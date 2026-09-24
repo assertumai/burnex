@@ -65,6 +65,24 @@ describe('ui-pipelines: имя и входы в виде пайплайна', ()
     assert.deepEqual([...(plain?.inputs ?? [])], []);
   });
 
+  it('раскрывает пайплайн с обязательным входом без умолчания: значение передаётся только при запуске', async () => {
+    const { runsRoot, projectRoot, home } = bed();
+    write(
+      projectRoot,
+      'required.yml',
+      document('needs-item', 'inputs:\n  item: { type: string, required: true }\n  count: { type: int, required: true }\n  flag: { type: bool, required: true }\n'),
+    );
+    const { config } = resolveConfig({ cwd: home, home, projectPath: null });
+
+    const view = (await buildPipelines(runsRoot, config, { home })).pipelines.find((entry) =>
+      entry.file.endsWith('required.yml'),
+    );
+
+    assert.equal(view?.error, undefined);
+    assert.equal(view?.name, 'needs-item');
+    assert.deepEqual([...(view?.inputs ?? [])], ['item', 'count', 'flag']);
+  });
+
   it('находит все файлы каталога пайплайнов проекта: перечня доска не ведёт', async () => {
     const { runsRoot, projectRoot, home } = bed();
     write(projectRoot, 'one.yml', document('one'));

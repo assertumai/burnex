@@ -4,6 +4,8 @@ import { relative } from 'node:path';
 import { listPipelineFiles } from '../pipeline/domain/project/pipelines.js';
 import { listProjects } from '../pipeline/run/journal/reader.js';
 import { expandPipeline } from '../pipeline/document/expand.js';
+import { readYamlDocument } from '../pipeline/document/load.js';
+import type { ParamValue } from '../pipeline/document/params.js';
 import { isStepcastError, StepcastError } from '../../kernel/errors.js';
 import { describeSource } from '../pipeline/config/merge.js';
 import { resolveConfig, type Config, type ResolveOptions } from '../pipeline/config/resolve.js';
@@ -401,7 +403,12 @@ function readPipeline(
 ): PipelineView {
   const file = relative(projectPath, absolute).replace(/\\/g, '/');
   try {
-    const { pipeline, modelOrigins, effortOrigins } = expandPipeline({ pipelinePath: absolute, config, registry });
+    const { pipeline, modelOrigins, effortOrigins } = expandPipeline({
+      pipelinePath: absolute,
+      config,
+      registry,
+      inputs: displayInputs(absolute),
+    });
     return toView(
       projectKey, projectPath, file, pipeline,
       modelOrigins, modelConfigFile, effortOrigins, effortConfigFile, registry,
@@ -409,6 +416,34 @@ function readPipeline(
   } catch (error) {
     return errorView(projectKey, projectPath, file, toFailure(error, projectPath));
   }
+}
+
+/**
+ * Заглушки для обязательных входов без умолчания. Экран показывает устройство
+ * пайплайна, а не запуск: значение такого входа приходит только с
+ * `--input`, и без заглушки раскрытие отказало бы файлу, который исправен.
+ * Заглушка видна там, куда вход подставлен (`<item>`), а не выдаёт себя за
+ * настоящее значение. Документ, который не читается, раскрытие разберёт само
+ * и отдаст свою диагностику — здесь его ошибка глотается.
+ */
+function displayInputs(pipelinePath: string): Record<string, ParamValue> {
+  let raw: unknown;
+  try {
+    raw = readYamlDocument(pipelinePath);
+  } catch {
+    return {};
+  }
+  const declared = (raw as { inputs?: unknown } | null)?.inputs;
+  if (declared === null || typeof declared !== 'object') return {};
+
+  const out: Record<string, ParamValue> = {};
+  for (const [name, spec] of Object.entries(declared as Record<string, unknown>)) {
+    if (spec === null || typeof spec !== 'object') continue;
+    const { required, default: fallback, type } = spec as { required?: unknown; default?: unknown; type?: unknown };
+    if (required !== true || fallback !== undefined) continue;
+    out[name] = type === 'int' ? 0 : type === 'bool' ? false : `<${name}>`;
+  }
+  return out;
 }
 
 /** `project`, `defaults`, `backends` и реестр вкладов того репозитория, чей пайплайн раскрывается. */
