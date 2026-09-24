@@ -254,7 +254,7 @@ function FilesSection({
     <Card className="cleanup-card">
       <CardHeader>
         <CardTitle>Run files</CardTitle>
-        <CardDescription>traits combine with “or”</CardDescription>
+        <CardDescription>traits combine with “or”; an age narrows them to older runs</CardDescription>
       </CardHeader>
       <CardContent>
         <div className="field">
@@ -462,7 +462,9 @@ function StatsSection({
     <Card className="cleanup-card">
       <CardHeader>
         <CardTitle>Usage records</CardTitle>
-        <CardDescription>removes the usage summary; run files are untouched</CardDescription>
+        <CardDescription>
+          removes the usage summary; run files are untouched. An age and a project narrow the selection
+        </CardDescription>
       </CardHeader>
       <CardContent>
         <div className="field">

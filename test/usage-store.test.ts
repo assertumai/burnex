@@ -410,6 +410,22 @@ describe('usage-store: хранилище расхода', () => {
     assert.ok(records.has(`${key}/recent-ok`));
   });
 
+  // Сценарий «Записи хранилища — то же правило» (cleanup-age-narrows-traits):
+  // срок сужает исход по «и».
+  it('срок сужает исход: отобраны только отказавшие записи старше срока', () => {
+    const { runsRoot, projectRoot } = makeJournalBed();
+    const key = projectKey(projectRoot);
+    const old = { started_at: '2020-01-01T00:00:00.000Z', finished_at: '2020-01-01T00:05:00.000Z' };
+    seedRun(runsRoot, projectRoot, { runId: 'old-failed', status: 'failed', manifest: old });
+    seedRun(runsRoot, projectRoot, { runId: 'old-ok', status: 'success', manifest: old });
+    seedRun(runsRoot, projectRoot, { runId: 'fresh-failed', status: 'failed' });
+    backfillUsageStore(runsRoot);
+
+    const selected = selectUsageRecords(runsRoot, { failed: true, olderThanMs: 1000 * 60 * 60 * 24 * 365 });
+
+    assert.deepEqual(selected.map((s) => s.address), [`${key}/old-failed`]);
+  });
+
   // Догон хвоста — часть снятия, которая имеет дело с состязанием во
   // времени (другой прогон дописывает свою запись, пока снятие уже читает
   // файл для отбора); проверяется как чистое преобразование двух срезов

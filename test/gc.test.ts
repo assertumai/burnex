@@ -9,7 +9,7 @@ import { ExitCode, isStepcastError } from '../src/kernel/errors.js';
 import { projectKey } from '../src/parts/pipeline/run/journal/paths.js';
 import { readUsageStore } from '../src/parts/pipeline/run/journal/usageStore.js';
 import { RunJournal } from '../src/parts/pipeline/run/journal/writer.js';
-import type { RunManifest } from '../src/parts/pipeline/run/journal/schema.js';
+import type { RunManifest, RunStatus } from '../src/parts/pipeline/run/journal/schema.js';
 import { tempDir } from './tmp.js';
 
 function args(flags: ParsedArgs['flags'] = {}): ParsedArgs {
@@ -53,6 +53,7 @@ function makeRun(
   projectRoot: string,
   runId: string,
   overrides: Partial<RunManifest> = {},
+  status: RunStatus['status'] = 'success',
 ): RunJournal {
   const journal = RunJournal.create({ runsRoot, projectRoot, runId });
   journal.writeManifest({
@@ -73,7 +74,7 @@ function makeRun(
     run_id: journal.paths.runId,
     pipeline: 'demo',
     lock_hash: 'abc',
-    status: 'success',
+    status,
     workspace: { mode: 'cwd' },
     inputs: {},
     jobs: [],
@@ -324,6 +325,28 @@ describe('CLI: stepcast gc --stats', () => {
     const key = projectKey(projectRoot);
     assert.equal(readUsageStore(runsRoot).records.has(`${key}/old`), false);
     assert.match(lines.join('\n'), /снято записей: 1/);
+  });
+
+  // Сценарий «Отказавшие старше срока» (cleanup-age-narrows-traits): срок
+  // сужает исход по «и», а не добавляется к нему.
+  it('--stats --failed --older-than снимает только записи отказавших старше срока', () => {
+    const { runsRoot, projectRoot, home } = bed();
+    const old = { started_at: '2020-01-01T00:00:00.000Z', finished_at: '2020-01-01T00:05:00.000Z' };
+    const fresh = { started_at: new Date().toISOString(), finished_at: new Date().toISOString() };
+    makeRun(runsRoot, projectRoot, 'old-failed', old, 'failed');
+    makeRun(runsRoot, projectRoot, 'old-ok', old, 'success');
+    makeRun(runsRoot, projectRoot, 'fresh-failed', fresh, 'failed');
+
+    const code = withHome(home, () =>
+      runGcCommand(args({ stats: true, failed: true, 'older-than': '2d' }), () => {}, projectRoot),
+    );
+
+    assert.equal(code, ExitCode.ok);
+    const key = projectKey(projectRoot);
+    const { records } = readUsageStore(runsRoot);
+    assert.equal(records.has(`${key}/old-failed`), false, 'отказавший старше срока снят');
+    assert.ok(records.has(`${key}/old-ok`), 'успешный старше срока остался');
+    assert.ok(records.has(`${key}/fresh-failed`), 'свежий отказавший остался');
   });
 
   // Сценарий «Снятие записей без признаков ничего не снимает».

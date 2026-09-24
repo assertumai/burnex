@@ -1352,6 +1352,33 @@ describe('ui-dashboard: отбор прогонов к удалению', () => 
     );
   });
 
+  // Сценарий «Свежий отказавший не отбирается сроком» (cleanup-age-narrows-traits).
+  it('срок сужает признак исхода, а не добавляется к нему', async (t) => {
+    const { runsRoot, projectRoot } = makeJournalBed();
+    const key = projectKey(projectRoot);
+    const old = { started_at: '2026-07-01T00:00:00.000Z', finished_at: '2026-07-01T00:05:00.000Z' };
+    seedRun(runsRoot, projectRoot, { runId: 'old-failed', status: 'failed', manifest: old });
+    seedRun(runsRoot, projectRoot, { runId: 'old-ok', status: 'success', manifest: old });
+    seedRun(runsRoot, projectRoot, {
+      runId: 'fresh-failed',
+      status: 'failed',
+      manifest: { started_at: new Date().toISOString(), finished_at: new Date().toISOString() },
+    });
+    const server = await startServer(t, { runsRoot });
+
+    const runs = await fetchJson(server, '/api/runs?trait=failed&older-than=2d');
+    assert.deepEqual(
+      (runs.json.runs as Array<{ address: string }>).map((r) => r.address),
+      [`${key}/old-failed`],
+    );
+
+    const records = await fetchJson(server, '/api/usage-records?trait=failed&older-than=2d');
+    assert.deepEqual(
+      (records.json.records as Array<{ address: string }>).map((r) => r.address),
+      [`${key}/old-failed`],
+    );
+  });
+
   // Сценарии: «Размер отобранного прогона», «Число и объём в подтверждении»
   it('называет размер каждого отобранного прогона и суммарный объём', async (t) => {
     const { runsRoot, projectRoot } = makeJournalBed();

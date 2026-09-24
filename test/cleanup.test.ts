@@ -389,6 +389,61 @@ describe('run-cleanup: отбор по признаку', () => {
     );
   });
 
+  // Сценарии «Свежий отказавший не отбирается сроком» и «Старый успешный не
+  // отбирается признаком исхода» (cleanup-age-narrows-traits): срок сужает
+  // исход по «и», а не добавляется к нему по «или».
+  it('срок сужает признак исхода: свежий отказавший и старый успешный не отобраны', () => {
+    const { runsRoot, projectRoot } = bed();
+    const now = new Date('2026-08-20T00:00:00.000Z');
+    const key = projectKey(projectRoot);
+    makeStatusRun(runsRoot, projectRoot, 'stale-failed', 'failed', {
+      started_at: '2026-08-10T00:00:00.000Z',
+      finished_at: '2026-08-10T00:05:00.000Z', // десять дней назад
+    });
+    makeStatusRun(runsRoot, projectRoot, 'fresh-failed', 'failed', {
+      started_at: '2026-08-19T23:58:00.000Z',
+      finished_at: '2026-08-19T23:59:00.000Z', // минуту назад
+    });
+    makeStatusRun(runsRoot, projectRoot, 'stale-success', 'success', {
+      started_at: '2026-08-10T00:00:00.000Z',
+      finished_at: '2026-08-10T00:05:00.000Z',
+    });
+
+    const { selected } = selectCandidates(runsRoot, { failed: true, olderThanMs: 2 * 86_400_000 }, { now });
+
+    assert.deepEqual(selected.map((c) => c.address), [`${key}/stale-failed`]);
+  });
+
+  // Сценарий «Признаки исхода складываются между собой».
+  it('признаки исхода складываются по «или», а срок сужает их объединение', () => {
+    const { runsRoot, projectRoot } = bed();
+    const now = new Date('2026-08-20T00:00:00.000Z');
+    const key = projectKey(projectRoot);
+    makeStatusRun(runsRoot, projectRoot, 'stale-failed', 'failed', {
+      started_at: '2026-08-10T00:00:00.000Z',
+      finished_at: '2026-08-10T00:05:00.000Z',
+    });
+    makeStatusRun(runsRoot, projectRoot, 'stale-abandoned', 'running', {
+      started_at: '2026-08-10T00:00:00.000Z',
+      pid: 999_999_999,
+    });
+    makeStatusRun(runsRoot, projectRoot, 'fresh-abandoned', 'running', {
+      started_at: '2026-08-19T23:00:00.000Z',
+      pid: 999_999_999,
+    });
+
+    const { selected } = selectCandidates(
+      runsRoot,
+      { abandoned: true, failed: true, olderThanMs: 2 * 86_400_000 },
+      { now },
+    );
+
+    assert.deepEqual(
+      selected.map((c) => c.address).sort(),
+      [`${key}/stale-abandoned`, `${key}/stale-failed`].sort(),
+    );
+  });
+
   // Сценарий: «Отбор по всем проектам»
   it('берёт подходящие прогоны обоих проектов, когда проект не указан', () => {
     const { runsRoot, projectRoot } = bed();
@@ -509,11 +564,11 @@ describe('run-cleanup: отбор по признаку', () => {
     assert.equal(uncheckedCount, 0, 'отобранный прогон не считается непроверенным');
   });
 
-  // Признак и срок вместе: непроверенный прогон, которого взял срок, в счёт не
-  // идёт, а тот, до кого срок не дотянулся, — идёт. Возраст такого прогона
-  // считается по времени каталога, поэтому «взял» и «не взял» задаются
-  // порогом: нулевой берёт оба, годовой — ни одного.
-  it('при отборе признаком и сроком непроверенным числится только не отобранный', () => {
+  // Непроверенный прогон статуса не имеет, поэтому признак исхода его не
+  // берёт — и в сочетании со сроком тоже: срок сужает, а не добавляет
+  // (cleanup-age-narrows-traits, Решение 2). Сроком без исхода он берётся —
+  // возраст считается по времени каталога, нулевой порог берёт оба.
+  it('непроверенный прогон берётся сроком без исхода и не берётся исходом со сроком', () => {
     const { runsRoot, projectRoot } = bed();
     for (const runId of ['первый', 'второй']) {
       const journal = makeStatusRun(runsRoot, projectRoot, runId, 'failed');
@@ -521,13 +576,13 @@ describe('run-cleanup: отбор по признаку', () => {
       writeFileSync(journal.paths.status, '{ не json');
     }
 
-    const takenByAge = selectCandidates(runsRoot, { failed: true, olderThanMs: 0 });
-    assert.equal(takenByAge.selected.length, 2, 'нулевой порог берёт оба каталога');
-    assert.equal(takenByAge.uncheckedCount, 0, 'отобранные непроверенными не числятся');
+    const byAge = selectCandidates(runsRoot, { olderThanMs: 0 });
+    assert.equal(byAge.selected.length, 2, 'нулевой порог берёт оба каталога');
+    assert.equal(byAge.uncheckedCount, 0, 'отобранные непроверенными не числятся');
 
-    const notTaken = selectCandidates(runsRoot, { failed: true, olderThanMs: 365 * 86_400_000 });
-    assert.deepEqual(notTaken.selected, []);
-    assert.equal(notTaken.uncheckedCount, 2, 'срок их не достал — оба остались непроверенными');
+    const byOutcomeAndAge = selectCandidates(runsRoot, { failed: true, olderThanMs: 0 });
+    assert.deepEqual(byOutcomeAndAge.selected, []);
+    assert.equal(byOutcomeAndAge.uncheckedCount, 2, 'исход их не взял — оба остались непроверенными');
   });
 
   // Сценарий «Читаемые прогоны непроверенными не считаются».

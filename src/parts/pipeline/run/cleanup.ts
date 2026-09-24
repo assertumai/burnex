@@ -198,9 +198,13 @@ export interface CandidateSelection {
 }
 
 /**
- * Отбор прогонов корня к полному снятию по признакам — оборванные, отказавшие,
- * старше срока, — объединённым по «или». Прогон под несколькими признаками
- * назван один раз. Ничего на диске отбор не меняет.
+ * Отбор прогонов корня к полному снятию. Признаки исхода — оборванные,
+ * отказавшие — складываются между собой по «или», а срок сужает их
+ * объединение по «и»: «отказавшие старше 2d» — это отказавшие, которым больше
+ * двух дней, а не все отказавшие заодно со всем старым (изменение
+ * cleanup-age-narrows-traits). Срок без признаков исхода берёт всё старше
+ * срока, признаки без срока — без ограничения возраста. Прогон под
+ * несколькими признаками назван один раз. Ничего на диске отбор не меняет.
  */
 export function selectCandidates(
   runsRoot: string,
@@ -213,6 +217,10 @@ export function selectCandidates(
       ? [options.project]
       : listProjects(runsRoot).map((project) => project.key);
 
+  const outcomeAsked = traits.abandoned === true || traits.failed === true;
+  // Без единого условия отбор пуст: «взять всё» уборка не выражает.
+  const asked = outcomeAsked || traits.olderThanMs !== undefined;
+
   const selected: AddressedCandidate[] = [];
   let uncheckedCount = 0;
   for (const key of keys) {
@@ -221,12 +229,14 @@ export function selectCandidates(
       const candidate = candidateOf(paths, runId, now);
       const status = statusOf(paths);
 
-      const matches =
+      const outcomeMatches =
+        !outcomeAsked ||
         (traits.abandoned === true &&
           status === 'running' &&
           !isRunAlive(paths, now.getTime())) ||
-        (traits.failed === true && status !== undefined && isFailure(status)) ||
-        (traits.olderThanMs !== undefined && candidate.ageMs >= traits.olderThanMs);
+        (traits.failed === true && status !== undefined && isFailure(status));
+      const ageMatches = traits.olderThanMs === undefined || candidate.ageMs >= traits.olderThanMs;
+      const matches = asked && outcomeMatches && ageMatches;
 
       if (!matches) {
         // Непроверенным считается только тот, кого отбор не назвал: названный
