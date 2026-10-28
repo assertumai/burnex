@@ -317,12 +317,14 @@ started_at: 2026-09-16T14:57:30.760Z
 
 ## backlog-queue-lock
 
-status: todo
+status: failed
 title: Все писатели очереди работают под lock-файлом
 why: `pick`, `finish`, `settle`, `merge-lanes` и демон доски правят `backlog.md` без взаимного исключения — два параллельных захода петли или заход вместе с перетаскиванием карточки теряют правку друг друга. Burnex закрыл это схемой «lock → read → edit → write → release».
 done_when: Каждый писатель `backlog.md` / `archived.md` берёт lock-файл `<git common dir>/stepcast-backlog.lock` (вне git — `.backlog.lock` рядом с очередью) с `O_EXCL` и JSON `{pid, host, command, acquired_at}`; повтор каждые 50 мс, через 10 с ожидания — код 2; брошенный lock мёртвого процесса того же host снимается, чужого host — нет; `list` lock не берёт; тесты на гонку двух писателей.
 group: backlog-queue
 source: docs/burnex-after-stepcast.md, раздел 5 «Блокировка очереди»
+started_at: 2026-10-28T22:08:22.923Z
+reason: заход до сведения дорожки не дошёл
 
 ## backlog-item-needs
 
