@@ -314,3 +314,264 @@ goal: docs/microkernel-target.md
 why: Шаг 10 и последний плана `docs/microkernel-target.md`: физическая раскладка приводится к целевой, когда границы уже проверены компилятором и линтером, а не наоборот. Переезд, сделанный раньше, был бы перестановкой каталогов без гарантий; сделанный последним — он лишь делает видимым то, что уже верно.
 done_when: дерево исходников соответствует разделу «Финальная структура кода» в `docs/microkernel-target.md`: `src/kernel/`, `src/plugin/`, `src/parts/{pipeline,backends,ui}`, `src/builtin/`, `bin.ts`; правило линтера запрещает импорт из `src/parts/**` в `src/kernel/**`; `package.json` (`exports`, `files`, `bin`) и пути опубликованных подпутей не изменились для потребителя либо изменение названо в `docs/`; тесты переехали вслед за модулями без правки ожиданий; `docs/microkernel-target.md` обновлён до состояния «сделано» с указанием, что осталось открытым; `npm run check` зелёный
 started_at: 2026-09-16T14:57:30.760Z
+
+## backlog-queue-lock
+
+status: todo
+title: Все писатели очереди работают под lock-файлом
+why: `pick`, `finish`, `settle`, `merge-lanes` и демон доски правят `backlog.md` без взаимного исключения — два параллельных захода петли или заход вместе с перетаскиванием карточки теряют правку друг друга. Burnex закрыл это схемой «lock → read → edit → write → release».
+done_when: Каждый писатель `backlog.md` / `archived.md` берёт lock-файл `<git common dir>/stepcast-backlog.lock` (вне git — `.backlog.lock` рядом с очередью) с `O_EXCL` и JSON `{pid, host, command, acquired_at}`; повтор каждые 50 мс, через 10 с ожидания — код 2; брошенный lock мёртвого процесса того же host снимается, чужого host — нет; `list` lock не берёт; тесты на гонку двух писателей.
+group: backlog-queue
+source: docs/burnex-after-stepcast.md, раздел 5 «Блокировка очереди»
+
+## backlog-item-needs
+
+status: todo
+title: Поле `needs` пункта — зависимости между пунктами очереди
+why: Порядок строк — единственный приоритет, и пункт, зависящий от другого, берётся в работу, пока тот ещё не влит; петля тратит заход на то, что сейчас не собрать. Статус `postponed` при этом должен не удовлетворять зависимость и не занимать группу.
+done_when: `needs` принимает slug'и пунктов; пункт свободен, только когда все зависимости `done`; неизвестный slug или цикл — код 2 с названием пункта; `postponed` не считается выполнением зависимости; доска показывает зависимости в панели деталей; `docs/backlog.md` описывает поле.
+group: backlog-queue
+source: docs/burnex-after-stepcast.md, раздел 5 «Новые поля пункта и статус postponed»
+
+## backlog-item-goal-details
+
+status: todo
+title: Поля `goal` и `details` пункта попадают в контекст работ петли
+why: Пункт умещает замысел в три строки `title`/`why`/`done_when`; материалы к нему (черновик, разбор отказа, ссылки) лежат отдельно, и агент их не видит. Burnex ввёл один целевой документ и список файлов, которые петля читает как контекст.
+done_when: `goal` — один путь, `details` — список путей (принято `backlog/<slug>/`); `pick` пропускает пункт с отсутствующим путём, `pick --only` отказывает; `item-<lane>.json` несёт пути, а работы propose/plan/implement/review self-improve получают их записью контекста `item_refs`; тест на отбор с отсутствующим файлом.
+group: backlog-queue
+source: docs/burnex-after-stepcast.md, раздел 5 «Новые поля пункта и статус postponed»
+
+## backlog-claimed-by-owner
+
+status: todo
+title: Владелец взятого пункта `claimed_by` вместо порога давности
+why: Зависший `in_progress` определяется по `--stale-hours`, и долгий честный прогон на седьмом часу отдаётся второму заходу, а оборвавшийся через минуту ждёт шесть часов. Живость владельца (процесс прогона) — точный признак.
+done_when: `pick --owner run:<id>` пишет `claimed_by`; пункт с владельцем зависший, если процесс прогона мёртв, а не по возрасту; `finish --owner` с чужим владельцем ничего не меняет и говорит об этом; `--stale-hours` остаётся для пунктов без владельца; тесты обоих путей.
+group: backlog-queue
+source: docs/burnex-after-stepcast.md, раздел 5 «Новые поля пункта и статус postponed»
+
+## backlog-add-show-commands
+
+status: todo
+title: Команды `backlog add` и `backlog show`
+why: Пункт заводится только правкой файла руками, и агент петли, нашедший кандидата, записать его не может; `show` нужен диспетчеру, чтобы прочитать взятый пункт без правки очереди.
+done_when: `stepcast backlog add <slug> --title --why --done-when [--group] [--track] [--needs] [--goal] [--details] [--status todo|postponed] [--after slug]` добавляет пункт под lock'ом, все проверки до записи; `backlog show <slug> [--run-dir]` печатает пункт и с `--run-dir` пишет `item-a.json`; `docs/backlog.md` дополнен; тесты CLI.
+group: backlog-queue
+track: express
+source: docs/burnex-after-stepcast.md, раздел 5 «Команды»
+
+## merge-lanes-onto-branch-tip
+
+status: todo
+title: `merge-lanes --onto <branch>` сводит дорожки на текущую вершину ветки
+why: Сведение идёт на стартовый коммит прогона, поэтому два прогона от одной базы не сводятся друг за другом — второй отказывает. Нужны merge lock, публикация через `git update-ref` с проверкой старого значения и ожидание грязной копии.
+done_when: `--onto` сводит на вершину ветки под `<git common dir>/stepcast-merge.lock`; расхождение при `update-ref` даёт исход `publication_conflict`; грязная копия вне файлов очереди — ожидание с событиями `merge.dirty_waiting`/`merge.dirty_resolved` раз в 10 минут; `--keep-claim` оставляет неслитый пункт `in_progress`; в коммит попадают только блоки своих пунктов; с `nested_repos` режим отклоняется; тесты двух последовательных прогонов.
+group: lane-merge
+source: docs/burnex-after-stepcast.md, раздел 5 «Сведение на вершину ветки»
+
+## self-improve-loop-runner
+
+status: todo
+title: Скрипт автономной петли — итерации self-improve до остановки
+why: Петлю запускают руками по одному заходу; burnex гоняет её скриптом, собирая движок из `HEAD` в отдельном worktree перед каждой итерацией, и останавливается по понятным условиям. Прежние `scripts/*.mjs` были заглушены (`drop-superseded-loop-scripts`), поэтому новый скрипт обязан звать только команды движка.
+done_when: `scripts/self-improve-loop.sh` собирает движок из `HEAD` в worktree (`npm ci` только при смене lockfile), гоняет `.stepcast/pipelines/self-improve.yml` итерациями; останавливается, когда прогон ничего не закоммитил, упала сборка или исчерпан `MAX_RUNS` (20); грязная копия петлю не останавливает; описано в `docs/backlog.md`.
+group: lane-merge
+source: docs/burnex-after-stepcast.md, раздел 5 «Автономная петля»
+
+## secrets-named-providers
+
+status: todo
+title: Секреты по имени — провайдер, точечная выдача, маскирование
+why: `docs/config.md` в разделе «Отложено» признаёт, что секретов как сущности нет и учётные данные идут обычным окружением, которое наследует всё, что запустит агент. Burnex решил это: секрет объявляется в `secrets:`, выдаётся только объявившему шагу `run`/`script`/`uses`, плагину или MCP-серверу и никогда — агенту.
+done_when: Верхний ключ `secrets:` (имя `^[a-z][a-z0-9_-]{0,63}$`, `provider`, `env` без префикса `STEPCAST_`); шаг получает их через `secrets: [имя]`; агентскому шагу значение не передаётся; разрешение до создания каталога прогона, значение короче 8 символов — отказ; маскирование в логах и `prompt.txt`; `${env.*}` не раскрывает переменную секрета и убирает её из окружения остальных шагов с событием `env.withheld`; встроенный провайдер `env-file`, свой — вкладом плагина по контракту `stepcast/pipeline`; раздел «Отложено» в `docs/config.md` снят.
+group: credentials
+source: docs/burnex-after-stepcast.md, раздел 2 «Учётные данные»
+
+## secrets-keychain-provider
+
+status: todo
+title: Провайдер секретов `keychain` для macOS
+why: Токены разработчиков лежат в связке ключей, и файл окружения с ними — лишняя копия секрета на диске.
+done_when: Провайдер читает `security find-generic-password -a <account> -s <service> -w` с таймаутом 5 с; не на macOS прогон отклоняется до старта; `backends.<id>.credentials.<VAR>` в `~/.stepcast/config.yml` кладёт значение только в окружение процесса CLI; описано в `docs/config.md`; тест с подменённой командой.
+group: credentials
+needs: secrets-named-providers
+source: docs/burnex-after-stepcast.md, раздел 2 «Провайдер keychain»
+
+## model-price-catalog
+
+status: todo
+title: Каталог цен моделей — оценка стоимости, когда бэкенд цену не сообщил
+why: `budget.cost` не действует, если бэкенд не сообщил цену ни разу за прогон (`docs/pipeline-format.md`, «Деньги»); Codex и подписочные CLI часто её не дают, и денежный потолок молча выключен. Каталог даёт оценку по токенам и источник цены в отчёте.
+done_when: `src/builtin/prices/model-prices.json` поставляется с пакетом; цена попытки — `reported` из отчёта CLI, иначе `catalog` по токенам; источник виден в `stepcast usage` и в витрине; модель без цены по-прежнему не проверяется против `budget.cost`, и это сказано предупреждением на старте; тесты на оба источника.
+group: agent-selection
+source: docs/burnex-after-stepcast.md, раздел 3 «Каталог моделей и цены»
+
+## agent-policy-and-pipeline-agents
+
+status: todo
+title: `agent_policy` и выбор агента на пайплайн и на шаг из конфигурации
+why: Документ пайплайна всегда сильнее пользователя: заменить `opus` на `sonnet` для одного запуска нельзя без правки файла. Burnex ввёл `pipeline_agents`/`step_agents` в конфиге и политику `force`/`fallback`, где выбор пользователя может побеждать.
+done_when: Ключи `step_agents` и `pipeline_agents` в `~/.stepcast/config.yml`, пишутся экраном Pipelines; `pipeline_agents` действует только на шаги без собственного `agent`/`model`; `agent_policy: force` (умолчание) — документ сильнее, `fallback` — пользователь сильнее, чужая для бэкенда `model` отбрасывается в пользу tier; `stepcast config --pipeline <p>` показывает итог и источник; `docs/pipeline-format.md` описывает порядок.
+group: agent-selection
+source: docs/burnex-after-stepcast.md, раздел 3 «Агент и уровень на шаг» и «agent_policy»
+
+## skip-exit-code
+
+status: todo
+title: `skip_exit_code` — командный шаг объявляет «делать нечего» и пропускается
+why: Шаг, которому нечего делать (нет пунктов в очереди, нет изменений для коммита), сегодня либо падает, либо притворяется успехом; статуса «пропущено» у него нет, и прогон с одними пропусками неотличим от полезного.
+done_when: Ключ на пайплайне, работе и шаге (ближайшее действует), целое 1..255; на шаге `agent` и плагинном шаге — ошибка разбора; код проверяется до `expect`/`output_schema`/judge; шаг и работа получают `skipped`, оставшиеся попытки не тратятся, остальные шаги работы не идут; прогон из успехов и пропусков — `success`, `fail_fast` не срабатывает; `lint` отклоняет `expect: exit_code`, равный коду пропуска; тесты.
+group: engine-outcomes
+source: docs/burnex-after-stepcast.md, раздел 1 «skip_exit_code»
+
+## on-always-runs-after-skipped-deps
+
+status: todo
+title: `on: always` исполняется и когда все зависимости пропущены
+why: Работа с `on: always` задумана как «в любом исходе», но при пропуске всех зависимостей сама пропускается — уборка и финализация после пустого захода не выполняются. Burnex признал это ломающим изменением и сделал его явно.
+done_when: `on: always` исполняется при любом исходе зависимостей, включая пропуск всех (по `if`, `fail_fast` или `skip_exit_code`); `if` работы по-прежнему проверяется; прежнее поведение достижимо явным условием по статусам зависимостей; `docs/pipeline-format.md` переписан; тесты.
+group: engine-outcomes
+needs: skip-exit-code
+source: docs/burnex-after-stepcast.md, раздел 1 «on: always при пропущенных зависимостях»
+
+## job-level-attempts
+
+status: todo
+title: `attempts` на работе — перезапуск упавшей работы с первого шага
+why: Попытки есть только у шага; работа, где второй шаг портит результат первого, перезапуститься целиком не может, и петля отдаёт пункт `failed` вместо второго захода.
+done_when: `attempts: { max: N }` на работе ограничен `limits.attempts`; не повторяются пропуск, превышение бюджета, отмена, `backend_rate_limited`, `backend_unauthenticated`; переменные `STEPCAST_JOB_ATTEMPT` и `STEPCAST_JOB_ATTEMPT_MAX`; бюджет работы покрывает все попытки, зависимые видят финальный исход; `lint` запрещает `max > 1` внутри `session_group`; при resume работа — единое целое; тесты.
+group: engine-outcomes
+source: docs/burnex-after-stepcast.md, раздел 1 «Повторы работы целиком»
+
+## job-group-loops
+
+status: todo
+title: `loops` — повтор группы работ проходами с условием и бюджетом
+why: `until` повторяет одну работу; цикл «реализация → проверка → починка» из нескольких работ сегодня разворачивается руками в линейный граф с фиксированным числом копий.
+done_when: Верхний ключ `loops` с `jobs`, `while` (видны участники и `loop.*`), обязательным `max_iterations`, `cost`, `wallclock`; вердикт на границе прохода `done`/`exhausted`/`canceled`, `exhausted` → `failed`, исчерпание `cost` → `budget_exceeded`; переменные `STEPCAST_LOOP*`; `lint` отклоняет неизвестного или повторного участника, работу в двух циклах, `needs: all` и работу вне цикла на пути между участниками, предупреждает без `cost`; `resume --from` только на точке входа цикла; проходы видны в ленте прогона; тесты.
+group: engine-outcomes
+source: docs/burnex-after-stepcast.md, раздел 1 «Циклы по группам работ»
+
+## run-env-override
+
+status: todo
+title: `run --env KEY=VALUE` — переопределение объявленного env на один прогон
+why: Сменить значение переменной пайплайна на один запуск можно только правкой файла или входом `inputs`, под который переменная не заведена.
+done_when: Флаг повторяемый, то же — поле `env` в `POST /api/run`; меняются только ключи верхнеуровневого `env:` пайплайна, необъявленный ключ и многострочное значение — отказ, подстановки в значении не раскрываются; переопределения пишутся в `run.json` (`env_overrides`), `resume` берёт их оттуда; тесты.
+group: engine-cli
+track: express
+source: docs/burnex-after-stepcast.md, раздел 1 «Переопределение env на один прогон»
+
+## run-step-shell-key
+
+status: todo
+title: Ключ `shell` — объявляемая оболочка для строкового `run`
+why: Строка `run` всегда идёт через `sh -c`; шаг, которому нужен `bash -lc`, `pwsh` или `zsh`, вынужден оборачивать команду вручную.
+done_when: `shell` задаёт префикс argv, команда запускается как `[...shell, command]`; ближайшее объявление шаг → работа → пайплайн; пустой список отклоняется `lint`; списочную форму `run` ключ не затрагивает; `docs/pipeline-format.md` описывает; тесты.
+group: engine-cli
+track: express
+source: docs/burnex-after-stepcast.md, раздел 1 «Объявляемая оболочка»
+
+## shadow-run-mode
+
+status: todo
+title: Shadow-режим — прогон насухо с записью внешних действий
+why: Пайплайн, который пишет в MR, публикует пакет или шлёт сообщение, проверить без последствий нельзя: `--dry-run` только разбирает документ, а что именно сделал бы прогон, не показывает.
+done_when: `run --shadow` и `shadow: true` в `POST /api/run`, режим в `run.json` и у `resume`; непрозрачный шаг обязан объявить `external`, иначе отказ до старта; шаг с `external: true` не исполняется, пишутся `action-<n>.json` и событие `step.action`, из `env:` — только имена; плагин с `external` в контракте делает внешнее действие через точку действия движка; предикаты исполняются как обычно; тесты.
+group: engine-cli
+source: docs/burnex-after-stepcast.md, раздел 1 «Shadow-режим»
+
+## job-outputs-key-value
+
+status: todo
+title: Строковые выходы работы `outputs` для командных шагов через `NEEDS_*`
+why: Структурированный выход работы требует `output_schema` и JSON в stdout; скрипту, которому нужно отдать дальше одну-две строки (хеш, имя ветки), это тяжело. Burnex дал файл `key=value` и переменные зависимым работам.
+done_when: Шаг `run` получает путь в `STEPCAST_JOB_OUTPUTS` и дописывает `key=value`; работы с прямым `needs` получают `NEEDS_<JOB>_<KEY>`; ключ `^[A-Za-z_][A-Za-z0-9_]{0,63}$`, значение до 4096 байт, до 32 на работу, имя, похожее на секрет, отклоняется; необъявленный в `outputs:` ключ работу не ограничивает, объявленный и не опубликованный — отказ; `lint` проверяет `$NEEDS_*` по объявленному набору; тесты.
+group: engine-cli
+source: docs/burnex-after-stepcast.md, раздел 1 «Выходные значения работы»
+
+## resume-from-dashboard-button
+
+status: todo
+title: Кнопка «Resume from this job» на графе прогона в витрине
+why: `resume --from` есть только в CLI; с экрана прогона перезапустить с выбранной работы нельзя, хотя там и видно, где он сломался.
+done_when: У работы завершённого прогона на графе есть кнопка, зовущая `resume --from <job>` через демон; у идущего прогона кнопки нет; отказ предстартовой проверки показывается на кнопке; новый прогон несёт `resumed_from`; тест экрана.
+group: ui-runs
+track: express
+source: docs/burnex-after-stepcast.md, раздел 1 «Возобновление завершённого прогона»
+
+## backend-cursor-adapter
+
+status: todo
+title: Плагин бэкенда Cursor (`cursor-agent`)
+why: Второй агент, кроме Claude, — только Codex; Cursor Agent CLI — третий распространённый, с сессиями и песочницей, и его подключение проверяет контракт бэкенда-плагина ещё раз.
+done_when: Плагин `stepcast/backends/cursor` с именем бэкенда `cursor-agent`: сессии (`--resume`), список моделей, `permissions.mode` → `--sandbox`; capability честно выключают MCP, `output_schema`, `strict_permissions`; effort из настроек отбрасывается с событием `backend.degraded`, effort в документе отклоняет прогон; `docs/config.md` и `docs/plugins.md` дополнены; тесты адаптера с подменённым CLI.
+group: backends
+source: docs/burnex-after-stepcast.md, раздел 3 «Новые бэкенды»
+
+## backend-copilot-adapter
+
+status: todo
+title: Плагин бэкенда GitHub Copilot CLI
+why: Копилот покрывает команды с подпиской GitHub; в burnex адаптер написан, но на живом CLI не проверен — здесь признаком выполненности должен быть живой прогон.
+done_when: Плагин `stepcast/backends/copilot`: запуск с `--allow-all`, без сессий, usage и списка моделей, что честно записано в capability; effort отклоняется как у Cursor; один живой прогон шага записан в документе изменения; тесты адаптера.
+group: backends
+needs: backend-cursor-adapter
+source: docs/burnex-after-stepcast.md, раздел 3 «Новые бэкенды»
+
+## schedule-catchup-and-keep-awake
+
+status: todo
+title: Расписание: догон пропущенного момента, `keep_awake`, `require_network`
+why: Изменение `schedule-trigger` (ещё не завершено) даёт cron в пайплайне, но ноутбук спит и момент теряется; burnex добавил один догон после сна, удержание машины бодрой и проверку сети перед запуском.
+done_when: `max_catchup_hours` (по умолчанию 2, `0` — только текущая минута) запускает один пропущенный момент; `keep_awake` держит `caffeinate` на время прогона и ставит `pmset schedule wakeorpoweron` за 120 с до момента, сниппет sudoers только предлагается; `require_network` проверяет DNS и TCP до хоста `origin` и пропускает момент без сети; расписания в `ui.triggers.schedules` домашнего конфига и экран расписаний; лимиты `max_concurrent_runs`/`max_concurrent_agent_jobs`; тесты.
+group: daemon-ops
+source: docs/burnex-after-stepcast.md, раздел 4 «Расписания»
+
+## launchd-autostart
+
+status: todo
+title: `up --install` / `down --uninstall` — автозапуск демона через launchd
+why: Расписания бесполезны, если демон не поднят после перезагрузки; сейчас `stepcast up` надо звать руками.
+done_when: `stepcast up --install` пишет `~/Library/LaunchAgents/ai.stepcast.daemon.plist` с `RunAtLoad`, `KeepAlive`, `PATH` и `SSH_AUTH_SOCK` текущей оболочки; `down` выгружает агента, `down --uninstall` удаляет plist; не на macOS — отказ с причиной; `docs/config.md` описывает; тест генерации plist.
+group: daemon-ops
+track: express
+source: docs/burnex-after-stepcast.md, раздел 4 «Автозапуск через launchd»
+
+## install-script-and-update
+
+status: todo
+title: `install.sh`, `stepcast update` и поставка через npm
+why: Движок ставится только из чекаута `npm link`; на вторую машину или коллеге его не отдать одной командой, и обновление — ручной `git pull` + `npm run build`.
+done_when: `install.sh` раскладывает релизы в `~/.stepcast/releases/<v>` и ставит `~/.local/bin/stepcast`, берёт последний тег `v*`, поддерживает `--ref`/`--repo`; `stepcast update` действует по `~/.stepcast/install.json` (`managed`/`checkout`/`npm`) и перезапускает демон; публикация npm-пакета по тегу `vX.Y.Z` описана; тесты разбора install.json.
+group: daemon-ops
+source: docs/burnex-after-stepcast.md, раздел 4 «Установщик» и «Самообновление»
+
+## packages-directory-layer
+
+status: todo
+title: Пакет — каталог с пайплайнами, шагами, плагинами, виджетами и дашбордами
+why: Плагины, виджеты, дашборды и маршруты лежат порознь в `.stepcast/`; поделиться практикой (например, петлёй саморазвития) одним каталогом нельзя.
+done_when: `<project>/.stepcast/packages/<name>/` и `~/.stepcast/packages/<name>/` с манифестом `package.yml` строгой схемы (`version`, `kind`, `name`, `description`, `package_version`, `needs`); пакет приносит `pipelines/` (`stepcast run <package>:<name>`), `steps/`, `plugins/`, `widgets/`, `dashboards/`, `routes.yml`; порядок поиска проект → пакеты проекта → home → пакеты home → встроенное, дубликат в слое — ошибка; сломанный пакет падает отдельно; `stepcast package list|new`; пример в `examples/packages/hello/`; тесты.
+group: packages
+source: docs/burnex-after-stepcast.md, раздел 6 «Пакеты»
+
+## container-step-isolation
+
+status: postponed
+title: Исполнение шагов в контейнере (`isolation: container`)
+why: Изоляция шага от хоста ценна, но требует рантайма podman/apple, образов и отказа от MCP у агента в контейнере; для петли одной машины выигрыш не окупает объём. Отложено до появления второго пользователя или шага, которому нельзя доверять хост.
+done_when: Ключ `isolation: host | container` на шаге и работе, секция `container` (`runtime`, `image`, `base_image`, тома, `cpus`, `memory`) только в глобальном конфиге; окружение проверяется до старта, отката на хост нет; `stepcast container status|build|login`; тесты.
+group: isolation
+source: docs/burnex-after-stepcast.md, раздел 1 «Исполнение шагов в контейнере»
+
+## marketplace-catalog
+
+status: postponed
+title: Маркетплейс пакетов, навыков и MCP из git-каталога
+why: Нужен каталог-репозиторий и ревью записей; у stepcast нет ни второго пользователя, ни каталога. Отложено до `packages-directory-layer` и появления того, с кем делиться.
+done_when: Каталог из `marketplace.repo` клонируется в `~/.stepcast/marketplace/catalog`; экраны What's New, Agents и Packages; `marketplace install|publish` с проверкой `needs` и запретом секретов в файлах; тесты.
+group: packages
+needs: packages-directory-layer
+source: docs/burnex-after-stepcast.md, раздел 6 «Маркетплейс»
