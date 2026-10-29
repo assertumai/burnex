@@ -38,6 +38,7 @@ import { resolveLate, type JobScopeEntry, type LateWithheld } from '../document/
 import { ExitCode, StepcastError, isStepcastError, type ExitCodeValue } from '../../../kernel/errors.js';
 import { createSessionRegistry, executeAgentStep } from './exec/agentStep.js';
 import { buildStepEnv, injectedVariables, type EnvLayers } from './exec/env.js';
+import { validateEnvOverrides } from './envOverrides.js';
 import { backendsInUse } from '../secrets/declaration.js';
 import { namedSecrets, resolveBackendCredentials, resolveSecrets } from './secrets.js';
 import { executeRunStep } from './exec/runStep.js';
@@ -126,6 +127,13 @@ export interface RunOptions {
   readonly cwd: string;
   readonly signal?: AbortSignal;
   readonly baseEnv?: Readonly<Record<string, string | undefined>>;
+  /**
+   * Переопределения объявленного верхнеуровневого `env:` на этот прогон
+   * (`run --env`). Возобновление без собственного значения берёт их из
+   * манифеста исходного прогона: у `resume` флага нет, а прогон, начатый с
+   * переопределением, обязан продолжиться с ним же.
+   */
+  readonly envOverrides?: Readonly<Record<string, string>>;
   /** Подмена адаптера бэкенда: тесты подставляют поддельный. */
   readonly adapterFor?: (name: string) => BackendAdapter;
   /**
@@ -227,6 +235,11 @@ export function resolveExitCode(
 export async function runPipeline(options: RunOptions): Promise<RunResult> {
   const { pipeline } = options.expanded;
   const { config } = options;
+
+  const envOverrides = options.envOverrides ?? options.resume?.source.manifest.env_overrides ?? {};
+  // Библиотечный вызов обходит `stepcast run`, а молча проигнорированное
+  // переопределение хуже отказа.
+  validateEnvOverrides(envOverrides, pipeline.env);
 
   // До создания журнала: отказ на этом этапе не оставляет за собой директории
   // прогона, потому что прогона ещё нет.
@@ -342,6 +355,7 @@ export async function runPipeline(options: RunOptions): Promise<RunResult> {
     ...(Object.keys(sourceCommits).length === 0 ? {} : { source_commits: sourceCommits }),
     ...(options.resume === undefined ? {} : { resumed_from: options.resume.source.manifest.run_id }),
     inputs: pipeline.inputs,
+    ...(Object.keys(envOverrides).length === 0 ? {} : { env_overrides: envOverrides }),
     git: {},
     backends: Object.fromEntries(
       Object.entries(config.backends).map(([name, backend]) => [name, { command: backend.command }]),
@@ -446,6 +460,7 @@ export async function runPipeline(options: RunOptions): Promise<RunResult> {
 
   const context: RunContext = {
     ...options,
+    envOverrides,
     registry,
     secretValues,
     backendCredentials,
@@ -915,6 +930,8 @@ interface LoopRuntime {
 }
 
 export interface RunContext extends RunOptions {
+  /** Действующие переопределения env: свои, а у возобновления — из манифеста исходного прогона. */
+  readonly envOverrides: Readonly<Record<string, string>>;
   /**
    * Реестр вкладов прогона — в отличие от `RunOptions.registry`, здесь он есть
    * всегда: умолчание встроенного ядра раскрыто при заведении контекста (см.
@@ -1866,6 +1883,15 @@ async function evaluateCheck(
  * Проверка цикла шагом не является, и объявлять `STEPCAST_STEP` для неё было
  * бы неправдой.
  */
+/**
+ * Верхнеуровневый `env:` с переопределениями прогона. Накладывается здесь,
+ * а не правкой пайплайна: замок и ключи шагов остаются прежними, а значение
+ * ложится буквально — раскрытие `${...}` в `env:` документа уже случилось.
+ */
+function pipelineEnv(pipeline: Pipeline, context: RunContext): Readonly<Record<string, string>> {
+  return Object.keys(context.envOverrides).length === 0 ? pipeline.env : { ...pipeline.env, ...context.envOverrides };
+}
+
 function jobEnv(job: Job, context: RunContext): Record<string, string> {
   const { pipeline } = context.expanded;
   const { env } = buildStepEnv({
@@ -1874,7 +1900,7 @@ function jobEnv(job: Job, context: RunContext): Record<string, string> {
     ...secretLayers(pipeline, context.secretValues, []),
     base: context.baseEnv ?? process.env,
     envFiles: pipeline.envFiles,
-    pipeline: pipeline.env,
+    pipeline: pipelineEnv(pipeline, context),
     job: job.env,
     step: {},
     injected: injectedVariables({
@@ -3837,7 +3863,7 @@ export function stepEnv(
     ...secretLayers(pipeline, context.secretValues, grant === 'step' ? (step.secrets ?? []) : []),
     base: context.baseEnv ?? process.env,
     envFiles: pipeline.envFiles,
-    pipeline: pipeline.env,
+    pipeline: pipelineEnv(pipeline, context),
     job: job.env,
     step: step.env,
     injected: injectedVariables({

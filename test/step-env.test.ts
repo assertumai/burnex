@@ -51,6 +51,7 @@ describe('injectedVariables: STEPCAST_SKIP_EXIT_CODE', () => {
     expanded: { pipeline: { secrets: [], envFiles: [], env: {}, envDeny: [] } },
     secretValues: new Map(),
     baseEnv: {},
+    envOverrides: {},
     journal: {
       paths: { runId: 'r', dir: '/r', artifacts: '/a', jobs: '/r/jobs' },
       prepareJob: () => '/r/j',

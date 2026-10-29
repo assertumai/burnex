@@ -470,13 +470,15 @@ claimed_by: run:2026-10-29T18-33-45Z-7c8cf2
 
 ## run-env-override
 
-status: todo
+status: done
 title: `run --env KEY=VALUE` — переопределение объявленного env на один прогон
 why: Сменить значение переменной пайплайна на один запуск можно только правкой файла или входом `inputs`, под который переменная не заведена.
 done_when: Флаг повторяемый, то же — поле `env` в `POST /api/run`; меняются только ключи верхнеуровневого `env:` пайплайна, необъявленный ключ и многострочное значение — отказ, подстановки в значении не раскрываются; переопределения пишутся в `run.json` (`env_overrides`), `resume` берёт их оттуда; тесты.
 group: engine-cli
 track: express
 source: docs/burnex-after-stepcast.md, раздел 1 «Переопределение env на один прогон»
+started_at: 2026-10-29T19:38:15.502Z
+claimed_by: run:2026-10-29T19-38-13Z-756586
 
 ## run-step-shell-key
 

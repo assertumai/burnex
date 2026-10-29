@@ -5056,6 +5056,30 @@ describe('ui-daemon: POST /api/run', () => {
     assert.equal(calls.length, 0);
   });
 
+  it('env доезжает до пуска, а плохое имя и многострочное значение отклонены без пуска', async (t) => {
+    const { runsRoot, projectRoot } = makeJournalBed();
+    seedRun(runsRoot, projectRoot, { runId: 'seed' });
+    writeFileSync(join(projectRoot, 'stepcast.yml'), MINIMAL_PIPELINE_YAML);
+    const key = projectKey(projectRoot);
+    const { launchRun, calls } = stubLaunch();
+    const server = await createUiServer({ runsRoot, port: 0, launchRun });
+    t.after(() => server.close());
+
+    const post = (env: unknown) =>
+      sendJson(server, {
+        method: 'POST',
+        path: '/api/run',
+        body: JSON.stringify({ project: key, pipeline: 'stepcast.yml', env }),
+      });
+
+    assert.equal((await post({ MODE: 'fast' })).code, 202);
+    assert.deepEqual((calls[0] as { env?: unknown } | undefined)?.env, { MODE: 'fast' });
+
+    assert.equal((await post({ 'bad-name': 'x' })).code, 400);
+    assert.equal((await post({ MODE: 'a\nb' })).code, 400);
+    assert.equal(calls.length, 1);
+  });
+
   it('лишние поля тела отклонены', async (t) => {
     const { runsRoot, projectRoot } = makeJournalBed();
     seedRun(runsRoot, projectRoot, { runId: 'seed' });

@@ -1881,7 +1881,7 @@ stepcast gc --stats [--older-than 1y] [--failed] [--project <ключ>]
 ```
 stepcast init                                    создать stepcast.yml и пример работы
 stepcast lint [pipeline] [--budget] [--resolve]
-stepcast run <pipeline> [--input k=v] [--dry-run] [--quiet]
+stepcast run <pipeline> [--input k=v] [--env KEY=VALUE] [--dry-run] [--quiet]
 stepcast status [--run <id>]
 stepcast resume <run-id> [--from <job|job/step>] [--set k=v]
 stepcast apply <run-id> [--job <job> | --lane <lane>]   наложить результат на текущее дерево
@@ -1901,6 +1901,14 @@ stepcast backlog list|pick|finish                очередь улучшени
 stepcast propose <цель> --from <файл> [--reason]  предложить правку файла кабинета, см. docs/proposals.md
 stepcast widgets [--json]                        состав виджетов проекта и их разрешимость, см. docs/widgets.md
 ```
+
+`run --env KEY=VALUE` (флаг повторяемый; то же — поле `env` в `POST /api/run`)
+меняет на один прогон значение ключа, объявленного в верхнеуровневом `env:`
+пайплайна. Необъявленный ключ и значение с переводом строки — ошибка
+конфигурации до записи прогона; значение ложится буквально, `${...}` в нём не
+раскрывается. Замок пайплайна не меняется: переопределения записаны в `run.json`
+ключом `env_overrides`, и `resume` применяет их заново — собственного флага у
+него нет.
 
 Коды возврата: `0` — успех, `1` — работа завершилась отказом, `2` — ошибка
 конфигурации или линта, `3` — остановлено по бюджету (включая упор в окно

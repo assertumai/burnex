@@ -9,6 +9,7 @@ import { expandPipeline } from '../document/expand.js';
 import { resolvePipelineTarget } from '../domain/package-schema.js';
 import type { PipelineCommandEnv } from '../contract.js';
 import { runPipeline } from '../run/runner.js';
+import { validateEnvOverrides } from '../run/envOverrides.js';
 import type { UsageSnapshot } from '../run/budget/accumulator.js';
 import { renderProgressLine } from './progress.js';
 import { commandRow } from '../../../kernel/cli/commandRow.js';
@@ -40,6 +41,7 @@ export async function runRunCommand(
   const { pipelinePath, isSupplyPipeline } = resolvePipelineTarget(cwd, target);
   const config = resolvedConfig ?? resolveConfig({ cwd }).config;
   const inputs = (args.flags.input as Record<string, string> | undefined) ?? {};
+  const envOverrides = (args.flags.env as Record<string, string> | undefined) ?? {};
 
   const expanded = expandPipeline({
     pipelinePath,
@@ -48,6 +50,21 @@ export async function runRunCommand(
     ...(registry === undefined ? {} : { registry }),
     ...(isSupplyPipeline ? { projectRoot: cwd } : {}),
   });
+
+  // До записи прогона: отказ не должен оставлять после себя каталог журнала.
+  try {
+    validateEnvOverrides(envOverrides, expanded.pipeline.env);
+  } catch (error) {
+    if (!isStepcastError(error)) throw error;
+    for (const line of formatDiagnostic({
+      severity: 'error',
+      message: error.message,
+      ...(error.hint === undefined ? {} : { hint: error.hint }),
+    })) {
+      write(line);
+    }
+    return error.exitCode;
+  }
 
   // Проверка перед запуском бесплатна по сравнению с прогоном, поэтому она
   // безусловна: ловить структурную ошибку после первого агентского шага
@@ -79,6 +96,7 @@ export async function runRunCommand(
       cwd,
       ...(registry === undefined ? {} : { registry }),
       signal: controller.signal,
+      ...(Object.keys(envOverrides).length === 0 ? {} : { envOverrides }),
       ...(onEvent === undefined ? {} : { onEvent }),
     });
 
@@ -176,6 +194,10 @@ export const row = commandRow<PipelineCommandEnv>(
       positional: ['pipeline'],
       flags: {
         input: { kind: 'keyValue', description: 'значение входа пайплайна: --input имя=значение' },
+        env: {
+          kind: 'keyValue',
+          description: 'переопределить объявленную переменную env пайплайна на этот прогон: --env ИМЯ=значение',
+        },
         'dry-run': { kind: 'boolean', description: 'только проверить, не запуская работы' },
         quiet: { kind: 'boolean', description: 'не печатать ход прогона' },
       },

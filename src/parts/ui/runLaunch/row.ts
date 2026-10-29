@@ -37,6 +37,11 @@ const InputsSchema = z.record(
   z.string().max(500).refine((value) => !/[\n\r]/.test(value), 'input value must fit on a single line'),
 );
 
+const EnvSchema = z.record(
+  z.string().regex(/^[A-Za-z_][A-Za-z0-9_]*$/, 'env name: letters, digits and underscore'),
+  z.string().max(500).refine((value) => !/[\n\r]/.test(value), 'env value must fit on a single line'),
+);
+
 const PostBodySchema = z
   .object({
     project: z.string().min(1),
@@ -47,6 +52,12 @@ const PostBodySchema = z
      * поведение этой возможностью не меняется.
      */
     inputs: InputsSchema.optional(),
+    /**
+     * Переопределения объявленного `env:` пайплайна на этот прогон. Допустимость
+     * ключа проверяет дочерний `stepcast run` — у него есть раскрытый
+     * пайплайн; здесь — только форма: имя переменной и одна строка.
+     */
+    env: EnvSchema.optional(),
   })
   .strict();
 
@@ -104,6 +115,7 @@ const handlePost: ApiHandler = async (req, res, env) => {
     projectKey: parsed.data.project,
     pipeline: parsed.data.pipeline,
     ...(parsed.data.inputs === undefined ? {} : { inputs: parsed.data.inputs }),
+    ...(parsed.data.env === undefined ? {} : { env: parsed.data.env }),
   });
   // 202: подтверждение запуска, не обещание идентификатора прогона — он
   // появится в обзоре обычным тактом наблюдателя, когда дочерний процесс

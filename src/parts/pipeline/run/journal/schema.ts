@@ -441,6 +441,12 @@ export const RunManifestSchema = z
     /** Прогон, из которого этот получен возобновлением. */
     resumed_from: z.string().optional(),
     inputs: z.record(z.string(), z.union([z.string(), z.number(), z.boolean()])),
+    /**
+     * Переопределения объявленного `env:` флагом `run --env` — буквальные
+     * значения. Ключа нет у прогона без переопределений и у прогона прежней
+     * версии; `resume` берёт их отсюда, собственного флага у него нет.
+     */
+    env_overrides: z.record(z.string(), z.string()).optional(),
     git: z.object({ head: z.string().optional(), dirty_hash: z.string().optional() }).strict(),
     backends: z.record(z.string(), z.object({ command: z.string(), version: z.string().optional() }).strict()),
     started_at: z.string(),

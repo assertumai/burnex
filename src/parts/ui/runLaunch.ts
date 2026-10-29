@@ -34,6 +34,8 @@ export interface LaunchRunOptions {
    * входом (`item=<слаг>`), а не угадывается им заново из очереди.
    */
   readonly inputs?: Readonly<Record<string, string>>;
+  /** Переопределения объявленного `env:` — ключами `--env имя=значение`. */
+  readonly env?: Readonly<Record<string, string>>;
   readonly execPath?: string;
   /** Куда сказать об отказе самого порождения. По умолчанию — журнал демона (`stderr`). */
   readonly onError?: (error: Error) => void;
@@ -73,6 +75,7 @@ export async function retryInterruptedRunRecovery(
 export const launchRun: LaunchRunFn = (options) => {
   const argv = [binPath(), 'run', options.pipeline];
   for (const [name, value] of Object.entries(options.inputs ?? {})) argv.push('--input', `${name}=${value}`);
+  for (const [name, value] of Object.entries(options.env ?? {})) argv.push('--env', `${name}=${value}`);
 
   const child = spawn(options.execPath ?? process.execPath, argv, {
     cwd: options.cwd,
