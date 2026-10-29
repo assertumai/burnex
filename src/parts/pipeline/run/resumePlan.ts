@@ -917,12 +917,21 @@ function dedupe(paths: readonly string[]): readonly string[] {
 }
 
 /**
- * Огрубление для общей сессии.
+ * Огрубление для общей сессии и для попыток работы.
  *
  * При `session: shared` результат шага зависит от диалога, которого при
  * частичном повторе не существует. Разрешить пошаговый повтор здесь означало бы
  * разрешить результат, полученный из другого разговора, чем записанный, —
  * поэтому единицей повтора становится работа целиком, и это не настройка.
+ *
+ * С `attempts.max > 1` причина другая, а следствие то же: шаги одной попытки
+ * опираются на дерево, которое построили предыдущие шаги *этой же* попытки.
+ * Переиспользовать первый шаг из исходного прогона и переисполнить второй —
+ * собрать результат, которого не было ни в одной попытке. В состоянии
+ * исходного прогона лежат шаги последней попытки, и у её первого шага
+ * `tree_before` — дерево начала работы. У работы ещё и с циклом `until` записи
+ * — последней итерации последней попытки, и дерево перед циклом берётся из
+ * `attempt-<n>/iter-1` (см. [loopTreeBefore]).
  *
  * Продолжение сессии — исключение: диалог, ради отсутствия которого введено
  * огрубление, здесь есть. Уступка — всё или ничего (design.md, решение 3):
@@ -945,21 +954,26 @@ function coarsenSharedSessions(
    * входы, изменилось определение), и подменять её общей сессией значило бы
    * прятать от читателя то, что на самом деле произошло.
    */
-  const flattenJob = (jobId: string, indices: readonly { plan: StepPlan; index: number }[]): void => {
+  const flattenJob = (
+    job: Job,
+    indices: readonly { plan: StepPlan; index: number }[],
+  ): void => {
+    const jobId = job.id;
+    const reason =
+      job.session === 'shared'
+        ? 'работа объявляет session: shared — единицей повтора является работа целиком'
+        : 'работа объявляет attempts.max > 1 — шаги попытки опираются на дерево предыдущих шагов этой же попытки, единицей повтора является работа целиком';
     adopt = adopt.filter((item) => item.job !== jobId);
     for (const { plan, index } of indices.filter(({ plan }) => plan.decision.kind !== 'rerun')) {
       result[index] = {
         ...plan,
-        decision: {
-          kind: 'rerun',
-          reason: 'работа объявляет session: shared — единицей повтора является работа целиком',
-        },
+        decision: { kind: 'rerun', reason },
       };
     }
   };
 
   for (const job of jobs) {
-    if (job.session !== 'shared') continue;
+    if (job.session !== 'shared' && job.attempts.max <= 1) continue;
 
     const indices = result
       .map((plan, index) => ({ plan, index }))
@@ -970,12 +984,12 @@ function coarsenSharedSessions(
       const prefixReusable = indices
         .slice(0, continueAt)
         .every(({ plan }) => plan.decision.kind === 'reuse');
-      if (!prefixReusable) flattenJob(job.id, indices);
+      if (!prefixReusable) flattenJob(job, indices);
       continue;
     }
 
     if (!indices.some(({ plan }) => plan.decision.kind === 'rerun')) continue;
-    flattenJob(job.id, indices);
+    flattenJob(job, indices);
   }
 
   return { steps: result, adoptWorkspace: adopt };
@@ -1101,13 +1115,17 @@ function jobVerdict(job: string, steps: readonly StepPlan[], sourceRunId: string
  * реализации, в дерево вернулись пять файлов из пятидесяти четырёх).
  * Запись первой итерации читается из журнала исходного прогона; нет её —
  * шаг остаётся со своим `tree_before`, как прежде.
+ *
+ * У работы с попытками записи шагов в состоянии — записи последней попытки, и
+ * первая итерация ищется в её каталоге (`attempt-<n>/iter-1`): `attempts` в
+ * записи работы есть ровно у тех работ, чей журнал разложен по попыткам.
  */
 export function loopTreeBefore(source: SourceRun): ReadonlyMap<StepRecord, string> {
   const bases = new Map<StepRecord, string>();
   for (const job of source.status.jobs) {
     if ((job.iterations ?? 1) <= 1) continue;
     for (const step of job.steps) {
-      const file = join(stepDir(source.paths, job.id, step.index, step.id, 1), 'step.json');
+      const file = join(stepDir(source.paths, job.id, step.index, step.id, 1, job.attempts), 'step.json');
       if (!existsSync(file)) continue;
       try {
         const first = JSON.parse(readFileSync(file, 'utf8')) as { tree_before?: unknown };
@@ -1236,6 +1254,12 @@ export function planResume(request: ResumeRequest): ResumePlanResult {
       throw new StepcastError(
         `Работа ${job.id} объявляет session: shared — возобновление с отдельного шага невозможно`,
         { hint: `Результат шага зависит от диалога, которого при частичном повторе нет. Укажите --from ${job.id}` },
+      );
+    }
+    if (job !== undefined && job.attempts.max > 1) {
+      throw new StepcastError(
+        `Работа ${job.id} объявляет attempts.max > 1 — возобновление с отдельного шага невозможно`,
+        { hint: `Шаги попытки опираются на дерево, собранное предыдущими шагами той же попытки. Укажите --from ${job.id}` },
       );
     }
   }

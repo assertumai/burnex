@@ -31,6 +31,8 @@ describe('injectedVariables: STEPCAST_SKIP_EXIT_CODE', () => {
     jobId: 'j',
     jobDir: '/r/j',
     attempt: 1,
+    jobAttempt: 1,
+    jobAttemptMax: 1,
     workspace: '/w',
     artifacts: '/a',
     scratch: '/s',
@@ -60,13 +62,33 @@ describe('injectedVariables: STEPCAST_SKIP_EXIT_CODE', () => {
     reportedDenials: new Set(),
     reportedWithheld: new Set(),
   } as unknown as Parameters<typeof stepEnv>[3];
-  const job = { id: 'j', env: {} } as unknown as Parameters<typeof stepEnv>[1];
+  const job = { id: 'j', env: {}, attempts: { max: 1 } } as unknown as Parameters<typeof stepEnv>[1];
   const common = { id: 's', env: {} };
 
   it('stepEnv отдаёт код командному шагу и его проверкам', () => {
     const step = { ...common, kind: 'run', skipExitCode: 78 } as unknown as Parameters<typeof stepEnv>[0];
     assert.equal(stepEnv(step, job, 1, context, '/r/j/s').STEPCAST_SKIP_EXIT_CODE, '78');
     assert.equal(stepEnv(step, job, 1, context, '/r/j/s', 'check').STEPCAST_SKIP_EXIT_CODE, '78');
+  });
+
+  it('работа без ключа attempts получает номер попытки 1 из 1', () => {
+    const step = { ...common, kind: 'run' } as unknown as Parameters<typeof stepEnv>[0];
+    for (const grant of ['step', 'check'] as const) {
+      const env = stepEnv(step, job, 1, context, '/r/j/s', grant);
+      assert.equal(env.STEPCAST_JOB_ATTEMPT, '1');
+      assert.equal(env.STEPCAST_JOB_ATTEMPT_MAX, '1');
+    }
+  });
+
+  it('во второй попытке работы из трёх шаг и его проверки видят 2 из 3', () => {
+    const step = { ...common, kind: 'agent' } as unknown as Parameters<typeof stepEnv>[0];
+    const retrying = { ...job, attempts: { max: 3 } } as unknown as Parameters<typeof stepEnv>[1];
+    const second = { ...context, jobAttempt: 2 } as unknown as Parameters<typeof stepEnv>[3];
+    for (const grant of ['step', 'check'] as const) {
+      const env = stepEnv(step, retrying, 1, second, '/r/j/s', grant);
+      assert.equal(env.STEPCAST_JOB_ATTEMPT, '2');
+      assert.equal(env.STEPCAST_JOB_ATTEMPT_MAX, '3');
+    }
   });
 
   it('stepEnv не выставляет переменную без кода и агентскому шагу', () => {

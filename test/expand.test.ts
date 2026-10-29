@@ -1647,6 +1647,69 @@ steps:
   });
 });
 
+describe('pipeline-definition: попытки работы', () => {
+  const body = (attempts: string): Project =>
+    makeProject({
+      'stepcast.yml': `
+kind: pipeline
+jobs:
+  build:
+    uses: ./jobs/build.yml
+    with: { retries: 2 }
+`,
+      'jobs/build.yml': `
+kind: job
+params:
+  retries: { type: int, required: true }
+${attempts}
+steps:
+  - id: c
+    run: [echo, ok]
+`,
+    });
+
+  it('раскрывает корректный ключ attempts работы', () => {
+    const job = expand(body('attempts: { max: 3 }')).pipeline.jobs[0]!;
+    assert.equal(job.attempts.max, 3);
+  });
+
+  it('раскрывает attempts.max из подстановки', () => {
+    const job = expand(body('attempts: { max: "${params.retries}" }')).pipeline.jobs[0]!;
+    assert.equal(job.attempts.max, 2);
+  });
+
+  it('без ключа работа исполняется один раз', () => {
+    assert.equal(expand(body('')).pipeline.jobs[0]!.attempts.max, 1);
+  });
+
+  it('отклоняет превышение limits.attempts и называет путь и оба значения', () => {
+    assert.throws(
+      () => expand(body('attempts: { max: 9 }')),
+      (error: unknown) => {
+        assert.ok(error instanceof StepcastError);
+        assert.match(error.message, /attempts\.max = 9/);
+        assert.match(error.message, /limits\.attempts = \d+/);
+        assert.match(error.at ?? '', /jobs\.build\.attempts\.max/);
+        return true;
+      },
+    );
+  });
+
+  it('схема отклоняет escalation у работы', () => {
+    assert.throws(
+      () => expand(body('attempts: { max: 2, escalation: [{ include_failure: true }] }')),
+      StepcastError,
+    );
+  });
+
+  it('замок пишет попытки работы только при max > 1', () => {
+    assert.match(serializeLock(expand(body('attempts: { max: 2 }')).pipeline), /attempts:\n\s+max: 2/);
+    const plain = serializeLock(expand(body('')).pipeline);
+    const jobPart = plain.slice(plain.indexOf('jobs:'), plain.indexOf('steps:'));
+    assert.doesNotMatch(jobPart, /attempts/);
+  });
+});
+
 // Сценарий: «Фиксация перед запуском»
 describe('pipeline.lock.yml', () => {
   it('не содержит ссылок uses и нераскрытых подстановок пайплайна', () => {

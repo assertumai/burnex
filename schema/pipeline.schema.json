@@ -1508,6 +1508,25 @@
                 ],
                 "additionalProperties": false
               },
+              "attempts": {
+                "type": "object",
+                "properties": {
+                  "max": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "number"
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "max"
+                ],
+                "additionalProperties": false
+              },
               "permissions": {
                 "type": "object",
                 "properties": {

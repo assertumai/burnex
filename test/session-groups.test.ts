@@ -186,6 +186,45 @@ jobs:
     );
   });
 
+  const groupWithAttempts = (max: number) =>
+    makeProject({
+      'stepcast.yml': `
+kind: pipeline
+name: probe
+jobs:
+  first:
+    session_group: g
+    steps:
+      - id: one
+        agent: claude
+        prompt: ok
+  second:
+    needs: [first]
+    session_group: g
+    attempts: { max: ${max} }
+    steps:
+      - id: two
+        agent: claude
+        prompt: ok
+`,
+    });
+
+  it('работа с attempts.max > 1 в группе отклоняется', () => {
+    const project = groupWithAttempts(2);
+
+    assert.deepEqual(
+      errorsOf(project).filter((message) => message.includes('attempts.max')),
+      ['Работа second объявляет attempts.max = 2 и состоит в группе сессий g'],
+    );
+  });
+
+  it('attempts.max: 1 в группе ошибки не даёт', () => {
+    assert.deepEqual(
+      errorsOf(groupWithAttempts(1)).filter((message) => message.includes('attempts.max')),
+      [],
+    );
+  });
+
   it('две неупорядоченные работы одной группы отклоняются', () => {
     const project = makeProject({
       'stepcast.yml': `
@@ -455,6 +494,7 @@ const FIXED_JOB: Job = {
   contextUpstream: 'all',
   inputs: [],
   data: [],
+  attempts: { max: 1 },
   steps: [FIXED_STEP],
 };
 

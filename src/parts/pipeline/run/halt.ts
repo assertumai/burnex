@@ -33,6 +33,20 @@ export const HaltCause = {
 
 export type HaltCauseValue = (typeof HaltCause)[keyof typeof HaltCause];
 
+/**
+ * Причины, при которых упавшую работу с `attempts.max > 1` исполняют заново.
+ * Белый список, а не чёрный: новая причина в `HaltCause` по умолчанию не
+ * повторяется, пока её не внесут сюда явно, — лишний повтор стоит денег и
+ * времени. Бюджет и окно лимита не восстановятся от повтора, отмена — воля
+ * пользователя, отказ аутентификации повтор воспроизведёт.
+ */
+export const RETRYABLE_JOB_CAUSES: readonly HaltCauseValue[] = [
+  HaltCause.expectFailed,
+  HaltCause.timeout,
+  HaltCause.spawnFailed,
+  HaltCause.untilNotMet,
+];
+
 /** Перечень целиком: тест сверяет с ним фактический набор причин. */
 export const HALT_CAUSES: readonly HaltCauseValue[] = Object.values(HaltCause);
 

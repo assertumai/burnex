@@ -110,6 +110,10 @@ export function renderProgressLine(
       );
     case 'step.stalled':
       return line(`${event.job}/${event.step}`, `тишина ${Math.round(event.silent_ms / 1000)}с`);
+    case 'job.attempt.started':
+      return line(event.job, `попытка работы ${event.attempt} начата`);
+    case 'job.attempt.finished':
+      return line(event.job, `попытка работы ${event.attempt} ${event.status}${detailSuffix(event.reason)}`);
     case 'iteration.started':
       return line(event.job, `итерация ${event.iteration} начата`);
     case 'iteration.finished':

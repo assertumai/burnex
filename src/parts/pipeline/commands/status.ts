@@ -71,7 +71,10 @@ export function runStatusCommand(
   const rows: string[][] = [];
   for (const job of status.jobs) {
     const detail = job.status === 'failed' ? failureDetail(job) : (job.reason ?? '');
-    rows.push([`  ${job.id}`, label(job.status), detail]);
+    // Работа с попытками: сколько их ушло, иначе шаг последней попытки читался
+    // бы как единственный.
+    const tries = job.attempts === undefined ? '' : ` (попыток работы: ${job.attempts})`;
+    rows.push([`  ${job.id}`, label(job.status), tries === '' ? detail : `${detail}${tries}`.trimStart()]);
   }
   for (const line of formatColumns(rows)) write(line);
 

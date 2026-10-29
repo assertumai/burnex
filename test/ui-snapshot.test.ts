@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { describe, it } from 'node:test';
 
 import { buildSnapshot } from '../src/parts/ui/snapshot.js';
+import { readStepOutput } from '../src/parts/ui/stepOutput.js';
 import { cleanupRun } from '../src/parts/pipeline/run/cleanup.js';
 import { projectKey } from '../src/parts/pipeline/run/journal/paths.js';
 import { expandPipeline } from '../src/parts/pipeline/document/expand.js';
@@ -303,6 +304,59 @@ params:
       step: 40,
     });
     assert.equal(think?.contextBreakdown?.total, 100);
+  });
+
+  // Работа с попытками кладёт шаги в `steps/attempt-<n>/`: витрина обязана
+  // находить каталог последней попытки, а не показывать работу пустой.
+  it('читает контекст и вывод шага из каталога последней попытки работы', () => {
+    const { journal, key } = seed();
+    const first = journal.prepareStep('producer', 1, 'think', undefined, 1);
+    journal.writeStepFile(first, 'stdout.log', 'первая попытка');
+    const second = journal.prepareStep('producer', 1, 'think', undefined, 2);
+    journal.writeStepFile(second, 'stdout.log', 'вторая попытка');
+    journal.writeContextReport(second, {
+      entries: [{ origin: 'job', kind: 'text', mode: 'inline', tokens: 7 }],
+      total_tokens: 7,
+    });
+
+    const think = buildSnapshot(journal.paths, key).jobs.find((j) => j.id === 'producer')?.steps[0];
+    assert.equal(think?.contextBreakdown?.total, 7);
+
+    const output = readStepOutput(journal.paths, 'producer', 'think', { stdoutOffset: 0 });
+    assert.equal(output.stdout?.content, 'вторая попытка');
+  });
+
+  it('модели попыток берутся из последней попытки работы', () => {
+    const { journal, key } = seed();
+    const entry = (jobAttempt: number, model: string) => ({
+      attempt: 1,
+      job_attempt: jobAttempt,
+      backend: 'claude',
+      model,
+      billable_tokens: 10,
+      wallclock_ms: 1_000,
+    });
+    journal.writeUsage({
+      run_id: 'run-a',
+      total: { tokens_in: 0, tokens_out: 0, cache_read: 0, cache_write: 0, billable_tokens: 20, wallclock_ms: 2_000 },
+      unreported: [],
+      jobs: {
+        producer: {
+          billable_tokens: 20,
+          wallclock_ms: 2_000,
+          steps: {
+            think: {
+              billable_tokens: 20,
+              wallclock_ms: 2_000,
+              attempts: [entry(1, 'sonnet'), entry(2, 'opus')],
+            },
+          },
+        },
+      },
+    });
+
+    const think = buildSnapshot(journal.paths, key).jobs.find((j) => j.id === 'producer')?.steps[0];
+    assert.deepEqual(think?.attemptModels, [{ attempt: 1, model: 'opus' }]);
   });
 
   // Сценарий: «Длительность работы и шага видна на идущем прогоне». Времена

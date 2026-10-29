@@ -185,6 +185,8 @@ export function jobToPlain(job: Job): Record<string, unknown> {
     ...(job.output === undefined ? {} : { output: job.output }),
     ...(job.data.length === 0 ? {} : { data: job.data }),
     ...(job.budget === undefined ? {} : { budget: budgetToPlain(job.budget) }),
+    // Только при повторе: замок работы без ключа не меняется ни на байт.
+    ...(job.attempts.max > 1 ? { attempts: { max: job.attempts.max } } : {}),
     ...(job.permissions === undefined ? {} : { permissions: job.permissions }),
     ...(job.mcp === undefined ? {} : { mcp: job.mcp }),
     steps: job.steps.map(stepToPlain),

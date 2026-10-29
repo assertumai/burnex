@@ -143,6 +143,11 @@ export interface Attempts {
   readonly escalation: readonly EscalationStep[];
 }
 
+/** Попытки работы целиком: перезапуск упавшей работы с первого шага. */
+export interface JobAttempts {
+  readonly max: number;
+}
+
 export interface StepCommon {
   readonly id: string;
   /** Позиция шага в работе, с 1. Задаёт числовой префикс каталога в журнале. */
@@ -446,6 +451,11 @@ export interface Job {
    */
   readonly budgetExempt?: boolean;
   readonly until?: Until;
+  /**
+   * Попытки работы. Без объявления `max: 1` — работа исполняется один раз, а
+   * раскладка журнала и ключи сессий остаются прежними.
+   */
+  readonly attempts: JobAttempts;
   /** Политика доступа агентских шагов работы, объявленная на её уровне. */
   readonly permissions?: Permissions;
   /**

@@ -7,7 +7,9 @@ import { isProcessAlive } from '../../../../kernel/process.js';
 import { describeSchemaFailure } from '../../../../kernel/schema-failure.js';
 import { JOURNAL_FORMAT, probeJournalFormat } from './format.js';
 import {
+  attemptDirName,
   iterationDirName,
+  parseAttemptDirName,
   parseIterationDirName,
   parseStepDirName,
   projectKey,
@@ -624,17 +626,32 @@ export function readExpectReports(
 }
 
 /**
- * Каталог шага. Итерацию можно не указывать — тогда берётся последняя
- * выполненная: чаще всего спрашивают именно про неё.
+ * Каталог шага. Попытку работы и итерацию можно не указывать — тогда берутся
+ * последние выполненные: чаще всего спрашивают именно про них. Раскладка без
+ * уровня попытки (работа без `attempts`) читается как прежде.
  */
 export function findStepDir(
   paths: RunPaths,
   jobId: string,
   stepId: string,
   iteration?: number,
+  jobAttempt?: number,
 ): string | undefined {
-  const stepsDir = join(paths.jobs, jobId, 'steps');
-  if (!existsSync(stepsDir)) return undefined;
+  const root = join(paths.jobs, jobId, 'steps');
+  if (!existsSync(root)) return undefined;
+
+  const attempts = readdirSync(root)
+    .map(parseAttemptDirName)
+    .filter((value): value is number => value !== undefined)
+    .sort((a, b) => a - b);
+  let stepsDir = root;
+  let attempt: number | undefined;
+  if (attempts.length > 0) {
+    attempt = jobAttempt ?? attempts.at(-1);
+    if (attempt === undefined || !attempts.includes(attempt)) return undefined;
+    stepsDir = join(root, attemptDirName(attempt));
+    if (!existsSync(stepsDir)) return undefined;
+  }
 
   const iterations = readdirSync(stepsDir)
     .map(parseIterationDirName)
@@ -644,10 +661,10 @@ export function findStepDir(
   if (iterations.length > 0) {
     const target = iteration ?? iterations.at(-1);
     if (target === undefined || !iterations.includes(target)) return undefined;
-    return within(paths, jobId, stepId, join(stepsDir, iterationDirName(target)), target);
+    return within(paths, jobId, stepId, join(stepsDir, iterationDirName(target)), target, attempt);
   }
 
-  return within(paths, jobId, stepId, stepsDir, undefined);
+  return within(paths, jobId, stepId, stepsDir, undefined, attempt);
 }
 
 function within(
@@ -656,12 +673,13 @@ function within(
   stepId: string,
   dir: string,
   iteration: number | undefined,
+  jobAttempt: number | undefined,
 ): string | undefined {
   if (!existsSync(dir)) return undefined;
   for (const name of readdirSync(dir)) {
     const parsed = parseStepDirName(name);
     if (parsed?.stepId === stepId) {
-      return stepDir(paths, jobId, parsed.index, parsed.stepId, iteration);
+      return stepDir(paths, jobId, parsed.index, parsed.stepId, iteration, jobAttempt);
     }
   }
   return undefined;

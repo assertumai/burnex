@@ -72,6 +72,8 @@ export interface LockJob {
   readonly lane?: string;
   /** Группа сессий, объявленная на месте подключения работы. */
   readonly sessionGroup?: string;
+  /** Попытки работы; поле есть в замке только при `max > 1`. */
+  readonly attempts?: { readonly max: number };
   readonly context: readonly string[];
   readonly steps: readonly LockStep[];
 }
@@ -230,6 +232,7 @@ function toJob(value: unknown): LockJob | undefined {
   const display = displayMap(record.display);
   const lane = asString(record.lane);
   const sessionGroup = asString(record.session_group);
+  const attemptsMax = asRecord(record.attempts)?.max;
 
   return {
     id,
@@ -241,6 +244,7 @@ function toJob(value: unknown): LockJob | undefined {
     ...(display === undefined ? {} : { display }),
     ...(lane === undefined ? {} : { lane }),
     ...(sessionGroup === undefined ? {} : { sessionGroup }),
+    ...(typeof attemptsMax === 'number' && attemptsMax > 1 ? { attempts: { max: attemptsMax } } : {}),
     context: contextLabels(record.context),
     steps,
   };

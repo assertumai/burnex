@@ -190,6 +190,12 @@ export class UsageAccumulator {
   /** Отличает переисполнения одной и той же попытки в ключах расхода. */
   private sealCounter = 0;
   /**
+   * Действующая попытка работы — только у работ с `attempts.max > 1`. Расход
+   * попыток шагов в сводке различается по ней, иначе шаг с тем же ключом во
+   * второй попытке работы слился бы с первой.
+   */
+  private readonly jobAttempts = new Map<string, number>();
+  /**
    * Расход попыток, перенесённых при продолжении оборванной сессии —
    * `<job>/<step>` → расход. Входит в сводку расхода шага (`report()`) как
    * попытка номер 1, наравне с продолженной попыткой того же номера, но не
@@ -372,6 +378,30 @@ export class UsageAccumulator {
       if (!key.startsWith(prefix)) continue;
       this.sealCounter += 1;
       const sealedKey = `${key}@seal${this.sealCounter}`;
+      this.steps.delete(key);
+      this.steps.set(sealedKey, counters);
+      if (this.costUnreportedAttempts.delete(key)) this.costUnreportedAttempts.add(sealedKey);
+    }
+  }
+
+  /** Объявить, что работа начала попытку `attempt`: расход шагов далее помечается ею. */
+  beginJobAttempt(jobId: string, attempt: number): void {
+    this.jobAttempts.set(jobId, attempt);
+  }
+
+  /**
+   * Запечатать расход всех шагов работы перед её новой попыткой — тем же
+   * механизмом, что `sealStep`, но с пометкой номера уходящей попытки работы:
+   * сводка разводит записи по ней, а итог работы по-прежнему ведут её
+   * собственные счётчики.
+   */
+  sealJob(jobId: string): void {
+    const attempt = this.jobAttempts.get(jobId);
+    const prefix = `${jobId}/`;
+    for (const [key, counters] of [...this.steps]) {
+      if (!key.startsWith(prefix)) continue;
+      this.sealCounter += 1;
+      const sealedKey = `${key}@seal${this.sealCounter}${attempt === undefined ? '' : `@job${attempt}`}`;
       this.steps.delete(key);
       this.steps.set(sealedKey, counters);
       if (this.costUnreportedAttempts.delete(key)) this.costUnreportedAttempts.add(sealedKey);
@@ -583,7 +613,7 @@ export class UsageAccumulator {
           /** Максимум по попыткам шага (включая запечатанные) — не сумма. */
           peak: number | undefined;
           attempts: Map<
-            number,
+            string,
             Omit<UsageReport['jobs'][string]['steps'][string]['attempts'][number], 'cost_source'> & {
               costMicroUsd: number;
               costReportedAttempts: number;
@@ -603,6 +633,12 @@ export class UsageAccumulator {
         const attemptPart = rest.slice(hashAt + 1);
         const sealAt = attemptPart.indexOf('@');
         const attempt = Number(sealAt === -1 ? attemptPart : attemptPart.slice(0, sealAt));
+        // Запись запечатанной попытки работы несёт её номер в ключе, живая —
+        // действующий номер работы.
+        const sealedJobAttempt = /@job(\d+)/.exec(attemptPart);
+        const jobAttempt =
+          sealedJobAttempt === null ? this.jobAttempts.get(jobId) : Number(sealedJobAttempt[1]);
+        const attemptKey = jobAttempt === undefined ? String(attempt) : `${jobAttempt}.${attempt}`;
 
         const existing =
           steps[stepId] ??
@@ -616,13 +652,14 @@ export class UsageAccumulator {
             peak: undefined,
             attempts: new Map(),
           };
-        const priorAttempt = existing.attempts.get(attempt);
+        const priorAttempt = existing.attempts.get(attemptKey);
         // Переисполнение шага запечатывает старую попытку под тем же номером
         // (`sealStep`): её пик не должен теряться, когда новая попытка с тем
         // же номером его не достигла.
         const attemptPeak = maxOptional(priorAttempt?.peak_prefix_tokens, step.peak);
-        existing.attempts.set(attempt, {
+        existing.attempts.set(attemptKey, {
           attempt,
+          ...(jobAttempt === undefined ? {} : { job_attempt: jobAttempt }),
           backend: step.backend,
           ...(step.model === undefined ? {} : { model: step.model }),
           billable_tokens: (priorAttempt?.billable_tokens ?? 0) + step.billable,
@@ -657,7 +694,7 @@ export class UsageAccumulator {
               ...costFields(step),
               ...(step.peak === undefined ? {} : { peak_prefix_tokens: step.peak }),
               attempts: [...step.attempts.values()]
-                .sort((a, b) => a.attempt - b.attempt)
+                .sort((a, b) => (a.job_attempt ?? 0) - (b.job_attempt ?? 0) || a.attempt - b.attempt)
                 .map(({ costMicroUsd, costReportedAttempts, costFromReported, costFromCatalog, ...attempt }) => ({
                   ...attempt,
                   ...costFields({ costMicroUsd, costReportedAttempts, costFromReported, costFromCatalog }),

@@ -31,8 +31,10 @@ import {
   journalSchemaFingerprint,
 } from '../src/parts/pipeline/run/journal/format.js';
 import {
+  attemptDirName,
   findProjectRoot,
   makeRunId,
+  parseAttemptDirName,
   parseStepDirName,
   projectKey,
   shortRunId,
@@ -206,6 +208,36 @@ describe('run-journal: раскладка и состояние', () => {
     assert.ok(found !== undefined);
     assert.ok(found.endsWith('07-write-code'));
     assert.equal(findStepDir(journal.paths, 'implement', 'нет-такого'), undefined);
+  });
+
+  it('находит шаг по последней попытке работы, с until и без него', () => {
+    const { runsRoot, projectRoot } = bed();
+    const journal = RunJournal.create({ runsRoot, projectRoot });
+    const sep = (...parts: string[]) => join(...parts);
+    journal.prepareStep('plain', 1, 'write', undefined, 1);
+    journal.prepareStep('plain', 1, 'write', undefined, 2);
+    const plain = findStepDir(journal.paths, 'plain', 'write');
+    assert.ok(plain?.endsWith(sep('steps', 'attempt-2', '01-write')));
+    assert.ok(findStepDir(journal.paths, 'plain', 'write', undefined, 1)?.endsWith(sep('attempt-1', '01-write')));
+    assert.equal(findStepDir(journal.paths, 'plain', 'write', undefined, 3), undefined);
+
+    journal.prepareStep('loop', 1, 'write', 1, 1);
+    journal.prepareStep('loop', 1, 'write', 1, 2);
+    journal.prepareStep('loop', 1, 'write', 2, 2);
+    assert.ok(findStepDir(journal.paths, 'loop', 'write')?.endsWith(sep('attempt-2', 'iter-2', '01-write')));
+    assert.ok(
+      findStepDir(journal.paths, 'loop', 'write', 1, 1)?.endsWith(sep('attempt-1', 'iter-1', '01-write')),
+    );
+
+    // Работа без попыток: прежняя раскладка.
+    journal.prepareStep('old', 1, 'write');
+    assert.ok(findStepDir(journal.paths, 'old', 'write')?.endsWith(sep('old', 'steps', '01-write')));
+  });
+
+  it('преобразует имя каталога попытки работы туда и обратно', () => {
+    assert.equal(attemptDirName(2), 'attempt-2');
+    assert.equal(parseAttemptDirName('attempt-2'), 2);
+    assert.equal(parseAttemptDirName('iter-2'), undefined);
   });
 
   it('преобразует имя каталога шага туда и обратно', () => {

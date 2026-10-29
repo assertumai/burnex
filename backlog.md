@@ -448,12 +448,14 @@ claimed_by: run:2026-10-29T17-17-09Z-2754d8
 
 ## job-level-attempts
 
-status: todo
+status: done
 title: `attempts` на работе — перезапуск упавшей работы с первого шага
 why: Попытки есть только у шага; работа, где второй шаг портит результат первого, перезапуститься целиком не может, и петля отдаёт пункт `failed` вместо второго захода.
 done_when: `attempts: { max: N }` на работе ограничен `limits.attempts`; не повторяются пропуск, превышение бюджета, отмена, `backend_rate_limited`, `backend_unauthenticated`; переменные `STEPCAST_JOB_ATTEMPT` и `STEPCAST_JOB_ATTEMPT_MAX`; бюджет работы покрывает все попытки, зависимые видят финальный исход; `lint` запрещает `max > 1` внутри `session_group`; при resume работа — единое целое; тесты.
 group: engine-outcomes
 source: docs/burnex-after-stepcast.md, раздел 1 «Повторы работы целиком»
+started_at: 2026-10-29T17:43:35.775Z
+claimed_by: run:2026-10-29T17-43-34Z-c53d39
 
 ## job-group-loops
 

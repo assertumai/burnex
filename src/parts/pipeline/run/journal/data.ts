@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { readFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { StepcastError } from '../../../../kernel/errors.js';
@@ -141,6 +141,15 @@ export function readJobData(jobDirPath: string): JobData {
  */
 export function writeJobDataUnchecked(jobDirPath: string, data: JobData): void {
   atomicWrite(jobDataPath(jobDirPath), `${JSON.stringify(data, null, 2)}\n`);
+}
+
+/**
+ * Сбросить данные работы перед новой её попыткой: то, что опубликовала
+ * упавшая попытка, не должно дойти до потребителей `${jobs.<id>.data.*}`.
+ * Объявление работы лежит в `resolved.json` и сброс его не касается.
+ */
+export function resetJobData(jobDirPath: string): void {
+  rmSync(jobDataPath(jobDirPath), { force: true });
 }
 
 /**

@@ -2218,6 +2218,34 @@ steps:
   });
 });
 
+describe('попытки работы в оценке худшего случая', () => {
+  it('худший случай умножается на attempts.max работы', () => {
+    const project = makeProject({
+      'stepcast.yml': `
+kind: pipeline
+budget: { tokens: 100k }
+jobs:
+  build:
+    attempts: { max: 2 }
+    until:
+      max_iterations: 3
+      check: [{ file_exists: done.txt }]
+    steps:
+      - id: a
+        run: [echo, a]
+      - id: b
+        run: [echo, b]
+`,
+    });
+
+    assert.ok(
+      lint(project).some(
+        (item) => item.severity === 'warning' && /Худший случай: до 12 исполнений/.test(item.hint ?? ''),
+      ),
+    );
+  });
+});
+
 describe('schedule-trigger: статическая проверка расписания', () => {
   // Сценарий: «Триггер расписания признаётся»
   it('принимает объявленное расписание', () => {

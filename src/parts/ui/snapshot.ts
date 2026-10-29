@@ -267,7 +267,12 @@ function attemptModels(
   jobId: string,
   stepId: string,
 ): readonly AttemptModel[] {
-  const attempts = summary?.jobs[jobId]?.steps[stepId]?.attempts ?? [];
+  const all = summary?.jobs[jobId]?.steps[stepId]?.attempts ?? [];
+  // Работа с попытками: карточка показывает шаги последней попытки работы, и
+  // модели берутся её же — иначе номера попыток шага встречались бы дважды.
+  const lastJobAttempt = Math.max(0, ...all.map((attempt) => attempt.job_attempt ?? 0));
+  const attempts =
+    lastJobAttempt === 0 ? all : all.filter((attempt) => attempt.job_attempt === lastJobAttempt);
   return attempts.map((attempt) => ({
     attempt: attempt.attempt,
     ...(attempt.model === undefined ? {} : { model: attempt.model }),

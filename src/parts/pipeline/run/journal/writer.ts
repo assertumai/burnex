@@ -233,8 +233,14 @@ export class RunJournal {
   }
 
   /** Создать каталог шага и вернуть его путь. */
-  prepareStep(jobId: string, index: number, stepId: string, iteration?: number): string {
-    const dir = stepDir(this.paths, jobId, index, stepId, iteration);
+  prepareStep(
+    jobId: string,
+    index: number,
+    stepId: string,
+    iteration?: number,
+    jobAttempt?: number,
+  ): string {
+    const dir = stepDir(this.paths, jobId, index, stepId, iteration, jobAttempt);
     mkdirSync(dir, { recursive: true, mode: DIR_MODE });
     return dir;
   }

@@ -367,6 +367,18 @@ function checkSessionGroups(
       });
     }
 
+    // Попытки работы — то же самое: новая попытка начинает сессии заново.
+    for (const job of members) {
+      if (job.attempts.max <= 1) continue;
+      push({
+        severity: 'error',
+        message: `Работа ${job.id} объявляет attempts.max = ${job.attempts.max} и состоит в группе сессий ${name}`,
+        file: pipeline.file,
+        at: `jobs.${job.id}.attempts`,
+        hint: 'Новая попытка работы начинает сессии заново, а сессия группы живёт дольше работы: повторяйте шаги через attempts шага или выведите работу из группы',
+      });
+    }
+
     // Порядок: две работы группы не вправе идти одновременно — иначе один и
     // тот же диалог продолжают два процесса разом.
     for (const [index, job] of members.entries()) {
@@ -797,15 +809,17 @@ export function lintPipeline(expanded: ExpandedPipeline, given: LintOptions): Di
   for (const job of pipeline.jobs) {
     if (job.until === undefined || job.budget !== undefined) continue;
     // Худший случай работы с циклом = Σ по шагам (бюджет × attempts.max) ×
-    // max_iterations. Без собственного бюджета он ограничен только сверху
-    // бюджетом пайплайна, а это обычно не то, чего ждёт автор.
+    // max_iterations × attempts.max работы. Без собственного бюджета он
+    // ограничен только сверху бюджетом пайплайна, а это обычно не то, чего
+    // ждёт автор.
     const attempts = job.steps.reduce((sum, step) => sum + step.attempts.max, 0);
+    const jobAttempts = job.attempts.max;
     push({
       severity: 'warning',
       message: `У работы ${job.id} есть цикл until, но нет собственного бюджета`,
       file: job.source,
       at: `jobs.${job.id}.budget`,
-      hint: `Худший случай: до ${attempts * job.until.maxIterations} исполнений шагов (${job.until.maxIterations} итераций)`,
+      hint: `Худший случай: до ${attempts * job.until.maxIterations * jobAttempts} исполнений шагов (${job.until.maxIterations} итераций${jobAttempts > 1 ? `, ${jobAttempts} попыток работы` : ''})`,
     });
   }
 

@@ -2,7 +2,7 @@ import { evaluate, parseExpression } from '../domain/expr/parse.js';
 import { buildGraph, type Graph } from '../domain/graph.js';
 import { isFailure, type PredicateResult, type SkipKind, type StatusValue } from './journal/schema.js';
 import type { Job, Pipeline } from '../document/model.js';
-import { HaltCause, type HaltCauseValue } from './halt.js';
+import { HaltCause, RETRYABLE_JOB_CAUSES, type HaltCauseValue } from './halt.js';
 
 /**
  * Планировщик работ.
@@ -28,6 +28,26 @@ export interface JobOutcome {
   readonly lastCheck?: readonly PredicateResult[];
   /** Опубликованный структурированный выход, если работа его произвела. */
   readonly output?: unknown;
+  /**
+   * Внутренний признак: отказ, который повтор воспроизвёл бы, — противоречие
+   * плану возобновления и необъявленный ключ данных. Наружу (в состояние и
+   * журнал) не пишется; так же названо `AttemptOutcome.terminal` у попыток шага.
+   */
+  readonly terminal?: boolean;
+}
+
+/**
+ * Стоит ли повторить работу после этого исхода. Только `failed` с причиной из
+ * белого списка и без признака `terminal`; всё прочее — пропуск, успех,
+ * бюджет, отмена, отказ бэкенда — возвращается как есть.
+ */
+export function isRetryableJobOutcome(outcome: JobOutcome): boolean {
+  return (
+    outcome.status === 'failed' &&
+    outcome.terminal !== true &&
+    outcome.cause !== undefined &&
+    RETRYABLE_JOB_CAUSES.includes(outcome.cause)
+  );
 }
 
 export interface SettledJob extends JobOutcome {

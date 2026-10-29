@@ -77,6 +77,7 @@ import {
 } from './schema.js';
 import type {
   Attempts,
+  JobAttempts,
   Budget,
   ContextEntry,
   ContextUpstream,
@@ -780,6 +781,24 @@ function toMcp(raw: RawMcp): McpServers {
         : { url: server.url, ...(server.headers === undefined ? {} : { headers: server.headers }) },
     ]),
   );
+}
+
+function toJobAttempts(
+  raw: { max: string | number } | undefined,
+  limits: Config['limits'],
+  substitutions: SubstitutionMap,
+  at: string,
+): JobAttempts {
+  if (raw === undefined) return { max: 1 };
+  const path = `${at}.attempts.max`;
+  const max = toCount(raw.max, path, substitutions, parseCount, path);
+  if (max > limits.attempts) {
+    throw new StepcastError(
+      `attempts.max = ${max} превышает потолок limits.attempts = ${limits.attempts}`,
+      { at: path, hint: 'Поднимите потолок в конфигурации или уменьшите число попыток' },
+    );
+  }
+  return { max };
 }
 
 function toAttempts(
@@ -2417,6 +2436,12 @@ export function expandPipeline(options: ExpandOptions): ExpandedPipeline {
         (body.context_upstream as ContextUpstream | undefined) ?? doc.context_upstream ?? 'all',
       inputs: (body.inputs as readonly string[] | undefined) ?? [],
       data: toDataDeclaration(body.data as readonly string[] | undefined, declaringFile, at),
+      attempts: toJobAttempts(
+        body.attempts as { max: string | number } | undefined,
+        config.limits,
+        substitutions,
+        at,
+      ),
       ...(until === undefined
         ? {}
         : {

@@ -140,6 +140,8 @@ describe('step-execution: окружение', () => {
       stepId: 'compile',
       stepDir: '/runs/r1/jobs/build/steps/01-compile',
       attempt: 2,
+      jobAttempt: 1,
+      jobAttemptMax: 1,
       workspace: '/work',
       artifacts: '/runs/r1/artifacts',
       scratch: '/runs/r1/jobs/build/scratch',

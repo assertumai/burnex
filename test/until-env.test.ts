@@ -27,6 +27,28 @@ async function run(project: Project, engineLocator?: () => EngineLocation): Prom
 }
 
 describe('job-iteration: окружение проверки цикла', () => {
+  it('проверка цикла видит номер попытки работы: 1 из 1 без объявления', async () => {
+    const project = makeProject({
+      'stepcast.yml': `
+version: 1
+kind: pipeline
+name: попытка-в-проверке
+jobs:
+  looped:
+    until:
+      max_iterations: 1
+      check:
+        - cmd: 'test "$STEPCAST_JOB_ATTEMPT" = 1 && test "$STEPCAST_JOB_ATTEMPT_MAX" = 1'
+    steps:
+      - id: noop
+        run: [echo, ok]
+        expect: [{ exit_code: 0 }]
+`,
+    });
+
+    assert.equal((await run(project)).status, 'success');
+  });
+
   it('env_files из корня проекта доступны шагу и проверке в отдельном worktree', async () => {
     const project = makeProject({
       '.gitignore': '.machine.env\n',

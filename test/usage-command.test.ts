@@ -111,6 +111,72 @@ const RETRIED_SUMMARY = (runId: string): UsageReport => ({
   },
 });
 
+describe('CLI: stepcast usage — попытки работы', () => {
+  it('показывает расход каждой попытки работы и сводит шаги к последней', () => {
+    const { runsRoot, projectRoot, home } = makeJournalBed();
+    const stamp = '2026-08-01T00:00:00.000Z';
+    const attemptOf = (tokens: number): RunStatus['jobs'][number]['steps'][number]['attempts'][number] => ({
+      attempt: 1,
+      status: 'success',
+      started_at: stamp,
+      finished_at: stamp,
+      usage: {
+        backend: 'claude',
+        model: 'sonnet',
+        tokens_in: tokens,
+        tokens_out: 0,
+        cache_read: 0,
+        cache_write: 0,
+        wallclock_ms: 1_000,
+      },
+    });
+    const entry = (jobAttempt: number, billable: number) => ({
+      attempt: 1,
+      job_attempt: jobAttempt,
+      backend: 'claude',
+      model: 'sonnet',
+      billable_tokens: billable,
+      wallclock_ms: 1_000,
+    });
+    const journal = seedRun(runsRoot, projectRoot, {
+      jobs: [
+        {
+          id: 'impl',
+          status: 'success',
+          attempts: 2,
+          steps: [{ id: 'write', index: 1, kind: 'agent', key: 'k', status: 'success', attempts: [attemptOf(30)] }],
+        },
+      ],
+      usage: {
+        run_id: 'r',
+        total: { tokens_in: 130, tokens_out: 0, cache_read: 0, cache_write: 0, billable_tokens: 130, wallclock_ms: 2_000 },
+        unreported: [],
+        jobs: {
+          impl: {
+            billable_tokens: 130,
+            wallclock_ms: 2_000,
+            steps: {
+              write: {
+                billable_tokens: 130,
+                wallclock_ms: 2_000,
+                attempts: [entry(1, 100), entry(2, 30)],
+              },
+            },
+          },
+        },
+      },
+    });
+
+    const { lines, write } = capture();
+    withHome(home, () => runUsageCommand(args([journal.paths.runId]), write, projectRoot));
+
+    assert.equal(cell(lines, '    попытка работы 1', 'списано'), '100');
+    assert.equal(cell(lines, '    попытка работы 2', 'списано'), '30');
+    // Строка попытки шага — из записей последней попытки работы.
+    assert.equal(cell(lines, '      #1', 'списано'), '30');
+  });
+});
+
 describe('CLI: stepcast usage', () => {
   // Сценарий: «Шаги, проходящие не с первой попытки»
   it('показывает обе попытки шага с их номерами, моделями и стоимостью', () => {

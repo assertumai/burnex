@@ -346,6 +346,107 @@ jobs:
   });
 });
 
+describe('run-resume: работа с попытками — единица повтора', () => {
+  const ATTEMPTED = (steps: string): string => `
+version: 1
+kind: pipeline
+name: попытки
+jobs:
+  работа:
+    session: per_step
+    attempts: { max: 2 }
+    inputs: [сырьё.txt]
+    steps:
+${steps}
+  вторая:
+    needs: [работа]
+    steps:
+      - id: c
+        run: [sh, -c, 'test -f маркер.txt']
+        expect: [{ exit_code: 0 }]
+`;
+
+  const FAILING = ATTEMPTED(`
+      - id: первый
+        run: [echo, один]
+        expect: [{ exit_code: 0 }]
+      - id: второй
+        run: [sh, -c, 'test -f маркер.txt']
+        expect: [{ exit_code: 0 }]`);
+
+  it('невалидный второй шаг переисполняет работу целиком, и причина называет попытки', async () => {
+    const b = bed({ 'сырьё.txt': 'вход', 'stepcast.yml': FAILING });
+    const first = await firstRun(b);
+    assert.equal(first.status, 'failed');
+    b.project.write('маркер.txt', 'есть');
+
+    const plan = planFor(b, first);
+    assert.equal(plan.steps.find((item) => item.job === 'работа' && item.step === 'первый')?.decision.kind, 'rerun');
+    assert.equal(plan.steps.find((item) => item.job === 'работа' && item.step === 'второй')?.decision.kind, 'rerun');
+    const reason = (plan.steps[0]?.decision as { reason: string }).reason;
+    assert.match(reason, /attempts\.max > 1/);
+    assert.doesNotMatch(reason, /session: shared/);
+  });
+
+  it('отказывает в --from <работа>/<шаг> и называет работу ближайшей допустимой точкой', async () => {
+    const b = bed({ 'сырьё.txt': 'вход', 'stepcast.yml': FAILING });
+    const first = await firstRun(b);
+
+    const request = (from: string) => ({
+      cwd: b.project.root,
+      config: configOf(b),
+      source: readSourceRun(first.journal.paths),
+      from,
+    });
+    assert.throws(
+      () => planResume(request('работа/второй')),
+      (error: unknown) => {
+        assert.ok(error instanceof Error);
+        assert.match(error.message, /attempts\.max > 1/);
+        assert.match((error as { hint?: string }).hint ?? '', /--from работа/);
+        return true;
+      },
+    );
+    // Сама работа как точка допустима.
+    assert.doesNotThrow(() => planResume(request('работа')));
+  });
+
+  it('переиспользует шаги последней попытки и восстанавливает дерево по их якорям', async () => {
+    const b = bed(
+      {
+        'сырьё.txt': 'вход',
+        'stepcast.yml': ATTEMPTED(`
+      - id: пишет
+        run: [sh, -c, 'test ! -e результат.txt && echo r > результат.txt']
+        expect: [{ exit_code: 0 }]
+      - id: проверка
+        run: [sh, -c, 'test "$STEPCAST_JOB_ATTEMPT" = 2']
+        expect: [{ exit_code: 0 }]`),
+      },
+      { git: true },
+    );
+
+    const first = await firstRun(b);
+    // Вторая работа упала на отсутствующем маркере; первая прошла со второй попытки.
+    assert.equal(first.status, 'failed');
+    assert.equal(readStatus(first.journal.paths).jobs.find((job) => job.id === 'работа')?.attempts, 2);
+    b.project.write('маркер.txt', 'есть');
+
+    const plan = planFor(b, first);
+    assert.deepEqual(decisions(plan), {
+      'работа/пишет': 'reuse',
+      'работа/проверка': 'reuse',
+      'вторая/c': 'rerun',
+    });
+
+    const second = await resume(b, first);
+    assert.equal(second.status, 'success');
+    assert.equal(existsSync(b.project.path('результат.txt')), true);
+    const reused = readEvents(second.journal.paths).filter((event) => event.kind === 'step.reused');
+    assert.equal(reused.length, 2);
+  });
+});
+
 describe('run-resume: явная точка возобновления', () => {
   // Сценарий: «Возобновление с работы»
   it('переисполняет указанную работу и всё ниже по графу', async () => {
@@ -3414,6 +3515,45 @@ jobs:
       plan.restoreWorkspace.find((item) => item.job === 'цикл')?.paths,
       ['итерация-1.txt', 'итерация-2.txt', 'итерация-3.txt'],
       'произведённое циклом — от дерева перед первой итерацией',
+    );
+
+    const second = await resume(b, first, 'после');
+    assert.equal(second.status, 'success');
+  });
+
+  // Работа с циклом и попытками: записи шагов в состоянии — последней итерации
+  // последней попытки, а первая итерация лежит в `attempt-<n>/iter-1`. Поиск
+  // её без уровня попытки молча откатывался к `tree_before` последней итерации.
+  it('находит первую итерацию в каталоге последней попытки работы', async () => {
+    const pipeline = LOOP_PIPELINE.replace(
+      '  цикл:\n    session: per_step\n',
+      '  цикл:\n    session: per_step\n    attempts: { max: 2 }\n',
+    ).replace(
+      "run: [sh, -c, 'n=$(",
+      "run: [sh, -c, 'test \"$STEPCAST_JOB_ATTEMPT\" = 2 || exit 1; n=$(",
+    );
+    assert.notEqual(pipeline, LOOP_PIPELINE);
+    const b = bed({ 'сырьё.txt': 'вход', 'stepcast.yml': pipeline }, { git: true });
+
+    const first = await firstRun(b);
+    assert.equal(first.status, 'failed', 'последней работе не хватает маркера');
+    const loop = readStatus(first.journal.paths).jobs.find((job) => job.id === 'цикл');
+    assert.equal(loop?.status, 'success');
+    assert.equal(loop?.attempts, 2);
+    assert.equal(loop?.iterations, 3);
+
+    b.project.write('маркер.txt', 'есть');
+    execFileSync('git', ['-C', b.project.root, 'add', '-A'], { stdio: ['ignore', 'pipe', 'pipe'] });
+    execFileSync('git', ['-C', b.project.root, 'commit', '--quiet', '-m', 'маркер'], {
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+
+    const plan = planFor(b, first, 'после');
+    assert.equal(decisions(plan)['цикл/пишет'], 'reuse');
+    assert.deepEqual(
+      plan.restoreWorkspace.find((item) => item.job === 'цикл')?.paths,
+      ['итерация-1.txt', 'итерация-2.txt', 'итерация-3.txt'],
+      'произведённое последней попыткой — от дерева перед её первой итерацией',
     );
 
     const second = await resume(b, first, 'после');

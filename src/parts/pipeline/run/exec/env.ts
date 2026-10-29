@@ -152,6 +152,14 @@ export interface InjectedContext {
   readonly stepId?: string;
   readonly stepDir?: string;
   readonly attempt: number;
+  /**
+   * Номер попытки работы и её предел. Есть у каждой работы — `1` и `1` без
+   * объявления `attempts`, — в отличие от `STEPCAST_ITERATION`: скрипту,
+   * решающему «последняя попытка — черновик не публиковать», не нужно
+   * ветвиться на отсутствие переменной.
+   */
+  readonly jobAttempt: number;
+  readonly jobAttemptMax: number;
   readonly workspace: string;
   readonly artifacts: string;
   /** Каталог черновиков работы — общий на все её шаги и итерации. */
@@ -183,6 +191,8 @@ export function injectedVariables(context: InjectedContext): Record<string, stri
     ...(context.stepId === undefined ? {} : { STEPCAST_STEP: context.stepId }),
     ...(context.stepDir === undefined ? {} : { STEPCAST_STEP_DIR: context.stepDir }),
     STEPCAST_ATTEMPT: String(context.attempt),
+    STEPCAST_JOB_ATTEMPT: String(context.jobAttempt),
+    STEPCAST_JOB_ATTEMPT_MAX: String(context.jobAttemptMax),
     STEPCAST_WORKSPACE: context.workspace,
     STEPCAST_ARTIFACTS: context.artifacts,
     STEPCAST_SCRATCH: context.scratch,

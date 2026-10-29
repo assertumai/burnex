@@ -364,6 +364,8 @@ export const JobRecordSchema = z
     data: z.record(z.string(), z.string()).optional(),
     /** Число выполненных итераций цикла. У работы без цикла отсутствует. */
     iterations: z.number().int().positive().optional(),
+    /** Число использованных попыток работы. Есть только у работы с `attempts.max > 1`. */
+    attempts: z.number().int().positive().optional(),
     /**
      * Результаты предикатов check последней вычисленной итерации. Есть
      * только при отказе с причиной until_not_met — иначе цикл завершился
@@ -560,6 +562,8 @@ export const RunStatusSchema = z
 export const UsageAttemptReportSchema = z
   .object({
     attempt: z.number().int().positive(),
+    /** Попытка работы, в которой исполнена эта попытка шага. Есть только у работы с `attempts.max > 1`. */
+    job_attempt: z.number().int().positive().optional(),
     backend: z.string(),
     model: z.string().optional(),
     billable_tokens: z.number(),
@@ -829,6 +833,8 @@ export const EventSchema = z.discriminatedUnion('kind', [
   // Неудача внутреннего учёта. Статусов не меняет: см. parts/pipeline/run/bookkeeping.ts.
   z.object({ ...eventBase, kind: z.literal('iteration.started'), job: z.string(), iteration: z.number().int().positive() }).strict(),
   z.object({ ...eventBase, kind: z.literal('iteration.finished'), job: z.string(), iteration: z.number().int().positive(), passed: z.boolean(), reason: z.string().optional() }).strict(),
+  z.object({ ...eventBase, kind: z.literal('job.attempt.started'), job: z.string(), attempt: z.number().int().positive() }).strict(),
+  z.object({ ...eventBase, kind: z.literal('job.attempt.finished'), job: z.string(), attempt: z.number().int().positive(), status: StatusValueSchema, reason: z.string().optional() }).strict(),
   z.object({ ...eventBase, kind: z.literal('step.reused'), job: z.string(), step: z.string(), source: z.string() }).strict(),
   // Шаг переисполнен продолжением своей сессии, оборванной отменой в исходном
   // прогоне: session — идентификатор диалога, source — прогон-источник.

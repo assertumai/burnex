@@ -19,6 +19,7 @@ import {
   usageRecordAddress,
 } from '../src/parts/pipeline/run/journal/usageStore.js';
 import { USAGE_STORE_FORMAT } from '../src/parts/pipeline/run/journal/format.js';
+import { UsageAccumulator } from '../src/parts/pipeline/run/budget/accumulator.js';
 import { expandPipeline } from '../src/parts/pipeline/document/expand.js';
 import { runPipeline } from '../src/parts/pipeline/run/runner.js';
 import { makeJournalBed, makeProject, MINIMAL_PIPELINE, seedRun } from './helpers.js';
@@ -543,6 +544,45 @@ describe('usage-store: хранилище расхода', () => {
     const key = projectKey(projectRoot);
     const record = usageRecord(key, manifestOf('run-x', projectRoot), statusOf('run-x'), usageOf('run-x'));
     assert.equal(usageRecordAddress(record), `${key}/run-x`);
+  });
+});
+
+describe('usage-store: попытки работы не сливаются в учёте', () => {
+  const usage = (tokens: number) => ({
+    backend: 'claude',
+    tokens_in: tokens,
+    tokens_out: 0,
+    cache_read: 0,
+    cache_write: 0,
+    wallclock_ms: 10,
+  });
+
+  it('шаг с одним ключом в двух попытках работы даёт две записи, итог работы — их сумму', () => {
+    const accumulator = new UsageAccumulator(() => 0);
+    accumulator.beginJobAttempt('impl', 1);
+    accumulator.record('impl', 'write', 1, usage(100));
+    accumulator.sealJob('impl');
+    accumulator.beginJobAttempt('impl', 2);
+    accumulator.record('impl', 'write', 1, usage(30));
+
+    const report = accumulator.report('r1');
+    const job = report.jobs.impl!;
+    const attempts = job.steps.write!.attempts;
+    assert.deepEqual(
+      attempts.map((item) => [item.job_attempt, item.attempt, item.billable_tokens]),
+      [
+        [1, 1, 100],
+        [2, 1, 30],
+      ],
+    );
+    assert.equal(job.billable_tokens, 130);
+    assert.equal(job.steps.write!.billable_tokens, 130);
+  });
+
+  it('работа без попыток не получает job_attempt', () => {
+    const accumulator = new UsageAccumulator(() => 0);
+    accumulator.record('impl', 'write', 1, usage(5));
+    assert.equal(accumulator.report('r1').jobs.impl!.steps.write!.attempts[0]!.job_attempt, undefined);
   });
 });
 

@@ -145,8 +145,19 @@ export function runUsageCommand(
         source: jobReport?.cost_source,
       }),
     ]);
+    // Работа с попытками: расход каждой отдельной строкой, а шаги ниже — это
+    // шаги последней попытки, и записи расхода берутся её же.
+    if (job.attempts !== undefined) {
+      for (let n = 1; n <= job.attempts; n += 1) {
+        rows.push([`    попытка работы ${n}`, ...jobAttemptCells(jobReport, n)]);
+      }
+    }
     for (const step of job.steps) {
       const stepReport = jobReport?.steps[step.id];
+      const reportedAttempts =
+        job.attempts === undefined
+          ? stepReport?.attempts
+          : stepReport?.attempts.filter((entry) => entry.job_attempt === job.attempts);
       rows.push([
         `    ${step.id}`,
         ...stepCells(
@@ -157,7 +168,7 @@ export function runUsageCommand(
         ),
       ]);
       for (const attempt of step.attempts) {
-        rows.push([`      #${attempt.attempt}`, ...attemptCells(attempt, stepReport?.attempts)]);
+        rows.push([`      #${attempt.attempt}`, ...attemptCells(attempt, reportedAttempts)]);
       }
     }
   }
@@ -180,6 +191,22 @@ export function runUsageCommand(
   }
 
   return ExitCode.ok;
+}
+
+/** Расход одной попытки работы: сумма записей её шагов из сводки. */
+function jobAttemptCells(jobReport: UsageReport['jobs'][string] | undefined, jobAttempt: number): string[] {
+  const entries = Object.values(jobReport?.steps ?? {})
+    .flatMap((step) => step.attempts)
+    .filter((entry) => entry.job_attempt === jobAttempt);
+  if (entries.length === 0) return totalCells(undefined, undefined, { usd: undefined, source: undefined });
+  return totalCells(
+    entries.reduce((sum, entry) => sum + entry.billable_tokens, 0),
+    entries.reduce((sum, entry) => sum + entry.wallclock_ms, 0),
+    {
+      usd: sumOrUnreported(entries.map((entry) => entry.cost_usd)),
+      source: mergeCostSources(entries.map((entry) => entry.cost_source)),
+    },
+  );
 }
 
 function attemptCells(

@@ -69,7 +69,7 @@ import { computeStepKey, upstreamForKey } from './stepKey.js';
 import { prepareWorkspace, type PreparedWorkspace } from './workspace.js';
 import { syncLiveFiles, writebackLiveFiles } from './liveFiles.js';
 import { createWaitState } from './waitState.js';
-import { jobDataPath, readJobData, writeJobDataUnchecked } from './journal/data.js';
+import { jobDataPath, readJobData, resetJobData, writeJobDataUnchecked } from './journal/data.js';
 import { jobDir, jobScratchDir, shortRunId } from './journal/paths.js';
 import { findStepDir } from './journal/reader.js';
 import { appendUsageRecord, usageRecord } from './journal/usageStore.js';
@@ -98,7 +98,7 @@ import type {
   StepRecord,
   Usage,
 } from './journal/schema.js';
-import { schedule, type JobOutcome } from './scheduler.js';
+import { isRetryableJobOutcome, schedule, type JobOutcome } from './scheduler.js';
 
 /** Адрес запущенного в решении шага — с идентичностью попытки и итерации цикла. */
 export interface DecisionIdentity {
@@ -944,6 +944,11 @@ export interface RunContext extends RunOptions {
   /** Результаты непрошедшего `check` предыдущей итерации текущей работы. */
   readonly iterationCheck?: readonly PredicateResult[];
   /**
+   * Номер действующей попытки работы. Заполнен на контексте работы с
+   * `attempts.max > 1`; у прочих отсутствует, и читатели берут `1`.
+   */
+  readonly jobAttempt?: number;
+  /**
    * Уход в ожидание: состояние прогона должно быть на диске до начала сна, а
    * не после — иначе спящий прогон неотличим от зависшего. Возвращённое
    * снятие убирает ровно это ожидание, не трогая чужих: ожидающих работ может
@@ -1368,9 +1373,10 @@ async function runJob(
       specDir: context.config.project.spec.dir,
     }),
   };
-  const anchorState: { anchorer: TreeAnchorer | undefined; lastAnchor: Anchor | undefined } = {
+  const anchorState: AnchorState = {
     anchorer: undefined,
     lastAnchor: undefined,
+    startAnchor: undefined,
   };
   // Индексный файл живёт ровно столько, сколько работа. Регистрируется здесь,
   // а не рядом с созданием якоря: якорь заводится заново на каждой итерации
@@ -1381,6 +1387,15 @@ async function runJob(
   });
   const jobStartedAt = Date.now();
   const maxIterations = job.until?.maxIterations ?? 1;
+  const maxAttempts = job.attempts.max;
+  /** Число использованных попыток пишется в запись работы вместе с финальным исходом. */
+  const finishAttempts = (outcome: JobOutcome, used: number): JobOutcome => {
+    context.records.set(job.id, {
+      ...(context.records.get(job.id) as JobRecord),
+      attempts: used,
+    });
+    return outcome;
+  };
   let previousCheck: readonly PredicateResult[] | undefined;
   // Сквозная нумерация вызовов предиката script в until.check — растёт через
   // итерации цикла, тем же образом, что и у предиката script в expect шага.
@@ -1390,16 +1405,23 @@ async function runJob(
     return checkScriptCallCount;
   };
 
-  const outcome = await (async (): Promise<JobOutcome> => {
-    try {
-      for (let iteration = 1; iteration <= maxIterations; iteration += 1) {
+  /**
+   * Одна попытка работы: итерации цикла `until` (или единственная итерация
+   * работы без цикла). Номера итераций и счётчики попыток шагов в каждой
+   * попытке работы начинаются заново, а `previousCheck` не переходит границу:
+   * он описывает дерево, которого после отката уже нет.
+   */
+  const runIterations = async (attemptContext: RunContext, jobAttempt: number | undefined): Promise<JobOutcome> => {
+    previousCheck = undefined;
+    for (let iteration = 1; iteration <= maxIterations; iteration += 1) {
       if (job.until !== undefined) {
         journal.event({ kind: 'iteration.started', job: job.id, iteration });
       }
 
-      const outcome = await runJobSteps(job, declared, jobContext, anchorState, {
+      const outcome = await runJobSteps(job, declared, attemptContext, anchorState, {
         jobStartedAt,
         ...(job.until === undefined ? {} : { iteration }),
+        ...(jobAttempt === undefined ? {} : { jobAttempt }),
         ...(previousCheck === undefined ? {} : { previousCheck }),
       });
 
@@ -1418,7 +1440,7 @@ async function runJob(
         return outcome;
       }
 
-      const results = await evaluateCheck(job, jobContext, nextCheckScriptCallIndex);
+      const results = await evaluateCheck(job, attemptContext, nextCheckScriptCallIndex);
       const passed = results.every((item) => item.passed || !item.hard);
       journal.event({ kind: 'iteration.finished', job: job.id, iteration, passed });
 
@@ -1445,6 +1467,48 @@ async function runJob(
       cause: HaltCause.untilNotMet,
       ...(previousCheck === undefined ? {} : { lastCheck: previousCheck }),
     };
+  };
+
+  /** Начатая и ещё не закрытая событием попытка — её закрывает и исключение. */
+  let openAttempt: number | undefined;
+  let startedAttempts = 0;
+  const closeAttempt = (attempt: number, attemptOutcome: JobOutcome): void => {
+    openAttempt = undefined;
+    journal.event({
+      kind: 'job.attempt.finished',
+      job: job.id,
+      attempt,
+      status: attemptOutcome.status,
+      ...(attemptOutcome.reason === undefined ? {} : { reason: attemptOutcome.reason }),
+    });
+  };
+
+  const outcome = await (async (): Promise<JobOutcome> => {
+    try {
+      // Работа без `attempts` проходит цикл ровно один раз и ничем не отличается
+      // от прежней: ни уровня попытки в раскладке, ни событий, ни номера в
+      // ключе сессии.
+      if (maxAttempts === 1) return await runIterations(jobContext, undefined);
+
+      let last: JobOutcome | undefined;
+      for (let jobAttempt = 1; jobAttempt <= maxAttempts; jobAttempt += 1) {
+        if (last !== undefined) {
+          const stop = prepareJobRetry(job, jobContext, anchorState, last);
+          if (stop !== undefined) return finishAttempts(stop, jobAttempt - 1);
+        }
+        context.usage.beginJobAttempt(job.id, jobAttempt);
+        journal.event({ kind: 'job.attempt.started', job: job.id, attempt: jobAttempt });
+        openAttempt = jobAttempt;
+        startedAttempts = jobAttempt;
+        const attemptOutcome = await runIterations({ ...jobContext, jobAttempt }, jobAttempt);
+        closeAttempt(jobAttempt, attemptOutcome);
+        if (!isRetryableJobOutcome(attemptOutcome) || jobAttempt === maxAttempts) {
+          return finishAttempts(attemptOutcome, jobAttempt);
+        }
+        last = attemptOutcome;
+      }
+      // Недостижимо: последняя попытка возвращает исход из цикла.
+      return finishAttempts(last as JobOutcome, maxAttempts);
     } catch (error) {
     // Ошибка внутри работы — её отказ, а не крушение прогона. Иначе состояние
     // остаётся в `running`, статусы отработавших работ теряются, а работы с
@@ -1458,11 +1522,16 @@ async function runJob(
     // бухгалтерию прогона хуже, чем отказать одной работой.
     const detail = error instanceof Error ? error.message : String(error);
     journal.event({ kind: 'job.errored', job: job.id, detail });
-    return {
+    const errored: JobOutcome = {
       status: 'failed',
       reason: `работа прервана ошибкой: ${detail}`,
       cause: HaltCause.spawnFailed,
     };
+    // Исключение — не повод повторять: дефект движка повторился бы и во второй
+    // попытке. Но начатая попытка закрывается, и запись работы называет,
+    // сколько попыток использовано, — как при любом другом финальном исходе.
+    if (openAttempt !== undefined) closeAttempt(openAttempt, errored);
+    return startedAttempts === 0 ? errored : finishAttempts(errored, startedAttempts);
     } finally {
     // Каталог и последний якорь записываются независимо от исхода: наследник
     // может продолжить дерево даже упавшей работы, а работа без единого
@@ -1491,6 +1560,64 @@ async function runJob(
     };
   }
   return outcome;
+}
+
+/**
+ * Подготовка новой попытки работы: бюджет, откат дерева, сброс данных, учёт
+ * расхода. Возвращает исход, которым работа заканчивается без новой попытки,
+ * либо `undefined`, если попытку можно начинать.
+ *
+ * Откатываются только пути, изменённые работой с её начала (`changedPaths` от
+ * якоря начала до текущего состояния), — так же, как возобновление
+ * восстанавливает дерево в режиме `cwd`: полный сброс стёр бы файлы
+ * пользователя, не принадлежащие работе. Не удавшийся откат повтор отменяет:
+ * на неоткаченном дереве он потерял бы смысл, и ради отката ключ и заводится.
+ */
+function prepareJobRetry(
+  job: Job,
+  context: RunContext,
+  anchorState: AnchorState,
+  last: JobOutcome,
+): JobOutcome | undefined {
+  const { journal } = context;
+
+  if (context.usage.check(jobScopes(job, context)) !== undefined) {
+    return {
+      status: 'budget_exceeded',
+      reason: `попытки прекращены: бюджет работы ${job.id} исчерпан`,
+      cause: HaltCause.budgetExceeded,
+    };
+  }
+
+  const scope = { journal, job: job.id };
+  const restored = bookkeep(scope, 'откат дерева перед попыткой работы', () => {
+    const { anchorer, startAnchor } = anchorState;
+    if (anchorer === undefined || startAnchor === undefined) {
+      throw new Error('якорь начала работы не снят');
+    }
+    const comparison = anchorer.changedPaths(startAnchor, anchorer.capture());
+    if (!comparison.comparable) throw new Error(comparison.reason);
+    anchorer.restorePaths(startAnchor, comparison.paths);
+    journal.event({ kind: 'tree.restored', anchor: startAnchor.id, path: context.cwd });
+    return true;
+  });
+  if (restored !== true) return last;
+
+  // Данные упавшей попытки до потребителей `${jobs.<id>.data.*}` не доходят.
+  bookkeep(scope, 'сброс данных работы перед попыткой', () => {
+    resetJobData(jobDir(journal.paths, job.id));
+  });
+  // Шаги упавшей попытки из записи уходят тоже: между попытками состояние
+  // прогона иначе показывало бы упавший шаг при работе в `running`, а записи
+  // шагов — по требованию — записи последней попытки, которая ещё не начала.
+  const { data: _published, iterations: _iterations, ...fresh } = context.records.get(job.id) as JobRecord;
+  context.records.set(job.id, { ...fresh, steps: [] });
+
+  // Расход шагов уходящей попытки запечатывается: ключ `${job}/${step}#${attempt}`
+  // у шага во второй попытке иначе совпал бы с первой.
+  context.usage.sealJob(job.id);
+  context.refreshStatus();
+  return undefined;
 }
 
 /**
@@ -1558,6 +1685,8 @@ function jobEnv(job: Job, context: RunContext): Record<string, string> {
       jobId: job.id,
       jobDir: context.journal.prepareJob(job.id),
       attempt: 1,
+      jobAttempt: context.jobAttempt ?? 1,
+      jobAttemptMax: job.attempts.max,
       workspace: context.cwd,
       artifacts: context.journal.paths.artifacts,
       scratch: jobScratchDir(context.journal.paths, job.id),
@@ -1858,6 +1987,16 @@ function sleepInterruptibly(ms: number, signal?: AbortSignal): Promise<boolean> 
   });
 }
 
+/**
+ * Якоря работы, которыми пользуется её внешний цикл. `startAnchor` — состояние
+ * дерева перед первым шагом первой попытки: откат перед повтором ведёт к нему.
+ */
+interface AnchorState {
+  anchorer: TreeAnchorer | undefined;
+  lastAnchor: Anchor | undefined;
+  startAnchor: Anchor | undefined;
+}
+
 interface IterationOptions {
   /**
    * Момент начала работы. Потолок времени работы меряет её саму, включая все
@@ -1866,6 +2005,8 @@ interface IterationOptions {
   readonly jobStartedAt: number;
   /** Номер итерации. Отсутствует у работы без цикла. */
   readonly iteration?: number;
+  /** Номер попытки работы. Отсутствует у работы без `attempts`. */
+  readonly jobAttempt?: number;
   /** Результаты непрошедшего `check` предыдущей итерации. */
   readonly previousCheck?: readonly PredicateResult[];
 }
@@ -1874,11 +2015,12 @@ async function runJobSteps(
   job: Job,
   declared: Job,
   context: RunContext,
-  anchorState: { anchorer: TreeAnchorer | undefined; lastAnchor: Anchor | undefined },
+  anchorState: AnchorState,
   iterationOptions: IterationOptions,
 ): Promise<JobOutcome> {
   const { journal } = context;
   const iteration = iterationOptions.iteration;
+  const jobAttempt = iterationOptions.jobAttempt;
   const jobStartedAt = iterationOptions.jobStartedAt;
   context =
     iterationOptions.previousCheck === undefined
@@ -1918,6 +2060,9 @@ async function runJobSteps(
 
   let treeAnchor = capture();
   anchorState.lastAnchor = treeAnchor;
+  // Начало работы — только первая попытка и первая итерация: повтор должен
+  // вернуть дерево к состоянию до всех шагов, а не к началу своей итерации.
+  anchorState.startAnchor ??= treeAnchor;
 
   /**
    * Псевдоним сессии, замкнутый на её пространство имён.
@@ -1936,8 +2081,10 @@ async function runJobSteps(
   // продолжить не умеет. Имя агента входит и в обычное пространство работы, и
   // в явную группу сессий.
   const sessionKey = (agent: string, alias: string): string => {
+    // Номер попытки работы входит в ключ только у работы с `attempts`: у прочих
+    // ключ прежний. Новая попытка начинает сессии заново, как новая итерация.
     const scope = job.sessionGroup === undefined
-      ? `${job.id}#${iteration ?? 1}`
+      ? `${job.id}#${jobAttempt === undefined ? '' : `${jobAttempt}.`}${iteration ?? 1}`
       : job.sessionGroup;
     return `${scope}/${agent}/${alias}`;
   };
@@ -1970,9 +2117,12 @@ async function runJobSteps(
       );
     }
 
-    const stepDirPath = journal.prepareStep(job.id, step.index, step.id, iteration);
+    const stepDirPath = journal.prepareStep(job.id, step.index, step.id, iteration, jobAttempt);
 
-    const planned = planFor(context, job.id, step.id);
+    // План возобновления описывает исполнение исходного прогона. Повтор работы
+    // его не продолжает: переиспользовать шаг во второй попытке значило бы
+    // собрать дерево, которого не было ни в одной попытке.
+    const planned = jobAttempt !== undefined && jobAttempt > 1 ? undefined : planFor(context, job.id, step.id);
     if (planned?.decision.kind === 'skip') {
       // План перенёс пропуск из исходного прогона и на этом основании
       // переиспользует работы ниже. Раз работа всё же исполняется, её условие
@@ -1981,6 +2131,7 @@ async function runJobSteps(
       return {
         status: 'failed',
         reason: `план возобновления считал работу ${job.id} пропущенной условием, как в прошлом прогоне, а условие выполнилось — возобновите без переноса пропуска: stepcast resume --from ${job.id}`,
+        terminal: true,
       };
     }
     if (planned?.decision.kind === 'reuse') {
@@ -2001,7 +2152,7 @@ async function runJobSteps(
         steps: [...steps],
       });
       const dataViolation = foldJobData(context, job);
-      if (dataViolation !== undefined) return { status: 'failed', reason: dataViolation };
+      if (dataViolation !== undefined) return { status: 'failed', reason: dataViolation, terminal: true };
       if (
         (step.kind === 'agent' ||
           (step.kind === 'run' && step.outputSchemaPath !== undefined) ||
@@ -2333,7 +2484,7 @@ async function runJobSteps(
     // пропущена, а не упала, и `output` у неё не публикуется. Нарушение
     // объявления `data` от исхода шага не зависит и остаётся отказом.
     if (status === 'skipped') {
-      if (dataViolation !== undefined) return { status: 'failed', reason: dataViolation };
+      if (dataViolation !== undefined) return { status: 'failed', reason: dataViolation, terminal: true };
       return {
         status: 'skipped',
         skip: 'declared',
@@ -2348,6 +2499,8 @@ async function runJobSteps(
         status,
         ...(joined === '' ? {} : { reason: joined }),
         ...(cause === undefined ? {} : { cause }),
+        // Необъявленный ключ данных повтор воспроизвёл бы: файл остаётся на месте.
+        ...(dataViolation === undefined ? {} : { terminal: true }),
       };
     }
 
@@ -2355,7 +2508,7 @@ async function runJobSteps(
     // сама запись мимо объявления. Причины остановки прогона (`cause`) здесь
     // нет — перечень закрыт, и ни одна его строка про это не говорит; так же
     // возвращается отказ по неперенесённому выходу шага ниже.
-    if (dataViolation !== undefined) return { status: 'failed', reason: dataViolation };
+    if (dataViolation !== undefined) return { status: 'failed', reason: dataViolation, terminal: true };
   }
 
   if (outputFromStepMissing) {
@@ -3465,6 +3618,8 @@ export function stepEnv(
       stepId: step.id,
       stepDir: stepDirPath,
       attempt,
+      jobAttempt: context.jobAttempt ?? 1,
+      jobAttemptMax: job.attempts.max,
       workspace: context.cwd,
       artifacts: context.journal.paths.artifacts,
       scratch: jobScratchDir(context.journal.paths, job.id),

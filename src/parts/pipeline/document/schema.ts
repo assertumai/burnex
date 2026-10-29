@@ -583,6 +583,13 @@ export function buildDocumentSchemas(
     })
     .strict();
 
+  /**
+   * Попытки работы: тот же `{ max }`, что у шага, но без `escalation` — что
+   * считать «выводом отказа» работы из нескольких шагов, не решено, и ключ
+   * оставлен свободным, чтобы добавить его позже, не меняя смысла.
+   */
+  const JobAttemptsSchema = z.object({ max: count }).strict();
+
   const StepCommonShape = {
     id: z.string().min(1),
     env: z.record(z.string(), z.string()).optional(),
@@ -790,6 +797,7 @@ export function buildDocumentSchemas(
     budget: BudgetSchema.optional(),
     ...SkipExitCodeShape,
     until: UntilSchema.optional(),
+    attempts: JobAttemptsSchema.optional(),
     permissions: PermissionsSchema.optional(),
     mcp: McpSchema.optional(),
     steps: z.array(StepSchema).min(1),

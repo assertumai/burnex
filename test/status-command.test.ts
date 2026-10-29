@@ -17,6 +17,21 @@ function capture(): { lines: string[]; write: (line: string) => void } {
   return { lines, write: (line) => lines.push(line) };
 }
 
+describe('CLI: stepcast status — попытки работы', () => {
+  it('называет число израсходованных попыток работы', () => {
+    const { runsRoot, projectRoot, home } = makeJournalBed();
+    const journal = seedRun(runsRoot, projectRoot, {
+      status: 'failed',
+      jobs: [{ id: 'impl', status: 'failed', reason: 'шаг write: проверка не пройдена', attempts: 3, steps: [] }],
+    });
+
+    const { lines, write } = capture();
+    withHome(home, () => runStatusCommand(args({ run: journal.paths.runId }), write, projectRoot));
+
+    assert.match(lines.join('\n'), /impl.*\(попыток работы: 3\)/);
+  });
+});
+
 describe('CLI: stepcast status', () => {
   // Спека stepcast-configuration: «Денежный расход и объявленный потолок»
   it('печатает потраченное и объявленный денежный потолок рядом с токенами', () => {

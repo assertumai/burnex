@@ -171,9 +171,10 @@ export function stepDirName(index: number, stepId: string): string {
 }
 
 /**
- * Каталог шага. Уровень итерации появляется только у работ с циклом: добавлять
- * его всем единообразнее, но раскладку читает человек, и её краткость стоит
- * дороже единообразия. Точка порождения пути при этом одна — здесь.
+ * Каталог шага. Уровень итерации появляется только у работ с циклом, уровень
+ * попытки работы — только у работ с `attempts.max > 1`: добавлять их всем
+ * единообразнее, но раскладку читает человек, и её краткость стоит дороже
+ * единообразия. Точка порождения пути при этом одна — здесь.
  */
 export function stepDir(
   paths: RunPaths,
@@ -181,8 +182,10 @@ export function stepDir(
   index: number,
   stepId: string,
   iteration?: number,
+  jobAttempt?: number,
 ): string {
-  const base = join(jobDir(paths, jobId), 'steps');
+  const steps = join(jobDir(paths, jobId), 'steps');
+  const base = jobAttempt === undefined ? steps : join(steps, attemptDirName(jobAttempt));
   return iteration === undefined
     ? join(base, stepDirName(index, stepId))
     : join(base, iterationDirName(iteration), stepDirName(index, stepId));
@@ -212,6 +215,16 @@ export function iterationDirName(iteration: number): string {
 
 export function parseIterationDirName(name: string): number | undefined {
   const match = /^iter-(\d+)$/.exec(name);
+  return match === null ? undefined : Number(match[1]);
+}
+
+/** Имя каталога попытки работы: `attempt-1`, `attempt-2`, … */
+export function attemptDirName(attempt: number): string {
+  return `attempt-${attempt}`;
+}
+
+export function parseAttemptDirName(name: string): number | undefined {
+  const match = /^attempt-(\d+)$/.exec(name);
   return match === null ? undefined : Number(match[1]);
 }
 
