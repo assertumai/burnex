@@ -1,6 +1,7 @@
+import { execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { join, relative } from 'node:path';
+import { existsSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import { join, posix, relative } from 'node:path';
 
 import { checkCompositeComposition, type AnchorKind } from '../anchor/index.js';
 import { StepcastError, isStepcastError } from '../../../../kernel/errors.js';
@@ -9,8 +10,11 @@ import {
   finishItem,
   foreignOwnerOf,
   parseBacklogFile,
+  readBacklogFile,
   tailLine,
   withBacklogLock,
+  withFields,
+  withOwnBlock,
   type FinishOwner,
 } from '../backlog/index.js';
 import type { RunPaths } from '../../run/journal/paths.js';
@@ -27,14 +31,19 @@ import {
 } from '../../run/liveFiles.js';
 import { addWorktree, removeWorktree } from '../../run/worktrees.js';
 import { runCheck } from './check.js';
-import { hasLaneItem, readLaneItem } from './item.js';
+import { hasLaneItem, readLaneItem, type LaneItem } from './item.js';
 import { evaluateLane, knownLanes } from './lanes.js';
+import { openMergeEvents } from './mergeEvents.js';
+import { mergeRecoveryPath, withMergeLockAsync } from './mergeLock.js';
 import { readLaneMerge, writeLaneMerge } from './mergeRecord.js';
 import {
+  findBranchWorktree,
   preparePublication,
+  publishOntoBranch,
   publishPrepared,
   rollbackPrepared,
   type PreparedPublication,
+  type WaitOptions,
 } from './publication.js';
 import {
   assertCleanTree,
@@ -92,6 +101,19 @@ export interface MergeLanesOptions {
    * от вызывающей команды. Без него исход проставляется как прежде.
    */
   readonly finishOwner?: FinishOwner;
+  /**
+   * Свести на текущую вершину этой ветки, а не на стартовый коммит прогона:
+   * интеграция растёт от `refs/heads/<ветка>`, прочитанной под merge lock'ом, а
+   * публикация сдвигает ref с проверкой старого значения (lane-merge,
+   * «`--onto` сводит дорожки на текущую вершину ветки»).
+   */
+  readonly onto?: string;
+  /** С `onto`: несведённый пункт остаётся `in_progress` за прогоном, а не получает `failed`. */
+  readonly keepClaim?: boolean;
+  /** Строки вывода режима `onto`: владелец занятого lock'а и события ожидания. */
+  readonly write?: (line: string) => void;
+  /** Интервалы опроса режима `onto`; умолчания — договор, параметры нужны тестам. */
+  readonly tuning?: { readonly lockIntervalMs?: number; readonly wait?: WaitOptions };
 }
 
 export type LaneMergeResult =
@@ -731,6 +753,145 @@ async function mergeLanesLegacy(options: MergeLanesOptions): Promise<readonly La
   return results;
 }
 
+/**
+ * Запись исхода дорожки — и в перечень, возвращаемый вызывающему, и в
+ * `merge-<дорожка>.json` каталога прогона: одна запись на каждую дорожку
+ * перечня (общая для путей с интеграционным деревом).
+ */
+function laneRecorder(runDir: string, results: LaneMergeResult[]): (result: LaneMergeResult) => void {
+  return (result) => {
+    results.push(result);
+    writeLaneMerge(runDir, {
+      lane: result.lane,
+      kind: result.kind,
+      at: new Date().toISOString(),
+      ...('slug' in result ? { slug: result.slug } : {}),
+      ...('reason' in result ? { reason: result.reason } : {}),
+      ...('repos' in result ? { repos: result.repos } : {}),
+      ...('commits' in result ? { commits: result.commits } : {}),
+    });
+  };
+}
+
+/** Исход дорожки, уже сведённой в этом или в прежнем обходе: заново она не сводится. */
+function alreadyMergedResult(runDir: string, lane: string): LaneMergeResult | undefined {
+  const already = readLaneMerge(runDir, lane);
+  if (already?.kind !== 'merged') return undefined;
+  const reason = `уже сведена (${
+    Object.entries(already.commits ?? {})
+      .map(([repo, sha]) => `${repo}: ${sha}`)
+      .join(', ') || 'коммиты не записаны'
+  })`;
+  return { lane, kind: 'already_merged', reason };
+}
+
+/** Причина дорожки, до которой обход не дошёл из-за остановки на предыдущей. */
+function notReachedReason(stoppedAt: { readonly lane: string; readonly reason: string }): string {
+  return `сведение остановилось на дорожке «${stoppedAt.lane}»: ${stoppedAt.reason}`;
+}
+
+/** Что решено про дорожку до наложения: пропустить с исходом либо накладывать. */
+type BeforeApply =
+  | {
+      readonly kind: 'skip';
+      readonly result: LaneMergeResult;
+      /** Причина `failed` для пункта, если пропуск — отказ дорожки, а не её отсутствие. */
+      readonly failure?: string;
+    }
+  | { readonly kind: 'ready'; readonly item: LaneItem };
+
+/**
+ * Дорожка до наложения: пустая, негодная, без пункта или с пунктом, который
+ * забрал другой прогон, пропускается, не тронув дерево. Очередь здесь — живой
+ * файл checkout'а, а не интеграционная копия: новый владелец пишет туда.
+ */
+function judgeBeforeApply(
+  context: {
+    readonly status: RunStatus;
+    readonly runDir: string;
+    readonly file: string;
+    readonly finishOwner: FinishOwner | undefined;
+  },
+  lane: string,
+): BeforeApply {
+  const { status, runDir, file, finishOwner } = context;
+  const verdict = evaluateLane(status.jobs, lane);
+  if (verdict.kind === 'empty') return { kind: 'skip', result: { lane, kind: 'empty' } };
+  if (verdict.kind === 'unfit') {
+    const reason = `работы дорожки не все успешны: ${verdict.jobs
+      .map((job) => `${job.id}=${job.status}`)
+      .join(', ')}`;
+    return { kind: 'skip', result: { lane, kind: 'unfit', reason }, failure: reason };
+  }
+  if (!hasLaneItem(runDir, lane)) return { kind: 'skip', result: { lane, kind: 'no_item' } };
+
+  const item = readLaneItem(runDir, lane);
+  const foreign = foreignOwnerBeforeApply(file, item.slug, finishOwner);
+  if (foreign !== undefined) return { kind: 'skip', result: foreignOwnerResult(lane, item.slug, foreign) };
+  return { kind: 'ready', item };
+}
+
+/** Исход наложения дорожки на дерево: наложено либо отказ с исходом и причиной для пункта. */
+type LaneApplication =
+  | { readonly kind: 'applied' }
+  | {
+      readonly kind: 'rejected';
+      readonly result: LaneMergeResult;
+      readonly failure: string;
+      /** Конфликт останавливает обход: дерево после него в неизвестном состоянии. */
+      readonly stops: boolean;
+    };
+
+function applyLaneToTree(
+  context: { readonly paths: RunPaths; readonly status: RunStatus },
+  root: string,
+  lane: string,
+  nestedRepos: readonly string[],
+  treeLabel: string,
+  beforeApply: () => void = () => undefined,
+): LaneApplication {
+  let applied: ReturnType<typeof applyRun>;
+  try {
+    beforeApply();
+    applied = applyRun({ paths: context.paths, cwd: root, lane, nestedRepos });
+  } catch (error) {
+    if (!isStepcastError(error)) throw error;
+    const workspace = workspaceOf(context.status, lane);
+    const reason = reasonWithOutput(
+      `наложение дорожки не сошлось с ${treeLabel} (рабочее дерево: ${workspace ?? 'неизвестно'}): `,
+      error.message,
+    );
+    return { kind: 'rejected', result: { lane, kind: 'conflict', reason }, failure: reason, stops: true };
+  }
+  if (applied.kind !== 'applied') {
+    const reason = 'дорожка не изменила дерево';
+    return { kind: 'rejected', result: { lane, kind: 'no_contribution', reason }, failure: reason, stops: false };
+  }
+  return { kind: 'applied' };
+}
+
+/**
+ * Проверки идут в детерминированном порядке (корень, затем части в порядке
+ * `affectedRepos`) и прекращаются на первой красной.
+ */
+async function firstRedCheck(
+  root: string,
+  affected: readonly string[],
+  check: string,
+  repoChecks: ReadonlyMap<string, string> | undefined,
+  prefix: string,
+): Promise<{ readonly prefix: string; readonly output: string } | undefined> {
+  for (const repo of affected) {
+    const command = checkCommandFor(repo, check, repoChecks);
+    // Объявлена до первого наложения (`assertRepoChecksDeclared`).
+    if (command === undefined) continue;
+    const checked = await runCheck({ command, cwd: repoDirOf(root, repo) });
+    if (checked.outcome === 'exited' && checked.exitCode === 0) continue;
+    return { prefix, output: checked.stderr.trim() !== '' ? checked.stderr : checked.stdout };
+  }
+  return undefined;
+}
+
 type PublicationPolicy = NonNullable<LockRead['workspace']>;
 
 const PUBLICATION_RECOVERY_FILE = 'publication-recovery.json';
@@ -835,18 +996,7 @@ async function mergeLanesIsolated(
     const results: LaneMergeResult[] = [];
     let stoppedAt: { readonly lane: string; readonly reason: string } | undefined;
 
-    const record = (result: LaneMergeResult): void => {
-      results.push(result);
-      writeLaneMerge(runDir, {
-        lane: result.lane,
-        kind: result.kind,
-        at: new Date().toISOString(),
-        ...('slug' in result ? { slug: result.slug } : {}),
-        ...('reason' in result ? { reason: result.reason } : {}),
-        ...('repos' in result ? { repos: result.repos } : {}),
-        ...('commits' in result ? { commits: result.commits } : {}),
-      });
-    };
+    const record = laneRecorder(runDir, results);
     const markFailed = (lane: string, reason: string): void => {
       if (!hasLaneItem(runDir, lane)) return;
       assertLiveFilesUnchanged(cwd, policy.liveFiles, liveSnapshot);
@@ -867,49 +1017,25 @@ async function mergeLanesIsolated(
     };
 
     for (const lane of lanes) {
-      const already = readLaneMerge(runDir, lane);
-      if (already?.kind === 'merged') {
-        const reason = `уже сведена (${
-          Object.entries(already.commits ?? {})
-            .map(([repo, sha]) => `${repo}: ${sha}`)
-            .join(', ') || 'коммиты не записаны'
-        })`;
-        record({ lane, kind: 'already_merged', reason });
+      const already = alreadyMergedResult(runDir, lane);
+      if (already !== undefined) {
+        record(already);
         continue;
       }
       if (stoppedAt !== undefined) {
-        const reason = `сведение остановилось на дорожке «${stoppedAt.lane}»: ${stoppedAt.reason}`;
+        const reason = notReachedReason(stoppedAt);
         markFailed(lane, reason);
         record({ lane, kind: 'not_reached', reason });
         continue;
       }
 
-      const verdict = evaluateLane(status.jobs, lane);
-      if (verdict.kind === 'empty') {
-        record({ lane, kind: 'empty' });
+      const before = judgeBeforeApply({ status, runDir, file, finishOwner: options.finishOwner }, lane);
+      if (before.kind === 'skip') {
+        if (before.failure !== undefined) markFailed(lane, before.failure);
+        record(before.result);
         continue;
       }
-      if (verdict.kind === 'unfit') {
-        const reason = `работы дорожки не все успешны: ${verdict.jobs
-          .map((job) => `${job.id}=${job.status}`)
-          .join(', ')}`;
-        markFailed(lane, reason);
-        record({ lane, kind: 'unfit', reason });
-        continue;
-      }
-      if (!hasLaneItem(runDir, lane)) {
-        record({ lane, kind: 'no_item' });
-        continue;
-      }
-
-      const item = readLaneItem(runDir, lane);
-      // Очередь живого checkout'а, а не интеграционная копия: новый владелец
-      // пишет туда.
-      const foreignBefore = foreignOwnerBeforeApply(file, item.slug, options.finishOwner);
-      if (foreignBefore !== undefined) {
-        record(foreignOwnerResult(lane, item.slug, foreignBefore));
-        continue;
-      }
+      const item = before.item;
       const range = laneAnchorRange(paths, lane);
       const affected = range === undefined ? [] : affectedRepos(kind, nestedRepos, range);
       const commitsBefore = new Map(
@@ -917,43 +1043,31 @@ async function mergeLanesIsolated(
       );
       const backlogBefore = existsSync(integrationFile) ? readFileSync(integrationFile) : undefined;
 
-      let applied: ReturnType<typeof applyRun>;
-      try {
-        restoreWritebackOnly();
-        applied = applyRun({ paths, cwd: integrationRoot, lane, nestedRepos });
-      } catch (error) {
-        if (!isStepcastError(error)) throw error;
-        const workspace = workspaceOf(status, lane);
-        const reason = reasonWithOutput(
-          `наложение дорожки не сошлось с интеграционным деревом (рабочее дерево: ${workspace ?? 'неизвестно'}): `,
-          error.message,
-        );
-        markFailed(lane, reason);
-        record({ lane, kind: 'conflict', reason });
-        stoppedAt = { lane, reason };
-        retainIntegration = true;
-        continue;
-      }
-      if (applied.kind !== 'applied') {
-        const reason = 'дорожка не изменила дерево';
-        markFailed(lane, reason);
-        record({ lane, kind: 'no_contribution', reason });
+      const application = applyLaneToTree(
+        { paths, status },
+        integrationRoot,
+        lane,
+        nestedRepos,
+        'интеграционным деревом',
+        restoreWritebackOnly,
+      );
+      if (application.kind === 'rejected') {
+        markFailed(lane, application.failure);
+        record(application.result);
+        if (application.stops) {
+          stoppedAt = { lane, reason: application.failure };
+          retainIntegration = true;
+        }
         continue;
       }
 
-      let red: { readonly prefix: string; readonly output: string } | undefined;
-      for (const repo of affected) {
-        const command = checkCommandFor(repo, check, repoChecks);
-        if (command === undefined) continue;
-        const checked = await runCheck({ command, cwd: repoDirOf(integrationRoot, repo) });
-        if (checked.outcome === 'exited' && checked.exitCode === 0) continue;
-        const output = checked.stderr.trim() !== '' ? checked.stderr : checked.stdout;
-        red = {
-          prefix: `проверка после наложения красная (интеграционное дерево: ${integrationRoot}): `,
-          output,
-        };
-        break;
-      }
+      const red = await firstRedCheck(
+        integrationRoot,
+        affected,
+        check,
+        repoChecks,
+        `проверка после наложения красная (интеграционное дерево: ${integrationRoot}): `,
+      );
       if (red !== undefined) {
         withBacklogLock(integrationFile, 'merge-lanes', () => {
           for (const [repo, sha] of commitsBefore) resetToCommit(repoDirOf(integrationRoot, repo), sha);
@@ -1169,7 +1283,296 @@ async function mergeLanesIsolated(
   }
 }
 
+/**
+ * Границы режима `--onto` — отказ кодом 2 до lock'а и до первой правки:
+ * ветка, копия и очередь остаются как были. Составной прогон не поддержан,
+ * потому что CAS по нескольким ref'ам разных репозиториев атомарным не
+ * сделать; `live_files` помимо очереди — потому что их `writeback` и
+ * `commit_on_success` в этом режиме не определены.
+ */
+export function assertOntoApplicable(options: MergeLanesOptions): void {
+  const { onto, paths, cwd, file } = options;
+  if (onto === undefined) {
+    if (options.keepClaim === true) {
+      throw new StepcastError('ключ --keep-claim применим только вместе с --onto', {
+        hint: 'Без --onto повторное сведение дорожки не предусмотрено, и оставленный за прогоном пункт был бы потерян',
+      });
+    }
+    return;
+  }
+
+  if ((options.nestedRepos ?? []).length > 0) {
+    throw new StepcastError('--onto не поддерживает составной прогон: в конфигурации объявлены project.nested_repos', {
+      hint: 'Публикация проверяет старое значение одного ref’а; по нескольким репозиториям так атомарно не сделать',
+    });
+  }
+  const anchorKind = readManifest(paths).anchor_kind ?? 'git';
+  if (anchorKind !== 'git') {
+    throw new StepcastError(`--onto требует прогона со снятием состояния git-якорем, а этот снят якорем «${anchorKind}»`);
+  }
+  try {
+    execFileSync('git', ['-C', cwd, 'rev-parse', '--verify', '--quiet', `refs/heads/${onto}^{commit}`], {
+      stdio: 'ignore',
+    });
+  } catch {
+    throw new StepcastError(`ветки «${onto}» нет: --onto называет существующую локальную ветку (refs/heads/${onto})`, {
+      file: cwd,
+    });
+  }
+  // Живая очередь — файл каталога запуска, а выкладывается ветка в свою копию:
+  // при разных каталогах `done` ушёл бы не в ту копию, а копия ветки показала
+  // бы откат своего пункта незакоммиченной правкой.
+  const copy = findBranchWorktree(cwd, onto);
+  if (copy !== undefined) {
+    const own = gitText(cwd, ['rev-parse', '--show-toplevel']).trim();
+    if (realpathSync(copy) !== realpathSync(own)) {
+      throw new StepcastError(`ветка «${onto}» выложена в другой рабочей копии: ${copy}`, {
+        file: own,
+        hint: 'Живой файл очереди берётся из каталога запуска, поэтому --onto сводит только на ветку этой же копии либо на ветку, не выложенную ни в одну копию',
+      });
+    }
+  }
+  const queuePath = projectRelative(cwd, file);
+  const extra = (readLock(paths.lock).workspace?.liveFiles ?? []).filter((live) => live.path !== queuePath);
+  if (extra.length > 0) {
+    throw new StepcastError(
+      `--onto не поддерживает живые файлы помимо файла очереди: ${extra.map((live) => live.path).join(', ')}`,
+      { file: paths.lock, at: 'workspace.live_files', hint: 'writeback и commit_on_success этих файлов в режиме --onto не определены' },
+    );
+  }
+}
+
+function gitText(dir: string, args: readonly string[]): string {
+  return execFileSync('git', ['-C', dir, ...args], {
+    encoding: 'utf8',
+    maxBuffer: 64 * 1024 * 1024,
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+}
+
+/** Пути `paths`, изменённые в дереве относительно HEAD: отслеживаемые и новые. */
+function touchedPaths(root: string, paths: readonly string[]): string[] {
+  const entries = gitText(root, ['status', '--porcelain', '-z', '--untracked-files=all', '--', ...paths]).split('\0');
+  return [...new Set(entries.filter((entry) => entry.length > 3).map((entry) => entry.slice(3)))].sort();
+}
+
+/** Текст пункта очереди с проставленным `done` — как проставил бы `finishItem`, но без записи на диск. */
+function liveTextWithDone(file: string, text: string, slug: string): string {
+  const entry = parseBacklogFile(file, text).find((candidate) => candidate.slug === slug);
+  if (entry === undefined || entry.data.status === 'done' || entry.data.status === 'failed') return text;
+  return withFields(text, slug, { status: 'done' });
+}
+
+/**
+ * Третий путь обхода: дорожки сводятся на текущую вершину ветки под merge
+ * lock'ом. Обход общий с изолированным (те же помощники и исходы), но база —
+ * вершина, прочитанная после захвата lock'а, а публикация — `update-ref` с
+ * проверкой старого значения.
+ */
+async function mergeLanesOnto(options: MergeLanesOptions, branch: string): Promise<readonly LaneMergeResult[]> {
+  const { paths, cwd, check, file, repoChecks } = options;
+  const runDir = paths.dir;
+  const write = options.write ?? (() => undefined);
+  const status = readStatus(paths);
+  const lanes = resolveLanes(options.lanes, knownLanes(status.jobs));
+  const mergeable = lanes.filter(
+    (lane) => evaluateLane(status.jobs, lane).kind === 'ready' && hasLaneItem(runDir, lane),
+  );
+  assertRepoChecksDeclared(paths, mergeable, 'git', [], check, repoChecks);
+
+  const events = openMergeEvents(paths.mergeEvents, write);
+  const queuePath = projectRelative(cwd, file);
+  const queuePaths = [queuePath, posix.join(posix.dirname(queuePath), 'archived.md')];
+
+  return withMergeLockAsync(
+    cwd,
+    'merge-lanes --onto',
+    async () => {
+      assertNoPendingPublication(runDir);
+      const recoveryPath = mergeRecoveryPath(cwd);
+      if (existsSync(recoveryPath)) {
+        throw new StepcastError('Публикация --onto одного из прогонов прервалась и требует восстановления', {
+          file: recoveryPath,
+          hint: 'Файл называет прогон, ref, ожидаемую вершину, коммит дорожки и копию; завершите выкладку копии либо верните ref и сотрите файл перед повторным merge-lanes --onto',
+        });
+      }
+      let tip = gitText(cwd, ['rev-parse', `refs/heads/${branch}`]).trim();
+      const integrationDir = join(runDir, 'integration', randomUUID());
+      const integrationRoot = join(integrationDir, 'tree');
+      addWorktree({ repoDir: cwd, path: integrationRoot, ref: tip });
+      let retainIntegration = false;
+      try {
+        const results: LaneMergeResult[] = [];
+        const record = laneRecorder(runDir, results);
+        let stoppedAt: { readonly lane: string; readonly reason: string } | undefined;
+        // `--keep-claim`: причина остаётся в `merge-<дорожка>.json`, а пункт — за прогоном.
+        const markFailed = (lane: string, reason: string): void => {
+          if (options.keepClaim === true || !hasLaneItem(runDir, lane)) return;
+          finishItem(file, 'merge-lanes', readLaneItem(runDir, lane).slug, 'failed', reason, options.finishOwner);
+        };
+        const stopAt = (lane: string, reason: string): void => {
+          stoppedAt = { lane, reason };
+          retainIntegration = true;
+        };
+
+        for (const lane of lanes) {
+          const already = alreadyMergedResult(runDir, lane);
+          if (already !== undefined) {
+            record(already);
+            continue;
+          }
+          if (stoppedAt !== undefined) {
+            const reason = notReachedReason(stoppedAt);
+            markFailed(lane, reason);
+            record({ lane, kind: 'not_reached', reason });
+            continue;
+          }
+
+          const before = judgeBeforeApply({ status, runDir, file, finishOwner: options.finishOwner }, lane);
+          if (before.kind === 'skip') {
+            if (before.failure !== undefined) markFailed(lane, before.failure);
+            record(before.result);
+            continue;
+          }
+          const item = before.item;
+          const range = laneAnchorRange(paths, lane);
+          const affected = range === undefined ? [] : affectedRepos('git', [], range);
+          const headBefore = currentCommit(integrationRoot);
+
+          const application = applyLaneToTree({ paths, status }, integrationRoot, lane, [], 'интеграционным деревом');
+          if (application.kind === 'rejected') {
+            markFailed(lane, application.failure);
+            record(application.result);
+            if (application.stops) stopAt(lane, application.failure);
+            continue;
+          }
+
+          // Из очереди коммит несёт только свой блок пункта (ниже), поэтому
+          // собственные правки дорожки в файлах очереди потерялись бы молча, а
+          // правка `archived.md` разошлась бы с копией, где файлы очереди не
+          // выкладываются. Такая дорожка не сводится; её результат цел в её дереве.
+          const queueTouched = touchedPaths(integrationRoot, queuePaths);
+          if (queueTouched.length > 0) {
+            const reason = `дорожка правит файлы очереди (${queueTouched.join(', ')}): в режиме --onto из очереди в коммит попадает только отметка своего пункта (рабочее дерево: ${workspaceOf(status, lane) ?? 'неизвестно'})`;
+            resetToCommit(integrationRoot, headBefore);
+            assertCleanTree(integrationRoot);
+            markFailed(lane, reason);
+            record({ lane, kind: 'conflict', reason });
+            continue;
+          }
+
+          const rollbackIntegration = (): void => {
+            resetToCommit(integrationRoot, headBefore);
+            try {
+              assertCleanTree(integrationRoot);
+            } catch (error) {
+              if (!isStepcastError(error)) throw error;
+              stopAt(lane, `откат интеграционного дерева не подтверждён: ${error.message}`);
+            }
+          };
+
+          const red = await firstRedCheck(
+            integrationRoot,
+            affected,
+            check,
+            repoChecks,
+            `проверка после наложения красная (интеграционное дерево: ${integrationRoot}): `,
+          );
+          if (red !== undefined) {
+            const reason = reasonWithOutput(red.prefix, red.output);
+            rollbackIntegration();
+            markFailed(lane, reason);
+            record({ lane, kind: 'check_failed', reason });
+            continue;
+          }
+
+          // Пункт могли забрать, пока шла проверка: наложенное снимается, исход не проставляется.
+          const foreignAtDone =
+            options.finishOwner === undefined || !existsSync(file)
+              ? undefined
+              : foreignOwnerOf(file, 'merge-lanes', item.slug, options.finishOwner);
+          if (foreignAtDone !== undefined) {
+            rollbackIntegration();
+            record(foreignOwnerResult(lane, item.slug, foreignAtDone));
+            continue;
+          }
+
+          // Файл очереди коммита — версия вершины и свой блок, а не живой файл
+          // целиком: в нём незакоммиченные отметки соседних прогонов.
+          const integrationFile = join(integrationRoot, queuePath);
+          let tipQueue: string | undefined;
+          try {
+            tipQueue = gitText(integrationRoot, ['show', `HEAD:${queuePath}`]);
+          } catch {
+            tipQueue = undefined; // очередь вершиной не отслеживается — коммитить в ней нечего
+          }
+          if (tipQueue !== undefined && existsSync(file)) {
+            const live = liveTextWithDone(file, readBacklogFile(file), item.slug);
+            writeFileSync(integrationFile, withOwnBlock(tipQueue, live, item.slug));
+          }
+
+          const committed = commitAll(integrationRoot, `${item.slug}: ${item.title ?? 'улучшение из очереди'}`);
+          const commit = currentCommit(integrationRoot);
+          const outcome = committed
+            ? await publishOntoBranch({
+                repoDir: cwd,
+                branch,
+                expected: tip,
+                commit,
+                copy: findBranchWorktree(cwd, branch),
+                queuePaths,
+                queueFile: file,
+                stateDir: join(integrationDir, 'publication', lane),
+                recoveryPath,
+                recovery: { version: 2, mode: 'onto', run_dir: runDir, lane, integration_dir: integrationDir },
+                onPublished: () => {
+                  if (existsSync(file)) finishItem(file, 'merge-lanes', item.slug, 'done', undefined, options.finishOwner);
+                },
+                events,
+                ...options.tuning?.wait,
+              })
+            : undefined;
+          if (outcome === undefined) {
+            const reason = 'дорожка не изменила дерево';
+            markFailed(lane, reason);
+            record({ lane, kind: 'no_contribution', reason });
+            continue;
+          }
+          if (outcome.kind === 'branch_moved') {
+            // Вершины названы первыми: причину срежет предел поля очереди с хвоста.
+            const reason = `ветка ${branch} сдвинулась мимо сведения: ожидалась вершина ${outcome.expected}, сейчас ${outcome.actual}; коммит дорожки ${commit} сохранён в интеграционном дереве ${integrationRoot}`;
+            markFailed(lane, reason);
+            record({ lane, kind: 'publication_conflict', reason });
+            stopAt(lane, reason);
+            continue;
+          }
+
+          // Следующая дорожка ложится на коммит этой: интеграционное дерево уже на нём.
+          tip = commit;
+          record({ lane, kind: 'merged', slug: item.slug, repos: ['.'], commits: { '.': commit } });
+        }
+        return results;
+      } finally {
+        if (!retainIntegration) removeWorktree({ repoDir: cwd, path: integrationRoot, runDir: integrationDir });
+      }
+    },
+    {
+      ...(options.tuning?.lockIntervalMs === undefined ? {} : { intervalMs: options.tuning.lockIntervalMs }),
+      onBusy: (owner) =>
+        write(
+          owner === 'unreadable'
+            ? 'merge lock занят, владельца прочитать не удалось: жду освобождения'
+            : `merge lock занят владельцем ${owner.command} (pid ${owner.pid}, host ${owner.host}, с ${owner.acquired_at}): жду освобождения`,
+        ),
+    },
+  );
+}
+
 export async function mergeLanes(options: MergeLanesOptions): Promise<readonly LaneMergeResult[]> {
+  assertOntoApplicable(options);
+  // Раньше проверки `preserve_local_changes`: `--onto` не зависит от того, как
+  // объявлен pipeline, — база и публикация у него свои.
+  if (options.onto !== undefined) return mergeLanesOnto(options, options.onto);
   const publication = readLock(options.paths.lock).workspace;
   if (publication?.preserveLocalChanges === true) return mergeLanesIsolated(options, publication);
   return mergeLanesLegacy(options);

@@ -11,6 +11,7 @@ export {
   type LockWaitOptions,
 } from './lock.js';
 export { withFields, withoutFields, insertItem } from './write.js';
+export { withOwnBlock } from './splice.js';
 export { moveWithin, moveBetween, withStatus, type MoveBetweenResult } from './move.js';
 export {
   statusResolver,

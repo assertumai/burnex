@@ -81,6 +81,12 @@ export interface RunPaths {
   readonly lock: string;
   readonly status: string;
   readonly events: string;
+  /**
+   * События `merge-lanes --onto` (ожидание грязной копии). Свой поток: `seq`
+   * `events.ndjson` ведёт процесс прогона в памяти, и дописывание из второго
+   * процесса рвало бы его монотонность.
+   */
+  readonly mergeEvents: string;
   readonly usage: string;
   readonly artifacts: string;
   readonly jobs: string;
@@ -115,6 +121,7 @@ export function runPaths(runsRoot: string, key: string, runId: string): RunPaths
     lock: join(dir, 'pipeline.lock.yml'),
     status: join(dir, 'status.json'),
     events: join(dir, 'events.ndjson'),
+    mergeEvents: join(dir, 'merge-events.jsonl'),
     usage: join(dir, 'usage.json'),
     artifacts: join(dir, 'artifacts'),
     jobs: join(dir, 'jobs'),

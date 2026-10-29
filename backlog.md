@@ -369,12 +369,14 @@ claimed_by: run:2026-10-29T07-43-40Z-f1003c
 
 ## merge-lanes-onto-branch-tip
 
-status: todo
+status: done
 title: `merge-lanes --onto <branch>` сводит дорожки на текущую вершину ветки
 why: Сведение идёт на стартовый коммит прогона, поэтому два прогона от одной базы не сводятся друг за другом — второй отказывает. Нужны merge lock, публикация через `git update-ref` с проверкой старого значения и ожидание грязной копии.
 done_when: `--onto` сводит на вершину ветки под `<git common dir>/stepcast-merge.lock`; расхождение при `update-ref` даёт исход `publication_conflict`; грязная копия вне файлов очереди — ожидание с событиями `merge.dirty_waiting`/`merge.dirty_resolved` раз в 10 минут; `--keep-claim` оставляет неслитый пункт `in_progress`; в коммит попадают только блоки своих пунктов; с `nested_repos` режим отклоняется; тесты двух последовательных прогонов.
 group: lane-merge
 source: docs/burnex-after-stepcast.md, раздел 5 «Сведение на вершину ветки»
+started_at: 2026-10-29T08:00:11.700Z
+claimed_by: run:2026-10-29T08-00-09Z-127b79
 
 ## self-improve-loop-runner
 

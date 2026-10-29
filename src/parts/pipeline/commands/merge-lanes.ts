@@ -105,6 +105,9 @@ export async function runMergeLanesCommand(
   const sourceRoot = readManifest(paths).project_root;
   const file = resolvePath(sourceRoot, stringFlag(args.flags, 'file') ?? 'backlog.md');
 
+  const onto = stringFlag(args.flags, 'onto');
+  const keepClaim = args.flags['keep-claim'] === true;
+
   const repoChecks = repoChecksFrom(config);
   const finishOwner = finishOwnerOfRun(
     config.runs.root,
@@ -121,6 +124,9 @@ export async function runMergeLanesCommand(
     check,
     file,
     finishOwner,
+    write,
+    ...(onto === undefined ? {} : { onto }),
+    ...(keepClaim ? { keepClaim } : {}),
     ...(config.project.nestedRepos === undefined ? {} : { nestedRepos: config.project.nestedRepos }),
     ...(repoChecks === undefined ? {} : { repoChecks }),
   });
@@ -160,6 +166,8 @@ export const row = commandRow(
         lanes: { kind: 'string', description: 'перечень дорожек через запятую, обязателен' },
         check: { kind: 'string', description: 'команда проверки объединённого дерева, обязателен' },
         file: { kind: 'string', description: 'путь к файлу очереди, по умолчанию backlog.md в рабочем каталоге' },
+        onto: { kind: 'string', description: 'свести на текущую вершину этой ветки под merge lock’ом, а не на стартовый коммит прогона' },
+        'keep-claim': { kind: 'boolean', description: 'с --onto: несведённый пункт остаётся in_progress за прогоном, а не получает failed' },
       },
     },
     run: (args, io, env) => runMergeLanesCommand(args, io.out, env.cwd),
