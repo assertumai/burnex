@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict';
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { join } from 'node:path';
 import { describe, it } from 'node:test';
+import { Ajv2020 } from 'ajv/dist/2020.js';
 
 import { resolveConfig } from '../src/parts/pipeline/config/resolve.js';
 import { describeSource, matchesKeyPattern } from '../src/parts/pipeline/config/merge.js';
@@ -1415,5 +1417,129 @@ describe('stepcast-configuration: таблица раннеров', () => {
       assert.match(error.message, /uv/);
       return true;
     });
+  });
+});
+
+describe('backends.<id>.credentials', () => {
+  const KEYCHAIN = `      OPENAI_API_KEY:
+        provider: keychain
+        service: api.openai.com
+        account: alice
+`;
+
+  it('глобальный слой: запись разбирается в провайдера и параметры, каталог конфига сохранён', () => {
+    const box = sandbox({ global: `backends:\n  codex:\n    credentials:\n${KEYCHAIN}` });
+    const { config } = resolveIn(box);
+
+    assert.deepEqual(config.backends.codex?.credentials, {
+      OPENAI_API_KEY: { provider: 'keychain', params: { service: 'api.openai.com', account: 'alice' } },
+    });
+    assert.equal(config.globalConfigDir, join(box.home, '.stepcast'));
+  });
+
+  it('проектный конфиг отклоняет credentials: путь ключа и файл', () => {
+    const box = sandbox({ project: `backends:\n  claude:\n    credentials:\n${KEYCHAIN}` });
+
+    assert.throws(
+      () => resolveIn(box),
+      (error: unknown) => {
+        assert.ok(error instanceof StepcastError);
+        assert.match(error.message, /допустим только в глобальной конфигурации/);
+        assert.match(error.message, /backends\.claude\.credentials\.OPENAI_API_KEY/);
+        assert.equal(error.file, box.projectPath);
+        return true;
+      },
+    );
+  });
+
+  it('умолчания плагина отклоняют credentials с путём ключа и именем плагина', () => {
+    const box = sandbox({});
+
+    assert.throws(
+      () =>
+        resolveConfig({
+          cwd: box.cwd,
+          home: box.home,
+          globalPath: box.globalPath,
+          projectPath: box.projectPath,
+          pluginDefaults: [
+            {
+              plugin: 'вендор',
+              file: '/модули/вендор.js',
+              values: {
+                backends: {
+                  codex: { credentials: { OPENAI_API_KEY: { provider: 'keychain', service: 's', account: 'a' } } },
+                },
+              },
+            },
+          ],
+        }),
+      (error: unknown) => {
+        assert.ok(error instanceof StepcastError);
+        assert.match(error.message, /вендор/);
+        assert.equal(error.file, '/модули/вендор.js');
+        assert.match(error.message, /backends\.codex\.credentials\.OPENAI_API_KEY/);
+        return true;
+      },
+    );
+  });
+
+  it('одно имя в credentials и в env бэкенда: отказ с именем переменной', () => {
+    const box = sandbox({
+      global: `backends:\n  codex:\n    env:\n      OPENAI_API_KEY: литерал\n    credentials:\n${KEYCHAIN}`,
+    });
+
+    assert.throws(
+      () => resolveIn(box),
+      (error: unknown) => {
+        assert.ok(error instanceof StepcastError);
+        assert.match(error.message, /OPENAI_API_KEY/);
+        assert.equal(error.at, 'backends.codex.credentials.OPENAI_API_KEY');
+        return true;
+      },
+    );
+  });
+
+  for (const [name, variable] of [
+    ['строчные буквы', 'openai_key'],
+    ['цифра первой', '1KEY'],
+    ['префикс STEPCAST_', 'STEPCAST_TOKEN'],
+  ] as const) {
+    it(`недопустимое имя переменной (${name}) отклоняется разбором`, () => {
+      const box = sandbox({
+        global: `backends:\n  codex:\n    credentials:\n      ${variable}:\n        provider: keychain\n`,
+      });
+      assert.throws(
+        () => resolveIn(box),
+        (error: unknown) => {
+          assert.ok(error instanceof StepcastError);
+          assert.match(error.message, /схеме/);
+          assert.match(error.at ?? '', /^backends\.codex\.credentials/);
+          return true;
+        },
+      );
+    });
+  }
+
+  it('опубликованная схема отклоняет те же имена, что и разбор', () => {
+    const schema = JSON.parse(
+      readFileSync(fileURLToPath(new URL('../../schema/config.schema.json', import.meta.url)), 'utf8'),
+    ) as object;
+    const validate = new Ajv2020({ strict: false }).compile(schema);
+    const document = (variable: string) => ({
+      backends: { codex: { credentials: { [variable]: { provider: 'keychain' } } } },
+    });
+
+    assert.equal(validate(document('OPENAI_API_KEY')), true, JSON.stringify(validate.errors));
+    for (const variable of ['openai_key', '1KEY', 'STEPCAST_TOKEN']) {
+      assert.equal(validate(document(variable)), false, variable);
+    }
+  });
+
+  it('запись без provider отклоняется разбором', () => {
+    const box = sandbox({
+      global: `backends:\n  codex:\n    credentials:\n      OPENAI_API_KEY:\n        service: s\n`,
+    });
+    assert.throws(() => resolveIn(box), StepcastError);
   });
 });

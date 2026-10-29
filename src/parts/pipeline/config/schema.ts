@@ -89,6 +89,25 @@ export const RawPermissionsSchema = z
   })
   .strict();
 
+/**
+ * Имя переменной учётных данных бэкенда (`secrets-keychain-provider`,
+ * design.md, решение 2): образец имени переменной окружения. Префикс
+ * `STEPCAST_` занят движком — тот же довод, что у `env` секрета пайплайна.
+ */
+const CredentialNameSchema = z
+  .string()
+  .regex(/^[A-Z_][A-Z0-9_]*$/, 'имя переменной учётных данных — ЗАГЛАВНЫЕ буквы, цифры и подчёркивание')
+  // Запрет префикса — тоже образец, а не refine: refine в опубликованную
+  // JSON-схему не попадает, и редактор принял бы имя, которое разбор отклонит.
+  .regex(/^(?!STEPCAST_)/, 'префикс STEPCAST_ зарезервирован движком');
+
+/**
+ * Запись учётных данных: `provider` и параметры провайдера соседними ключами,
+ * та же форма, что у объявления в `secrets:` пайплайна, без `env` — его роль
+ * играет ключ записи. Параметры проверяет схема провайдера, а не эта.
+ */
+const RawCredentialSchema = z.object({ provider: z.string().min(1) }).catchall(z.unknown());
+
 export const RawBackendSchema = z
   .object({
     command: z.string().optional(),
@@ -110,6 +129,7 @@ export const RawBackendSchema = z
     mcp: z.boolean().optional(),
     permissions: RawPermissionsSchema.optional(),
     env: z.record(z.string(), z.string()).optional(),
+    credentials: z.record(CredentialNameSchema, RawCredentialSchema).optional(),
   })
   .strict();
 
@@ -404,7 +424,7 @@ export type RawBackend = z.infer<typeof RawBackendSchema>;
  * репозитории и попадает в ревью, поэтому машинно-зависимым путям там не место.
  * Шаблон `*` совпадает с одним сегментом пути.
  */
-export const GLOBAL_ONLY_KEYS = ['runs.root', 'backends.*.command'] as const;
+export const GLOBAL_ONLY_KEYS = ['runs.root', 'backends.*.command', 'backends.*.credentials.**'] as const;
 
 /**
  * Ключи, допустимые только в проектном конфиге. Глобальный конфиг общий всем

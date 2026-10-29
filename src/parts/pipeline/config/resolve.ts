@@ -95,9 +95,28 @@ export interface BackendConfig {
       }
     | undefined;
   readonly env: Readonly<Record<string, string>>;
+  /**
+   * Источники значений переменных окружения процесса CLI
+   * (`secrets-keychain-provider`): «переменная → провайдер и его параметры».
+   * Значения здесь нет — оно берётся провайдером при старте прогона.
+   */
+  readonly credentials?: Readonly<Record<string, BackendCredential>>;
+}
+
+export interface BackendCredential {
+  readonly provider: string;
+  readonly params: Readonly<Record<string, unknown>>;
 }
 
 export interface Config {
+  /**
+   * Каталог глобального конфига: от него разрешаются относительные пути
+   * параметров `backends.*.credentials` (так же, как пути `plugins` — от файла,
+   * в котором объявлены).
+   */
+  readonly globalConfigDir: string;
+  /** Сам файл глобального конфига: его называют диагностики записей `backends.*.credentials`. */
+  readonly globalConfigFile: string;
   readonly runs: { readonly root: string; readonly keepMs: number };
   readonly defaults: {
     readonly agent: string;
@@ -260,6 +279,8 @@ export interface ResolveOptions {
    */
   readonly pluginDefaults?: readonly {
     readonly plugin: string;
+    /** Разрешённый путь модуля плагина — его называет отказ о недопустимом ключе. */
+    readonly file?: string;
     readonly values: Record<string, unknown>;
   }[];
   /**
@@ -401,6 +422,25 @@ function rejectGlobalOnlyKeys(config: RawConfig, path: string): void {
           hint: 'Проектный конфиг попадает в репозиторий — перенесите значение в ~/.stepcast/config.yml',
         });
       }
+    }
+  }
+}
+
+const PLUGIN_FORBIDDEN_KEY = 'backends.*.credentials.**';
+
+/**
+ * Слой умолчаний плагина не проходит файловую схему, поэтому глобальные
+ * ключи отсекаются отдельно: откуда брать ключ CLI, решает владелец машины,
+ * а не плагин (`secrets-keychain-provider`, design.md, решение 2).
+ */
+function rejectGlobalOnlyPluginKeys(values: Record<string, unknown>, plugin: string, file: string | undefined): void {
+  for (const [keyPath] of flatten(values)) {
+    if (matchesKeyPattern(keyPath, PLUGIN_FORBIDDEN_KEY)) {
+      throw new StepcastError(`Умолчания плагина ${plugin} объявляют ключ ${keyPath}, допустимый только в глобальной конфигурации`, {
+        ...(file === undefined ? {} : { file }),
+        at: keyPath,
+        hint: 'Плагин описывает возможности адаптера; источник учётных данных задаёт ~/.stepcast/config.yml',
+      });
     }
   }
 }
@@ -555,6 +595,8 @@ function buildBackends(
 
   for (const [name, raw] of Object.entries(rawBackends)) {
     const command = typeof raw.command === 'string' ? expandHome(raw.command, home) : name;
+    const env = (raw.env as Record<string, string> | undefined) ?? {};
+    const credentials = buildCredentials(name, raw.credentials, env);
     out[name] = {
       command,
       enabled: raw.enabled !== false,
@@ -567,10 +609,34 @@ function buildBackends(
       strictPermissions: raw.strict_permissions === true,
       mcp: raw.mcp === true,
       permissions: (raw.permissions as BackendConfig['permissions']) ?? undefined,
-      env: (raw.env as Record<string, string> | undefined) ?? {},
+      env,
+      credentials,
     };
   }
 
+  return out;
+}
+
+/**
+ * Одно имя в `credentials` и в `env` бэкенда — две величины под одним
+ * именем, и какая победит в окружении CLI, по записи не видно: отказ разбора.
+ */
+function buildCredentials(
+  backend: string,
+  raw: unknown,
+  env: Readonly<Record<string, string>>,
+): Record<string, BackendCredential> {
+  const out: Record<string, BackendCredential> = {};
+  for (const [variable, entry] of Object.entries((raw ?? {}) as Record<string, Record<string, unknown>>)) {
+    if (Object.hasOwn(env, variable)) {
+      throw new StepcastError(`Переменная ${variable} объявлена и в backends.${backend}.env, и в backends.${backend}.credentials`, {
+        at: `backends.${backend}.credentials.${variable}`,
+        hint: 'Оставьте одно объявление: значение из провайдера (credentials) или литерал (env)',
+      });
+    }
+    const { provider, ...params } = entry;
+    out[variable] = { provider: provider as string, params };
+  }
   return out;
 }
 
@@ -722,6 +788,7 @@ export function resolveConfig(options: ResolveOptions): ResolvedConfig {
   // обязаны их перекрывать, а сами они — быть видны в отчёте своим источником,
   // а не притворяться встроенными.
   for (const layer of options.pluginDefaults ?? []) {
+    rejectGlobalOnlyPluginKeys(layer.values, layer.plugin, layer.file);
     layers.push({ source: { kind: 'plugin', name: layer.plugin }, values: layer.values });
   }
 
@@ -878,6 +945,8 @@ export function resolveConfig(options: ResolveOptions): ResolvedConfig {
       noteMaxTokens: requireNumber(values, 'context.note_max_tokens'),
       deny: (values.get('context.deny') as string[] | undefined) ?? [],
     },
+    globalConfigDir: dirname(globalPath),
+    globalConfigFile: globalPath,
     backends: buildBackends(values, home),
     runners,
     runnersByExtension,

@@ -1,7 +1,7 @@
 import { Ajv2020 } from 'ajv/dist/2020.js';
 
 import type { SecretProviderContribution } from '../contract.js';
-import type { SecretDeclaration } from '../document/model.js';
+import type { Pipeline, SecretDeclaration } from '../document/model.js';
 
 /**
  * Объявления секретов в модели документа и проверка их параметров схемой
@@ -48,4 +48,27 @@ export function describeSecretParamsIssue(
   return (validate.errors ?? [])
     .map((error) => `${error.instancePath === '' ? 'параметры' : error.instancePath} ${error.message ?? ''}`.trim())
     .join('; ');
+}
+
+/**
+ * Бэкенды, которыми пойдёт хотя бы один агентский шаг или судья раскрытого
+ * пайплайна (`secrets-keychain-provider`, design.md, решение 3). Единый
+ * выбор для предстартовой проверки адаптеров, линта и разрешения учётных
+ * данных: судья без `agent` идёт бэкендом по умолчанию, и три потребителя не
+ * вправе расходиться в том, какой бэкенд «используется».
+ */
+export function backendsInUse(pipeline: Pipeline, defaultAgent: string): ReadonlySet<string> {
+  const used = new Set<string>();
+  for (const job of pipeline.jobs) {
+    for (const step of job.steps) {
+      if (step.kind === 'agent') used.add(step.agent);
+      for (const predicate of step.expect) {
+        if (predicate.kind === 'judge') used.add(predicate.agent ?? defaultAgent);
+      }
+    }
+    for (const predicate of job.until?.check ?? []) {
+      if (predicate.kind === 'judge') used.add(predicate.agent ?? defaultAgent);
+    }
+  }
+  return used;
 }

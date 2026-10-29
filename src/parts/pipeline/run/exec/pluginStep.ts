@@ -398,6 +398,7 @@ export async function runPluginStep(
                 journal.event({ kind: 'step.stalled', job: job.id, step: step.id, silent_ms: silentMs }),
               env,
               adapterFor: (name) => adapterOf(name, context),
+              credentialsFor: (name) => context.backendCredentials.get(name),
               defaultAgent: config.defaults.agent,
               backendSlots: context.backendSlots,
               journal,

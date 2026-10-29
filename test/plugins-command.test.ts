@@ -142,7 +142,7 @@ describe('plugin-tree: stepcast plugins печатает дерево со сл�
     assert.equal(lines[22], '    вклады: steps: decision');
     assert.match(lines[23] ?? '', /^9\s+secret-providers\s+встроенный\s+stepcast:secret-providers\s+действует$/);
     assert.equal(lines[24], '    сервисы запрошены: secretProviders (разрешён)');
-    assert.equal(lines[25], '    вклады: secretProviders: env-file');
+    assert.equal(lines[25], '    вклады: secretProviders: env-file, keychain');
 
     let cursor = 26;
     let place = 10;
@@ -255,7 +255,7 @@ describe('plugin-tree: отказ загрузки не заслоняет де�
     assert.match(lines[20] ?? '', /действует/);
     assert.equal(lines[22], '    вклады: steps: decision');
     assert.match(lines[23] ?? '', /действует/); // secret-providers
-    assert.equal(lines[25], '    вклады: secretProviders: env-file');
+    assert.equal(lines[25], '    вклады: secretProviders: env-file, keychain');
 
     // Семя дерева называет строки команд наравне со строками движка
     // (`resolveConfig`, `reservedRowIds`) — они стоят в дереве раньше явных

@@ -179,3 +179,89 @@ jobs:
     assert.equal(code, ExitCode.ok, out);
   });
 });
+
+describe('lint: keychain и учётные данные бэкендов', () => {
+  const KEYCHAIN_SECRET = '  gh-token:\n    provider: keychain\n    service: github.com\n    account: alice\n';
+
+  /** Конфигурация с записью `credentials` у бэкенда — как после разбора глобального конфига. */
+  function withCredentials(
+    project: Project,
+    backend: string,
+    credentials: Record<string, { provider: string; params: Record<string, unknown> }>,
+  ): Project['config'] {
+    return {
+      ...project.config,
+      backends: {
+        ...project.config.backends,
+        [backend]: { ...project.config.backends[backend]!, credentials },
+      },
+    };
+  }
+
+  function lintWith(project: Project, config: Project['config']): Diagnostic[] {
+    const expanded = expandPipeline({ pipelinePath: project.path('stepcast.yml'), config });
+    return lintPipeline(expanded, { config });
+  }
+
+  const AGENT = '      - { id: think, agent: claude, prompt: подумай }\n';
+
+  it('секрет keychain с валидными параметрами: линт не сообщает об ошибке, в том числе не на macOS', () => {
+    const project = makeProject({ 'stepcast.yml': pipeline({ secrets: KEYCHAIN_SECRET, steps: USING }) });
+    assert.deepEqual(messages(lint(project), 'error'), []);
+  });
+
+  it('секрет keychain без account: ошибка с указанием параметра', () => {
+    const project = makeProject({
+      'stepcast.yml': pipeline({
+        secrets: '  gh-token:\n    provider: keychain\n    service: github.com\n',
+        steps: USING,
+      }),
+    });
+    const errors = messages(lint(project), 'error');
+    assert.equal(errors.length, 1);
+    assert.match(errors[0]!, /gh-token.*keychain/);
+    assert.match(errors[0]!, /account/);
+  });
+
+  it('credentials с незарегистрированным провайдером: путь записи и имя провайдера', () => {
+    const project = makeProject({ 'stepcast.yml': pipeline({ steps: AGENT }) });
+    const config = withCredentials(project, 'claude', {
+      ANTHROPIC_API_KEY: { provider: 'vault', params: { path: 'x' } },
+    });
+    const errors = lintWith(project, config).filter((item) => item.severity === 'error');
+    assert.equal(errors.length, 1);
+    assert.match(errors[0]!.message, /vault/);
+    assert.equal(errors[0]!.at, 'backends.claude.credentials.ANTHROPIC_API_KEY.provider');
+    // Запись лежит в глобальном конфиге, а не в документе пайплайна.
+    assert.equal(errors[0]!.file, config.globalConfigFile);
+    assert.notEqual(errors[0]!.file, project.path('stepcast.yml'));
+    assert.match(errors[0]!.hint ?? '', /keychain/);
+  });
+
+  it('credentials keychain без account: диагностика называет параметр и путь записи', () => {
+    const project = makeProject({ 'stepcast.yml': pipeline({ steps: AGENT }) });
+    const config = withCredentials(project, 'claude', {
+      ANTHROPIC_API_KEY: { provider: 'keychain', params: { service: 'api.anthropic.com' } },
+    });
+    const errors = lintWith(project, config).filter((item) => item.severity === 'error');
+    assert.equal(errors.length, 1);
+    assert.match(errors[0]!.message, /account/);
+    assert.equal(errors[0]!.at, 'backends.claude.credentials.ANTHROPIC_API_KEY');
+  });
+
+  it('credentials бэкенда, которым пайплайн не идёт, не проверяются', () => {
+    const project = makeProject({ 'stepcast.yml': pipeline({ steps: AGENT }) });
+    const config = withCredentials(project, 'codex', {
+      OPENAI_API_KEY: { provider: 'vault', params: {} },
+    });
+    assert.deepEqual(messages(lintWith(project, config), 'error'), []);
+  });
+
+  it('credentials с валидным keychain: диагностик нет', () => {
+    const project = makeProject({ 'stepcast.yml': pipeline({ steps: AGENT }) });
+    const config = withCredentials(project, 'claude', {
+      ANTHROPIC_API_KEY: { provider: 'keychain', params: { service: 'api.anthropic.com', account: 'alice' } },
+    });
+    assert.deepEqual(messages(lintWith(project, config), 'error'), []);
+  });
+});

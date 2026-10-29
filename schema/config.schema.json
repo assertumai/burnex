@@ -328,6 +328,33 @@
             "additionalProperties": {
               "type": "string"
             }
+          },
+          "credentials": {
+            "type": "object",
+            "propertyNames": {
+              "type": "string",
+              "allOf": [
+                {
+                  "pattern": "^[A-Z_][A-Z0-9_]*$"
+                },
+                {
+                  "pattern": "^(?!STEPCAST_)"
+                }
+              ]
+            },
+            "additionalProperties": {
+              "type": "object",
+              "properties": {
+                "provider": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              },
+              "required": [
+                "provider"
+              ],
+              "additionalProperties": {}
+            }
           }
         },
         "additionalProperties": false

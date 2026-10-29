@@ -12,7 +12,7 @@ import { buildPublishedSchemas, pluginPredicateEntries, pluginStepKindEntries } 
 import { builtinRegistry } from '../../builtin.js';
 import { hasPredicateEvaluator, hasStepExecutor } from '../contract.js';
 import { availableNames, nativePredicateNames, nativeStepKindNames, type Registry } from '../../../kernel/registry.js';
-import { describeSecretParamsIssue } from '../secrets/declaration.js';
+import { backendsInUse, describeSecretParamsIssue } from '../secrets/declaration.js';
 import { isGitWorktree } from './anchor/git.js';
 import { workspaceInheritanceDiagnostics } from '../run/inherit.js';
 import {
@@ -669,6 +669,7 @@ export function lintPipeline(expanded: ExpandedPipeline, given: LintOptions): Di
 
   checkPublishedSchema(base, options.registry, push);
   checkSecrets(pipeline, substitutions, options.registry, push);
+  checkBackendCredentials(pipeline, options.config, options.registry, push);
 
   // Практика памяти объявлена — значит записи `knowledge:` и предикат
   // `knowledge_valid` имеют кем разрешаться. Значение уже слито (пайплайн
@@ -1928,6 +1929,47 @@ function mcpOrigin(
     return { at: 'mcp', ...(pipelineFile === undefined ? {} : { file: pipelineFile }) };
   }
   return { at: `${at}.mcp`, file: job.source };
+}
+
+/**
+ * Учётные данные бэкендов, которыми идёт пайплайн (`secrets-keychain-provider`,
+ * design.md, решение 3): провайдер и параметры отказывают здесь теми же словами,
+ * что и при запуске. Платформа не проверяется — документ с `keychain`
+ * законно линтуется в CI на Linux, падать должен запуск, которому значение
+ * действительно нужно.
+ */
+function checkBackendCredentials(
+  pipeline: ExpandedPipeline['pipeline'],
+  config: Config,
+  registry: Registry,
+  push: (diagnostic: Diagnostic) => void,
+): void {
+  for (const backend of backendsInUse(pipeline, config.defaults.agent)) {
+    for (const [variable, credential] of Object.entries(config.backends[backend]?.credentials ?? {})) {
+      const at = `backends.${backend}.credentials.${variable}`;
+      const provider = registry.secretProviders.get(credential.provider);
+      if (provider === undefined) {
+        const known = availableNames(registry, 'secretProviders');
+        push({
+          severity: 'error',
+          message: `Учётные данные ${at} объявляют провайдера ${credential.provider}, которого нет в реестре`,
+          file: config.globalConfigFile,
+          at: `${at}.provider`,
+          hint: known.length === 0 ? 'Провайдеров не заведено вовсе' : `Доступны: ${known.join(', ')}`,
+        });
+        continue;
+      }
+      const issue = describeSecretParamsIssue(provider, credential.params);
+      if (issue !== undefined) {
+        push({
+          severity: 'error',
+          message: `Параметры ${at} не соответствуют схеме провайдера ${credential.provider}: ${issue}`,
+          file: config.globalConfigFile,
+          at,
+        });
+      }
+    }
+  }
 }
 
 /**

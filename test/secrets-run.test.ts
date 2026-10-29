@@ -18,6 +18,7 @@ import { expandPipeline } from '../src/parts/pipeline/document/expand.js';
 import { readEvents, readManifest } from '../src/parts/pipeline/run/journal/reader.js';
 import { planResume, readSourceRun } from '../src/parts/pipeline/run/resumePlan.js';
 import { runPipeline, type RunResult } from '../src/parts/pipeline/run/runner.js';
+import { createKeychainProvider } from '../src/parts/pipeline/secrets/keychain.js';
 import { gitCommit, gitInit, makeProject, testBaseEnv, type Project } from './helpers.js';
 import { tempDir } from './tmp.js';
 
@@ -558,5 +559,40 @@ jobs:
     });
     const { result } = await start(project);
     assert.equal(read(result, 'jobs/b/steps/01-a/stdout.log'), 'токен-12345678\n');
+  });
+});
+
+describe('secrets: провайдер keychain не на macOS', () => {
+  it('запуск отклонён до каталога прогона с объяснением про macOS, а не про команду', async () => {
+    // Настоящее имя `keychain` занято встроенной строкой, а на macOS она
+    // вызвала бы настоящий `security`; поэтому платформа подменяется у
+    // провайдера под другим именем, с той же схемой и той же фабрикой. Команда
+    // несуществующая: запусти её провайдер — отказ был бы про отсутствие файла.
+    const linux = createKeychainProvider({ command: '/нет/такой/security', platform: 'linux' });
+    const registry = await registryWith({
+      name: 'keychain-linux-plugin',
+      secretProviders: [{ ...linux, name: 'keychain-linux' }],
+    });
+    const project = makeProject({
+      'stepcast.yml': `
+kind: pipeline
+secrets:
+  gh-token: { provider: keychain-linux, service: github.com, account: alice, env: GH_TOKEN }
+jobs:
+  build:
+    steps:
+      - { id: a, run: [echo, ok], secrets: [gh-token] }
+`,
+    });
+    const runsRoot = tempDir('runs-');
+
+    await assert.rejects(start(project, { registry, runsRoot }), (error: unknown) => {
+      assert.ok(error instanceof StepcastError);
+      assert.equal(error.at, 'secrets.gh-token');
+      assert.match(error.message, /только на macOS/);
+      assert.doesNotMatch(error.message, /не найдена/);
+      return true;
+    });
+    assert.deepEqual(readdirSync(runsRoot), [], 'отказ не оставляет каталога прогона');
   });
 });

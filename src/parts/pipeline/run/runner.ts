@@ -38,7 +38,8 @@ import { resolveLate, type JobScopeEntry, type LateWithheld } from '../document/
 import { ExitCode, StepcastError, isStepcastError, type ExitCodeValue } from '../../../kernel/errors.js';
 import { createSessionRegistry, executeAgentStep } from './exec/agentStep.js';
 import { buildStepEnv, injectedVariables, type EnvLayers } from './exec/env.js';
-import { namedSecrets, resolveSecrets } from './secrets.js';
+import { backendsInUse } from '../secrets/declaration.js';
+import { namedSecrets, resolveBackendCredentials, resolveSecrets } from './secrets.js';
 import { executeRunStep } from './exec/runStep.js';
 import { runJudgePass } from './exec/judgePass.js';
 import { runPluginStep } from './exec/pluginStep.js';
@@ -252,6 +253,21 @@ export async function runPipeline(options: RunOptions): Promise<RunResult> {
           ...(options.signal === undefined ? {} : { signal: options.signal }),
         });
 
+  // Учётные данные бэкендов — тот же этап и те же правила отказа
+  // (`secrets-keychain-provider`, design.md, решение 3). Без объявленных
+  // записей у используемых бэкендов ожидания нет, как и у секретов.
+  const usesCredentials = [...backendsInUse(pipeline, config.defaults.agent)].some(
+    (name) => Object.keys(config.backends[name]?.credentials ?? {}).length > 0,
+  );
+  const backendCredentials: ReadonlyMap<string, Readonly<Record<string, string>>> = usesCredentials
+    ? await resolveBackendCredentials({
+        pipeline,
+        config,
+        registry,
+        ...(options.signal === undefined ? {} : { signal: options.signal }),
+      })
+    : new Map();
+
   // Способ фиксации выбирается один раз на прогон: якоря разных способов
   // несравнимы, и смешивать их в пределах прогона нельзя.
   const anchorKind = detectAnchorKind(options.cwd, config.project.nestedRepos);
@@ -287,7 +303,7 @@ export async function runPipeline(options: RunOptions): Promise<RunResult> {
   const journal = RunJournal.create({
     runsRoot: config.runs.root,
     projectRoot: options.projectRoot,
-    secrets: secretValues.values(),
+    secrets: [...secretValues.values(), ...[...backendCredentials.values()].flatMap((vars) => Object.values(vars))],
     ...(options.onEvent === undefined
       ? {}
       : {
@@ -410,6 +426,7 @@ export async function runPipeline(options: RunOptions): Promise<RunResult> {
     ...options,
     registry,
     secretValues,
+    backendCredentials,
     journal,
     records,
     usage,
@@ -813,6 +830,12 @@ export interface RunContext extends RunOptions {
    * памяти прогона — ни замок, ни манифест, ни ключ шага их не несут.
    */
   readonly secretValues: ReadonlyMap<string, string>;
+  /**
+   * Учётные данные бэкендов, которыми идёт прогон: бэкенд → { переменная →
+   * значение }. Только в памяти и только для процесса CLI своего бэкенда;
+   * маскируются журналом наравне с секретами.
+   */
+  readonly backendCredentials: ReadonlyMap<string, Readonly<Record<string, string>>>;
   readonly journal: RunJournal;
   readonly records: Map<string, JobRecord>;
   readonly usage: UsageAccumulator;
@@ -933,18 +956,7 @@ export interface RunContext extends RunOptions {
  * ничего и делается там же, где остальные предстартовые.
  */
 function requireAdapters(context: RunContext): void {
-  const needed = new Set<string>();
-  for (const job of context.expanded.pipeline.jobs) {
-    for (const step of job.steps) {
-      if (step.kind === 'agent') needed.add(step.agent);
-      for (const predicate of step.expect) {
-        if (predicate.kind === 'judge') needed.add(predicate.agent ?? context.config.defaults.agent);
-      }
-    }
-    for (const predicate of job.until?.check ?? []) {
-      if (predicate.kind === 'judge') needed.add(predicate.agent ?? context.config.defaults.agent);
-    }
-  }
+  const needed = backendsInUse(context.expanded.pipeline, context.config.defaults.agent);
 
   for (const name of needed) adapterOf(name, context);
 }
@@ -2729,6 +2741,7 @@ async function runCommandStep(
             onStall,
             env: stepEnv(step, job, plan.attempt, context, stepDirPath, 'check'),
             adapterFor: (name) => adapterOf(name, context),
+            credentialsFor: (name) => context.backendCredentials.get(name),
             defaultAgent: config.defaults.agent,
             backendSlots: context.backendSlots,
             journal,
@@ -2887,6 +2900,7 @@ async function runAgentStep(
       step,
       masker: journal.masker,
       adapter,
+      credentials: context.backendCredentials.get(step.agent),
       cwd: context.cwd,
       stepDir: stepDirPath,
       scratchDir: jobScratchDir(journal.paths, job.id),
@@ -3065,6 +3079,7 @@ async function runAgentStep(
           onStall,
           env: stepEnv(step, job, plan.attempt, context, stepDirPath, 'check'),
           adapterFor: (name) => adapterOf(name, context),
+          credentialsFor: (name) => context.backendCredentials.get(name),
           defaultAgent: config.defaults.agent,
           backendSlots: context.backendSlots,
           journal,
@@ -3262,6 +3277,16 @@ function failureBlock(previousFailure: string | undefined): string {
   return `## Прошлая попытка не прошла проверку\n\n${previousFailure}\n\nПочини причину, а не симптом.`;
 }
 
+/** Значения учётных данных бэкендов с путём записи — для проверки `${env.*}` наравне с секретами. */
+function credentialValues(context: RunContext): [string, string][] {
+  return [...context.backendCredentials].flatMap(([backend, variables]) =>
+    Object.entries(variables).map(([variable, value]): [string, string] => [
+      `backends.${backend}.credentials.${variable}`,
+      value,
+    ]),
+  );
+}
+
 /**
  * Пространство `${env.*}` для позднего раскрытия: объявленный `env` работы без
  * переменных секретов и без переменных, чьё значение содержит значение
@@ -3286,7 +3311,7 @@ function substitutableEnv(
 
   for (const [name, value] of Object.entries(declared)) {
     if (name in withheld) continue;
-    const holder = [...context.secretValues].find(([, secretValue]) => value.includes(secretValue));
+    const holder = [...context.secretValues, ...credentialValues(context)].find(([, secretValue]) => value.includes(secretValue));
     if (holder === undefined) env[name] = value;
     else withheld[name] = { secret: holder[0], reason: 'value' };
   }

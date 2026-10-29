@@ -29,10 +29,11 @@ function resolveEnvFile(root: string, params: Record<string, unknown>, env = 'GH
 }
 
 describe('secret-providers: реестр', () => {
-  it('env-file числится среди провайдеров встроенного реестра, владелец — встроенный', () => {
+  it('env-file и keychain числятся среди провайдеров встроенного реестра, владелец — встроенный', () => {
     const registry = registryFromKernel(createBuiltinKernel());
-    assert.deepEqual(availableNames(registry, 'secretProviders'), ['env-file']);
+    assert.deepEqual(availableNames(registry, 'secretProviders'), ['env-file', 'keychain']);
     assert.equal(contributionOwner(registry, 'secretProviders', 'env-file'), 'встроенный');
+    assert.equal(contributionOwner(registry, 'secretProviders', 'keychain'), 'встроенный');
   });
 
   it('плагин вносит провайдер, и владельцем числится он', async () => {
@@ -44,7 +45,7 @@ describe('secret-providers: реестр', () => {
       DECLARATIVE_CONTRIBUTION_FIELDS,
     );
     const registry = registryFromKernel(kernel);
-    assert.deepEqual(availableNames(registry, 'secretProviders'), ['env-file', 'vault']);
+    assert.deepEqual(availableNames(registry, 'secretProviders'), ['env-file', 'keychain', 'vault']);
     assert.equal(contributionOwner(registry, 'secretProviders', 'vault'), 'vault');
   });
 

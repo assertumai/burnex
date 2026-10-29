@@ -104,6 +104,12 @@ export interface AgentStepOptions {
   /** Текст, который отправляется вместе с промптом: контекст и разбор отказа. */
   readonly buildPrompt: (plan: AttemptPlan, previousFailure: string | undefined) => string;
   readonly env: (plan: AttemptPlan) => Readonly<Record<string, string>>;
+  /**
+   * Учётные данные бэкенда шага (`backends.<id>.credentials`): последний слой
+   * окружения процесса CLI, поверх `env_deny` и `launch.env`. Кладёт движок, а
+   * не адаптер, — адаптер мог бы забыть их или положить в argv.
+   */
+  readonly credentials?: Readonly<Record<string, string>> | undefined;
   readonly stallTimeoutMs?: number;
   readonly graceMs?: number;
   readonly signal?: AbortSignal;
@@ -331,7 +337,7 @@ export async function executeAgentStep(options: AgentStepOptions): Promise<Agent
         return runProcess({
           command: launch.command,
           cwd: options.cwd,
-          env: { ...options.env(plan), ...(launch.env ?? {}) },
+          env: { ...options.env(plan), ...(launch.env ?? {}), ...(options.credentials ?? {}) },
           stdin: launch.stdin,
           timeoutMs: step.timeoutMs,
           ...(options.stallTimeoutMs === undefined ? {} : { stallTimeoutMs: options.stallTimeoutMs }),

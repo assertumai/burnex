@@ -87,7 +87,7 @@ export async function resolveWithPlugins(
       if (contributionOwner(registry, 'backends', name) !== plugin.name) continue;
       backends[name] = contribution.defaults;
     }
-    return Object.keys(backends).length === 0 ? [] : [{ plugin: plugin.name, values: { backends } }];
+    return Object.keys(backends).length === 0 ? [] : [{ plugin: plugin.name, file: plugin.source, values: { backends } }];
   });
 
   if (pluginDefaults.length === 0) return { resolved: first, registry, ctx, outcomes };

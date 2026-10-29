@@ -1,7 +1,8 @@
 import { StepcastError } from '../../../kernel/errors.js';
 import { availableNames, type Registry } from '../../../kernel/registry.js';
+import type { Config } from '../config/resolve.js';
 import type { Pipeline, SecretDeclaration } from '../document/model.js';
-import { describeSecretParamsIssue } from '../secrets/declaration.js';
+import { backendsInUse, describeSecretParamsIssue } from '../secrets/declaration.js';
 
 /**
  * Разрешение секретов до каталога прогона (`secrets-named-providers`,
@@ -31,11 +32,88 @@ export function namedSecrets(pipeline: Pipeline): SecretDeclaration[] {
   return pipeline.secrets.filter((secret) => named.has(secret.name));
 }
 
-function refusal(secret: SecretDeclaration, reason: string, hint?: string): StepcastError {
-  return new StepcastError(`Секрет ${secret.name} не разрешён: ${reason}`, {
-    at: `secrets.${secret.name}`,
+/**
+ * Что именно разрешается. Секрет пайплайна и учётные данные бэкенда проходят
+ * один путь проверок (`secrets-keychain-provider`, design.md, решение 3):
+ * линт и запуск обязаны отказывать теми же словами, и разные ветки кода
+ * разошлись бы на первой правке.
+ */
+interface Target {
+  /** Начало сообщения об отказе: «Секрет gh не разрешён», «Учётные данные … не разрешены». */
+  readonly refused: string;
+  readonly at: string;
+  readonly provider: string;
+  readonly params: Readonly<Record<string, unknown>>;
+  /** Поле `secret` входа провайдера — имя в сообщениях. */
+  readonly secret: string;
+  readonly env: string;
+}
+
+function refusal(target: Target, reason: string, hint?: string): StepcastError {
+  return new StepcastError(`${target.refused}: ${reason}`, {
+    at: target.at,
     ...(hint === undefined ? {} : { hint }),
   });
+}
+
+async function resolveTarget(
+  target: Target,
+  registry: Registry,
+  projectRoot: string,
+  signal: AbortSignal,
+): Promise<string> {
+  const provider = registry.secretProviders.get(target.provider);
+  if (provider === undefined) {
+    const known = availableNames(registry, 'secretProviders');
+    throw refusal(
+      target,
+      `провайдер ${target.provider} не зарегистрирован`,
+      known.length === 0 ? undefined : `Доступны: ${known.join(', ')}`,
+    );
+  }
+
+  const issue = describeSecretParamsIssue(provider, target.params);
+  if (issue !== undefined) {
+    throw refusal(target, `параметры не соответствуют схеме провайдера ${target.provider}: ${issue}`);
+  }
+
+  let value: unknown;
+  try {
+    value = await provider.resolve({
+      params: target.params,
+      secret: target.secret,
+      env: target.env,
+      projectRoot,
+      signal,
+    });
+  } catch (error) {
+    throw new StepcastError(
+      `${target.refused}: провайдер ${target.provider} завершился ошибкой: ${error instanceof Error ? error.message : String(error)}`,
+      { at: target.at, cause: error },
+    );
+  }
+
+  if (typeof value !== 'string') {
+    throw refusal(target, `провайдер ${target.provider} вернул не строку`);
+  }
+  if (value === '') {
+    throw refusal(target, `провайдер ${target.provider} вернул пустое значение`);
+  }
+  if (value.length < MIN_SECRET_LENGTH) {
+    throw refusal(
+      target,
+      `значение короче ${MIN_SECRET_LENGTH} символов`,
+      'Короткое значение нельзя надёжно замаскировать в журнале: оно совпадало бы с обычным текстом',
+    );
+  }
+  if (/[\r\n]/.test(value)) {
+    throw refusal(
+      target,
+      'значение содержит перевод строки',
+      'Маскирование построчное; многострочный материал (например, PEM) передайте путём к файлу',
+    );
+  }
+  return value;
 }
 
 /**
@@ -49,60 +127,70 @@ export async function resolveSecrets(options: ResolveSecretsOptions): Promise<Re
   const signal = options.signal ?? new AbortController().signal;
 
   for (const secret of namedSecrets(options.pipeline)) {
-    const provider = options.registry.secretProviders.get(secret.provider);
-    if (provider === undefined) {
-      const known = availableNames(options.registry, 'secretProviders');
-      throw refusal(
-        secret,
-        `провайдер ${secret.provider} не зарегистрирован`,
-        known.length === 0 ? undefined : `Доступны: ${known.join(', ')}`,
-      );
-    }
-
-    const issue = describeSecretParamsIssue(provider, secret.params);
-    if (issue !== undefined) {
-      throw refusal(secret, `параметры не соответствуют схеме провайдера ${secret.provider}: ${issue}`);
-    }
-
-    let value: unknown;
-    try {
-      value = await provider.resolve({
+    const value = await resolveTarget(
+      {
+        refused: `Секрет ${secret.name} не разрешён`,
+        at: `secrets.${secret.name}`,
+        provider: secret.provider,
         params: secret.params,
         secret: secret.name,
         env: secret.env,
-        projectRoot: options.projectRoot,
-        signal,
-      });
-    } catch (error) {
-      throw new StepcastError(
-        `Секрет ${secret.name} не разрешён: провайдер ${secret.provider} завершился ошибкой: ${error instanceof Error ? error.message : String(error)}`,
-        { at: `secrets.${secret.name}`, cause: error },
-      );
-    }
-
-    if (typeof value !== 'string') {
-      throw refusal(secret, `провайдер ${secret.provider} вернул не строку`);
-    }
-    if (value === '') {
-      throw refusal(secret, `провайдер ${secret.provider} вернул пустое значение`);
-    }
-    if (value.length < MIN_SECRET_LENGTH) {
-      throw refusal(
-        secret,
-        `значение короче ${MIN_SECRET_LENGTH} символов`,
-        'Короткое значение нельзя надёжно замаскировать в журнале: оно совпадало бы с обычным текстом',
-      );
-    }
-    if (/[\r\n]/.test(value)) {
-      throw refusal(
-        secret,
-        'значение содержит перевод строки',
-        'Маскирование построчное; многострочный материал (например, PEM) передайте путём к файлу',
-      );
-    }
-
+      },
+      options.registry,
+      options.projectRoot,
+      signal,
+    );
     values.set(secret.name, value);
   }
 
   return values;
+}
+
+export interface ResolveBackendCredentialsOptions {
+  readonly pipeline: Pipeline;
+  readonly config: Config;
+  readonly registry: Registry;
+  readonly signal?: AbortSignal;
+}
+
+/**
+ * Учётные данные бэкендов, которыми идёт хотя бы один агентский шаг или судья
+ * (`secrets-keychain-provider`, design.md, решение 3): «бэкенд → { переменная →
+ * значение }». Запись неиспользуемого бэкенда не разрешается — иначе ключ
+ * `codex` ронял бы прогон чисто claude-пайплайна на машине с заблокированной
+ * связкой ключей. `projectRoot` провайдера — каталог глобального конфига, от
+ * которого разрешаются относительные пути параметров.
+ */
+export async function resolveBackendCredentials(
+  options: ResolveBackendCredentialsOptions,
+): Promise<ReadonlyMap<string, Readonly<Record<string, string>>>> {
+  const { config } = options;
+  const signal = options.signal ?? new AbortController().signal;
+  const resolved = new Map<string, Readonly<Record<string, string>>>();
+
+  for (const backend of backendsInUse(options.pipeline, config.defaults.agent)) {
+    const credentials = Object.entries(config.backends[backend]?.credentials ?? {});
+    if (credentials.length === 0) continue;
+
+    const values: Record<string, string> = {};
+    for (const [variable, credential] of credentials) {
+      const at = `backends.${backend}.credentials.${variable}`;
+      values[variable] = await resolveTarget(
+        {
+          refused: `Учётные данные ${at} не разрешены`,
+          at,
+          provider: credential.provider,
+          params: credential.params,
+          secret: at,
+          env: variable,
+        },
+        options.registry,
+        config.globalConfigDir,
+        signal,
+      );
+    }
+    resolved.set(backend, values);
+  }
+
+  return resolved;
 }

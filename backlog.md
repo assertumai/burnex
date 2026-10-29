@@ -402,13 +402,15 @@ claimed_by: run:2026-10-29T09-15-49Z-3b0786
 
 ## secrets-keychain-provider
 
-status: todo
+status: done
 title: Провайдер секретов `keychain` для macOS
 why: Токены разработчиков лежат в связке ключей, и файл окружения с ними — лишняя копия секрета на диске.
 done_when: Провайдер читает `security find-generic-password -a <account> -s <service> -w` с таймаутом 5 с; не на macOS прогон отклоняется до старта; `backends.<id>.credentials.<VAR>` в `~/.stepcast/config.yml` кладёт значение только в окружение процесса CLI; описано в `docs/config.md`; тест с подменённой командой.
 group: credentials
 needs: secrets-named-providers
 source: docs/burnex-after-stepcast.md, раздел 2 «Провайдер keychain»
+started_at: 2026-10-29T10:28:17.283Z
+claimed_by: run:2026-10-29T10-28-15Z-0d0755
 
 ## model-price-catalog
 

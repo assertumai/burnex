@@ -60,6 +60,8 @@ export interface JudgePassOptions {
    */
   readonly env?: Readonly<Record<string, string>>;
   readonly adapterFor: (name: string) => BackendAdapter;
+  /** Учётные данные бэкенда по имени: судья получает их так же, как агентский шаг. */
+  readonly credentialsFor?: (name: string) => Readonly<Record<string, string>> | undefined;
   readonly defaultAgent: string;
   /** Место бэкенда: судья занимает его на общих основаниях с агентским шагом. */
   readonly backendSlots?: BackendSlots;
@@ -108,6 +110,9 @@ export async function runJudgePass(
       ...(options.onStall === undefined ? {} : { onStall: options.onStall }),
       ...(options.env === undefined ? {} : { env: options.env }),
       adapter: options.adapterFor(predicate.agent ?? options.defaultAgent),
+      ...(options.credentialsFor === undefined
+        ? {}
+        : { credentials: options.credentialsFor(predicate.agent ?? options.defaultAgent) }),
       ...(options.backendSlots === undefined ? {} : { backendSlots: options.backendSlots }),
       journal: options.journal,
       callIndex: options.nextCallIndex(),
@@ -148,6 +153,7 @@ interface CallJudgeOptions {
   readonly onStall?: (silentMs: number) => void;
   readonly env?: Readonly<Record<string, string>>;
   readonly adapter: BackendAdapter;
+  readonly credentials?: Readonly<Record<string, string>> | undefined;
   readonly backendSlots?: BackendSlots;
   readonly journal: RunJournal;
   readonly callIndex: number;
@@ -223,7 +229,7 @@ async function callJudge(options: CallJudgeOptions): Promise<CallJudgeResult> {
       command: launch.command,
       cwd: options.cwd,
       // Тем же порядком, что у агентского шага: окружение шага, поверх — бэкенда.
-      env: { ...(options.env ?? {}), ...(launch.env ?? {}) },
+      env: { ...(options.env ?? {}), ...(launch.env ?? {}), ...(options.credentials ?? {}) },
       stdin: launch.stdin,
       timeoutMs: options.timeoutMs,
       ...(options.stallTimeoutMs === undefined ? {} : { stallTimeoutMs: options.stallTimeoutMs }),
