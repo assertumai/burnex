@@ -492,6 +492,91 @@ jobs:
     assert.match(result.reasons.get('archive') ?? '', /все зависимости пропущены/);
   });
 
+  // Сценарий: «Все зависимости пропущены у on: always»
+  it('исполняет on: always, когда все зависимости пропущены ложным if', async () => {
+    const result = await drive(
+      pipelineOf(`
+kind: pipeline
+inputs:
+  skip: { type: bool, default: true }
+jobs:
+  review: { if: "not inputs.skip", steps: [${STEP}] }
+  merge: { needs: [review], on: always, steps: [${STEP}] }
+`),
+    );
+    assert.equal(result.statuses.get('review'), 'skipped');
+    assert.equal(result.statuses.get('merge'), 'success');
+  });
+
+  it('исполняет on: always, когда пропущены все зависимости при needs: all', async () => {
+    const result = await drive(
+      pipelineOf(`
+kind: pipeline
+jobs:
+  a: { if: "false", steps: [${STEP}] }
+  b: { if: "false", steps: [${STEP}] }
+  merge: { needs: all, on: always, steps: [${STEP}] }
+`),
+    );
+    assert.equal(result.statuses.get('a'), 'skipped');
+    assert.equal(result.statuses.get('b'), 'skipped');
+    assert.equal(result.statuses.get('merge'), 'success');
+  });
+
+  it('не отменяет ложное if у on: always при пропуске всех зависимостей', async () => {
+    const result = await drive(
+      pipelineOf(`
+kind: pipeline
+jobs:
+  a: { if: "false", steps: [${STEP}] }
+  merge: { needs: [a], on: always, if: "jobs.a.status == 'success'", steps: [${STEP}] }
+`),
+    );
+    assert.equal(result.statuses.get('merge'), 'skipped');
+    assert.match(result.reasons.get('merge') ?? '', /^if: /);
+    assert.equal(result.executed.includes('merge'), false);
+  });
+
+  // Рецепт прежнего поведения: явное условие по статусам зависимостей.
+  it('рецепт: if по jobs.<id>.status возвращает пропуск при пропуске обеих зависимостей', async () => {
+    const yaml = (aOff: string, bOff: string): string => `
+kind: pipeline
+jobs:
+  a: { if: "${aOff}", steps: [${STEP}] }
+  b: { if: "${bOff}", steps: [${STEP}] }
+  merge:
+    needs: [a, b]
+    on: always
+    if: "jobs.a.status != 'skipped' or jobs.b.status != 'skipped'"
+    steps: [${STEP}]
+`;
+    const both = await drive(pipelineOf(yaml('false', 'false')));
+    assert.equal(both.statuses.get('merge'), 'skipped');
+    assert.match(both.reasons.get('merge') ?? '', /^if: /);
+
+    const one = await drive(pipelineOf(yaml('false', 'true')));
+    assert.equal(one.statuses.get('merge'), 'success');
+
+    // Непропущенная зависимость упала — on: always всё равно исполняется.
+    const failed = await drive(pipelineOf(yaml('false', 'true')), { b: { status: 'failed' } });
+    assert.equal(failed.statuses.get('b'), 'failed');
+    assert.equal(failed.statuses.get('merge'), 'success');
+    assert.equal(failed.executed.includes('merge'), true);
+  });
+
+  it('on: failure пропускается, когда пропущены все зависимости', async () => {
+    const result = await drive(
+      pipelineOf(`
+kind: pipeline
+jobs:
+  a: { if: "false", steps: [${STEP}] }
+  triage: { needs: [a], on: failure, steps: [${STEP}] }
+`),
+    );
+    assert.equal(result.statuses.get('triage'), 'skipped');
+    assert.match(result.reasons.get('triage') ?? '', /все зависимости пропущены/);
+  });
+
   // Сценарий: «Ложное условие по входу»
   it('пропускает работу по ложному условию', async () => {
     const result = await drive(
@@ -677,6 +762,41 @@ jobs:
       { пустая: DECLARED },
     );
     assert.equal(result.statuses.get('обе'), 'success');
+  });
+
+  it('on: always исполняется, когда все зависимости пропущены кодом пропуска', async () => {
+    const result = await drive(
+      pipelineOf(`
+kind: pipeline
+jobs:
+  пустая: { steps: [${STEP}] }
+  итог: { needs: [пустая], on: always, steps: [${STEP}] }
+`),
+      { пустая: DECLARED },
+    );
+    assert.equal(result.statuses.get('итог'), 'success');
+    assert.deepEqual(result.executed, ['пустая', 'итог']);
+  });
+
+  it('on: always исполняется, когда все зависимости погашены остановкой fail_fast', async () => {
+    const result = await drive(
+      pipelineOf(`
+kind: pipeline
+fail_fast: true
+jobs:
+  упавшая: { steps: [${STEP}] }
+  первая: { steps: [${STEP}] }
+  итог: { needs: [первая], on: always, steps: [${STEP}] }
+`),
+      { упавшая: { status: 'failed' } },
+    );
+    // Единственная прямая зависимость итога погашена самой остановкой
+    // (`skip: halted`), а не правилом пропуска всех зависимостей.
+    assert.equal(result.statuses.get('первая'), 'skipped');
+    assert.match(result.reasons.get('первая') ?? '', /fail_fast/);
+    assert.equal(result.executed.includes('первая'), false);
+    assert.equal(result.statuses.get('итог'), 'success');
+    assert.equal(result.executed.includes('итог'), true);
   });
 
   it('итог прогона из success и declared — success', () => {

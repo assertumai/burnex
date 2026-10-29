@@ -97,11 +97,19 @@ export async function schedule(options: ScheduleOptions): Promise<ScheduleResult
     const outcomes = dependencies.map((id) => settled.get(id)).filter((item) => item !== undefined);
 
     // Пропущенная зависимость не блокирует: иначе один флаг, отключающий
-    // ревью, тихо отменял бы и архивацию.
+    // ревью, тихо отменял бы и архивацию. Исключение — `on: always`: она
+    // обещает выполниться при любом исходе зависимостей, в том числе когда
+    // пропущены все (пусты все слоты, и сборка итога всё равно нужна); её
+    // отсекает только собственное `if`.
     const failed = outcomes.filter((outcome) => isFailure(outcome.status));
     const skipped = outcomes.filter((outcome) => outcome.status === 'skipped');
 
-    if (dependencies.length > 0 && skipped.length === outcomes.length && outcomes.length > 0) {
+    if (
+      job.on !== 'always' &&
+      dependencies.length > 0 &&
+      skipped.length === outcomes.length &&
+      outcomes.length > 0
+    ) {
       return { status: 'skipped', reason: 'все зависимости пропущены', skip: 'condition' };
     }
 
@@ -173,7 +181,10 @@ export async function schedule(options: ScheduleOptions): Promise<ScheduleResult
         // «зависимость упала» объясняет пропуск точнее, чем «остановлено после
         // отказа». Во-вторых, остановка касается продолжения работы, а не её
         // разбора: работы с on: failure и on: always должны выполниться и после
-        // отказа, иначе разбирать его будет нечем.
+        // отказа, иначе разбирать его будет нечем. По той же причине
+        // `on: always` не пропускается, даже когда погашены все её
+        // зависимости (в том числе остановкой `halted`): fail_fast гасит
+        // только `on: success`.
         const decision = decide(job, dependencies);
         if (decision !== undefined) {
           await settle(job, decision);

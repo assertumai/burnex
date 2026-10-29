@@ -436,13 +436,15 @@ claimed_by: run:2026-10-29T16-32-27Z-47b93f
 
 ## on-always-runs-after-skipped-deps
 
-status: todo
+status: done
 title: `on: always` исполняется и когда все зависимости пропущены
 why: Работа с `on: always` задумана как «в любом исходе», но при пропуске всех зависимостей сама пропускается — уборка и финализация после пустого захода не выполняются. Burnex признал это ломающим изменением и сделал его явно.
 done_when: `on: always` исполняется при любом исходе зависимостей, включая пропуск всех (по `if`, `fail_fast` или `skip_exit_code`); `if` работы по-прежнему проверяется; прежнее поведение достижимо явным условием по статусам зависимостей; `docs/pipeline-format.md` переписан; тесты.
 group: engine-outcomes
 needs: skip-exit-code
 source: docs/burnex-after-stepcast.md, раздел 1 «on: always при пропущенных зависимостях»
+started_at: 2026-10-29T17:17:11.230Z
+claimed_by: run:2026-10-29T17-17-09Z-2754d8
 
 ## job-level-attempts
 

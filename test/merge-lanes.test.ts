@@ -1102,6 +1102,50 @@ jobs:
     assert.equal(readFileSync(backlogFile, 'utf8'), '# Очередь\n');
   });
 
+  it('когда пусты все дорожки, каждая отдаёт empty, коммитов нет, очередь не тронута', async () => {
+    const project = makeProject({
+      'stepcast.yml': `
+version: 1
+kind: pipeline
+name: пустые-слоты
+workspace: { mode: worktree }
+jobs:
+  work-a:
+    lane: a
+    if: "false"
+    steps: [{ id: шаг, run: [sh, -c, '${SUCCESS_A}'], expect: [{ exit_code: 0 }] }]
+  work-b:
+    lane: b
+    if: "false"
+    steps: [{ id: шаг, run: [sh, -c, '${SUCCESS_B}'], expect: [{ exit_code: 0 }] }]
+`,
+    });
+    gitInit(project);
+    commit(project, 'начальный');
+    const runsRoot = tempDir('lanes-runs-');
+    const result = await runLanes(project, runsRoot);
+
+    const backlogFile = project.path('backlog.md');
+    writeFileSync(backlogFile, '# Очередь\n');
+    commit(project, 'добавлена очередь');
+    const before = commitCount(project);
+
+    const outcomes = await mergeLanes({
+      paths: result.journal.paths,
+      cwd: project.root,
+      lanes: ['a', 'b'],
+      check: 'exit 0',
+      file: backlogFile,
+    });
+
+    assert.deepEqual(outcomes, [
+      { lane: 'a', kind: 'empty' },
+      { lane: 'b', kind: 'empty' },
+    ]);
+    assert.equal(commitCount(project), before);
+    assert.equal(readFileSync(backlogFile, 'utf8'), '# Очередь\n');
+  });
+
   it('неизвестная дорожка отказывает кодом 2 (StepcastError), перечисляя известные, ничего не накладывая', async () => {
     const project = makeProject({ 'stepcast.yml': twoLanePipeline(SUCCESS_A, SUCCESS_B) });
     gitInit(project);
