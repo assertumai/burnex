@@ -551,12 +551,14 @@ claimed_by: run:2026-10-29T22-42-39Z-0f2522
 
 ## schedule-catchup-and-keep-awake
 
-status: todo
+status: done
 title: Расписание: догон пропущенного момента, `keep_awake`, `require_network`
 why: Изменение `schedule-trigger` (ещё не завершено) даёт cron в пайплайне, но ноутбук спит и момент теряется; burnex добавил один догон после сна, удержание машины бодрой и проверку сети перед запуском.
 done_when: `max_catchup_hours` (по умолчанию 2, `0` — только текущая минута) запускает один пропущенный момент; `keep_awake` держит `caffeinate` на время прогона и ставит `pmset schedule wakeorpoweron` за 120 с до момента, сниппет sudoers только предлагается; `require_network` проверяет DNS и TCP до хоста `origin` и пропускает момент без сети; расписания в `ui.triggers.schedules` домашнего конфига и экран расписаний; лимиты `max_concurrent_runs`/`max_concurrent_agent_jobs`; тесты.
 group: daemon-ops
 source: docs/burnex-after-stepcast.md, раздел 4 «Расписания»
+started_at: 2026-10-29T23:13:42.333Z
+claimed_by: run:2026-10-29T23-13-40Z-efc18f
 
 ## launchd-autostart
 
