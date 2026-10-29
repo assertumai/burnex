@@ -17,15 +17,31 @@
 # без правки этой работы, а перечень, набранный руками, мог разойтись с
 # дорожками, объявленными пайплайном, — забытая в нём буква проходит свою
 # цепочку и пропадает без следа.
+#
+# Параметр onto — ветка, на текущую вершину которой сводятся дорожки
+# (`merge-lanes --onto`, его задаёт scripts/self-improve-loop.sh). Ключ
+# добавляется ветвлением sh только при непустом значении, как --only в
+# pick-lanes работы slots: при пустом команда прежняя. Грязную копию --onto
+# пережидает сам, поэтому предусловия чистоты здесь нет. Значение подставляется
+# в sh -c без экранирования: скрипт пропускает только имена веток из
+# [A-Za-z0-9._/-], ручной вход onto — на совести набравшего, как --only.
 
 version: 1
 kind: job
 name: merge
 description: Наложить дорожки по очереди, проверить и закоммитить зелёную
 
+params:
+  onto: { type: string, default: '' }
+
 steps:
   - id: merge-lanes
-    run: [sh, -c, '"$STEPCAST_BIN" merge-lanes "$STEPCAST_RUN_ID" --lanes all --check "${project.check}"']
+    run:
+      [
+        sh,
+        -c,
+        'if [ -n "${params.onto}" ]; then ONTO="--onto ${params.onto}"; else ONTO=""; fi; "$STEPCAST_BIN" merge-lanes "$STEPCAST_RUN_ID" --lanes all $ONTO --check "${project.check}"',
+      ]
     # Объявленная команда гоняется внутри, на дорожку, дважды при двух
     # дорожках — запас кратно щедрее, чем у одиночного verify.
     timeout: 30m

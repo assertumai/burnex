@@ -380,12 +380,14 @@ claimed_by: run:2026-10-29T08-00-09Z-127b79
 
 ## self-improve-loop-runner
 
-status: todo
+status: done
 title: Скрипт автономной петли — итерации self-improve до остановки
 why: Петлю запускают руками по одному заходу; burnex гоняет её скриптом, собирая движок из `HEAD` в отдельном worktree перед каждой итерацией, и останавливается по понятным условиям. Прежние `scripts/*.mjs` были заглушены (`drop-superseded-loop-scripts`), поэтому новый скрипт обязан звать только команды движка.
 done_when: `scripts/self-improve-loop.sh` собирает движок из `HEAD` в worktree (`npm ci` только при смене lockfile), гоняет `.stepcast/pipelines/self-improve.yml` итерациями; останавливается, когда прогон ничего не закоммитил, упала сборка или исчерпан `MAX_RUNS` (20); грязная копия петлю не останавливает; описано в `docs/backlog.md`.
 group: lane-merge
 source: docs/burnex-after-stepcast.md, раздел 5 «Автономная петля»
+started_at: 2026-10-29T08:45:32.104Z
+claimed_by: run:2026-10-29T08-45-30Z-fa1668
 
 ## secrets-named-providers
 

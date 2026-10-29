@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
-import { existsSync, mkdirSync, readFileSync, readdirSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
+import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { dirname, isAbsolute, join, relative as relativePath, resolve as resolvePath } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, it } from 'node:test';
@@ -11,7 +12,7 @@ import { expandPipeline } from '../src/parts/pipeline/document/expand.js';
 import { lintPipeline } from '../src/parts/pipeline/domain/lint.js';
 import { readStatus } from '../src/parts/pipeline/run/journal/reader.js';
 import { runPipeline } from '../src/parts/pipeline/run/runner.js';
-import { asAgent } from './helpers.js';
+import { asAgent, asRun, testBaseEnv } from './helpers.js';
 import { makeProject, type Project } from './helpers.js';
 import { tempDir } from './tmp.js';
 
@@ -1408,5 +1409,59 @@ jobs:
     assert.ok(schemaPath !== undefined, 'output.schema не разрешился');
     assert.ok(existsSync(schemaPath), `схема не найдена: ${schemaPath}`);
     assert.doesNotThrow(() => JSON.parse(readFileSync(schemaPath, 'utf8')));
+  });
+});
+
+/**
+ * Вход `onto` пайплайна петли (`self-improve-loop-runner`): пустой оставляет
+ * прежние команды `guard-clean-tree` и `merge-lanes`, непустой снимает
+ * предусловие чистоты и добавляет `--onto`. Команды раскрываются настоящим
+ * `expandPipeline` над настоящим пайплайном и исполняются настоящим `sh` с
+ * подменённым `STEPCAST_BIN`, который лишь записывает argv: так проверяется
+ * то, что реально выполнится, а не текст YAML.
+ */
+describe('self-improve.yml: вход onto', () => {
+  /** Исполнить команду шага с подменой бинаря; вернуть код и записанные вызовы. */
+  function runStep(jobId: string, stepId: string, inputs: Record<string, string>): { status: number; calls: string[] } {
+    const { pipeline } = expandPipeline({
+      pipelinePath: join(PIPELINES_DIR, 'self-improve.yml'),
+      config: realProjectConfig(),
+      inputs,
+    });
+    const job = pipeline.jobs.find((item) => item.id === jobId);
+    assert.ok(job !== undefined, `работы ${jobId} нет в пайплайне петли`);
+    const step = job.steps.find((item) => item.id === stepId);
+    assert.ok(step !== undefined, `шага ${stepId} нет в работе ${jobId}`);
+    const command = asRun(step).command;
+    assert.ok(Array.isArray(command), 'ожидался список argv');
+
+    const dir = tempDir('loop-onto-');
+    const log = join(dir, 'calls.log');
+    const fakeBin = join(dir, 'fake-bin.sh');
+    writeFileSync(fakeBin, '#!/bin/sh\nprintf "%s\\n" "$*" >> "$CALLS_LOG"\n', { mode: 0o755 });
+    const result = spawnSync(command[0]!, command.slice(1), {
+      encoding: 'utf8',
+      env: { ...testBaseEnv(), STEPCAST_BIN: fakeBin, STEPCAST_RUN_ID: 'run-1', CALLS_LOG: log },
+    });
+    const calls = existsSync(log) ? readFileSync(log, 'utf8').split('\n').filter((line) => line !== '') : [];
+    return { status: result.status ?? -1, calls };
+  }
+
+  it('пустой onto: guard-clean-tree зовёт assert-clean, merge-lanes без --onto', () => {
+    assert.deepEqual(runStep('slots', 'guard-clean-tree', {}), { status: 0, calls: ['assert-clean'] });
+
+    const merge = runStep('merge', 'merge-lanes', {});
+    assert.equal(merge.status, 0);
+    assert.equal(merge.calls.length, 1);
+    assert.match(merge.calls[0]!, /^merge-lanes run-1 --lanes all --check \S/);
+    assert.doesNotMatch(merge.calls[0]!, /--onto/);
+  });
+
+  it('onto=main: assert-clean не зовётся, код шага 0, merge-lanes получает --onto main', () => {
+    assert.deepEqual(runStep('slots', 'guard-clean-tree', { onto: 'main' }), { status: 0, calls: [] });
+
+    const merge = runStep('merge', 'merge-lanes', { onto: 'main' });
+    assert.equal(merge.status, 0);
+    assert.match(merge.calls[0]!, /^merge-lanes run-1 --lanes all --onto main --check \S/);
   });
 });

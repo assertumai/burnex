@@ -47,6 +47,9 @@
 # Требует чистого рабочего дерева: отказ прошлого захода останавливает петлю до
 # разбора человеком, а не наслаивает следующее улучшение на сломанный код.
 # Чистоту проверяет work slots, до того как какая-либо дорожка тронет копию.
+# Требование действует без входа onto; с ним (так зовёт
+# scripts/self-improve-loop.sh) slots чистоту не проверяет, а сведение ждёт
+# чистой копии само.
 
 version: 1
 kind: pipeline
@@ -140,8 +143,14 @@ budget:
 # переводит пункт в колонку in progress на доске и выбирает этот пайплайн:
 #
 #   stepcast run .stepcast/pipelines/self-improve.yml --input item=<слаг>
+#
+# onto — ветка, на вершину которой заход сводит результат. Заполняет его
+# scripts/self-improve-loop.sh; пустое значение — прежнее поведение:
+#
+#   stepcast run .stepcast/pipelines/self-improve.yml --input onto=<ветка>
 inputs:
   item: { type: string, default: '' }
+  onto: { type: string, default: '' }
 
 jobs:
 
@@ -152,6 +161,7 @@ jobs:
     # внутри работы): значение доезжает параметром с места подключения.
     with:
       item: ${inputs.item}
+      onto: ${inputs.onto}
     # Подпись узла в витрине. Самоссылка законна ровно здесь: display не
     # проходит через раскрытие определения работы (там данных ещё нет) — его
     # раскрывает витрина в момент отрисовки, когда pick-lanes уже записала
@@ -393,6 +403,8 @@ jobs:
   merge:
     uses: ../jobs/merge.yml
     workspace: { mode: cwd }
+    with:
+      onto: ${inputs.onto}
     needs: [verify-a, verify-b, verify-express-a, verify-express-b]
     on: always
     budget_exempt: true
