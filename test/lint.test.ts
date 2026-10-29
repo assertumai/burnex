@@ -1451,6 +1451,64 @@ jobs:
     );
   });
 
+  // Сценарий: «Схема вывода у шага» (cursor-backend)
+  it('отклоняет output_schema агентского шага на бэкенде без структурированного вывода', () => {
+    const project = makeProject({
+      'schemas/plan.json': '{ "type": "object" }\n',
+      'stepcast.yml': `
+kind: pipeline
+budget: { tokens: 100k }
+jobs:
+  build:
+    steps:
+      - id: a
+        agent: text_only
+        prompt: сделай
+        output_schema: ./schemas/plan.json
+`,
+    });
+    const textOnly = {
+      command: 'text-only',
+      enabled: true,
+      defaultModel: undefined,
+      concurrency: 1,
+      cacheReadWeight: 0.1,
+      sessions: true,
+      structuredOutput: false,
+      strictPermissions: false,
+      mcp: false,
+      permissions: undefined,
+      env: {},
+    };
+    const config = { ...project.config, backends: { ...project.config.backends, text_only: textOnly } };
+    const diagnostics = lintPipeline(
+      expandPipeline({ pipelinePath: project.path('stepcast.yml'), config }),
+      { config },
+    );
+    const found = diagnostics.find(
+      (item) => item.severity === 'error' && /не поддерживает структурированный вывод/.test(item.message),
+    );
+    assert.ok(found, 'ошибка линта на бэкенд без structured_output');
+    assert.match(found.message, /text_only/);
+    assert.match(found.message, /build\/a/);
+    assert.equal(found.at, 'jobs.build.steps.0.output_schema');
+    assert.match(found.hint ?? '', /structured_output/);
+
+    // Тот же шаг на бэкенде с возможностью чист.
+    const enabled = {
+      ...config,
+      backends: { ...config.backends, text_only: { ...textOnly, structuredOutput: true } },
+    };
+    const clean = lintPipeline(
+      expandPipeline({ pipelinePath: project.path('stepcast.yml'), config: enabled }),
+      { config: enabled },
+    );
+    assert.deepEqual(
+      clean.filter((item) => item.severity === 'error' && /структурированный вывод/.test(item.message)),
+      [],
+    );
+  });
+
   // plugin-contributions: бэкенд судьи обязан быть не только настроен, но и
   // предоставлен — иначе прогон упрётся в это на первом вызове судьи.
   it('отклоняет бэкенд судьи, для которого нет адаптера', () => {

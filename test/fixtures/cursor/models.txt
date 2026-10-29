@@ -1,0 +1,8 @@
+Available models
+
+auto - Auto
+sonnet-4.5 - Claude 4.5 Sonnet (current)
+gpt-5 - GPT-5
+auto - Auto
+
+Tip: use --model <id> to switch models.

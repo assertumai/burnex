@@ -716,3 +716,75 @@ describe('codex-backend: загрузка плагина пакета', () => {
     );
   });
 });
+
+describe('cursor-backend: загрузка плагина пакета', () => {
+  const MODULE = fileURLToPath(new URL('../src/parts/backends/cursor/index.js', import.meta.url));
+
+  // Сценарий: «Плагин объявлен»
+  it('объявленный ключом plugins, плагин даёт адаптер cursor-agent с честными умолчаниями', async () => {
+    const place = bed();
+    writeFileSync(place.projectPath, `plugins: [${JSON.stringify(MODULE)}]\n`);
+    const { resolved, registry } = await resolveWithPlugins(
+      { cwd: place.root, home: place.home, globalPath: place.globalPath, projectPath: place.projectPath },
+      {},
+    );
+
+    assert.deepEqual(availableNames(registry, 'backends'), ['claude', 'cursor-agent']);
+    assert.equal(registry.plugins[0]?.name, 'cursor');
+    const backend = resolved.config.backends['cursor-agent'];
+    assert.equal(backend?.command, 'cursor-agent');
+    assert.equal(backend?.sessions, true);
+    assert.equal(backend?.structuredOutput, false);
+    assert.equal(backend?.strictPermissions, false);
+    assert.equal(backend?.mcp, false);
+    assert.equal(backend?.concurrency, 2);
+    assert.equal(backend?.defaultModel, undefined);
+    assert.deepEqual(resolved.provenance.get('backends.cursor-agent.sessions'), { kind: 'plugin', name: 'cursor' });
+
+    const adapter = resolveAdapter('cursor-agent', resolved.config, registry);
+    assert.deepEqual(adapter.capabilities, {
+      sessions: true,
+      sessionIdSource: 'backend',
+      structuredOutput: false,
+      strictPermissions: false,
+      mcp: false,
+      effort: false,
+      reportsCost: false,
+    });
+  });
+
+  it('включить конфигурацией возможность, которой у CLI нет, адаптер не даёт', async () => {
+    const place = bed();
+    writeFileSync(
+      place.projectPath,
+      `plugins: [${JSON.stringify(MODULE)}]\nbackends:\n  cursor-agent: { mcp: true, structured_output: true, strict_permissions: true }\n`,
+    );
+    const { resolved, registry } = await resolveWithPlugins(
+      { cwd: place.root, home: place.home, globalPath: place.globalPath, projectPath: place.projectPath },
+      {},
+    );
+
+    const { capabilities } = resolveAdapter('cursor-agent', resolved.config, registry);
+    assert.equal(capabilities.mcp, false);
+    assert.equal(capabilities.structuredOutput, false);
+    assert.equal(capabilities.strictPermissions, false);
+  });
+
+  // Сценарий: «Плагин не объявлен»
+  it('без объявления бэкенд cursor-agent не существует', () => {
+    const place = bed();
+    const config = resolved(place, { global: 'backends:\n  cursor-agent:\n    command: cursor-agent\n' });
+    assert.throws(
+      () => resolveAdapter('cursor-agent', config.config, builtinRegistry()),
+      (error: unknown) => error instanceof StepcastError && /не предоставлен ни встроенно, ни плагином/.test(error.message),
+    );
+  });
+
+  it('подпуть пакета ведёт на собранный модуль', () => {
+    const pkg = JSON.parse(readFileSync(fileURLToPath(new URL('../../package.json', import.meta.url)), 'utf8')) as {
+      exports: Record<string, string>;
+    };
+    assert.equal(pkg.exports['./backends/cursor'], './dist/src/parts/backends/cursor/index.js');
+    assert.ok(existsSync(fileURLToPath(new URL('../../dist/src/parts/backends/cursor/index.js', import.meta.url))));
+  });
+});

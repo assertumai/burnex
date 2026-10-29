@@ -15,7 +15,8 @@
     "./plugin": "./dist/src/plugin/index.js",
     "./pipeline": "./dist/src/parts/pipeline/surface.js",
     "./step": "./dist/src/parts/pipeline/step/index.js",
-    "./backends/codex": "./dist/src/parts/backends/codex/index.js"
+    "./backends/codex": "./dist/src/parts/backends/codex/index.js",
+    "./backends/cursor": "./dist/src/parts/backends/cursor/index.js"
   },
   "files": [
     "dist",

@@ -1,0 +1,2 @@
+{"type":"system","subtype":"init","apiKeySource":"login","cwd":"/work","session_id":"3f0a8d52-91c4-4b6e-a7d3-2e5f8c19b046","model":"Claude 4.5 Sonnet","permissionMode":"default"}
+{"type":"result","subtype":"error","is_error":true,"duration_ms":312,"duration_api_ms":0,"result":"usage limit reached","session_id":"3f0a8d52-91c4-4b6e-a7d3-2e5f8c19b046","request_id":"a4d71c08-3e5b-4f92-b6a0-9d18e7c3f255"}

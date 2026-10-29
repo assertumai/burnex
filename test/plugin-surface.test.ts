@@ -9,7 +9,8 @@ import { describe, it } from 'node:test';
  * design.md `user-decision-steps`, решение 12) закреплена дважды: правилом
  * линта (`eslint.config.js`) и здесь. Линт решает построчно и не разворачивает
  * `**`-паттерн заранее — этот тест перечисляет модули на диске, так что новый
- * файл `src/parts/backends/codex/**` или `src/parts/pipeline/steps/decision/**`
+ * файл `src/parts/backends/codex/**`, `src/parts/backends/cursor/**` или
+ * `src/parts/pipeline/steps/decision/**`
  * проверяется без отдельной правки теста, а не только когда кто-то напишет
  * нарушающий импорт.
  *
@@ -18,9 +19,9 @@ import { describe, it } from 'node:test';
  * `src/parts/pipeline/surface.ts` и соседний модуль того же каталога — плагин
  * из нескольких файлов (манифест отдельно от адаптера, поля отдельно от
  * исполнителя) остаётся законной раскладкой, а путь наружу, в ядро, отсюда не
- * ведёт никуда. Оба каталога — `src/parts/backends/codex` и
- * `src/parts/pipeline/steps/decision` — обходятся одним перечислением:
- * граница у них одна и та же, а не две её копии. `src/parts/backends/claude` в
+ * ведёт никуда. Все каталоги — `src/parts/backends/codex`,
+ * `src/parts/backends/cursor` и `src/parts/pipeline/steps/decision` — обходятся одним перечислением:
+ * граница у них одна и та же, а не её копии. `src/parts/backends/claude` в
  * перечне не значится (`source-tree-microkernel-layout`, Решение 8): адаптер
  * написан внутренними импортами и публичной поверхностью не пользуется —
  * граница, названная деревом, потребовала бы либо переписать его, либо дать
@@ -40,7 +41,11 @@ import { describe, it } from 'node:test';
  * пока в пакете нет ни одного плагина этого вида.
  */
 const repoRoot = fileURLToPath(new URL('../../', import.meta.url));
-const surfaceRoots = [join(repoRoot, 'src/parts/backends/codex'), join(repoRoot, 'src/parts/pipeline/steps/decision')];
+const surfaceRoots = [
+  join(repoRoot, 'src/parts/backends/codex'),
+  join(repoRoot, 'src/parts/backends/cursor'),
+  join(repoRoot, 'src/parts/pipeline/steps/decision'),
+];
 const pluginModule = resolve(repoRoot, 'src/plugin/index.ts');
 /** Доменная поверхность `stepcast/pipeline` — второе законное направление рядом с ядерной. */
 const pipelineSurfaceModule = resolve(repoRoot, 'src/parts/pipeline/surface.ts');

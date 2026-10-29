@@ -89,6 +89,7 @@ import { describeScriptUnresolved } from '../document/expand.js';
 import type {
   AgentStep,
   ContextEntry,
+  EffortOrigin,
   ExpandedPipeline,
   Job,
   Loop,
@@ -662,6 +663,7 @@ export async function runPipeline(options: RunOptions): Promise<RunResult> {
   warnAboutUnpricedCalls(context);
   requireStrictPermissionsSupport(context);
   requireMcpSupport(context);
+  requireStructuredOutputSupport(context);
   requireEffortSupport(context);
 
   /**
@@ -1241,12 +1243,73 @@ function requireMcpSupport(context: RunContext): void {
   }
 }
 
-/** Явный effort нельзя молча потерять при передаче чужому backend-плагину. */
+/**
+ * Схема выхода агентского шага на бэкенде без структурированного вывода не
+ * деградирует, а останавливает прогон до первого шага, тем же приёмом, что и
+ * `requireMcpSupport`: шаг прошёл бы без `output.json`, и отказ проявился бы
+ * лишь у потребителя вывода дальше по графу.
+ */
+function requireStructuredOutputSupport(context: RunContext): void {
+  for (const job of context.expanded.pipeline.jobs) {
+    for (const step of job.steps) {
+      if (step.kind !== 'agent' || step.outputSchemaPath === undefined) continue;
+      if (adapterOf(step.agent, context).capabilities.structuredOutput) continue;
+      throw new StepcastError(
+        `Бэкенд ${step.agent} не поддерживает структурированный вывод, нужный для output_schema шага ${job.id}/${step.id}`,
+        {
+          file: job.source,
+          hint: `Включите backends.${step.agent}.structured_output в конфигурации, если бэкенд это умеет, либо снимите output_schema`,
+        },
+      );
+    }
+  }
+  // Судья по той же причине: вердикт принимается только структурой
+  // { pass, reason }, и без возможности он провалился бы уже после того, как
+  // шаг отработал и потратил токены. Флаг конфигурации тут не довод — адаптер
+  // может его не читать (cursor-agent).
+  for (const job of context.expanded.pipeline.jobs) {
+    for (const step of job.steps) {
+      for (const predicate of step.expect ?? []) {
+        if (predicate.kind !== 'judge') continue;
+        const backend = predicate.agent ?? context.config.defaults.agent;
+        if (adapterOf(backend, context).capabilities.structuredOutput) continue;
+        throw new StepcastError(
+          `Бэкенд судьи ${backend} не поддерживает структурированный вывод, нужный для вердикта у шага ${job.id}/${step.id}`,
+          {
+            file: job.source,
+            hint: 'Вердикт судьи принимается только структурой { pass, reason } — назначьте судье бэкенд со структурированным выводом',
+          },
+        );
+      }
+    }
+  }
+}
+
+/**
+ * Явный effort документа нельзя молча потерять при передаче чужому
+ * backend-плагину: автор просил именно это. Effort из настроек пользователя
+ * (`defaults.effort`, записи агентов, tier) — не просьба документа, а общая
+ * установка; пользователь, выставивший её для всех шагов, не может знать, что
+ * один из бэкендов уровня рассуждений не умеет. Такой effort отбрасывается,
+ * а факт остаётся в журнале. Шаг без записи об источнике (собран не
+ * раскрытием) считается документом: громкий отказ лучше тихой потери.
+ */
 function requireEffortSupport(context: RunContext): void {
   for (const job of context.expanded.pipeline.jobs) {
     for (const step of job.steps) {
       if (step.kind !== 'agent' || step.effort === undefined) continue;
       if (adapterOf(step.agent, context).capabilities.effort === true) continue;
+      const origin = context.expanded.effortOrigins.get(`${job.id}/${step.id}`);
+      const source = origin === undefined ? undefined : settingsSourceOf(origin);
+      if (source !== undefined) {
+        context.journal.event({
+          kind: 'backend.degraded',
+          backend: step.agent,
+          capability: 'effort',
+          detail: `${job.id}/${step.id}: effort ${step.effort} из ${source} не передаётся`,
+        });
+        continue;
+      }
       throw new StepcastError(
         `Бэкенд ${step.agent} не умеет применять effort, объявленный у шага ${job.id}/${step.id}`,
         {
@@ -1255,6 +1318,23 @@ function requireEffortSupport(context: RunContext): void {
         },
       );
     }
+  }
+}
+
+/** Источник effort в настройках пользователя; `undefined` — effort написал документ. */
+function settingsSourceOf(origin: EffortOrigin): string | undefined {
+  switch (origin.layer) {
+    case 'config':
+      return 'defaults.effort';
+    case 'pipeline_agents':
+    case 'step_agents':
+      return origin.layer;
+    case 'tier':
+      // Даже tier, названный документом, приносит effort из `model_tiers`
+      // конфигурации: документ просил уровень модели, а не effort.
+      return `model_tiers (tier ${origin.tier})`;
+    default:
+      return undefined;
   }
 }
 

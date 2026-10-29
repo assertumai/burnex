@@ -72,7 +72,8 @@ const kernelContractCarryoverPatterns = [
   },
 ];
 
-// Плагины пакета (`src/parts/backends/codex/**`, `src/parts/pipeline/steps/decision/**`) —
+// Плагины пакета (`src/parts/backends/codex/**`, `src/parts/backends/cursor/**`,
+// `src/parts/pipeline/steps/decision/**`) —
 // не половина ядра: близость ограничена механически, тем же приёмом, что и
 // граница ядра/поверхности выше (design.md первого настоящего плагина,
 // решение 2; design.md `user-decision-steps`, решение 12).
@@ -115,7 +116,7 @@ const backendsBoundaryPatterns = [
       '!../../../../plugin/index.js',
     ],
     message:
-      'src/parts/backends/codex и src/parts/pipeline/steps/decision не должны импортировать внутренние модули движка — вклад обязан идти через публичные подпути stepcast/plugin (src/plugin/index.ts) и stepcast/pipeline (src/parts/pipeline/surface.ts) (design.md, решение 2).',
+      'src/parts/backends/codex, src/parts/backends/cursor и src/parts/pipeline/steps/decision не должны импортировать внутренние модули движка — вклад обязан идти через публичные подпути stepcast/plugin (src/plugin/index.ts) и stepcast/pipeline (src/parts/pipeline/surface.ts) (design.md, решение 2).',
   },
   // Подъём выше `src/` — отдельной записью, а не в группе выше: там каждый
   // шаблон соседствует с отрицанием, а здесь отрицать нечего — разрешённый
@@ -124,7 +125,7 @@ const backendsBoundaryPatterns = [
   {
     group: ['../../../../../**'],
     message:
-      'src/parts/backends/codex и src/parts/pipeline/steps/decision не должны импортировать ничего выше src/ — вклад обязан идти через публичные подпути stepcast/plugin (src/plugin/index.ts) и stepcast/pipeline (src/parts/pipeline/surface.ts) (design.md, решение 2).',
+      'src/parts/backends/codex, src/parts/backends/cursor и src/parts/pipeline/steps/decision не должны импортировать ничего выше src/ — вклад обязан идти через публичные подпути stepcast/plugin (src/plugin/index.ts) и stepcast/pipeline (src/parts/pipeline/surface.ts) (design.md, решение 2).',
   },
 ];
 
@@ -275,7 +276,11 @@ export default tseslint.config(
     // (правка поведения в изменении-переименовании), либо дать ему именное
     // исключение, то есть то же самое, чего это решение избегает для ядра.
     // Переписывание `claude` на публичный подпуть — открытый вопрос плана.
-    files: ['src/parts/backends/codex/**/*.ts', 'src/parts/pipeline/steps/decision/**/*.ts'],
+    files: [
+      'src/parts/backends/codex/**/*.ts',
+      'src/parts/backends/cursor/**/*.ts',
+      'src/parts/pipeline/steps/decision/**/*.ts',
+    ],
     ignores: ['src/parts/pipeline/steps/decision/row.ts'],
     rules: {
       'no-restricted-imports': [

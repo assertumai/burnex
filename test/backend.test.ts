@@ -29,6 +29,7 @@ import { registryFromKernel } from '../src/kernel/registry.js';
 import { readEvents, readStatus } from '../src/parts/pipeline/run/journal/reader.js';
 import { StepcastError } from '../src/kernel/errors.js';
 import { makeProject } from './helpers.js';
+import { resolveConfig } from '../src/parts/pipeline/config/resolve.js';
 import type { BackendConfig, Config } from '../src/parts/pipeline/config/resolve.js';
 import type { AgentStep } from '../src/parts/pipeline/document/model.js';
 import type { AgentInvocation, BackendAdapter, BackendCapabilities } from '../src/parts/pipeline/backend/types.js';
@@ -171,6 +172,114 @@ jobs:
     assert.equal(backend.invocations.length, 0);
   });
 
+  /**
+   * Прогон `build/ask` с настройками из `.stepcast/config.yml`: effort из
+   * настроек и effort документа различаются только источником, поэтому тесту
+   * нужен настоящий разбор конфигурации, а не `project.config`.
+   */
+  async function runWithSettings(options: {
+    readonly pipeline: string;
+    readonly config: string;
+    readonly effort: boolean;
+  }) {
+    const project = makeProject({
+      'stepcast.yml': options.pipeline,
+      '.stepcast/config.yml': options.config,
+    });
+    const { config } = resolveConfig({ cwd: project.root, home: project.home });
+    const backend = createFakeBackend({
+      capabilities: { effort: options.effort },
+      lines: [resultLine({ text: 'готово' })],
+    });
+    const run = runPipeline({
+      expanded: expandPipeline({ pipelinePath: project.path('stepcast.yml'), config }),
+      config: { ...config, runs: { ...config.runs, root: tempDir('runs-') } },
+      projectRoot: project.root,
+      cwd: project.root,
+      adapterFor: () => backend.adapter,
+    });
+    return { backend, run };
+  }
+
+  const PLAIN_PIPELINE = 'name: p\njobs:\n  build:\n    steps:\n      - id: ask\n        prompt: сделай\n';
+
+  const degradedEffort = (result: Awaited<ReturnType<typeof runPipeline>>) =>
+    readEvents(result.journal.paths).flatMap((event) =>
+      event.kind === 'backend.degraded' && event.capability === 'effort' ? [event] : [],
+    );
+
+  it('effort из defaults.effort на бэкенде без effort отбрасывается с backend.degraded', async () => {
+    const { backend, run } = await runWithSettings({
+      pipeline: PLAIN_PIPELINE,
+      config: 'defaults:\n  effort: high\n',
+      effort: false,
+    });
+    const result = await run;
+
+    assert.equal(result.status, 'success');
+    const degraded = degradedEffort(result);
+    assert.equal(degraded.length, 1);
+    assert.equal(degraded[0]?.backend, 'claude');
+    assert.match(degraded[0]?.detail ?? '', /build\/ask/);
+    assert.match(degraded[0]?.detail ?? '', /defaults\.effort/);
+    assert.equal(backend.invocations.length, 1);
+    assert.equal(backend.invocations[0]?.effort, undefined);
+  });
+
+  it('effort из tier и из step_agents деградирует так же', async () => {
+    const tier = await runWithSettings({
+      pipeline: 'name: p\nmodel_tier: review\njobs:\n  build:\n    steps:\n      - id: ask\n        prompt: сделай\n',
+      config: 'backends:\n  claude:\n    model_tiers:\n      review: { model: opus, effort: high }\n',
+      effort: false,
+    });
+    const tierResult = await tier.run;
+    assert.equal(tierResult.status, 'success');
+    assert.equal(degradedEffort(tierResult).length, 1);
+    assert.equal(tier.backend.invocations[0]?.effort, undefined);
+
+    const stepAgents = await runWithSettings({
+      pipeline: PLAIN_PIPELINE,
+      config: 'step_agents:\n  p:\n    build:\n      ask: { effort: high }\n',
+      effort: false,
+    });
+    const stepResult = await stepAgents.run;
+    assert.equal(stepResult.status, 'success');
+    const degraded = degradedEffort(stepResult);
+    assert.equal(degraded.length, 1);
+    assert.match(degraded[0]?.detail ?? '', /step_agents/);
+    assert.equal(stepAgents.backend.invocations[0]?.effort, undefined);
+  });
+
+  it('effort шага, работы и корня документа отказывает до первой работы даже при настройках', async () => {
+    const placements: Record<string, string> = {
+      шага: 'name: p\njobs:\n  build:\n    steps:\n      - id: ask\n        prompt: сделай\n        effort: high\n',
+      работы: 'name: p\njobs:\n  build:\n    effort: high\n    steps:\n      - id: ask\n        prompt: сделай\n',
+      корня: `effort: high\n${PLAIN_PIPELINE}`,
+    };
+    for (const [place, pipeline] of Object.entries(placements)) {
+      const { backend, run } = await runWithSettings({
+        pipeline,
+        config: 'defaults:\n  effort: low\n',
+        effort: false,
+      });
+      await assert.rejects(run, /не умеет применять effort/, `effort ${place}`);
+      assert.equal(backend.invocations.length, 0);
+    }
+  });
+
+  it('бэкенд с effort получает effort из настроек без события деградации', async () => {
+    const { backend, run } = await runWithSettings({
+      pipeline: PLAIN_PIPELINE,
+      config: 'defaults:\n  effort: high\n',
+      effort: true,
+    });
+    const result = await run;
+
+    assert.equal(result.status, 'success');
+    assert.deepEqual(degradedEffort(result), []);
+    assert.equal(backend.invocations[0]?.effort, 'high');
+  });
+
   it('передаёт effective effort из шага в invocation', async () => {
     const dir = tempDir('backend-');
     const backend = createFakeBackend({ lines: [resultLine({ text: 'готово' })] });
@@ -277,6 +386,49 @@ jobs:
         .strictPermissions,
       false,
     );
+  });
+});
+
+describe('agent-backend: возможность структурированного вывода', () => {
+  const SCHEMA_PIPELINE =
+    'name: p\njobs:\n  build:\n    steps:\n      - id: ask\n        prompt: сделай\n        output_schema: ./schema.json\n';
+
+  function runWithSchema(structuredOutput: boolean) {
+    const project = makeProject({
+      'stepcast.yml': SCHEMA_PIPELINE,
+      'schema.json': '{ "type": "object" }\n',
+    });
+    const backend = createFakeBackend({
+      capabilities: { structuredOutput },
+      lines: [resultLine({ text: '{}' })],
+    });
+    const run = runPipeline({
+      expanded: expandPipeline({ pipelinePath: project.path('stepcast.yml'), config: project.config }),
+      config: { ...project.config, runs: { ...project.config.runs, root: tempDir('runs-') } },
+      projectRoot: project.root,
+      cwd: project.root,
+      adapterFor: () => backend.adapter,
+    });
+    return { backend, run };
+  }
+
+  // Сценарий: «Схема вывода у шага» (cursor-backend)
+  it('агентский шаг с output_schema на бэкенде без возможности отказывает до первой работы', async () => {
+    const { backend, run } = runWithSchema(false);
+
+    await assert.rejects(
+      run,
+      (error: Error) =>
+        /claude/.test(error.message) && /структурированн/.test(error.message) && /build\/ask/.test(error.message),
+    );
+    assert.equal(backend.invocations.length, 0);
+  });
+
+  it('на бэкенде с возможностью тот же шаг проходит', async () => {
+    const { backend, run } = runWithSchema(true);
+
+    assert.equal((await run).status, 'success');
+    assert.equal(backend.invocations.length, 1);
   });
 });
 

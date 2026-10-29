@@ -46,6 +46,7 @@ const TMPDIR_IMPORT = "import { tmpdir } from 'node:os';\n";
  * потому что специфик, который они пишут, относительный и глубину знает.
  */
 const CODEX_PROBE = 'src/parts/backends/codex/проба.ts';
+const CURSOR_PROBE = 'src/parts/backends/cursor/проба.ts';
 const DECISION_PROBE = 'src/parts/pipeline/steps/decision/проба.ts';
 
 /**
@@ -203,6 +204,7 @@ describe('eslint: запреты импорта действуют одновр�
   it('пробы границы плагина названы настоящими модулями движка', () => {
     for (const [probe, specifiers] of [
       [CODEX_PROBE, [...CODEX_INTERNAL, ...CODEX_SURFACE]],
+      [CURSOR_PROBE, [...CODEX_INTERNAL, ...CODEX_SURFACE]],
       [DECISION_PROBE, [...DECISION_INTERNAL, ...DECISION_SURFACE, ABOVE_SRC]],
     ] as const) {
       for (const specifier of specifiers) {
@@ -233,6 +235,23 @@ describe('eslint: запреты импорта действуют одновр�
   it('плагины пакета: публичные подпути границей не задеты', async () => {
     for (const specifier of CODEX_SURFACE) {
       const messages = await restrictedImports(CODEX_PROBE, importLine(specifier));
+      assert.deepEqual(messages, [], `${specifier}: ${messages.join('\n')}`);
+    }
+  });
+
+  // Cursor лежит на той же глубине, что и Codex, — те же специфики; отдельная
+  // проба нужна потому, что граница включается списком `files`, и каталог,
+  // забытый в нём, остался бы без запрета, пока тесты Codex зелёные.
+  it('плагины пакета: граница действует и на каталог cursor', async () => {
+    for (const specifier of CODEX_INTERNAL) {
+      const messages = await restrictedImports(CURSOR_PROBE, importLine(specifier));
+      assert.ok(
+        messages.some((message) => message.includes('src/plugin/index.ts')),
+        `${specifier}: ${messages.join('\n')}`,
+      );
+    }
+    for (const specifier of CODEX_SURFACE) {
+      const messages = await restrictedImports(CURSOR_PROBE, importLine(specifier));
       assert.deepEqual(messages, [], `${specifier}: ${messages.join('\n')}`);
     }
   });

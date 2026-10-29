@@ -1,0 +1,7 @@
+{"type":"system","subtype":"init","apiKeySource":"login","cwd":"/work","session_id":"c6b62c6f-7ead-4fd6-9922-e952131177ff","model":"Claude 4.5 Sonnet","permissionMode":"default"}
+{"type":"user","message":{"role":"user","content":[{"type":"text","text":"Покажи файлы и скажи, сколько их."}]},"session_id":"c6b62c6f-7ead-4fd6-9922-e952131177ff"}
+{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"Смотрю содержимое каталога."}]},"session_id":"c6b62c6f-7ead-4fd6-9922-e952131177ff"}
+{"type":"tool_call","subtype":"started","call_id":"call_1","tool_call":{"shellToolCall":{"args":{"command":"ls","workingDirectory":""}}},"session_id":"c6b62c6f-7ead-4fd6-9922-e952131177ff"}
+{"type":"tool_call","subtype":"completed","call_id":"call_1","tool_call":{"shellToolCall":{"args":{"command":"ls","workingDirectory":""},"result":{"success":{"command":"ls","exitCode":0,"stdout":"README.md\nsrc\n","stderr":""}}}},"session_id":"c6b62c6f-7ead-4fd6-9922-e952131177ff"}
+{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"В каталоге два элемента: README.md и src."}]},"session_id":"c6b62c6f-7ead-4fd6-9922-e952131177ff"}
+{"type":"result","subtype":"success","is_error":false,"duration_ms":4210,"duration_api_ms":4210,"result":"В каталоге два элемента: README.md и src.","session_id":"c6b62c6f-7ead-4fd6-9922-e952131177ff","request_id":"7b1d2f10-0a52-4e0c-9f5d-3a8e4c1b6d90"}

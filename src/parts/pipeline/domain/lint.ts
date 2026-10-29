@@ -2,6 +2,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join, resolve as resolvePath } from 'node:path';
 
 import type { BackendConfig, Config } from '../config/resolve.js';
+import type { BackendAdapter } from '../backend/types.js';
 import { PERMISSIVE_MODES } from '../../backends/claude/adapter.js';
 import { effectivePermissions } from '../backend/permissions.js';
 import { parseExpression, references } from './expr/parse.js';
@@ -1627,8 +1628,18 @@ function checkStep(
         at: `${at}.agent`,
       });
     } else {
-      checkPermissionsEnforce(job, step, step.agent, backend, at, push);
-      checkMcp(job, step, step.agent, backend, at, pipelineMcp, pipelineFile, push);
+      const capable = declaredCapabilities(step.agent, backend, options.registry);
+      checkPermissionsEnforce(job, step, step.agent, capable, at, push);
+      checkMcp(job, step, step.agent, capable, at, pipelineMcp, pipelineFile, push);
+      if (step.outputSchemaPath !== undefined && !capable.structuredOutput) {
+        push({
+          severity: 'error',
+          message: `Бэкенд ${step.agent} не поддерживает структурированный вывод, нужный для output_schema шага ${job.id}/${step.id}`,
+          file: job.source,
+          at: `${at}.output_schema`,
+          hint: capabilityHint(step.agent, capable.configured.structuredOutput, 'structured_output', 'output_schema'),
+        });
+      }
     }
   }
 
@@ -1722,13 +1733,15 @@ function checkStep(
       });
       continue;
     }
-    if (!backend.structuredOutput) {
+    if (!declaredCapabilities(backendName, backend, options.registry).structuredOutput) {
       push({
         severity: 'error',
         message: `Бэкенд судьи ${backendName} не поддерживает структурированный вывод`,
         file: job.source,
         at: `${at}.expect.${index}.agent`,
-        hint: 'Вердикт судьи принимается только структурой { pass, reason } — бэкенд обязан объявлять structured_output: true',
+        hint: backend.structuredOutput
+          ? `Вердикт судьи принимается только структурой { pass, reason }, а адаптер бэкенда ${backendName} структурированного вывода не объявляет, хотя backends.${backendName}.structured_output включён — назначьте судье другой бэкенд`
+          : 'Вердикт судьи принимается только структурой { pass, reason } — бэкенд обязан объявлять structured_output: true',
       });
     }
     // Настроенный бэкенд без адаптера — отказ прогона на первом вызове судьи;
@@ -1995,7 +2008,7 @@ function checkPermissionsEnforce(
   job: Job,
   step: Step,
   backendName: string,
-  backend: BackendConfig,
+  backend: CapableBackend,
   at: string,
   push: (diagnostic: Diagnostic) => void,
 ): void {
@@ -2024,9 +2037,55 @@ function checkPermissionsEnforce(
       message: `Шаг ${job.id}/${step.id}: бэкенд ${backendName} не объявляет возможность применять enforce: strict`,
       ...(enforceFile === undefined ? {} : { file: enforceFile }),
       at: enforceAt,
-      hint: `Включите backends.${backendName}.strict_permissions в конфигурации либо снимите enforce: strict`,
+      hint: capabilityHint(backendName, backend.configured.strictPermissions, 'strict_permissions', 'enforce: strict'),
     });
   }
+}
+
+/**
+ * Конфигурация бэкенда, в которой флаги возможностей сужены до того, что
+ * объявил сам адаптер. Флаг — то, что о бэкенде сказал пользователь,
+ * возможность — то, что адаптер умеет; предстартовые проверки прогона
+ * спрашивают адаптер, и линт, читающий один флаг, молчал бы там, где прогон
+ * откажет (адаптер `cursor-agent` этих флагов не читает вовсе). Адаптер,
+ * который не собрать — вклада нет или он отказал, — сужения не даёт: об
+ * отсутствии адаптера линт говорит отдельно, а об отказе скажет прогон.
+ */
+interface CapableBackend extends BackendConfig {
+  /** Флаги, как их объявила конфигурация, — для подсказки. */
+  readonly configured: Pick<BackendConfig, 'structuredOutput' | 'strictPermissions' | 'mcp'>;
+}
+
+function declaredCapabilities(name: string, backend: BackendConfig, registry: Registry): CapableBackend {
+  const configured = {
+    structuredOutput: backend.structuredOutput,
+    strictPermissions: backend.strictPermissions,
+    mcp: backend.mcp,
+  };
+  let capabilities: BackendAdapter['capabilities'] | undefined;
+  try {
+    capabilities = registry.backends.get(name)?.create(backend).capabilities;
+  } catch {
+    capabilities = undefined;
+  }
+  if (capabilities === undefined) return { ...backend, configured };
+  return {
+    ...backend,
+    configured,
+    structuredOutput: backend.structuredOutput && capabilities.structuredOutput,
+    strictPermissions: backend.strictPermissions && capabilities.strictPermissions,
+    mcp: backend.mcp && capabilities.mcp,
+  };
+}
+
+/**
+ * Подсказка к недостающей возможности. Советовать включить флаг можно, только
+ * пока он выключен: включённый флаг при выключенной возможности адаптера
+ * ничего не меняет, и совет «включите» отправил бы автора по кругу.
+ */
+function capabilityHint(name: string, configured: boolean, key: string, remove: string): string {
+  if (!configured) return `Включите backends.${name}.${key} в конфигурации либо снимите ${remove}`;
+  return `Адаптер бэкенда ${name} этой возможности не объявляет, и флаг backends.${name}.${key} её не включает — переведите шаг на другой бэкенд либо снимите ${remove}`;
 }
 
 /**
@@ -2063,7 +2122,7 @@ function checkMcp(
   job: Job,
   step: Step,
   backendName: string,
-  backend: BackendConfig,
+  backend: CapableBackend,
   at: string,
   pipelineMcp: McpServers | undefined,
   pipelineFile: string | undefined,
@@ -2082,7 +2141,7 @@ function checkMcp(
       message: `Шаг ${job.id}/${step.id}: бэкенд ${backendName} не объявляет возможность работать с MCP-серверами`,
       ...(mcpFile === undefined ? {} : { file: mcpFile }),
       at: mcpAt,
-      hint: `Включите backends.${backendName}.mcp в конфигурации либо снимите объявление mcp`,
+      hint: capabilityHint(backendName, backend.configured.mcp, 'mcp', 'объявление mcp'),
     });
   }
 

@@ -528,12 +528,14 @@ claimed_by: run:2026-10-29T21-49-10Z-60682c
 
 ## backend-cursor-adapter
 
-status: todo
+status: done
 title: Плагин бэкенда Cursor (`cursor-agent`)
 why: Второй агент, кроме Claude, — только Codex; Cursor Agent CLI — третий распространённый, с сессиями и песочницей, и его подключение проверяет контракт бэкенда-плагина ещё раз.
 done_when: Плагин `stepcast/backends/cursor` с именем бэкенда `cursor-agent`: сессии (`--resume`), список моделей, `permissions.mode` → `--sandbox`; capability честно выключают MCP, `output_schema`, `strict_permissions`; effort из настроек отбрасывается с событием `backend.degraded`, effort в документе отклоняет прогон; `docs/config.md` и `docs/plugins.md` дополнены; тесты адаптера с подменённым CLI.
 group: backends
 source: docs/burnex-after-stepcast.md, раздел 3 «Новые бэкенды»
+started_at: 2026-10-29T22:02:54.078Z
+claimed_by: run:2026-10-29T22-02-52Z-1a92c1
 
 ## backend-copilot-adapter
 
