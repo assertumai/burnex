@@ -414,12 +414,14 @@ claimed_by: run:2026-10-29T10-28-15Z-0d0755
 
 ## agent-policy-and-pipeline-agents
 
-status: todo
+status: done
 title: `agent_policy` и выбор агента на пайплайн и на шаг из конфигурации
 why: Документ пайплайна всегда сильнее пользователя: заменить `opus` на `sonnet` для одного запуска нельзя без правки файла. Burnex ввёл `pipeline_agents`/`step_agents` в конфиге и политику `force`/`fallback`, где выбор пользователя может побеждать.
 done_when: Ключи `step_agents` и `pipeline_agents` в `~/.stepcast/config.yml`, пишутся экраном Pipelines; `pipeline_agents` действует только на шаги без собственного `agent`/`model`; `agent_policy: force` (умолчание) — документ сильнее, `fallback` — пользователь сильнее, чужая для бэкенда `model` отбрасывается в пользу tier; `stepcast config --pipeline <p>` показывает итог и источник; `docs/pipeline-format.md` описывает порядок.
 group: agent-selection
 source: docs/burnex-after-stepcast.md, раздел 3 «Агент и уровень на шаг» и «agent_policy»
+started_at: 2026-10-29T15:34:34.985Z
+claimed_by: run:2026-10-29T15-34-33Z-d12f7b
 
 ## skip-exit-code
 

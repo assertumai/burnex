@@ -20,6 +20,7 @@ import {
 } from '../../../kernel/tree/tree.js';
 import {
   GLOBAL_ONLY_KEYS,
+  type AgentPolicy,
   PluginsPatchDocumentSchema,
   PROJECT_ONLY_KEYS,
   RawConfigSchema,
@@ -29,6 +30,7 @@ import {
   type RawConfig,
 } from './schema.js';
 import { BUILTIN_CONFIG } from './defaults.js';
+import { buildAgentSelections, type PipelineAgents, type StepAgents } from './agentSelections.js';
 import type { ModelTierSelection, ModelTiers } from './modelTiers.js';
 import {
   flatten,
@@ -120,6 +122,12 @@ export interface Config {
   readonly runs: { readonly root: string; readonly keepMs: number };
   readonly defaults: {
     readonly agent: string;
+    /**
+     * `defaults.agent` объявлена файлом или флагом, а не встроенным умолчанием:
+     * только объявленное пользователем считается его выбором и подчиняется
+     * `agent_policy` (`agent-policy-and-pipeline-agents`).
+     */
+    readonly agentFromUser: boolean;
     readonly model: string | undefined;
     readonly effort: string | undefined;
     readonly workspace: { readonly mode: 'cwd' | 'worktree' | 'copy'; readonly path?: string };
@@ -172,6 +180,15 @@ export interface Config {
    */
   readonly runnersByExtension: ReadonlyMap<string, string>;
   readonly ui: { readonly port: number };
+  /**
+   * Кто сильнее, документ или выбор пользователя (`agent-policy-and-pipeline-agents`).
+   * Всегда определена: умолчание `force` стоит во встроенном слое.
+   */
+  readonly agentPolicy: AgentPolicy;
+  /** Выбор пользователя для пайплайна, ключ — `name` документа. У каждого поля свой файл. */
+  readonly pipelineAgents: PipelineAgents;
+  /** Выбор пользователя для шага: пайплайн → работа → шаг. */
+  readonly stepAgents: StepAgents;
   readonly project: {
     /** Команда проверки репозитория. Нет встроенного умолчания: неверная угадка исполнялась бы в чужом дереве. */
     readonly check: string | undefined;
@@ -910,6 +927,7 @@ export function resolveConfig(options: ResolveOptions): ResolvedConfig {
     },
     defaults: {
       agent: requireString(values, 'defaults.agent'),
+      agentFromUser: ['file', 'flag'].includes(merged.provenance.get('defaults.agent')?.kind ?? 'builtin'),
       model: typeof model === 'string' ? model : undefined,
       effort: typeof effort === 'string' ? effort : undefined,
       workspace: {
@@ -951,6 +969,8 @@ export function resolveConfig(options: ResolveOptions): ResolvedConfig {
     runners,
     runnersByExtension,
     ui: { port: requireNumber(values, 'ui.port') },
+    agentPolicy: values.get('agent_policy') === 'fallback' ? 'fallback' : 'force',
+    ...buildAgentSelections(values, merged.provenance, layers),
     project: {
       check: typeof projectCheck === 'string' ? projectCheck : undefined,
       tools:

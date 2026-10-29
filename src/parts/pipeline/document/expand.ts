@@ -5,7 +5,17 @@ import { dirname, extname, isAbsolute, join, posix, resolve as resolvePath } fro
 import { fileURLToPath } from 'node:url';
 
 import { EffortSchema, ModelTierSchema } from '../config/schema.js';
+import type { AgentSelectionConfig, StepAgents } from '../config/agentSelections.js';
 import type { ModelTier } from '../config/modelTiers.js';
+import type { AgentPolicy } from '../config/schema.js';
+import {
+  layerRank,
+  resolveAgentChoice,
+  type AgentChoice,
+  type ChoiceLayer,
+  type DocumentChoice,
+  type EntryOutcome,
+} from './agentChoice.js';
 import type { Config, RunnerConfig } from '../config/resolve.js';
 import { Ajv2020 } from 'ajv/dist/2020.js';
 
@@ -71,6 +81,8 @@ import type {
   ContextEntry,
   ContextUpstream,
   ExpandedPipeline,
+  AgentEntryReason,
+  AgentOrigin,
   EffortOrigin,
   Job,
   KnowledgeDeclaration,
@@ -87,6 +99,7 @@ import type {
   Substitution,
   SubstitutionMap,
   Triggers,
+  UnusedAgentEntry,
   UsesOrigin,
   Workspace,
   PipelinePublication,
@@ -1168,19 +1181,23 @@ export function describeScriptUnresolved(
 }
 
 interface StepDefaults {
-  readonly agent: string;
-  readonly model: string | undefined;
   /**
-   * Слой, давший `model`, — `job`, `pipeline` либо `config`; не определён, когда
-   * `model` тоже не определена. Разрешается один раз в `expandPipeline`, рядом
-   * со значением: сравнивать строки задним числом нельзя, одинаковое значение
-   * законно прийти с разных слоёв.
+   * Выбор агента, модели и effort на уровнях работы и корня документа, без
+   * конфигурации: её слои ранжирует политика (`agent_policy`), а склеенная
+   * цепочка `работа ?? корень ?? конфигурация` потеряла бы порядок, в котором
+   * `fallback` ставит `defaults.*` выше корня. Слой разрешается один раз в
+   * `expandPipeline`, рядом со значением: сравнивать строки задним числом
+   * нельзя, одинаковое значение законно прийти с разных слоёв.
    */
-  readonly modelLayer: 'job' | 'pipeline' | 'config' | undefined;
-  readonly effort: string | undefined;
-  readonly effortLayer: 'job' | 'pipeline' | 'config' | undefined;
-  readonly modelTier: ModelTier | undefined;
-  readonly tierLayer: 'pipeline' | 'job';
+  readonly document: DocumentChoice;
+  /** Запись `pipeline_agents` этого пайплайна. */
+  readonly pipelineEntry: AgentSelectionConfig | undefined;
+  /** Записи `step_agents` этой работы по `id` шага. */
+  readonly stepEntries: Readonly<Record<string, AgentSelectionConfig>> | undefined;
+  /** Накопитель итога по записям пользователя: что победило, кому проиграло. */
+  readonly entryUsage: EntryUsage;
+  /** Путь ключа записей: `pipeline_agents.<имя>` и `step_agents.<имя>.<работа>` (без шага). */
+  readonly entryKeys: { readonly pipeline: string; readonly stepPrefix: string };
   readonly timeoutMs: number;
   readonly sessionMode: 'shared' | 'per_step';
   /** Политика доступа, объявленная работой — применяется к шагу без своей. */
@@ -1217,7 +1234,23 @@ type StepParseResult = {
   readonly step: Step;
   readonly modelOrigin?: ModelOrigin;
   readonly effortOrigin?: EffortOrigin;
+  readonly agentOrigin?: AgentOrigin;
 };
+
+/**
+ * Итог по записям пользователя за раскрытие: ключ записи → поля, которые
+ * победили хотя бы на одном шаге, и самый сильный слой, которому проиграли
+ * остальные. Запись, ни одним полем не повлиявшая ни на один шаг, попадает в
+ * `ExpandedPipeline.unusedAgentEntries`.
+ */
+interface EntryUsage {
+  /** Записи, чьё поле хотя бы раз определило значение шага. */
+  readonly influenced: Set<string>;
+  /** Записи, дошедшие хотя бы до одного агентского шага. */
+  readonly reached: Set<string>;
+  /** Сильнейший по рангу политики слой, которому запись проиграла. */
+  readonly lostTo: Map<string, ChoiceLayer>;
+}
 
 function buildStepCommon(
   raw: RawStep,
@@ -1404,42 +1437,24 @@ function parseAgentStep(raw: RawStep, ctx: BuiltinStepParseContext): StepParseRe
   const promptKey = `${at}.prompt`;
   const prompt = readPrompt(raw.prompt, declaringFile, scope, promptKey);
   recordPromptSubstitutions(substitutions, promptKey, prompt.substitutions);
-  const agent = raw.agent ?? defaults.agent;
-  const backend = config.backends[agent];
-  const tier = parseModelTier(raw.model_tier, declaringFile, `${at}.model_tier`) ?? defaults.modelTier;
-  const tierSelection = tier === undefined ? undefined : backend?.modelTiers?.[tier];
-  const tierModel = tierSelection?.model;
-  const model = raw.model ?? defaults.model ?? tierModel ?? backend?.defaultModel;
-  const selectedTierBundle = raw.model === undefined && defaults.model === undefined && tierModel !== undefined;
-  const stepEffort = parseEffort(raw.effort, declaringFile, `${at}.effort`);
-  const effort = stepEffort ?? defaults.effort ?? (selectedTierBundle ? tierSelection?.effort : undefined);
-
-  const modelOrigin: ModelOrigin =
-    raw.model !== undefined
-      ? { layer: 'step' }
-      : defaults.modelLayer !== undefined
-        ? { layer: defaults.modelLayer }
-        : tier !== undefined
-          ? {
-              layer: 'tier', backend: agent, tier,
-              tierLayer: raw.model_tier !== undefined ? 'step' : defaults.tierLayer,
-              ...(tierModel === undefined ? { fallback: true as const } : {}),
-            }
-          : backend?.defaultModel !== undefined
-            ? { layer: 'backend', backend: agent }
-            : { layer: 'none' };
-
-  const effortOrigin: EffortOrigin =
-    raw.effort !== undefined
-      ? { layer: 'step' }
-      : defaults.effortLayer !== undefined
-        ? { layer: defaults.effortLayer }
-        : selectedTierBundle && tierSelection?.effort !== undefined && tier !== undefined
-          ? {
-              layer: 'tier', backend: agent, tier,
-              tierLayer: raw.model_tier !== undefined ? 'step' : defaults.tierLayer,
-            }
-          : { layer: 'none' };
+  const stepEntry = Object.hasOwn(defaults.stepEntries ?? {}, raw.id) ? defaults.stepEntries?.[raw.id] : undefined;
+  const choice = resolveAgentChoice({
+    config,
+    step: {
+      agent: raw.agent,
+      model: raw.model,
+      tier: parseModelTier(raw.model_tier, declaringFile, `${at}.model_tier`),
+      effort: parseEffort(raw.effort, declaringFile, `${at}.effort`),
+    },
+    doc: defaults.document,
+    pipelineEntry: defaults.pipelineEntry,
+    stepEntry,
+  });
+  const { agent, model, effort, agentOrigin, modelOrigin, effortOrigin } = choice;
+  recordEntryUsage(defaults.entryUsage, config, {
+    pipeline: defaults.pipelineEntry === undefined ? undefined : defaults.entryKeys.pipeline,
+    step: stepEntry === undefined ? undefined : `${defaults.entryKeys.stepPrefix}.${raw.id}`,
+  }, choice);
 
   return {
     step: {
@@ -1475,7 +1490,38 @@ function parseAgentStep(raw: RawStep, ctx: BuiltinStepParseContext): StepParseRe
     },
     modelOrigin,
     effortOrigin,
+    agentOrigin,
   };
+}
+
+/**
+ * Занести в накопитель итог одного шага по записям пользователя. Победа
+ * любого поля записи делает её «действующей»; проигрыш запоминает слой,
+ * сильнейший по рангу политики, — его и назовёт отчёт.
+ */
+function recordEntryUsage(
+  usage: EntryUsage,
+  config: Config,
+  keys: { readonly pipeline: string | undefined; readonly step: string | undefined },
+  choice: AgentChoice,
+): void {
+  const record = (key: string | undefined, outcome: EntryOutcome): void => {
+    if (key === undefined) return;
+    usage.reached.add(key);
+    for (const field of Object.values(outcome)) {
+      if (field === undefined) continue;
+      if (field.won) {
+        usage.influenced.add(key);
+        continue;
+      }
+      const seen = usage.lostTo.get(key);
+      if (seen === undefined || layerRank(config.agentPolicy, field.lostTo) > layerRank(config.agentPolicy, seen)) {
+        usage.lostTo.set(key, field.lostTo);
+      }
+    }
+  };
+  record(keys.pipeline, choice.outcomes.pipeline_agents);
+  record(keys.step, choice.outcomes.step_agents);
 }
 
 /**
@@ -2028,25 +2074,33 @@ export function expandPipeline(options: ExpandOptions): ExpandedPipeline {
     : undefined;
 
   const defaultSession = doc.defaults?.session ?? config.defaults.session;
-  const defaultAgent = doc.agent ?? doc.defaults?.agent ?? config.defaults.agent;
-  const defaultModel = doc.model ?? doc.defaults?.model ?? config.defaults.model;
-  const pipelineEffort = parseEffort(
+  // Корень документа отдельно от конфигурации: слои конфигурации ранжирует
+  // политика, и склеенное значение потеряло бы их порядок (`agentChoice.ts`).
+  const rootAgent = doc.agent ?? doc.defaults?.agent;
+  const rootModel = doc.model ?? doc.defaults?.model;
+  const rootEffort = parseEffort(
     doc.effort ?? doc.defaults?.effort,
     pipelinePath,
     doc.effort !== undefined ? 'effort' : 'defaults.effort',
   );
-  const defaultEffort = pipelineEffort ?? config.defaults.effort;
-  const defaultModelTier = parseModelTier(
+  const rootModelTier = parseModelTier(
     doc.model_tier ?? doc.defaults?.model_tier, pipelinePath,
     doc.model_tier !== undefined ? 'model_tier' : 'defaults.model_tier',
   );
-  // Слой умолчания разрешается здесь же, рядом со значением: сравнивать
-  // строки задним числом в toStep нельзя — документ пайплайна и конфигурация
-  // законно объявляют одну и ту же модель, и слои должны остаться различимы.
-  const defaultModelLayer: 'pipeline' | 'config' | undefined =
-    doc.model !== undefined || doc.defaults?.model !== undefined ? 'pipeline' : config.defaults.model !== undefined ? 'config' : undefined;
-  const defaultEffortLayer: 'pipeline' | 'config' | undefined =
-    doc.effort !== undefined || doc.defaults?.effort !== undefined ? 'pipeline' : config.defaults.effort !== undefined ? 'config' : undefined;
+
+  // Выбор пользователя для этого пайплайна: по `name` документа. Запись
+  // чужого пайплайна не читается и не проверяется вовсе (design.md, решение 6).
+  const pipelineKey = doc.name === undefined ? undefined : doc.name;
+  const pipelineEntry = pipelineKey !== undefined && Object.hasOwn(config.pipelineAgents, pipelineKey)
+    ? config.pipelineAgents[pipelineKey]
+    : undefined;
+  const jobEntries = pipelineKey !== undefined && Object.hasOwn(config.stepAgents, pipelineKey)
+    ? config.stepAgents[pipelineKey]
+    : undefined;
+  if (pipelineKey !== undefined) rejectUnknownEntryAgents(pipelineKey, pipelineEntry, jobEntries, config, registry);
+  const entryUsage: EntryUsage = { influenced: new Set(), reached: new Set(), lostTo: new Map() };
+  /** Ключ работы в `step_agents` → идентификаторы работ документа, которые его нашли. */
+  const jobsByEntryKey = new Map<string, string[]>();
 
   // Объявление пайплайна — верхний из трёх уровней (design.md, решение 2):
   // разбирается один раз здесь, а не в цикле работ, чтобы работы, его не
@@ -2057,6 +2111,7 @@ export function expandPipeline(options: ExpandOptions): ExpandedPipeline {
   const jobs: Job[] = [];
   const modelOrigins = new Map<string, ModelOrigin>();
   const effortOrigins = new Map<string, EffortOrigin>();
+  const agentOrigins = new Map<string, AgentOrigin>();
 
   for (const [id, entryRaw] of Object.entries(document.jobs)) {
     const at = `jobs.${id}`;
@@ -2204,6 +2259,10 @@ export function expandPipeline(options: ExpandOptions): ExpandedPipeline {
       'uses' in entry && entry.effort !== undefined ? pipelinePath : declaringFile,
       `${at}.effort`,
     );
+    const jobEntryKey = jobEntries === undefined
+      ? undefined
+      : findJobEntryKey(jobEntries, id, wiring.value.lane as string | undefined);
+    if (jobEntryKey !== undefined) jobsByEntryKey.set(jobEntryKey, [...(jobsByEntryKey.get(jobEntryKey) ?? []), id]);
     const sessionMode = (body.session as 'shared' | 'per_step' | undefined) ?? defaultSession;
     // Слияние, а не замена: работа обычно переопределяет только `inherit`
     // (или только `path`), а режим объявлен один раз на пайплайне. Полная
@@ -2338,13 +2397,24 @@ export function expandPipeline(options: ExpandOptions): ExpandedPipeline {
           declaringFile,
           bodyScope,
           {
-            agent: (body.agent as string | undefined) ?? defaultAgent,
-            model: (body.model as string | undefined) ?? defaultModel,
-            modelLayer: body.model !== undefined ? 'job' : defaultModelLayer,
-            effort: jobEffort ?? defaultEffort,
-            effortLayer: body.effort !== undefined ? 'job' : defaultEffortLayer,
-            modelTier: jobModelTier ?? defaultModelTier,
-            tierLayer: jobModelTier !== undefined ? 'job' : 'pipeline',
+            document: {
+              agent: (body.agent as string | undefined) ?? rootAgent,
+              agentLayer: body.agent !== undefined ? 'job' : rootAgent !== undefined ? 'pipeline' : undefined,
+              model: (body.model as string | undefined) ?? rootModel,
+              modelLayer: body.model !== undefined ? 'job' : rootModel !== undefined ? 'pipeline' : undefined,
+              effort: jobEffort ?? rootEffort,
+              effortLayer: jobEffort !== undefined ? 'job' : rootEffort !== undefined ? 'pipeline' : undefined,
+              tier: jobModelTier ?? rootModelTier,
+              tierLayer: jobModelTier !== undefined ? 'job' : 'pipeline',
+              jobDeclaresModel: body.model !== undefined || jobModelTier !== undefined,
+            },
+            pipelineEntry,
+            stepEntries: jobEntryKey === undefined ? undefined : jobEntries?.[jobEntryKey],
+            entryUsage,
+            entryKeys: {
+              pipeline: `pipeline_agents.${pipelineKey ?? ''}`,
+              stepPrefix: `step_agents.${pipelineKey ?? ''}.${jobEntryKey ?? id}`,
+            },
             timeoutMs: config.defaults.stepTimeoutMs,
             sessionMode,
             permissions: jobPermissions,
@@ -2362,6 +2432,9 @@ export function expandPipeline(options: ExpandOptions): ExpandedPipeline {
         }
         if (expanded.effortOrigin !== undefined) {
           effortOrigins.set(`${id}/${expanded.step.id}`, expanded.effortOrigin);
+        }
+        if (expanded.agentOrigin !== undefined) {
+          agentOrigins.set(`${id}/${expanded.step.id}`, expanded.agentOrigin);
         }
         return expanded.step;
       }),
@@ -2437,5 +2510,113 @@ export function expandPipeline(options: ExpandOptions): ExpandedPipeline {
     jobs,
   };
 
-  return { pipeline, substitutions, modelOrigins, effortOrigins };
+  const unusedAgentEntries =
+    pipelineKey === undefined
+      ? []
+      : collectUnusedAgentEntries(pipelineKey, pipelineEntry, jobEntries, jobs, jobsByEntryKey, entryUsage, config.agentPolicy);
+
+  return {
+    pipeline, substitutions, modelOrigins, effortOrigins, agentOrigins, unusedAgentEntries,
+    ...(pipelineKey === undefined ? {} : { agentEntryName: pipelineKey }),
+  };
+}
+
+/**
+ * Ключ работы в `step_agents`: идентификатор работы документа, а при его
+ * отсутствии — идентификатор без суффикса дорожки. Дорожки в документе —
+ * отдельные работы (`implement-a`, `implement-b`) с меткой `lane`; запись
+ * `implement` действует на обе, а точное имя ближе общего (design.md,
+ * решение 1).
+ */
+function findJobEntryKey(
+  entries: Readonly<Record<string, unknown>>,
+  jobId: string,
+  lane: string | undefined,
+): string | undefined {
+  if (Object.hasOwn(entries, jobId)) return jobId;
+  if (lane === undefined || lane === '' || !jobId.endsWith(`-${lane}`)) return undefined;
+  const base = jobId.slice(0, -(lane.length + 1));
+  return Object.hasOwn(entries, base) ? base : undefined;
+}
+
+/**
+ * Неизвестный агент в записи своего пайплайна — отказ раскрытия только этого
+ * пайплайна, с файлом и путём ключа (design.md, решение 6). Записи чужих
+ * пайплайнов сюда не попадают: их никто не читает.
+ */
+function rejectUnknownEntryAgents(
+  name: string,
+  pipelineEntry: AgentSelectionConfig | undefined,
+  jobEntries: StepAgents[string] | undefined,
+  config: Config,
+  registry: Registry,
+): void {
+  const known = (agent: string): boolean => Object.hasOwn(config.backends, agent) || registry.backends.has(agent);
+  const check = (entry: AgentSelectionConfig | undefined, at: string): void => {
+    if (entry?.agent === undefined || known(entry.agent.value)) return;
+    throw new StepcastError(`Запись выбора называет агента ${entry.agent.value}, которого нет среди бэкендов`, {
+      file: entry.agent.file,
+      at: `${at}.agent`,
+      hint: `Доступны: ${[...new Set([...Object.keys(config.backends), ...registry.backends.keys()])].sort().join(', ')}`,
+    });
+  };
+  check(pipelineEntry, `pipeline_agents.${name}`);
+  for (const [job, steps] of Object.entries(jobEntries ?? {})) {
+    for (const [step, entry] of Object.entries(steps)) check(entry, `step_agents.${name}.${job}.${step}`);
+  }
+}
+
+function entryFiles(entry: AgentSelectionConfig): readonly string[] {
+  return [...new Set([entry.agent, entry.model, entry.modelTier, entry.effort].flatMap((field) => (field === undefined ? [] : [field.file])))];
+}
+
+/**
+ * Записи этого пайплайна, не повлиявшие ни на один шаг, с причиной. Устаревшая
+ * запись `step_agents` (нет работы, шага или шаг не агентский) — не ошибка,
+ * а строка в этом списке: запись глобального файла переживает правки
+ * пайплайна, и ронять запуск из-за неё значило бы наказывать за чужую правку.
+ */
+function collectUnusedAgentEntries(
+  name: string,
+  pipelineEntry: AgentSelectionConfig | undefined,
+  jobEntries: StepAgents[string] | undefined,
+  jobs: readonly Job[],
+  jobsByEntryKey: ReadonlyMap<string, readonly string[]>,
+  usage: EntryUsage,
+  policy: AgentPolicy,
+): readonly UnusedAgentEntry[] {
+  const out: UnusedAgentEntry[] = [];
+  const lost = (key: string): AgentEntryReason => {
+    const to = usage.lostTo.get(key);
+    return to === undefined ? { kind: 'no_agent_steps' } : { kind: 'lost', to, policy };
+  };
+
+  if (pipelineEntry !== undefined) {
+    const key = `pipeline_agents.${name}`;
+    if (!usage.influenced.has(key)) {
+      out.push({ key, kind: 'pipeline_agents', files: entryFiles(pipelineEntry), reason: lost(key) });
+    }
+  }
+
+  for (const [jobKey, steps] of Object.entries(jobEntries ?? {})) {
+    const matched = (jobsByEntryKey.get(jobKey) ?? []).flatMap((id) => jobs.filter((job) => job.id === id));
+    for (const [stepKey, entry] of Object.entries(steps)) {
+      const key = `step_agents.${name}.${jobKey}.${stepKey}`;
+      if (usage.influenced.has(key)) continue;
+      const files = entryFiles(entry);
+      if (matched.length === 0) {
+        out.push({ key, kind: 'step_agents', files, reason: { kind: 'no_job' } });
+        continue;
+      }
+      const found = matched.flatMap((job) => job.steps.filter((step) => step.id === stepKey));
+      if (found.length === 0) {
+        out.push({ key, kind: 'step_agents', files, reason: { kind: 'no_step' } });
+      } else if (!found.some((step) => step.kind === 'agent')) {
+        out.push({ key, kind: 'step_agents', files, reason: { kind: 'not_agent' } });
+      } else {
+        out.push({ key, kind: 'step_agents', files, reason: lost(key) });
+      }
+    }
+  }
+  return out;
 }

@@ -1543,3 +1543,126 @@ describe('backends.<id>.credentials', () => {
     assert.throws(() => resolveIn(box), StepcastError);
   });
 });
+
+describe('stepcast-configuration: pipeline_agents, step_agents и agent_policy', () => {
+  const rejects = (box: Sandbox, at: RegExp) =>
+    assert.throws(
+      () => resolveIn(box),
+      (error: unknown) => {
+        assert.ok(error instanceof StepcastError);
+        assert.match(error.message, /схеме/);
+        assert.match(error.at ?? '', at);
+        assert.ok(error.file !== undefined);
+        return true;
+      },
+    );
+
+  it('запись пайплайна принимается, отчёт называет файл источником листа', () => {
+    const box = sandbox({
+      global: 'pipeline_agents:\n  self-improve: { agent: codex, model_tier: deep }\n',
+    });
+    const { config, provenance } = resolveIn(box);
+    assert.deepEqual(config.pipelineAgents['self-improve'], {
+      agent: { value: 'codex', file: box.globalPath },
+      modelTier: { value: 'deep', file: box.globalPath },
+    });
+    assert.equal(describeSource(provenance.get('pipeline_agents.self-improve.agent')!), box.globalPath);
+
+    const report = renderConfigReport(resolveIn(box)).join('\n');
+    assert.match(report, new RegExp(`pipeline_agents\\.self-improve\\.agent\\s+codex\\s+${box.globalPath}`));
+  });
+
+  it('запись шага разбирается в три уровня', () => {
+    const box = sandbox({
+      global: 'step_agents:\n  p:\n    implement:\n      code: { model: sonnet, effort: high }\n',
+    });
+    const { config } = resolveIn(box);
+    assert.equal(config.stepAgents.p?.implement?.code?.model?.value, 'sonnet');
+    assert.equal(config.stepAgents.p?.implement?.code?.effort?.value, 'high');
+  });
+
+  it('model вместе с model_tier отклоняется с путём записи', () => {
+    rejects(
+      sandbox({ global: 'step_agents:\n  p:\n    implement:\n      code: { model: sonnet, model_tier: fast }\n' }),
+      /^step_agents\.p\.implement\.code/,
+    );
+  });
+
+  it('пустая запись отклоняется', () => {
+    rejects(sandbox({ project: 'pipeline_agents:\n  p: {}\n' }), /^pipeline_agents\.p/);
+  });
+
+  it('неизвестное поле записи отклоняется', () => {
+    rejects(sandbox({ project: 'pipeline_agents:\n  p: { agnet: codex }\n' }), /^pipeline_agents\.p/);
+  });
+
+  it('ключ записи с точкой отклоняется: слияние идёт по точечным путям', () => {
+    rejects(sandbox({ project: 'pipeline_agents:\n  "a.b": { agent: codex }\n' }), /^pipeline_agents/);
+  });
+
+  it('agent_policy по умолчанию force, источник — встроенное умолчание', () => {
+    const { config, provenance } = resolveIn(sandbox({}));
+    assert.equal(config.agentPolicy, 'force');
+    assert.equal(describeSource(provenance.get('agent_policy')!), 'встроенное умолчание');
+  });
+
+  it('agent_policy: always отклоняется с ключом', () => {
+    rejects(sandbox({ global: 'agent_policy: always\n' }), /^agent_policy/);
+  });
+
+  it('проектный файл перекрывает agent_policy глобального', () => {
+    const box = sandbox({ global: 'agent_policy: fallback\n', project: 'agent_policy: force\n' });
+    assert.equal(resolveIn(box).config.agentPolicy, 'force');
+    assert.equal(resolveIn(sandbox({ global: 'agent_policy: fallback\n' })).config.agentPolicy, 'fallback');
+  });
+
+  it('слои сливаются по листьям, у каждого листа свой файл', () => {
+    const box = sandbox({
+      global: 'pipeline_agents:\n  p: { agent: codex, effort: high }\n',
+      project: 'pipeline_agents:\n  p: { agent: claude }\n',
+    });
+    assert.deepEqual(resolveIn(box).config.pipelineAgents.p, {
+      agent: { value: 'claude', file: box.projectPath },
+      effort: { value: 'high', file: box.globalPath },
+    });
+  });
+
+  it('выбор модели ближнего слоя снимает выбор дальнего: слой берётся целиком', () => {
+    const box = sandbox({
+      global: 'pipeline_agents:\n  p: { model_tier: deep }\n',
+      project: 'pipeline_agents:\n  p: { model: sonnet }\n',
+    });
+    const entry = resolveIn(box).config.pipelineAgents.p;
+    assert.equal(entry?.model?.value, 'sonnet');
+    assert.equal(entry?.modelTier, undefined);
+
+    const reverse = sandbox({
+      global: 'pipeline_agents:\n  p: { model: sonnet }\n',
+      project: 'pipeline_agents:\n  p: { model_tier: deep }\n',
+    });
+    const other = resolveIn(reverse).config.pipelineAgents.p;
+    assert.equal(other?.modelTier?.value, 'deep');
+    assert.equal(other?.model, undefined);
+  });
+
+  describe('опубликованная схема', () => {
+    const schema = JSON.parse(
+      readFileSync(fileURLToPath(new URL('../../schema/config.schema.json', import.meta.url)), 'utf8'),
+    ) as object;
+    const validate = new Ajv2020({ strict: false }).compile(schema);
+
+    it('принимает допустимые записи и политику', () => {
+      const pipeline = { agent_policy: 'fallback', pipeline_agents: { p: { agent: 'codex', model_tier: 'deep' } } };
+      const step = { step_agents: { p: { implement: { code: { model: 'sonnet', effort: 'high' } } } } };
+      assert.equal(validate(pipeline), true, JSON.stringify(validate.errors));
+      assert.equal(validate(step), true, JSON.stringify(validate.errors));
+    });
+
+    it('model вместе с model_tier, пустая запись и чужая политика отклоняются', () => {
+      assert.equal(validate({ pipeline_agents: { p: { model: 'sonnet', model_tier: 'fast' } } }), false);
+      assert.equal(validate({ step_agents: { p: { j: { s: { model: 'sonnet', model_tier: 'fast' } } } } }), false);
+      assert.equal(validate({ pipeline_agents: { p: {} } }), false);
+      assert.equal(validate({ agent_policy: 'always' }), false);
+    });
+  });
+});

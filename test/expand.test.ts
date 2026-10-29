@@ -7,6 +7,7 @@ import { parse as parseYaml } from 'yaml';
 import { evaluatePredicates } from '../src/parts/pipeline/expect/evaluate.js';
 import { lintPipeline } from '../src/parts/pipeline/domain/lint.js';
 import { expandPipeline } from '../src/parts/pipeline/document/expand.js';
+import { resolveConfig } from '../src/parts/pipeline/config/resolve.js';
 import { interpolate, interpolateTree, type Scope } from '../src/parts/pipeline/document/interpolate.js';
 import { jobLockHash, serializeLock } from '../src/parts/pipeline/document/lock.js';
 import { computeStepKey } from '../src/parts/pipeline/run/stepKey.js';
@@ -5433,5 +5434,387 @@ jobs:
       });
 
     assert.notEqual(keyOf(before.pipeline, beforeStep), keyOf(after.pipeline, afterStep));
+  });
+});
+
+describe('pipeline-definition: agent_policy, pipeline_agents и step_agents', () => {
+  // `opus` принадлежит claude (tier в его карте), а `gpt-5.6-terra` — codex.
+  const BACKENDS = `
+backends:
+  claude:
+    model_tiers:
+      fast: haiku
+      deep: opus
+      review: { model: opus, effort: high }
+  codex:
+    default_model: gpt-5.6-terra
+    model_tiers:
+      deep: codex-deep
+      fast: codex-fast
+`;
+
+  /** Раскрыть пайплайн `p` с одной работой `implement` и шагом `code` (`root` — верхний уровень документа). */
+  function run(options: {
+    readonly root?: string;
+    readonly job?: string;
+    readonly step?: string;
+    readonly config?: string;
+    readonly global?: string;
+    readonly backends?: string;
+  }) {
+    const indent = (text: string | undefined, by: number): string =>
+      (text ?? '')
+        .split('\n')
+        .filter((line) => line.trim() !== '')
+        .map((line) => ' '.repeat(by) + line.trim())
+        .join('\n');
+    const pipeline = `name: p\n${options.root ?? ''}\njobs:\n  implement:\n${indent(options.job, 4)}\n    steps:\n      - id: code\n        prompt: hi\n${indent(options.step, 8)}\n`;
+    const project = makeProject({
+      'pipeline.yml': pipeline,
+      '.stepcast/config.yml': `${options.backends ?? BACKENDS}${options.config ?? ''}`,
+    });
+    if (options.global !== undefined) writeFileSync(join(project.home, '.stepcast', 'config.yml'), options.global);
+    const { config } = resolveConfig({ cwd: project.root, home: project.home });
+    const expanded = expandPipeline({ pipelinePath: project.path('pipeline.yml'), config });
+    const step = asAgent(expanded.pipeline.jobs[0]!.steps[0]!);
+    return { expanded, step, project, config };
+  }
+
+  const policy = (value: 'force' | 'fallback') => `agent_policy: ${value}\n`;
+
+  describe('агент и effort по рангу политики', () => {
+    it('при force документ сильнее записи пайплайна', () => {
+      const { step, expanded } = run({ root: 'agent: claude', config: 'pipeline_agents:\n  p: { agent: codex }\n' });
+      assert.equal(step.agent, 'claude');
+      assert.deepEqual(expanded.agentOrigins.get('implement/code'), { layer: 'pipeline' });
+    });
+
+    it('при force запись пользователя заполняет молчание документа', () => {
+      const { step, expanded, project } = run({
+        config: 'defaults:\n  agent: claude\npipeline_agents:\n  p: { agent: codex }\n',
+      });
+      assert.equal(step.agent, 'codex');
+      assert.deepEqual(expanded.agentOrigins.get('implement/code'), {
+        layer: 'pipeline_agents',
+        file: project.path('.stepcast/config.yml'),
+      });
+    });
+
+    it('при fallback запись пайплайна сильнее корня документа', () => {
+      const { step } = run({
+        root: 'agent: claude',
+        config: `${policy('fallback')}pipeline_agents:\n  p: { agent: codex }\n`,
+      });
+      assert.equal(step.agent, 'codex');
+    });
+
+    it('при fallback работа и шаг сильнее записи пайплайна', () => {
+      const config = `${policy('fallback')}pipeline_agents:\n  p: { agent: codex }\n`;
+      assert.equal(run({ job: 'agent: claude', config }).step.agent, 'claude');
+      assert.equal(run({ step: 'agent: claude', config }).step.agent, 'claude');
+    });
+
+    it('при fallback defaults.agent из файла встаёт над корнем, а встроенное умолчание — нет', () => {
+      assert.equal(run({ root: 'agent: codex', config: policy('fallback') }).step.agent, 'codex');
+      assert.equal(
+        run({ root: 'agent: codex', config: `${policy('fallback')}defaults:\n  agent: claude\n` }).step.agent,
+        'claude',
+      );
+    });
+
+    it('запись пайплайна не трогает работу, объявившую свой выбор, при любой политике', () => {
+      for (const mode of ['force', 'fallback'] as const) {
+        const { step } = run({ job: 'model: opus', config: `${policy(mode)}pipeline_agents:\n  p: { model_tier: fast }\n` });
+        assert.equal(step.model, 'opus', mode);
+      }
+    });
+
+    it('при fallback запись шага сильнее самого шага', () => {
+      const { step, expanded } = run({
+        step: 'model: opus',
+        config: `${policy('fallback')}step_agents:\n  p:\n    implement:\n      code: { model: sonnet }\n`,
+      });
+      assert.equal(step.model, 'sonnet');
+      assert.equal(expanded.modelOrigins.get('implement/code')?.layer, 'step_agents');
+    });
+
+    it('при force запись шага проигрывает шагу', () => {
+      const { step, expanded } = run({
+        step: 'model: opus',
+        config: `${policy('force')}step_agents:\n  p:\n    implement:\n      code: { model: sonnet }\n`,
+      });
+      assert.equal(step.model, 'opus');
+      assert.deepEqual(expanded.modelOrigins.get('implement/code'), { layer: 'step' });
+    });
+
+    it('запись шага действует на все дорожки работы', () => {
+      const project = makeProject({
+        'pipeline.yml': `
+name: p
+jobs:
+  implement-a:
+    lane: a
+    steps: [{ id: code, prompt: hi }]
+  implement-b:
+    lane: b
+    steps: [{ id: code, prompt: hi }]
+  implement-c:
+    steps: [{ id: code, prompt: hi }]
+`,
+        '.stepcast/config.yml': `${BACKENDS}step_agents:\n  p:\n    implement:\n      code: { agent: codex }\n`,
+      });
+      const { config } = resolveConfig({ cwd: project.root, home: project.home });
+      const { pipeline } = expandPipeline({ pipelinePath: project.path('pipeline.yml'), config });
+      assert.deepEqual(
+        pipeline.jobs.map((job) => asAgent(job.steps[0]!).agent),
+        ['codex', 'codex', 'claude'],
+      );
+    });
+
+    it('точное имя работы ближе общего имени дорожек', () => {
+      const project = makeProject({
+        'pipeline.yml': 'name: p\njobs:\n  implement-a:\n    lane: a\n    steps: [{ id: code, prompt: hi }]\n',
+        '.stepcast/config.yml': `${BACKENDS}step_agents:\n  p:\n    implement:\n      code: { agent: codex }\n    implement-a:\n      code: { agent: claude, effort: low }\n`,
+      });
+      const { config } = resolveConfig({ cwd: project.root, home: project.home });
+      const { pipeline } = expandPipeline({ pipelinePath: project.path('pipeline.yml'), config });
+      const step = asAgent(pipeline.jobs[0]!.steps[0]!);
+      assert.equal(step.agent, 'claude');
+      assert.equal(step.effort, 'low');
+    });
+
+    it('effort разрешается независимо по рангу', () => {
+      const entry = 'pipeline_agents:\n  p: { effort: high }\n';
+      assert.equal(run({ root: 'effort: low', config: entry }).step.effort, 'low');
+      assert.equal(run({ root: 'effort: low', config: `${policy('fallback')}${entry}` }).step.effort, 'high');
+      assert.equal(run({ job: 'effort: low', config: `${policy('fallback')}${entry}` }).step.effort, 'low');
+    });
+  });
+
+  describe('выбор модели слоем целиком', () => {
+    it('tier пользователя бьёт явную модель корня документа', () => {
+      const { step, expanded } = run({
+        root: 'model: opus',
+        config: `${policy('fallback')}pipeline_agents:\n  p: { model_tier: fast }\n`,
+      });
+      assert.equal(step.model, 'haiku');
+      assert.equal(expanded.modelOrigins.get('implement/code')?.layer, 'tier');
+    });
+
+    it('при force тот же tier не трогает корень документа', () => {
+      const { step } = run({ root: 'model: opus', config: 'pipeline_agents:\n  p: { model_tier: fast }\n' });
+      assert.equal(step.model, 'opus');
+    });
+
+    it('выбор документа на работе сильнее выбора пользователя', () => {
+      const { step } = run({
+        job: 'model_tier: deep',
+        config: `${policy('fallback')}pipeline_agents:\n  p: { model: sonnet }\n`,
+      });
+      assert.equal(step.model, 'opus');
+    });
+
+    it('при force выбор пользователя заполняет молчание документа', () => {
+      const { step } = run({ config: 'pipeline_agents:\n  p: { model_tier: fast }\n' });
+      assert.equal(step.model, 'haiku');
+    });
+
+    it('effort tier пользователя едет вместе с его моделью', () => {
+      const { step, expanded, project } = run({
+        config: 'step_agents:\n  p:\n    implement:\n      code: { model_tier: review }\n',
+      });
+      assert.equal(step.model, 'opus');
+      assert.equal(step.effort, 'high');
+      assert.deepEqual(expanded.effortOrigins.get('implement/code'), {
+        layer: 'tier',
+        backend: 'claude',
+        tier: 'review',
+        tierLayer: 'step_agents',
+        file: project.path('.stepcast/config.yml'),
+      });
+    });
+
+    it('явный effort шага сильнее effort tier, а effort корня — слабее', () => {
+      const config = `${policy('fallback')}pipeline_agents:\n  p: { model_tier: review }\n`;
+      assert.equal(run({ root: 'effort: low', config }).step.effort, 'high');
+      assert.equal(run({ step: 'effort: low', config }).step.effort, 'low');
+    });
+
+    it('известный край: при force defaults.model бьёт tier документа и pipeline_agents.model', () => {
+      const { step, expanded } = run({
+        root: 'model_tier: deep',
+        config: 'defaults:\n  model: from-defaults\npipeline_agents:\n  p: { model: from-entry }\n',
+      });
+      assert.equal(step.model, 'from-defaults');
+      assert.deepEqual(expanded.modelOrigins.get('implement/code'), { layer: 'config' });
+    });
+
+    it('при fallback defaults.model встаёт над корнем, но под работой', () => {
+      const config = `${policy('fallback')}defaults:\n  model: from-defaults\n`;
+      assert.equal(run({ root: 'model: opus', config }).step.model, 'from-defaults');
+      assert.equal(run({ job: 'model: opus', config }).step.model, 'opus');
+    });
+  });
+
+  describe('чужая модель документа при агенте от пользователя', () => {
+    it('модель Claude не уходит в Codex', () => {
+      const { step, expanded } = run({ root: 'model: opus', config: 'defaults:\n  agent: codex\n' });
+      assert.equal(step.agent, 'codex');
+      assert.equal(step.model, 'gpt-5.6-terra');
+      assert.deepEqual(expanded.modelOrigins.get('implement/code'), {
+        layer: 'backend',
+        backend: 'codex',
+        dropped: { model: 'opus', layer: 'pipeline' },
+      });
+    });
+
+    it('отброшенную модель заменяет tier агента', () => {
+      const { step, expanded } = run({
+        root: 'model_tier: deep',
+        job: 'model: opus',
+        config: 'pipeline_agents:\n  p: { agent: codex }\n',
+      });
+      assert.equal(step.model, 'codex-deep');
+      const origin = expanded.modelOrigins.get('implement/code');
+      assert.equal(origin?.layer, 'tier');
+      assert.deepEqual(origin?.dropped, { model: 'opus', layer: 'job' });
+    });
+
+    it('неизвестная модель сохраняется', () => {
+      const { step, expanded } = run({ root: 'model: my-private-model', config: 'defaults:\n  agent: codex\n' });
+      assert.equal(step.model, 'my-private-model');
+      assert.equal(expanded.modelOrigins.get('implement/code')?.dropped, undefined);
+    });
+
+    it('при агенте из работы модель не отбрасывается', () => {
+      const { step } = run({ job: 'agent: codex\nmodel: opus', config: 'defaults:\n  agent: codex\n' });
+      assert.equal(step.agent, 'codex');
+      assert.equal(step.model, 'opus');
+    });
+
+    it('модель, принадлежащая и агенту, не отбрасывается', () => {
+      const { step } = run({
+        root: 'model: shared-model',
+        backends:
+          'backends:\n  codex:\n    model_tiers: { balance: shared-model }\n  claude:\n    model_tiers: { balance: shared-model }\n',
+        config: 'defaults:\n  agent: codex\n',
+      });
+      assert.equal(step.model, 'shared-model');
+    });
+
+    it('модель, известная только каталогу цен, отбрасывается без процессов CLI', () => {
+      const { step, expanded } = run({ root: 'model: claude-opus-4-6', config: 'defaults:\n  agent: codex\n' });
+      assert.equal(step.model, 'gpt-5.6-terra');
+      assert.equal(expanded.modelOrigins.get('implement/code')?.dropped?.model, 'claude-opus-4-6');
+    });
+  });
+
+  describe('происхождение и ключ шага', () => {
+    it('происхождение называет файл слоя конфигурации для каждого значения', () => {
+      const { expanded, project } = run({
+        config: `${policy('fallback')}pipeline_agents:\n  p: { agent: codex, effort: high }\n`,
+        global: 'step_agents:\n  p:\n    implement:\n      code: { model: gpt-x }\n',
+      });
+      const global = join(project.home, '.stepcast', 'config.yml');
+      const projectFile = project.path('.stepcast/config.yml');
+      assert.deepEqual(expanded.agentOrigins.get('implement/code'), { layer: 'pipeline_agents', file: projectFile });
+      assert.deepEqual(expanded.modelOrigins.get('implement/code'), { layer: 'step_agents', file: global });
+      assert.deepEqual(expanded.effortOrigins.get('implement/code'), { layer: 'pipeline_agents', file: projectFile });
+    });
+
+    it('одинаковый выбор из разных слоёв даёт один ключ шага', () => {
+      const keyOf = (expanded: ReturnType<typeof run>['expanded']): string => {
+        const job = expanded.pipeline.jobs[0]!;
+        return computeStepKey({
+          // Хеш определения у проектов разный (в нём пути файлов), поэтому
+          // сравнивается ключ самого шага при одном и том же хеше работы.
+          lockHash: 'fixed',
+          jobId: job.id,
+          step: job.steps[0]!,
+          inputsFingerprint: undefined,
+          backendCommand: undefined,
+          upstream: [],
+        });
+      };
+      const fromDocument = run({ step: 'agent: codex\nmodel: gpt-x' });
+      const fromEntry = run({
+        config: 'step_agents:\n  p:\n    implement:\n      code: { agent: codex, model: gpt-x }\n',
+      });
+      assert.equal(fromEntry.step.model, 'gpt-x');
+      assert.equal(fromEntry.expanded.agentOrigins.get('implement/code')?.layer, 'step_agents');
+      assert.equal(keyOf(fromEntry.expanded), keyOf(fromDocument.expanded));
+    });
+  });
+
+  describe('неизвестный агент и устаревшие записи', () => {
+    it('неизвестный агент записи своего пайплайна — отказ с файлом и путём ключа', () => {
+      assert.throws(
+        () => run({ config: 'pipeline_agents:\n  p: { agent: nosuch }\n' }),
+        (error: unknown) => {
+          assert.ok(error instanceof StepcastError);
+          assert.equal(error.at, 'pipeline_agents.p.agent');
+          assert.match(error.file ?? '', /\.stepcast[/\\]config\.yml$/);
+          return true;
+        },
+      );
+      assert.throws(
+        () => run({ config: 'step_agents:\n  p:\n    implement:\n      code: { agent: nosuch }\n' }),
+        (error: unknown) => error instanceof StepcastError && error.at === 'step_agents.p.implement.code.agent',
+      );
+    });
+
+    it('такая же запись чужого пайплайна раскрытию не мешает', () => {
+      const { step } = run({
+        config: 'pipeline_agents:\n  other: { agent: nosuch }\nstep_agents:\n  other:\n    j:\n      s: { agent: nosuch }\n',
+      });
+      assert.equal(step.agent, 'claude');
+    });
+
+    it('запись исчезнувшей работы, шага и неагентского шага — предупреждение', () => {
+      const project = makeProject({
+        'pipeline.yml':
+          'name: p\njobs:\n  implement:\n    steps:\n      - id: code\n        prompt: hi\n      - id: build\n        run: [echo, ok]\n',
+        '.stepcast/config.yml': `${BACKENDS}step_agents:\n  p:\n    old:\n      gone: { agent: codex }\n    implement:\n      missing: { agent: codex }\n      build: { agent: codex }\n`,
+      });
+      const { config } = resolveConfig({ cwd: project.root, home: project.home });
+      const { unusedAgentEntries } = expandPipeline({ pipelinePath: project.path('pipeline.yml'), config });
+      assert.deepEqual(
+        unusedAgentEntries.map((entry) => [entry.key, entry.reason.kind]),
+        [
+          ['step_agents.p.old.gone', 'no_job'],
+          ['step_agents.p.implement.missing', 'no_step'],
+          ['step_agents.p.implement.build', 'not_agent'],
+        ],
+      );
+    });
+
+    it('проигравшая запись получает причину и слой, которому проиграла', () => {
+      const { expanded } = run({
+        step: 'model: opus',
+        config: 'step_agents:\n  p:\n    implement:\n      code: { model: sonnet }\n',
+      });
+      assert.deepEqual(
+        expanded.unusedAgentEntries.map((entry) => [entry.key, entry.reason]),
+        [['step_agents.p.implement.code', { kind: 'lost', to: 'step', policy: 'force' }]],
+      );
+    });
+
+    it('запись, победившая хотя бы полем, в список не попадает', () => {
+      const { expanded } = run({
+        step: 'model: opus',
+        config: 'step_agents:\n  p:\n    implement:\n      code: { model: sonnet, effort: high }\n',
+      });
+      assert.deepEqual(expanded.unusedAgentEntries, []);
+    });
+
+    it('запись пайплайна без агентских шагов названа', () => {
+      const project = makeProject({
+        'pipeline.yml': 'name: p\njobs:\n  build:\n    steps: [{ id: c, run: [echo, ok] }]\n',
+        '.stepcast/config.yml': `${BACKENDS}pipeline_agents:\n  p: { agent: codex }\n`,
+      });
+      const { config } = resolveConfig({ cwd: project.root, home: project.home });
+      const { unusedAgentEntries } = expandPipeline({ pipelinePath: project.path('pipeline.yml'), config });
+      assert.deepEqual(unusedAgentEntries.map((entry) => entry.reason.kind), ['no_agent_steps']);
+    });
   });
 });

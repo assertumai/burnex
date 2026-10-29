@@ -5,6 +5,7 @@ import { describe, it } from 'node:test';
 
 import {
   PriceCatalogError,
+  backendsKnowingModel,
   estimateCostUsd,
   loadPriceCatalog,
   priceCatalogPath,
@@ -177,5 +178,25 @@ describe('price-catalog: действующая цена вызова', () => {
 
   it('бэкенд из чужой записи не получает цену', () => {
     assert.equal(priceUsage({ ...base, backend: 'claude' }, catalog).cost_usd, undefined);
+  });
+});
+
+describe('price-catalog: бэкенды, знающие модель', () => {
+  it('поставляемый каталог называет бэкенд по точному имени', () => {
+    assert.deepEqual([...backendsKnowingModel('claude-opus-4-6')], ['claude']);
+    assert.deepEqual([...backendsKnowingModel('gpt-5-codex')], ['codex']);
+  });
+
+  it('неизвестное имя даёт пустой набор', () => {
+    assert.equal(backendsKnowingModel('no-such-model').size, 0);
+  });
+
+  it('находит модель и по псевдониму, и в нескольких бэкендах', () => {
+    const path = writeCatalog([
+      entry({ backend: 'claude', model: 'big', aliases: ['b'] }),
+      entry({ backend: 'codex', model: 'b', aliases: [] }),
+    ]);
+    assert.deepEqual([...backendsKnowingModel('big', path)], ['claude']);
+    assert.deepEqual([...backendsKnowingModel('b', path)].sort(), ['claude', 'codex']);
   });
 });

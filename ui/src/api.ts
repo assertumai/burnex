@@ -288,24 +288,80 @@ export interface RunSnapshot {
   readonly problem?: JournalProblem;
 }
 
-/** Слой, из которого пришла модель шага. Слой `config` несёт файл, победивший в этом проекте. */
-export type PipelineModelOrigin =
+/** Явная модель документа, отброшенная как чужая выбранному агенту. */
+export interface DroppedModel {
+  readonly model: string;
+  readonly layer: 'step' | 'job' | 'pipeline';
+}
+
+/** Слой, давший значение из записи `pipeline_agents` / `step_agents`, — всегда с файлом. */
+export interface PipelineEntryLayer {
+  readonly layer: 'pipeline_agents' | 'step_agents';
+  readonly file: string;
+}
+
+/** Слой, давший агента шага. */
+export type PipelineAgentOrigin =
   | { readonly layer: 'step' }
   | { readonly layer: 'job' }
-  | { readonly layer: 'tier'; readonly backend: string; readonly tier: string; readonly tierLayer: 'pipeline' | 'job' | 'step'; readonly fallback?: true }
+  | { readonly layer: 'pipeline' }
+  | { readonly layer: 'config' }
+  | PipelineEntryLayer;
+
+/** Слой, из которого пришла модель шага. Слой `config` несёт файл, победивший в этом проекте. */
+export type PipelineModelOrigin = (
+  | { readonly layer: 'step' }
+  | { readonly layer: 'job' }
+  | {
+      readonly layer: 'tier';
+      readonly backend: string;
+      readonly tier: string;
+      readonly tierLayer: 'pipeline' | 'job' | 'step' | 'pipeline_agents' | 'step_agents';
+      readonly file?: string;
+      readonly fallback?: true;
+    }
   | { readonly layer: 'pipeline' }
   | { readonly layer: 'config'; readonly file: string }
+  | PipelineEntryLayer
   | { readonly layer: 'backend'; readonly backend: string }
-  | { readonly layer: 'none' };
+  | { readonly layer: 'none' }
+) & { readonly dropped?: DroppedModel };
 
 /** Слой, из которого пришёл действующий reasoning effort шага. */
 export type PipelineEffortOrigin =
   | { readonly layer: 'step' }
   | { readonly layer: 'job' }
-  | { readonly layer: 'tier'; readonly backend: string; readonly tier: string; readonly tierLayer: 'pipeline' | 'job' | 'step' }
+  | {
+      readonly layer: 'tier';
+      readonly backend: string;
+      readonly tier: string;
+      readonly tierLayer: 'pipeline' | 'job' | 'step' | 'pipeline_agents' | 'step_agents';
+      readonly file?: string;
+    }
   | { readonly layer: 'pipeline' }
   | { readonly layer: 'config'; readonly file: string }
+  | PipelineEntryLayer
   | { readonly layer: 'none' };
+
+export interface AgentEntryFieldView {
+  readonly value: string;
+  readonly file: string;
+}
+
+/**
+ * Запись выбора пользователя, действующая для пайплайна или шага. Отметка
+ * говорит, почему правка с экрана может ничего не менять: запись проигрывает
+ * документу при действующей политике либо задана проектным файлом, а экран
+ * пишет только глобальный. Сверено с `AgentEntryView` (`src/parts/ui/pipelines.ts`).
+ */
+export interface AgentEntryView {
+  readonly key: string;
+  readonly agent?: AgentEntryFieldView;
+  readonly model?: AgentEntryFieldView;
+  readonly modelTier?: AgentEntryFieldView;
+  readonly effort?: AgentEntryFieldView;
+  readonly mark?: 'loses_to_document' | 'no_agent_steps' | 'shadowed_by_project';
+}
 
 export interface PipelineStepView {
   readonly id: string;
@@ -318,6 +374,10 @@ export interface PipelineStepView {
   /** Effective reasoning effort и слой, который его дал. */
   readonly effort?: string;
   readonly effortOrigin?: PipelineEffortOrigin;
+  /** Слой, давший агента, — только у агентских шагов. */
+  readonly agentOrigin?: PipelineAgentOrigin;
+  /** Запись `step_agents` этого шага, если она есть. */
+  readonly agentEntry?: AgentEntryView;
   readonly command?: string;
   /** Путь скрипта, объявленный в документе, — у шага script. */
   readonly scriptPath?: string;
@@ -351,6 +411,8 @@ export interface PipelineJobView {
   readonly on: 'success' | 'failure' | 'always';
   readonly if?: string;
   readonly publishesOutput: boolean;
+  /** Ключ работы для `step_agents` её шагов: у дорожки — работа до раскрытия, если точной записи дорожки нет. */
+  readonly agentEntryJob: string;
   readonly steps: readonly PipelineStepView[];
 }
 
@@ -362,6 +424,13 @@ export interface PipelineView {
   readonly concurrency?: number;
   readonly failFast?: boolean;
   readonly jobs: readonly PipelineJobView[];
+  /** Действующая политика выбора агента и файл, давший её; у пайплайна с ошибкой разбора не определены. */
+  readonly agentPolicy?: 'force' | 'fallback';
+  readonly agentPolicyFile?: string;
+  /** Запись `pipeline_agents` этого пайплайна, если она есть. */
+  readonly agentEntry?: AgentEntryView;
+  /** Имя записей выбора — `name` документа; у пайплайна без `name` выбора с экрана нет. */
+  readonly agentEntryName?: string;
   /** Имена объявленных входов пайплайна: доска предлагает к запуску только те, кому слаг пункта есть куда передать. */
   readonly inputs: readonly string[];
   readonly graph?: JobGraph;
@@ -1002,6 +1071,41 @@ export async function fetchStepOutput(options: {
 
 export async function fetchPipelines(): Promise<PipelinesOverview> {
   return json<PipelinesOverview>(await fetch('/api/pipelines'));
+}
+
+/**
+ * Правка выбора пользователя. Поле со значением `null` снимается; `selection:
+ * null` снимает запись целиком. Выбор tier снимает `model` той же записи,
+ * и наоборот — это делает демон.
+ */
+export interface PipelineAgentSelection {
+  readonly agent?: string | null;
+  readonly model?: string | null;
+  readonly model_tier?: string | null;
+  readonly effort?: string | null;
+}
+
+export interface PipelineAgentTarget {
+  readonly pipeline: string;
+  readonly job?: string;
+  readonly step?: string;
+}
+
+/**
+ * Записать выбор в глобальный файл. Ответ — заново раскрытые пайплайны, а не
+ * эхо правки: запись могла проиграть документу, и показывать надо итог.
+ */
+export async function savePipelineAgent(
+  target: PipelineAgentTarget,
+  selection: PipelineAgentSelection | null,
+): Promise<PipelinesOverview> {
+  return json<PipelinesOverview>(
+    await fetch('/api/pipelines/agents', {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ ...target, selection }),
+    }),
+  );
 }
 
 /**

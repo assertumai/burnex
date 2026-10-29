@@ -5315,3 +5315,136 @@ describe('ui-daemon: POST /api/run/decision', () => {
     assert.equal(overview.code, 200);
   });
 });
+
+describe('ui-screens: PUT /api/pipelines/agents', () => {
+  const PIPELINE = `kind: pipeline
+name: p
+jobs:
+  implement:
+    steps:
+      - id: code
+        prompt: hi
+`;
+
+  function agentsBed() {
+    const { runsRoot, projectRoot, home } = makeJournalBed();
+    seedRun(runsRoot, projectRoot, { runId: 'a' });
+    mkdirSync(join(projectRoot, '.stepcast', 'pipelines'), { recursive: true });
+    writeFileSync(join(projectRoot, '.stepcast', 'pipelines', 'p.yml'), PIPELINE);
+    const file = join(home, '.stepcast', 'config.yml');
+    writeFileSync(file, `# корень прогонов задан тестом\n${readFileSync(file, 'utf8')}`);
+    const { config } = resolveConfig({ cwd: home, home, projectPath: null });
+    return { runsRoot, home, file, config };
+  }
+
+  const put = (server: UiServer, body: unknown) =>
+    sendJson(server, { method: 'PUT', path: '/api/pipelines/agents', body: JSON.stringify(body) });
+
+  function stepOf(json: Json, id: string): Record<string, unknown> | undefined {
+    const pipelines = pick(json, 'pipelines') as Array<{ name: string; jobs: Array<{ steps: Array<Record<string, unknown>> }> }>;
+    return pipelines.find((entry) => entry.name === 'p')?.jobs[0]?.steps.find((step) => step.id === id);
+  }
+
+  it('записывает модель шага, сохраняет комментарии и отвечает заново раскрытым пайплайном', async (t) => {
+    const { runsRoot, home, file, config } = agentsBed();
+    const server = await startServer(t, { runsRoot, home, config });
+
+    const saved = await put(server, { pipeline: 'p', job: 'implement', step: 'code', selection: { model: 'sonnet' } });
+
+    assert.equal(saved.code, 200, JSON.stringify(saved.json));
+    const text = readFileSync(file, 'utf8');
+    assert.match(text, /# корень прогонов задан тестом/);
+    assert.match(text, /step_agents:\n {2}p:\n {4}implement:\n {6}code:\n {8}model: sonnet/);
+
+    const step = stepOf(saved.json, 'code');
+    assert.equal(step?.model, 'sonnet');
+    assert.deepEqual(step?.modelOrigin, { layer: 'step_agents', file });
+  });
+
+  it('снимает единственное поле вместе с опустевшими родителями', async (t) => {
+    const { runsRoot, home, file, config } = agentsBed();
+    const server = await startServer(t, { runsRoot, home, config });
+    await put(server, { pipeline: 'p', job: 'implement', step: 'code', selection: { model: 'sonnet' } });
+
+    const cleared = await put(server, { pipeline: 'p', job: 'implement', step: 'code', selection: { model: null } });
+
+    assert.equal(cleared.code, 200, JSON.stringify(cleared.json));
+    const text = readFileSync(file, 'utf8');
+    assert.doesNotMatch(text, /step_agents/);
+    assert.doesNotMatch(text, /implement:/);
+    assert.match(text, /# корень прогонов задан тестом/);
+    // Модель вернулась к умолчанию бэкенда: слой записи из происхождения ушёл.
+    assert.equal((stepOf(cleared.json, 'code')?.modelOrigin as { layer: string }).layer, 'backend');
+  });
+
+  it('selection: null удаляет запись целиком, не трогая соседние', async (t) => {
+    const { runsRoot, home, file, config } = agentsBed();
+    const server = await startServer(t, { runsRoot, home, config });
+    await put(server, { pipeline: 'p', selection: { effort: 'high' } });
+    await put(server, { pipeline: 'p', job: 'implement', step: 'code', selection: { effort: 'low', model: 'sonnet' } });
+
+    await put(server, { pipeline: 'p', job: 'implement', step: 'code', selection: null });
+
+    const text = readFileSync(file, 'utf8');
+    assert.doesNotMatch(text, /step_agents/);
+    assert.match(text, /pipeline_agents:\n {2}p:\n {4}effort: high/);
+  });
+
+  it('выбор tier снимает model той же записи, и наоборот', async (t) => {
+    const { runsRoot, home, file, config } = agentsBed();
+    const server = await startServer(t, { runsRoot, home, config });
+    const target = { pipeline: 'p', job: 'implement', step: 'code' };
+
+    await put(server, { ...target, selection: { model: 'sonnet' } });
+    await put(server, { ...target, selection: { model_tier: 'fast' } });
+    assert.match(readFileSync(file, 'utf8'), /model_tier: fast/);
+    assert.doesNotMatch(readFileSync(file, 'utf8'), /model: sonnet/);
+
+    await put(server, { ...target, selection: { model: 'opus' } });
+    assert.match(readFileSync(file, 'utf8'), /model: opus/);
+    assert.doesNotMatch(readFileSync(file, 'utf8'), /model_tier/);
+  });
+
+  it('запись пайплайна: агент пишется в pipeline_agents, и шаг его получает', async (t) => {
+    const { runsRoot, home, file, config } = agentsBed();
+    const server = await startServer(t, { runsRoot, home, config });
+
+    const saved = await put(server, { pipeline: 'p', selection: { agent: 'claude', effort: 'high' } });
+
+    assert.equal(saved.code, 200, JSON.stringify(saved.json));
+    assert.match(readFileSync(file, 'utf8'), /pipeline_agents:\n {2}p:\n {4}agent: claude\n {4}effort: high/);
+    const step = stepOf(saved.json, 'code');
+    assert.deepEqual(step?.agentOrigin, { layer: 'pipeline_agents', file });
+    assert.equal(step?.effort, 'high');
+  });
+
+  it('отказ схемы не трогает файл', async (t) => {
+    const { runsRoot, home, file, config } = agentsBed();
+    const server = await startServer(t, { runsRoot, home, config });
+    const before = readFileSync(file, 'utf8');
+
+    // Точка в имени пайплайна: слияние слоёв идёт по точечным путям, схема такой ключ не принимает.
+    const refused = await put(server, { pipeline: 'a.b', selection: { effort: 'high' } });
+
+    assert.equal(refused.code, 400, JSON.stringify(refused.json));
+    assert.equal(readFileSync(file, 'utf8'), before);
+  });
+
+  it('неизвестный агент и тело без шага отклоняются до записи', async (t) => {
+    const { runsRoot, home, file, config } = agentsBed();
+    const server = await startServer(t, { runsRoot, home, config });
+    const before = readFileSync(file, 'utf8');
+
+    const unknown = await put(server, { pipeline: 'p', selection: { agent: 'нет-такого' } });
+    assert.equal(unknown.code, 400);
+    assert.match(String(unknown.json.error), /нет-такого/);
+
+    const half = await put(server, { pipeline: 'p', job: 'implement', selection: { effort: 'high' } });
+    assert.equal(half.code, 400);
+
+    const both = await put(server, { pipeline: 'p', selection: { model: 'sonnet', model_tier: 'fast' } });
+    assert.equal(both.code, 400);
+
+    assert.equal(readFileSync(file, 'utf8'), before);
+  });
+});

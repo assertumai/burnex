@@ -2,7 +2,9 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
 import codexPlugin from '../src/parts/backends/codex/index.js';
+import { isForeignModel, modelOwners } from '../src/parts/pipeline/config/modelTiers.js';
 import { resolveConfig } from '../src/parts/pipeline/config/resolve.js';
+import { backendsKnowingModel } from '../src/parts/pipeline/run/budget/priceCatalog.js';
 import { StepcastError } from '../src/kernel/errors.js';
 import { expandPipeline } from '../src/parts/pipeline/document/expand.js';
 import { serializeLock } from '../src/parts/pipeline/document/lock.js';
@@ -306,5 +308,42 @@ jobs:
     const low = serializeLock(expandPipeline(opts).pipeline);
     project.write('pipeline.yml', `effort: high\n${JOB}`);
     assert.notEqual(low, serializeLock(expandPipeline(opts).pipeline));
+  });
+});
+
+describe('принадлежность модели бэкенду', () => {
+  const backends = {
+    claude: { defaultModel: undefined, modelTiers: { deep: { model: 'opus' } } },
+    codex: { defaultModel: 'gpt-5.6-terra', modelTiers: {} },
+  };
+  const ownersOf = (model: string): ReadonlySet<string> =>
+    modelOwners(model, backends, backendsKnowingModel(model));
+
+  it('opus принадлежит claude по карте tier', () => {
+    assert.deepEqual([...ownersOf('opus')], ['claude']);
+    assert.equal(isForeignModel('codex', ownersOf('opus')), true);
+    assert.equal(isForeignModel('claude', ownersOf('opus')), false);
+  });
+
+  it('default_model бэкенда принадлежит этому бэкенду', () => {
+    assert.deepEqual([...ownersOf('gpt-5.6-terra')], ['codex']);
+    assert.equal(isForeignModel('claude', ownersOf('gpt-5.6-terra')), true);
+  });
+
+  it('каталог цен приписывает модель бэкенду без записи в конфигурации', () => {
+    assert.deepEqual([...ownersOf('claude-opus-4-6')], ['claude']);
+    assert.equal(isForeignModel('codex', ownersOf('claude-opus-4-6')), true);
+  });
+
+  it('неизвестная модель не принадлежит никому и чужой не считается', () => {
+    assert.equal(ownersOf('my-private-model').size, 0);
+    assert.equal(isForeignModel('codex', ownersOf('my-private-model')), false);
+  });
+
+  it('модель, принадлежащая нескольким бэкендам, не чужая ни одному из них', () => {
+    const shared = modelOwners('m', { a: { defaultModel: 'm' }, b: { defaultModel: 'm' } }, new Set());
+    assert.equal(isForeignModel('a', shared), false);
+    assert.equal(isForeignModel('b', shared), false);
+    assert.equal(isForeignModel('c', shared), true);
   });
 });

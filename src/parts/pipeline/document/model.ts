@@ -558,27 +558,100 @@ export interface Substitution {
 export type SubstitutionMap = ReadonlyMap<string, readonly Substitution[]>;
 
 /**
- * Звено цепочки, давшее модель агентского шага: объявление самого шага,
- * работа, пайплайн, конфигурация, карта tier выбранного агента, умолчание
- * бэкенда либо отсутствие модели. Происхождение не входит в исполняемый шаг.
+ * Слой конфигурации, давший значение выбора пользователя (`pipeline_agents`,
+ * `step_agents`): вместе с файлом, иначе экран не отличит запись глобального
+ * файла от проектной.
  */
-export type ModelOrigin =
+export interface ConfigEntryLayer {
+  readonly layer: 'pipeline_agents' | 'step_agents';
+  readonly file: string;
+}
+
+/** Звено цепочки, давшее агента агентского шага. */
+export type AgentOrigin =
   | { readonly layer: 'step' }
   | { readonly layer: 'job' }
-  | { readonly layer: 'tier'; readonly backend: string; readonly tier: ModelTier; readonly tierLayer: 'pipeline' | 'job' | 'step'; readonly fallback?: true }
   | { readonly layer: 'pipeline' }
   | { readonly layer: 'config' }
+  | ConfigEntryLayer;
+
+/**
+ * Явная модель документа, отброшенная как чужая агенту, пришедшему от
+ * пользователя (`agent-policy-and-pipeline-agents`, решение 4).
+ */
+export interface DroppedModel {
+  readonly model: string;
+  readonly layer: 'step' | 'job' | 'pipeline';
+}
+
+/**
+ * Звено цепочки, давшее модель агентского шага: объявление самого шага,
+ * работа, пайплайн, конфигурация, запись выбора пользователя, карта tier
+ * выбранного агента, умолчание бэкенда либо отсутствие модели. Происхождение
+ * не входит в исполняемый шаг.
+ */
+export type ModelOrigin = (
+  | { readonly layer: 'step' }
+  | { readonly layer: 'job' }
+  | {
+      readonly layer: 'tier';
+      readonly backend: string;
+      readonly tier: ModelTier;
+      readonly tierLayer: 'pipeline' | 'job' | 'step' | 'pipeline_agents' | 'step_agents';
+      /** Файл записи пользователя, когда tier выбран ею. */
+      readonly file?: string;
+      readonly fallback?: true;
+    }
+  | { readonly layer: 'pipeline' }
+  | { readonly layer: 'config' }
+  | ConfigEntryLayer
   | { readonly layer: 'backend'; readonly backend: string }
-  | { readonly layer: 'none' };
+  | { readonly layer: 'none' }
+) & {
+  /** Явная модель документа, замененная потому, что она чужая выбранному агенту. */
+  readonly dropped?: DroppedModel;
+};
 
 /** Звено цепочки, давшее reasoning effort агентского шага. */
 export type EffortOrigin =
   | { readonly layer: 'step' }
   | { readonly layer: 'job' }
-  | { readonly layer: 'tier'; readonly backend: string; readonly tier: ModelTier; readonly tierLayer: 'pipeline' | 'job' | 'step' }
+  | {
+      readonly layer: 'tier';
+      readonly backend: string;
+      readonly tier: ModelTier;
+      readonly tierLayer: 'pipeline' | 'job' | 'step' | 'pipeline_agents' | 'step_agents';
+      readonly file?: string;
+    }
   | { readonly layer: 'pipeline' }
   | { readonly layer: 'config' }
+  | ConfigEntryLayer
   | { readonly layer: 'none' };
+
+/**
+ * Запись выбора пользователя, не повлиявшая ни на один шаг пайплайна, и
+ * причина (`stepcast config --pipeline`, экран Pipelines).
+ */
+export interface UnusedAgentEntry {
+  /** Путь ключа записи: `pipeline_agents.p` или `step_agents.p.job.step`. */
+  readonly key: string;
+  readonly kind: 'pipeline_agents' | 'step_agents';
+  /** Файл, давший хотя бы одно поле записи. */
+  readonly files: readonly string[];
+  readonly reason: AgentEntryReason;
+}
+
+export type AgentEntryReason =
+  | {
+      readonly kind: 'lost';
+      readonly to: 'step' | 'job' | 'pipeline' | 'config' | 'pipeline_agents' | 'step_agents';
+      readonly policy: 'force' | 'fallback';
+    }
+  /** Запись пайплайна, у которого нет ни одного агентского шага. */
+  | { readonly kind: 'no_agent_steps' }
+  | { readonly kind: 'no_job' }
+  | { readonly kind: 'no_step' }
+  | { readonly kind: 'not_agent' };
 
 export interface ExpandedPipeline {
   readonly pipeline: Pipeline;
@@ -592,6 +665,16 @@ export interface ExpandedPipeline {
   readonly modelOrigins: ReadonlyMap<string, ModelOrigin>;
   /** Слой reasoning effort каждого агентского шага, ключ — `<job>/<step>`. */
   readonly effortOrigins: ReadonlyMap<string, EffortOrigin>;
+  /** Слой агента каждого агентского шага, ключ — `<job>/<step>`; по той же причине, что и модель, не в `Step`. */
+  readonly agentOrigins: ReadonlyMap<string, AgentOrigin>;
+  /** Записи `pipeline_agents` и `step_agents` этого пайплайна, не повлиявшие ни на один шаг. */
+  readonly unusedAgentEntries: readonly UnusedAgentEntry[];
+  /**
+   * Имя, под которым пайплайн читает `pipeline_agents` и `step_agents`, — `name`
+   * документа. У документа без `name` отсутствует: подставленное имя `pipeline`
+   * записи не адресует, и выбору пользователя такой пайплайн недоступен.
+   */
+  readonly agentEntryName?: string;
 }
 
 /** Файлы, из которых собрано определение прогона: пайплайн и работы. */

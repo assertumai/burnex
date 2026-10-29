@@ -1,7 +1,7 @@
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
-import { parseDocument } from 'yaml';
+import { parseDocument, type Document } from 'yaml';
 import { z } from 'zod';
 
 import codexPlugin from '../backends/codex/index.js';
@@ -172,6 +172,37 @@ export async function readSettings(home: string = homedir(), kernelCache?: Kerne
   };
 }
 
+/**
+ * Единственный путь записи глобального файла из витрины: открыть его как
+ * документ `yaml` (комментарии сохраняются), применить правки, проверить
+ * результат схемой конфигурации и подменить файл через временный — читатель
+ * не увидит полузаписанное. Им пользуются экран настроек и экран Pipelines;
+ * второй писатель разошёлся бы с первым в том, что считать допустимым файлом.
+ * Правка, не прошедшая схему, файла не трогает.
+ */
+export function editGlobalConfig(home: string, edit: (document: Document) => void): void {
+  const file = globalConfigPath(home);
+  let text = '';
+  try {
+    text = readFileSync(file, 'utf8');
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+  }
+  const document = parseDocument(text);
+  edit(document);
+
+  const next = document.toString();
+  const parsed = RawConfigSchema.safeParse(parseDocument(next).toJS() ?? {});
+  if (!parsed.success) {
+    throw new StepcastError(`The patch does not pass the configuration schema: ${parsed.error.issues[0]?.message ?? 'unknown error'}`, { file });
+  }
+
+  mkdirSync(dirname(file), { recursive: true });
+  const temporary = `${file}.tmp`;
+  writeFileSync(temporary, next);
+  renameSync(temporary, file);
+}
+
 /** Проверить всю правку до записи; менять YAML-документ, сохраняя комментарии. */
 export async function writeSettings(
   input: unknown,
@@ -203,65 +234,48 @@ export async function writeSettings(
     }
   }
 
-  const file = globalConfigPath(home);
-  let text = '';
-  try {
-    text = readFileSync(file, 'utf8');
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
-  }
-  const document = parseDocument(text);
-  if (patch.connectCodex === true) {
-    const plugins = (document.toJS() as { plugins?: string[] } | null)?.plugins ?? [];
-    if (!plugins.includes('stepcast/backends/codex')) {
-      if (!document.has('plugins')) document.set('plugins', document.createNode([]));
-      document.addIn(['plugins'], 'stepcast/backends/codex');
-    }
-  }
-  if (patch.agent !== undefined) document.setIn(['defaults', 'agent'], patch.agent);
-  if (patch.model !== undefined) {
-    if (patch.model === null || patch.model === '') document.deleteIn(['defaults', 'model']);
-    else document.setIn(['defaults', 'model'], patch.model);
-  }
-  if (patch.effort !== undefined) {
-    if (patch.effort === null) document.deleteIn(['defaults', 'effort']);
-    else document.setIn(['defaults', 'effort'], patch.effort);
-  }
-  for (const [name, backend] of Object.entries(patch.backends ?? {})) {
-    const path = ['backends', name];
-    if (backend.defaultModel !== undefined) {
-      if (backend.defaultModel === null) document.deleteIn([...path, 'default_model']);
-      else document.setIn([...path, 'default_model'], backend.defaultModel);
-    }
-    for (const [tier, selection] of Object.entries(backend.modelTiers ?? {})) {
-      if (selection.model === null) document.deleteIn([...path, 'model_tiers', tier]);
-      else if (selection.effort === undefined || selection.effort === null) {
-        document.setIn([...path, 'model_tiers', tier], selection.model);
-      } else {
-        document.setIn([...path, 'model_tiers', tier], {
-          model: selection.model,
-          effort: selection.effort,
-        });
+  editGlobalConfig(home, (document) => {
+    if (patch.connectCodex === true) {
+      const plugins = (document.toJS() as { plugins?: string[] } | null)?.plugins ?? [];
+      if (!plugins.includes('stepcast/backends/codex')) {
+        if (!document.has('plugins')) document.set('plugins', document.createNode([]));
+        document.addIn(['plugins'], 'stepcast/backends/codex');
       }
     }
-  }
-  const documentBackends = (document.toJS() as { backends?: Record<string, unknown> } | null)?.backends ?? {};
-  for (const tier of patch.removeModelTiers ?? []) {
-    for (const name of new Set([...Object.keys(documentBackends), ...current.backends.map((backend) => backend.name)])) {
-      document.deleteIn(['backends', name, 'model_tiers', tier]);
+    if (patch.agent !== undefined) document.setIn(['defaults', 'agent'], patch.agent);
+    if (patch.model !== undefined) {
+      if (patch.model === null || patch.model === '') document.deleteIn(['defaults', 'model']);
+      else document.setIn(['defaults', 'model'], patch.model);
     }
-  }
-
-  const next = document.toString();
-  const parsed = RawConfigSchema.safeParse(parseDocument(next).toJS() ?? {});
-  if (!parsed.success) {
-    throw new StepcastError(`The patch does not pass the configuration schema: ${parsed.error.issues[0]?.message ?? 'unknown error'}`, { file });
-  }
-
-  mkdirSync(dirname(file), { recursive: true });
-  const temporary = `${file}.tmp`;
-  writeFileSync(temporary, next);
-  renameSync(temporary, file);
+    if (patch.effort !== undefined) {
+      if (patch.effort === null) document.deleteIn(['defaults', 'effort']);
+      else document.setIn(['defaults', 'effort'], patch.effort);
+    }
+    for (const [name, backend] of Object.entries(patch.backends ?? {})) {
+      const path = ['backends', name];
+      if (backend.defaultModel !== undefined) {
+        if (backend.defaultModel === null) document.deleteIn([...path, 'default_model']);
+        else document.setIn([...path, 'default_model'], backend.defaultModel);
+      }
+      for (const [tier, selection] of Object.entries(backend.modelTiers ?? {})) {
+        if (selection.model === null) document.deleteIn([...path, 'model_tiers', tier]);
+        else if (selection.effort === undefined || selection.effort === null) {
+          document.setIn([...path, 'model_tiers', tier], selection.model);
+        } else {
+          document.setIn([...path, 'model_tiers', tier], {
+            model: selection.model,
+            effort: selection.effort,
+          });
+        }
+      }
+    }
+    const documentBackends = (document.toJS() as { backends?: Record<string, unknown> } | null)?.backends ?? {};
+    for (const tier of patch.removeModelTiers ?? []) {
+      for (const name of new Set([...Object.keys(documentBackends), ...current.backends.map((backend) => backend.name)])) {
+        document.deleteIn(['backends', name, 'model_tiers', tier]);
+      }
+    }
+  });
   // Кеш перечитывает объявления плагинов заново при каждом обращении: правка,
   // добавившая plugins (`connectCodex`), обязана быть видна тут же, без
   // перезапуска демона.

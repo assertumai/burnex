@@ -12,7 +12,11 @@ import {
   resolvePipelineTarget,
 } from '../src/parts/pipeline/domain/package-schema.js';
 import { resolveConfig } from '../src/parts/pipeline/config/resolve.js';
+import { displayInputs } from '../src/parts/pipeline/document/displayInputs.js';
 import { expandPipeline } from '../src/parts/pipeline/document/expand.js';
+import type { Step } from '../src/parts/pipeline/document/model.js';
+import { enginePackageRoot } from '../src/parts/pipeline/document/packagePaths.js';
+import { computeStepKey } from '../src/parts/pipeline/run/stepKey.js';
 import { hasErrors, lintPipeline } from '../src/parts/pipeline/domain/lint.js';
 import { createClaudeAdapter } from '../src/parts/backends/claude/adapter.js';
 import { resultLine } from '../src/parts/pipeline/backend/fake.js';
@@ -361,4 +365,55 @@ describe('builtin pipelines: прогон migrate-widgets с поддельны�
 
     assert.deepEqual(readProposalsDir(proj.root).records, []);
   });
+});
+
+/**
+ * `agent-policy-and-pipeline-agents`, «Миграции не требуется»: без новых ключей
+ * поставляемые пайплайны раскрываются в те же `Step`, с теми же ключами шага и
+ * теми же слоями модели и effort, что и до изменения. Эталон снят на коде до
+ * изменения (`test/fixtures/pipelines/shipped-baseline.json`); путь установки
+ * движка в нём заменён на `<engine>`, потому что он зависит от места checkout.
+ */
+describe('поставляемые пайплайны без записей выбора пользователя', () => {
+  interface BaselineStep {
+    readonly step: Step;
+    readonly modelOrigin: unknown;
+    readonly effortOrigin: unknown;
+  }
+  const baseline = JSON.parse(
+    readFileSync(fileURLToPath(new URL('../../test/fixtures/pipelines/shipped-baseline.json', import.meta.url)), 'utf8'),
+  ) as Record<string, Record<string, BaselineStep>>;
+  const engine = enginePackageRoot();
+  const localize = (value: unknown): unknown => JSON.parse(JSON.stringify(value).split('<engine>').join(engine));
+  const keyOf = (jobId: string, step: Step): string =>
+    computeStepKey({ lockHash: 'fixed', jobId, step, inputsFingerprint: undefined, backendCommand: undefined, upstream: [] });
+
+  it('эталон не отстал от списка поставки', () => {
+    for (const name of Object.keys(baseline)) assert.ok(packagedPipelineNames().includes(name), name);
+  });
+
+  for (const name of Object.keys(baseline)) {
+    it(`${name}: Step, ключи шагов и слои модели и effort прежние`, () => {
+      const dir = project();
+      const { config } = resolveConfig({ cwd: dir, home: dir });
+      const path = packagedPipelinePath(name);
+      const expanded = expandPipeline({ pipelinePath: path, config, inputs: displayInputs(path) });
+      const expected = baseline[name]!;
+
+      const actualIds = expanded.pipeline.jobs.flatMap((job) => job.steps.map((step) => `${job.id}/${step.id}`));
+      assert.deepEqual(actualIds, Object.keys(expected));
+
+      for (const job of expanded.pipeline.jobs) {
+        for (const step of job.steps) {
+          const id = `${job.id}/${step.id}`;
+          const before = expected[id]!;
+          assert.deepEqual(JSON.parse(JSON.stringify(step)), localize(before.step), id);
+          assert.equal(keyOf(job.id, step), keyOf(job.id, localize(before.step) as Step), id);
+          assert.deepEqual(expanded.modelOrigins.get(id) ?? null, before.modelOrigin, `${id}: модель`);
+          assert.deepEqual(expanded.effortOrigins.get(id) ?? null, before.effortOrigin, `${id}: effort`);
+        }
+      }
+      assert.deepEqual(expanded.unusedAgentEntries, []);
+    });
+  }
 });

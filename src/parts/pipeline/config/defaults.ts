@@ -6,6 +6,9 @@ import type { RawConfig } from './schema.js';
  * источник «встроенное умолчание», а не пустота.
  */
 export const BUILTIN_CONFIG: RawConfig = {
+  // `force` сохраняет прежний порядок слоёв байт в байт; ключ стоит во
+  // встроенном слое, чтобы отчёт назвал источником умолчание, а не пустоту.
+  agent_policy: 'force',
   runs: {
     root: '~/.stepcast/runs',
     keep: '30d',

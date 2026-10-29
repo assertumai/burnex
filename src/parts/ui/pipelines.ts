@@ -4,8 +4,7 @@ import { relative } from 'node:path';
 import { listPipelineFiles } from '../pipeline/domain/project/pipelines.js';
 import { listProjects } from '../pipeline/run/journal/reader.js';
 import { expandPipeline } from '../pipeline/document/expand.js';
-import { readYamlDocument } from '../pipeline/document/load.js';
-import type { ParamValue } from '../pipeline/document/params.js';
+import { displayInputs } from '../pipeline/document/displayInputs.js';
 import { isStepcastError, StepcastError } from '../../kernel/errors.js';
 import { describeSource } from '../pipeline/config/merge.js';
 import { resolveConfig, type Config, type ResolveOptions } from '../pipeline/config/resolve.js';
@@ -14,7 +13,9 @@ import type { BuiltinRow, LoadOptions } from '../../kernel/load.js';
 import type { Kernel } from '../../kernel/kernel.js';
 import { kernelFromRegistry, registryFromKernel, type Registry } from '../../kernel/registry.js';
 import type { TreeRow } from '../../kernel/tree/tree.js';
-import type { EffortOrigin, Job, ModelOrigin, Pipeline } from '../pipeline/document/model.js';
+import type { AgentOrigin, EffortOrigin, Job, ModelOrigin, Pipeline, UnusedAgentEntry } from '../pipeline/document/model.js';
+import type { AgentSelectionConfig } from '../pipeline/config/agentSelections.js';
+import type { AgentPolicy } from '../pipeline/config/schema.js';
 import { hasStepExecutor } from '../pipeline/contract.js';
 import { layoutJobs, type JobGraph } from './graph.js';
 import { paramViews, type StepParamView } from './steps.js';
@@ -41,22 +42,38 @@ import { paramViews, type StepParamView } from './steps.js';
  * (design.md, Решение 1).
  */
 export type PipelineModelOrigin =
-  | { readonly layer: 'step' }
-  | { readonly layer: 'job' }
-  | { readonly layer: 'tier'; readonly backend: string; readonly tier: string; readonly tierLayer: 'pipeline' | 'job' | 'step'; readonly fallback?: true }
-  | { readonly layer: 'pipeline' }
-  | { readonly layer: 'config'; readonly file: string }
-  | { readonly layer: 'backend'; readonly backend: string }
-  | { readonly layer: 'none' };
+  | Exclude<ModelOrigin, { readonly layer: 'config' }>
+  | { readonly layer: 'config'; readonly file: string };
 
 /** Слой, из которого пришёл reasoning effort шага. */
 export type PipelineEffortOrigin =
-  | { readonly layer: 'step' }
-  | { readonly layer: 'job' }
-  | { readonly layer: 'tier'; readonly backend: string; readonly tier: string; readonly tierLayer: 'pipeline' | 'job' | 'step' }
-  | { readonly layer: 'pipeline' }
-  | { readonly layer: 'config'; readonly file: string }
-  | { readonly layer: 'none' };
+  | Exclude<EffortOrigin, { readonly layer: 'config' }>
+  | { readonly layer: 'config'; readonly file: string };
+
+/** Слой, из которого пришёл агент шага; у записей конфигурации — с файлом. */
+export type PipelineAgentOrigin = AgentOrigin;
+
+/** Поле записи выбора пользователя вместе с файлом, давшим его. */
+export interface AgentEntryFieldView {
+  readonly value: string;
+  readonly file: string;
+}
+
+/**
+ * Запись `pipeline_agents` либо `step_agents`, действующая для пайплайна или
+ * шага. Отметка говорит, почему правка с экрана может ничего не менять:
+ * запись проигрывает документу при действующей политике, в пайплайне нет
+ * агентских шагов, которым она могла бы достаться, либо поле задано
+ * проектным файлом, а экран пишет только глобальный.
+ */
+export interface AgentEntryView {
+  readonly key: string;
+  readonly agent?: AgentEntryFieldView;
+  readonly model?: AgentEntryFieldView;
+  readonly modelTier?: AgentEntryFieldView;
+  readonly effort?: AgentEntryFieldView;
+  readonly mark?: 'loses_to_document' | 'no_agent_steps' | 'shadowed_by_project';
+}
 
 export interface PipelineStepView {
   readonly id: string;
@@ -70,6 +87,10 @@ export interface PipelineStepView {
   /** Действующий reasoning effort и слой, который его дал. */
   readonly effort?: string;
   readonly effortOrigin?: PipelineEffortOrigin;
+  /** Слой, давший агента, — только у агентских шагов. */
+  readonly agentOrigin?: PipelineAgentOrigin;
+  /** Запись `step_agents` этого шага, если она есть, и отметка, что она не действует. */
+  readonly agentEntry?: AgentEntryView;
   readonly command?: string;
   /** Путь скрипта, объявленный в документе, — у шага script. */
   readonly scriptPath?: string;
@@ -112,6 +133,13 @@ export interface PipelineJobView {
   readonly on: 'success' | 'failure' | 'always';
   readonly if?: string;
   readonly publishesOutput: boolean;
+  /**
+   * Ключ работы, под которым экран пишет `step_agents` её шагов. У дорожки это
+   * работа до раскрытия (`implement`, а не `implement-a`): запись действует на
+   * все копии. Исключение — уже существующая точная запись дорожки: она ближе
+   * общей и действует, поэтому правится она, а не общая под ней.
+   */
+  readonly agentEntryJob: string;
   readonly steps: readonly PipelineStepView[];
 }
 
@@ -124,6 +152,17 @@ export interface PipelineView {
   readonly concurrency?: number;
   readonly failFast?: boolean;
   readonly jobs: readonly PipelineJobView[];
+  /** Действующая политика выбора агента и файл, давший её (встроенное умолчание — тоже источник). */
+  readonly agentPolicy?: AgentPolicy;
+  readonly agentPolicyFile?: string;
+  /** Запись `pipeline_agents` этого пайплайна, если она есть. */
+  readonly agentEntry?: AgentEntryView;
+  /**
+   * Имя, под которым экран читает и пишет записи выбора, — `name` документа.
+   * У пайплайна без `name` отсутствует: записи такой пайплайн не читает, и
+   * выбор с экрана ему не предлагается, а не сохраняется впустую.
+   */
+  readonly agentEntryName?: string;
   /**
    * Имена объявленных входов пайплайна (`inputs`), в порядке объявления.
    *
@@ -219,14 +258,74 @@ function toEffortOriginView(
   return { layer: 'config', file: effortConfigFile };
 }
 
-function toJobView(
-  job: Job,
-  modelOrigins: ReadonlyMap<string, ModelOrigin>,
-  modelConfigFile: string | undefined,
-  effortOrigins: ReadonlyMap<string, EffortOrigin>,
-  effortConfigFile: string | undefined,
-  registry: Registry,
-): PipelineJobView {
+/** Всё, что нужно собрать карточку пайплайна из раскрытия и конфигурации проекта. */
+interface ViewContext {
+  readonly modelOrigins: ReadonlyMap<string, ModelOrigin>;
+  readonly modelConfigFile: string | undefined;
+  readonly effortOrigins: ReadonlyMap<string, EffortOrigin>;
+  readonly effortConfigFile: string | undefined;
+  readonly agentOrigins: ReadonlyMap<string, AgentOrigin>;
+  readonly unusedAgentEntries: readonly UnusedAgentEntry[];
+  /** Имя записей выбора — `name` документа; у безымянного пайплайна отсутствует. */
+  readonly agentEntryName: string | undefined;
+  readonly config: Config;
+  /** Файл политики: у встроенного умолчания — его описание. */
+  readonly agentPolicyFile: string;
+  readonly registry: Registry;
+}
+
+/**
+ * Запись выбора как её видит карточка. `unused` — почему запись не дала шагу
+ * ни одного значения (агент, модель, effort): проиграла документу или ей
+ * некому достаться; в обоих случаях правка с экрана ничего не изменит.
+ */
+function toEntryView(
+  key: string,
+  entry: AgentSelectionConfig | undefined,
+  unused: 'loses_to_document' | 'no_agent_steps' | undefined,
+  globalConfigFile: string,
+): AgentEntryView | undefined {
+  if (entry === undefined) return undefined;
+  const fields = [entry.agent, entry.model, entry.modelTier, entry.effort];
+  const fromProject = fields.some((field) => field !== undefined && field.file !== globalConfigFile);
+  return {
+    key,
+    ...(entry.agent === undefined ? {} : { agent: entry.agent }),
+    ...(entry.model === undefined ? {} : { model: entry.model }),
+    ...(entry.modelTier === undefined ? {} : { modelTier: entry.modelTier }),
+    ...(entry.effort === undefined ? {} : { effort: entry.effort }),
+    ...(unused !== undefined ? { mark: unused } : fromProject ? { mark: 'shadowed_by_project' as const } : {}),
+  };
+}
+
+/** Работа документа до раскрытия дорожек: `implement-a` дорожки `a` — это `implement`. */
+function laneBaseOf(jobId: string, lane: string | undefined): string | undefined {
+  return lane !== undefined && lane !== '' && jobId.endsWith(`-${lane}`) ? jobId.slice(0, -(lane.length + 1)) : undefined;
+}
+
+/**
+ * Ключ работы в `step_agents` для записи с экрана — тем же правилом, что и у
+ * раскрытия (`findJobEntryKey`): если точная запись дорожки есть, раскрытие
+ * читает только её, и правка идёт туда же; иначе — работа до раскрытия дорожек.
+ */
+function entryJobOf(config: Config, pipelineName: string | undefined, job: Job): string {
+  const base = laneBaseOf(job.id, job.lane);
+  if (base === undefined) return job.id;
+  const jobs = pipelineName !== undefined && Object.hasOwn(config.stepAgents, pipelineName) ? config.stepAgents[pipelineName] : undefined;
+  return jobs !== undefined && Object.hasOwn(jobs, job.id) ? job.id : base;
+}
+
+function stepEntryOf(config: Config, pipelineName: string, jobId: string, stepId: string, lane: string | undefined): { key: string; entry: AgentSelectionConfig } | undefined {
+  const jobs = Object.hasOwn(config.stepAgents, pipelineName) ? config.stepAgents[pipelineName] : undefined;
+  if (jobs === undefined) return undefined;
+  const base = laneBaseOf(jobId, lane);
+  const jobKey = Object.hasOwn(jobs, jobId) ? jobId : base !== undefined && Object.hasOwn(jobs, base) ? base : undefined;
+  const entry = jobKey === undefined ? undefined : jobs[jobKey]?.[stepId];
+  return jobKey === undefined || entry === undefined ? undefined : { key: `step_agents.${pipelineName}.${jobKey}.${stepId}`, entry };
+}
+
+function toJobView(job: Job, pipelineName: string | undefined, ctx: ViewContext): PipelineJobView {
+  const globalFile = ctx.config.globalConfigFile;
   return {
     id: job.id,
     ...(job.description === undefined ? {} : { description: job.description }),
@@ -234,46 +333,48 @@ function toJobView(
     on: job.on,
     ...(job.if === undefined ? {} : { if: job.if }),
     publishesOutput: job.output !== undefined,
-    steps: job.steps.map((step) => ({
-      id: step.id,
-      kind: step.kind,
-      ...(step.kind === 'agent' ? { agent: step.agent } : {}),
-      ...(step.kind === 'agent' && step.model !== undefined ? { model: step.model } : {}),
-      ...(step.kind === 'agent' && step.effort !== undefined ? { effort: step.effort } : {}),
-      ...(step.kind === 'agent'
-        ? {
-            modelOrigin: toModelOriginView(
-              modelOrigins.get(`${job.id}/${step.id}`),
-              modelConfigFile,
-              `jobs.${job.id}.steps.${step.id}`,
-            ),
-          }
-        : {}),
-      ...(step.kind === 'agent'
-        ? {
-            effortOrigin: toEffortOriginView(
-              effortOrigins.get(`${job.id}/${step.id}`),
-              effortConfigFile,
-              `jobs.${job.id}.steps.${step.id}`,
-            ),
-          }
-        : {}),
-      ...(step.kind === 'run'
-        ? { command: Array.isArray(step.command) ? step.command.join(' ') : String(step.command) }
-        : {}),
-      ...(step.kind === 'script' ? { scriptPath: step.path } : {}),
-      ...(step.kind === 'script' && step.resolved !== undefined
-        ? { scriptRunner: step.resolved.runner }
-        : {}),
-      ...(step.kind === 'script' ? { hasScriptInput: step.input !== undefined } : {}),
-      ...(step.kind === 'script' && step.outputSchemaPath !== undefined
-        ? { scriptOutputSchemaPath: step.outputSchemaPath }
-        : {}),
-      ...(step.kind === 'script' && step.uses !== undefined ? { usesName: step.uses.name } : {}),
-      ...(step.kind === 'script' && step.uses?.layer !== undefined ? { usesLayer: step.uses.layer } : {}),
-      ...(step.kind === 'script' && step.uses?.params !== undefined ? { usesParams: step.uses.params } : {}),
-      ...(step.kind === 'plugin' ? pluginStepView(step, registry) : {}),
-    })),
+    agentEntryJob: entryJobOf(ctx.config, pipelineName, job),
+    steps: job.steps.map((step) => {
+      const at = `jobs.${job.id}.steps.${step.id}`;
+      const key = `${job.id}/${step.id}`;
+      const agentOrigin = step.kind === 'agent' ? ctx.agentOrigins.get(key) : undefined;
+      const modelOrigin = step.kind === 'agent' ? toModelOriginView(ctx.modelOrigins.get(key), ctx.modelConfigFile, at) : undefined;
+      const effortOrigin = step.kind === 'agent' ? toEffortOriginView(ctx.effortOrigins.get(key), ctx.effortConfigFile, at) : undefined;
+      const found = step.kind === 'agent' && pipelineName !== undefined ? stepEntryOf(ctx.config, pipelineName, job.id, step.id, job.lane) : undefined;
+      const wins = (layer: 'step_agents'): boolean =>
+        agentOrigin?.layer === layer ||
+        modelOrigin?.layer === layer ||
+        (modelOrigin?.layer === 'tier' && modelOrigin.tierLayer === layer) ||
+        effortOrigin?.layer === layer ||
+        (effortOrigin?.layer === 'tier' && effortOrigin.tierLayer === layer);
+      const agentEntry = found === undefined ? undefined : toEntryView(found.key, found.entry, wins('step_agents') ? undefined : 'loses_to_document', globalFile);
+      return {
+        id: step.id,
+        kind: step.kind,
+        ...(step.kind === 'agent' ? { agent: step.agent } : {}),
+        ...(step.kind === 'agent' && step.model !== undefined ? { model: step.model } : {}),
+        ...(step.kind === 'agent' && step.effort !== undefined ? { effort: step.effort } : {}),
+        ...(modelOrigin === undefined ? {} : { modelOrigin }),
+        ...(effortOrigin === undefined ? {} : { effortOrigin }),
+        ...(agentOrigin === undefined ? {} : { agentOrigin }),
+        ...(agentEntry === undefined ? {} : { agentEntry }),
+        ...(step.kind === 'run'
+          ? { command: Array.isArray(step.command) ? step.command.join(' ') : String(step.command) }
+          : {}),
+        ...(step.kind === 'script' ? { scriptPath: step.path } : {}),
+        ...(step.kind === 'script' && step.resolved !== undefined
+          ? { scriptRunner: step.resolved.runner }
+          : {}),
+        ...(step.kind === 'script' ? { hasScriptInput: step.input !== undefined } : {}),
+        ...(step.kind === 'script' && step.outputSchemaPath !== undefined
+          ? { scriptOutputSchemaPath: step.outputSchemaPath }
+          : {}),
+        ...(step.kind === 'script' && step.uses !== undefined ? { usesName: step.uses.name } : {}),
+        ...(step.kind === 'script' && step.uses?.layer !== undefined ? { usesLayer: step.uses.layer } : {}),
+        ...(step.kind === 'script' && step.uses?.params !== undefined ? { usesParams: step.uses.params } : {}),
+        ...(step.kind === 'plugin' ? pluginStepView(step, ctx.registry) : {}),
+      };
+    }),
   };
 }
 
@@ -312,14 +413,24 @@ function toView(
   projectPath: string,
   file: string,
   pipeline: Pipeline,
-  modelOrigins: ReadonlyMap<string, ModelOrigin>,
-  modelConfigFile: string | undefined,
-  effortOrigins: ReadonlyMap<string, EffortOrigin>,
-  effortConfigFile: string | undefined,
-  registry: Registry,
+  ctx: ViewContext,
 ): PipelineView {
-  const jobs = pipeline.jobs.map((job) =>
-    toJobView(job, modelOrigins, modelConfigFile, effortOrigins, effortConfigFile, registry));
+  const name = ctx.agentEntryName;
+  const jobs = pipeline.jobs.map((job) => toJobView(job, name, ctx));
+  // Запись пайплайна не действует, если раскрытие назвало её среди записей без
+  // действия: на уровне пайплайна «хотя бы на одном шаге» — единственный честный
+  // счёт. Причина различает «проиграла документу» и «шагов, которым она могла бы
+  // достаться, нет»: та же, что печатает `stepcast config --pipeline`.
+  const pipelineKey = `pipeline_agents.${name ?? ''}`;
+  const unused = ctx.unusedAgentEntries.find((entry) => entry.key === pipelineKey);
+  const pipelineEntry = name !== undefined && Object.hasOwn(ctx.config.pipelineAgents, name)
+    ? toEntryView(
+        pipelineKey,
+        ctx.config.pipelineAgents[name],
+        unused === undefined ? undefined : unused.reason.kind === 'no_agent_steps' ? 'no_agent_steps' : 'loses_to_document',
+        ctx.config.globalConfigFile,
+      )
+    : undefined;
   return {
     projectKey,
     projectPath,
@@ -328,6 +439,10 @@ function toView(
     concurrency: pipeline.concurrency,
     failFast: pipeline.failFast,
     jobs,
+    agentPolicy: ctx.config.agentPolicy,
+    agentPolicyFile: ctx.agentPolicyFile,
+    ...(pipelineEntry === undefined ? {} : { agentEntry: pipelineEntry }),
+    ...(name === undefined ? {} : { agentEntryName: name }),
     // Ключи раскрытых входов — это и есть объявленные имена: раскрытие
     // подставляет умолчания объявленным и ничего не добавляет от себя.
     inputs: Object.keys(pipeline.inputs),
@@ -398,52 +513,31 @@ function readPipeline(
   absolute: string,
   config: Config,
   registry: Registry,
-  modelConfigFile: string | undefined,
-  effortConfigFile: string | undefined,
+  files: Pick<ProjectOverrides, 'modelConfigFile' | 'effortConfigFile' | 'agentPolicyFile'>,
 ): PipelineView {
   const file = relative(projectPath, absolute).replace(/\\/g, '/');
   try {
-    const { pipeline, modelOrigins, effortOrigins } = expandPipeline({
+    const { pipeline, modelOrigins, effortOrigins, agentOrigins, unusedAgentEntries, agentEntryName } = expandPipeline({
       pipelinePath: absolute,
       config,
       registry,
       inputs: displayInputs(absolute),
     });
-    return toView(
-      projectKey, projectPath, file, pipeline,
-      modelOrigins, modelConfigFile, effortOrigins, effortConfigFile, registry,
-    );
+    return toView(projectKey, projectPath, file, pipeline, {
+      modelOrigins,
+      modelConfigFile: files.modelConfigFile,
+      effortOrigins,
+      effortConfigFile: files.effortConfigFile,
+      agentOrigins,
+      unusedAgentEntries,
+      agentEntryName,
+      config,
+      agentPolicyFile: files.agentPolicyFile,
+      registry,
+    });
   } catch (error) {
     return errorView(projectKey, projectPath, file, toFailure(error, projectPath));
   }
-}
-
-/**
- * Заглушки для обязательных входов без умолчания. Экран показывает устройство
- * пайплайна, а не запуск: значение такого входа приходит только с
- * `--input`, и без заглушки раскрытие отказало бы файлу, который исправен.
- * Заглушка видна там, куда вход подставлен (`<item>`), а не выдаёт себя за
- * настоящее значение. Документ, который не читается, раскрытие разберёт само
- * и отдаст свою диагностику — здесь его ошибка глотается.
- */
-function displayInputs(pipelinePath: string): Record<string, ParamValue> {
-  let raw: unknown;
-  try {
-    raw = readYamlDocument(pipelinePath);
-  } catch {
-    return {};
-  }
-  const declared = (raw as { inputs?: unknown } | null)?.inputs;
-  if (declared === null || typeof declared !== 'object') return {};
-
-  const out: Record<string, ParamValue> = {};
-  for (const [name, spec] of Object.entries(declared as Record<string, unknown>)) {
-    if (spec === null || typeof spec !== 'object') continue;
-    const { required, default: fallback, type } = spec as { required?: unknown; default?: unknown; type?: unknown };
-    if (required !== true || fallback !== undefined) continue;
-    out[name] = type === 'int' ? 0 : type === 'bool' ? false : `<${name}>`;
-  }
-  return out;
 }
 
 /** `project`, `defaults`, `backends` и реестр вкладов того репозитория, чей пайплайн раскрывается. */
@@ -455,6 +549,11 @@ interface ProjectOverrides {
   readonly modelConfigFile: string | undefined;
   /** Файл, победивший в `defaults.effort` этого проекта. */
   readonly effortConfigFile: string | undefined;
+  /** Политика выбора агента проекта и файл, давший её. */
+  readonly agentPolicy: Config['agentPolicy'];
+  readonly agentPolicyFile: string;
+  readonly pipelineAgents: Config['pipelineAgents'];
+  readonly stepAgents: Config['stepAgents'];
   /**
    * Реестр вкладов этого проекта: без него плагинный предикат отклоняется
    * разбором как неизвестный ключ, а умолчание плагинного бэкенда не доезжает
@@ -691,6 +790,10 @@ async function projectSection(
     backends: resolved.config.backends,
     modelConfigFile: modelSource === undefined ? undefined : describeSource(modelSource),
     effortConfigFile: effortSource === undefined ? undefined : describeSource(effortSource),
+    agentPolicy: resolved.config.agentPolicy,
+    agentPolicyFile: describeSource(resolved.provenance.get('agent_policy') ?? { kind: 'builtin' }),
+    pipelineAgents: resolved.config.pipelineAgents,
+    stepAgents: resolved.config.stepAgents,
     registry,
   };
 }
@@ -733,6 +836,7 @@ export async function buildPipelines(
     let registry: Registry | undefined;
     let modelConfigFile: string | undefined;
     let effortConfigFile: string | undefined;
+    let agentPolicyFile = '';
     let failure: Failure | undefined;
     try {
       const overrides = await projectSection(project.path, options.home, options.kernelCache);
@@ -741,10 +845,14 @@ export async function buildPipelines(
         project: overrides.project,
         defaults: overrides.defaults,
         backends: overrides.backends,
+        agentPolicy: overrides.agentPolicy,
+        pipelineAgents: overrides.pipelineAgents,
+        stepAgents: overrides.stepAgents,
       };
       registry = overrides.registry;
       modelConfigFile = overrides.modelConfigFile;
       effortConfigFile = overrides.effortConfigFile;
+      agentPolicyFile = overrides.agentPolicyFile;
     } catch (error) {
       failure = toFailure(error, project.path);
     }
@@ -760,7 +868,7 @@ export async function buildPipelines(
             )
           : readPipeline(
               project.key, project.path, file, forProject, registry,
-              modelConfigFile, effortConfigFile,
+              { modelConfigFile, effortConfigFile, agentPolicyFile },
             ),
       );
     }

@@ -389,6 +389,48 @@ export const RawProjectSchema = z
   })
   .strict();
 
+/**
+ * Запись выбора пользователя для пайплайна или шага (`agent-policy-and-pipeline-agents`,
+ * design.md, решение 2): частичный выбор, любое поле необязательно, но хотя бы
+ * одно названо. `model` и `model_tier` вместе отклоняются: в документе
+ * пайплайна `model` молча побеждает tier, но в записи пользователя пара почти
+ * наверняка след двух правок с экрана, и о намерении можно только гадать.
+ *
+ * Оба ограничения — `refine`, а в публикуемую схему он не попадает; поэтому
+ * они же дописаны в `.meta`, тем же приёмом, что у манифеста плагина, иначе
+ * редактор принимал бы записи, которые разбор отклонит.
+ */
+export const AgentSelectionSchema = z
+  .object({
+    agent: z.string().min(1).regex(/\S/).optional(),
+    model: ModelNameSchema.optional(),
+    model_tier: ModelTierSchema.optional(),
+    effort: EffortSchema.optional(),
+  })
+  .strict()
+  .refine((value) => Object.keys(value).length > 0, {
+    message: 'запись выбора пуста: назовите хотя бы одно из agent, model, model_tier, effort',
+  })
+  .refine((value) => value.model === undefined || value.model_tier === undefined, {
+    message: 'запись выбора называет и model, и model_tier: оставьте одно из двух',
+  })
+  .meta({ minProperties: 1, not: { required: ['model', 'model_tier'] } });
+
+export type AgentSelection = z.infer<typeof AgentSelectionSchema>;
+
+/**
+ * Ключи записей — имя пайплайна, идентификатор работы и шага. Точка в ключе
+ * запрещена: слияние слоёв идёт по точечным путям (`merge.ts`), и ключ с точкой
+ * развалился бы на два уровня. Имя пайплайна с точкой записью не адресуется.
+ */
+const AgentEntryKeySchema = z
+  .string()
+  .min(1)
+  .regex(/^[^.]+$/, 'ключ записи выбора не может содержать точку');
+
+export const AgentPolicySchema = z.enum(['force', 'fallback']);
+export type AgentPolicy = z.infer<typeof AgentPolicySchema>;
+
 export const RawConfigSchema = z
   .object({
     version: z.literal(1).optional(),
@@ -413,6 +455,17 @@ export const RawConfigSchema = z
     runners: z.record(RunnerNameSchema, RawRunnerSchema).optional(),
     ui: RawUiSchema.optional(),
     project: RawProjectSchema.optional(),
+    /**
+     * Кто сильнее, документ пайплайна или выбор пользователя (`defaults.agent`,
+     * `pipeline_agents`, `step_agents`). Умолчание `force` — встроенный слой.
+     */
+    agent_policy: AgentPolicySchema.optional(),
+    /** Выбор пользователя для пайплайна по `name` его документа. */
+    pipeline_agents: z.record(AgentEntryKeySchema, AgentSelectionSchema).optional(),
+    /** Выбор пользователя для шага: пайплайн → работа → шаг. */
+    step_agents: z
+      .record(AgentEntryKeySchema, z.record(AgentEntryKeySchema, z.record(AgentEntryKeySchema, AgentSelectionSchema)))
+      .optional(),
   })
   .strict();
 

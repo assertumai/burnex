@@ -345,3 +345,107 @@ describe('cli-commands-as-rows: составу не принадлежит ст�
     assert.match(outcome.stdout, /привет/);
   });
 });
+
+describe('stepcast config --pipeline: итоговый выбор агента и его источник', () => {
+  const PIPELINE = `name: p
+jobs:
+  implement:
+    steps:
+      - id: code
+        prompt: hi
+        model: opus
+      - id: review
+        prompt: hi
+  build:
+    steps:
+      - id: compile
+        run: [echo, ok]
+`;
+
+  function projectWith(globalConfig: string, projectConfig = '', pipeline = PIPELINE): Project {
+    const project = makeProject({ 'p.yml': pipeline, '.stepcast/config.yml': projectConfig });
+    writeFileSync(join(project.home, '.stepcast', 'config.yml'), globalConfig);
+    return project;
+  }
+
+  const globalFile = (project: Project): string => join(project.home, '.stepcast', 'config.yml');
+
+  it('называет источник у каждого значения при fallback', async () => {
+    const project = projectWith(
+      'agent_policy: fallback\npipeline_agents:\n  p: { agent: codex }\nstep_agents:\n  p:\n    implement:\n      code: { model: gpt-x, effort: high }\nbackends:\n  codex: { default_model: gpt-5.6-terra }\n',
+    );
+    const { code, stdout } = await cli(project, ['config', '--pipeline', 'p.yml']);
+
+    assert.equal(code, ExitCode.ok, stdout);
+    assert.match(stdout, new RegExp(`Политика выбора агента: fallback \\(${globalFile(project)}\\)`));
+    const row = stdout.split('\n').find((line) => line.startsWith('implement/code'));
+    assert.ok(row !== undefined, stdout);
+    assert.match(row, new RegExp(`codex\\s+pipeline_agents \\(${globalFile(project)}\\)`));
+    assert.match(row, new RegExp(`gpt-x\\s+step_agents \\(${globalFile(project)}\\)`));
+    assert.match(row, new RegExp(`high\\s+step_agents \\(${globalFile(project)}\\)`));
+    // Шаг без run — не агентский, в таблицу не попадает.
+    assert.doesNotMatch(stdout, /build\/compile/);
+  });
+
+  it('политика по умолчанию — force со встроенным умолчанием в источнике', async () => {
+    const { code, stdout } = await cli(projectWith(''), ['config', '--pipeline', 'p.yml']);
+    assert.equal(code, ExitCode.ok);
+    assert.match(stdout, /Политика выбора агента: force \(встроенное умолчание\)/);
+    assert.match(stdout, /implement\/code\s+claude\s+defaults\.agent \(встроенное умолчание\)\s+opus\s+шаг/);
+  });
+
+  it('проигравшая запись названа с причиной и политикой', async () => {
+    const project = projectWith('step_agents:\n  p:\n    implement:\n      code: { model: sonnet }\n');
+    const { stdout } = await cli(project, ['config', '--pipeline', 'p.yml']);
+    assert.match(stdout, /Записи без действия:/);
+    assert.match(stdout, /step_agents\.p\.implement\.code\s+— проиграла шагу \(политика force\)/);
+  });
+
+  it('запись отсутствующего шага названа среди записей без действия', async () => {
+    const project = projectWith(
+      'step_agents:\n  p:\n    old:\n      gone: { agent: claude }\n    implement:\n      missing: { agent: claude }\n',
+    );
+    const { code, stdout } = await cli(project, ['config', '--pipeline', 'p.yml']);
+    assert.equal(code, ExitCode.ok);
+    assert.match(stdout, /step_agents\.p\.old\.gone\s+— шага нет в пайплайне/);
+    assert.match(stdout, /step_agents\.p\.implement\.missing\s+— шага нет в пайплайне/);
+  });
+
+  it('отброшенная чужая модель выводится вместе со слоем, из которого пришла', async () => {
+    const project = projectWith(
+      'defaults:\n  agent: codex\nbackends:\n  claude:\n    model_tiers: { deep: opus }\n  codex:\n    default_model: gpt-5.6-terra\n',
+    );
+    const { stdout } = await cli(project, ['config', '--pipeline', 'p.yml']);
+    assert.match(stdout, /↳ отброшена opus \(step\): модель бэкенда claude/);
+    assert.match(stdout, /gpt-5\.6-terra\s+default_model бэкенда codex/);
+  });
+
+  it('раскрывает поставляемый пайплайн, когда файла в проекте нет', async () => {
+    const project = makeProject({});
+    const { code, stdout } = await cli(project, ['config', '--pipeline', 'stepcast:migrate-widgets']);
+    assert.equal(code, ExitCode.ok, stdout);
+    assert.match(stdout, /Политика выбора агента:/);
+    assert.match(stdout, /migrate\/agent/);
+  });
+
+  it('отказывает на неизвестном агенте в записи этого пайплайна, называя файл и ключ', async () => {
+    const project = projectWith('pipeline_agents:\n  p: { agent: nosuch }\n');
+    const { code, stdout, stderr } = await cli(project, ['config', '--pipeline', 'p.yml']);
+    assert.notEqual(code, ExitCode.ok);
+    const text = `${stdout}\n${stderr}`;
+    assert.match(text, /pipeline_agents\.p\.agent/);
+    assert.ok(text.includes(globalFile(project)), text);
+  });
+
+  it('запись чужого пайплайна с неизвестным агентом отчёту не мешает', async () => {
+    const project = projectWith('pipeline_agents:\n  other: { agent: nosuch }\n');
+    const { code } = await cli(project, ['config', '--pipeline', 'p.yml']);
+    assert.equal(code, ExitCode.ok);
+  });
+
+  it('без флага отчёт прежний: ни политики, ни таблицы шагов', async () => {
+    const { stdout } = await cli(projectWith(''), ['config']);
+    assert.doesNotMatch(stdout, /Политика выбора агента/);
+    assert.match(stdout, /agent_policy\s+force\s+встроенное умолчание/);
+  });
+});

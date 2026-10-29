@@ -3,6 +3,10 @@ import { formatDuration, formatMoney, formatTokens } from '../../../kernel/units
 import { ExitCode, type ExitCodeValue } from '../../../kernel/errors.js';
 import type { PipelineCommandEnv } from '../contract.js';
 import { formatColumns } from '../../../kernel/cli/output.js';
+import { expandPipeline } from '../document/expand.js';
+import { displayInputs } from '../document/displayInputs.js';
+import { resolvePipelineTarget } from '../domain/package-schema.js';
+import { renderAgentsReport } from './configAgents.js';
 import { commandRow } from '../../../kernel/cli/commandRow.js';
 import type { ParsedArgs } from '../../../kernel/cli/args.js';
 import { contributionOwner, type Registry } from '../../../kernel/registry.js';
@@ -189,6 +193,21 @@ export function runConfigCommand(
   // который уже собрала точка входа.
   const resolved = resolveConfig({ cwd, flags, ...pluginDefaultsOf(registry) });
   for (const line of renderConfigReport(resolved)) write(line);
+
+  // Раскрытие идёт тем же путём, что у экрана Pipelines: действующая
+  // конфигурация, реестр и заглушки обязательных входов. Отказ раскрытия
+  // (неизвестный агент в записи этого пайплайна) уходит вызывающему как есть.
+  if (typeof args.flags.pipeline === 'string') {
+    const { pipelinePath, isSupplyPipeline } = resolvePipelineTarget(cwd, args.flags.pipeline);
+    const expanded = expandPipeline({
+      pipelinePath,
+      config: resolved.config,
+      inputs: displayInputs(pipelinePath),
+      ...(registry === undefined ? {} : { registry }),
+      ...(isSupplyPipeline ? { projectRoot: cwd } : {}),
+    });
+    for (const line of renderAgentsReport(resolved, expanded)) write(line);
+  }
   for (const line of renderPluginsReport(registry)) write(line);
   for (const line of renderMissingServicesReport(registry)) write(line);
   return ExitCode.ok;
@@ -218,6 +237,10 @@ export const row = commandRow<PipelineCommandEnv>({
     flags: {
       model: { kind: 'string', description: 'переопределить модель по умолчанию' },
       agent: { kind: 'string', description: 'переопределить бэкенд по умолчанию' },
+      pipeline: {
+        kind: 'string',
+        description: 'раскрыть пайплайн (путь или stepcast:<имя>) и показать агента, модель и effort каждого шага с источником',
+      },
     },
   },
   run: (args, io, env) => runConfigCommand(args, io.out, env.cwd, env.registry),

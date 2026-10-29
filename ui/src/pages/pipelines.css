@@ -25,3 +25,24 @@
 
 /* Строка про прогоны под карточкой: подчинена содержимому карточки. */
 .pipeline-card .sc-card-footer.runs-note { flex-wrap: wrap; gap: .3rem; font-size: .85rem; color: var(--muted-foreground); }
+
+/* Выбор агента, модели и effort пользователем: ряд полей под шапкой шага. */
+.pipeline-agents { margin: .6rem 0 .8rem; }
+.agent-select {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: .5rem .75rem;
+  margin: .35rem 0 .2rem;
+}
+.agent-select-field { display: flex; flex-direction: column; gap: .15rem; min-width: 8rem; }
+.agent-select-field select {
+  font: inherit;
+  padding: .3rem .4rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--background);
+  color: var(--foreground);
+}
+/* Запись, которая ничего не меняет, выделена: правка с экрана иначе выглядела бы действующей. */
+.entry-mark { font-style: italic; }

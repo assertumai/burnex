@@ -144,3 +144,33 @@ export function priceUsage(usage: Usage, catalog: PriceCatalog | undefined): Usa
   if (entry === undefined) return usage;
   return { ...usage, cost_usd: estimateCostUsd(entry, usage), cost_source: 'catalog' };
 }
+
+const catalogBackendsByModel = new Map<string, Map<string, Set<string>>>();
+
+/**
+ * Бэкенды, у которых каталог знает модель — по точному имени или псевдониму.
+ * Нужен раскрытию пайплайна как статическое знание «чья эта модель»
+ * (`agent-policy-and-pipeline-agents`, решение 4): процессов CLI он не
+ * запускает, а каталог читает один раз на путь — раскрытие зовут линт,
+ * витрина и `stepcast config`, и перечитывать файл на каждом шаге незачем.
+ */
+export function backendsKnowingModel(model: string, path: string = priceCatalogPath()): ReadonlySet<string> {
+  let index = catalogBackendsByModel.get(path);
+  if (index === undefined) {
+    index = new Map();
+    const catalog = JSON.parse(readFileSync(path, 'utf8')) as {
+      models?: Array<{ backend: string; model: string; aliases?: string[] }>;
+    };
+    // Форму записей проверяет `loadPriceCatalog`; индексу нужны только имена,
+    // а порча каталога доходит до старта прогона его же отказом.
+    for (const entry of catalog.models ?? []) {
+      for (const name of [entry.model, ...(entry.aliases ?? [])]) {
+        const owners = index.get(name) ?? new Set<string>();
+        owners.add(entry.backend);
+        index.set(name, owners);
+      }
+    }
+    catalogBackendsByModel.set(path, index);
+  }
+  return index.get(model) ?? new Set();
+}

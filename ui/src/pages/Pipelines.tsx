@@ -18,14 +18,26 @@ import { groupProjects } from '../../../src/parts/ui/grouping';
 import { lastPathSegment, unknownPathLabel } from '../../../src/parts/ui/runsView';
 import {
   fetchPipelines,
+  fetchSettings,
+  savePipelineAgent,
   type Overview,
-  type PipelineEffortOrigin,
+  type PipelineAgentSelection,
+  type PipelineAgentTarget,
   type PipelineJobView,
-  type PipelineModelOrigin,
   type PipelineView,
   type RunOverview,
 } from '../api';
 import { fmtTime } from '../format';
+import {
+  AgentSelector,
+  agentChoices,
+  agentOriginLabel,
+  effortOriginLabel,
+  entryMarkLabel,
+  modelOriginLabel,
+  type AgentChoices,
+  type ApplySelection,
+} from './PipelineAgents';
 import { JobGraph } from '../components/JobGraph';
 import { TargetLink } from '../routeLink';
 import { RUN_TARGET } from '../screens/run';
@@ -62,48 +74,24 @@ function stepsOf(job: PipelineJobView): string {
 }
 
 /**
- * Слой модели словами: карточка не должна заставлять читателя сравнивать
- * значения самому, чтобы понять, что `opus` шага и `opus` настроек — не одно
- * и то же решение (design.md, «Экран пайплайна показывает значение, не
- * называя слоя»).
+ * Карточка работы. Без `onApply` выбор агента не показывается вовсе (экран
+ * читает пайплайны без доступа к настройкам), а подписи слоёв остаются.
  */
-function modelOriginLabel(origin: PipelineModelOrigin): string {
-  switch (origin.layer) {
-    case 'job':
-      return 'job model';
-    case 'tier':
-      return `tier ${origin.tier} (${origin.tierLayer}, ${origin.backend})${origin.fallback ? ' → agent default model' : ''}`;
-    case 'step':
-      return 'declared by the step';
-    case 'pipeline':
-      return 'pipeline default';
-    case 'config':
-      return `settings · ${origin.file}`;
-    case 'backend':
-      return `backend model ${origin.backend}`;
-    case 'none':
-      return 'no model set — the backend picks one';
-  }
-}
-
-function effortOriginLabel(origin: PipelineEffortOrigin): string {
-  switch (origin.layer) {
-    case 'job':
-      return 'job effort';
-    case 'tier':
-      return `tier ${origin.tier} effort (${origin.tierLayer}, ${origin.backend})`;
-    case 'step':
-      return 'effort declared by the step';
-    case 'pipeline':
-      return 'pipeline effort';
-    case 'config':
-      return `effort settings · ${origin.file}`;
-    case 'none':
-      return 'model default effort';
-  }
-}
-
-function JobCard({ job }: { readonly job: PipelineJobView }): JSX.Element {
+export function JobCard({
+  job,
+  pipeline,
+  agentPolicy,
+  choices,
+  busy = false,
+  onApply,
+}: {
+  readonly job: PipelineJobView;
+  readonly pipeline: string;
+  readonly agentPolicy?: string;
+  readonly choices?: AgentChoices;
+  readonly busy?: boolean;
+  readonly onApply?: ApplySelection;
+}): JSX.Element {
   return (
     <div className="job">
       <div className="job-head">
@@ -152,7 +140,23 @@ function JobCard({ job }: { readonly job: PipelineJobView }): JSX.Element {
             {step.effortOrigin === undefined ? null : (
               <span className="kind dim model-origin">{effortOriginLabel(step.effortOrigin)}</span>
             )}
+            {step.agentOrigin === undefined ? null : (
+              <span className="kind dim model-origin">{agentOriginLabel(step.agentOrigin)}</span>
+            )}
           </div>
+          {step.agentEntry?.mark === undefined ? null : (
+            <div className="ctx dim entry-mark">{entryMarkLabel(step.agentEntry.mark, agentPolicy)}</div>
+          )}
+          {step.kind !== 'agent' || choices === undefined || onApply === undefined ? null : (
+            <AgentSelector
+              key={JSON.stringify(step.agentEntry ?? null)}
+              target={{ pipeline, job: job.agentEntryJob, step: step.id }}
+              entry={step.agentEntry}
+              choices={choices}
+              busy={busy}
+              onApply={onApply}
+            />
+          )}
           {step.command === undefined ? null : <div className="ctx">$ {step.command}</div>}
           {/* Имя занимает место пути на карточке (design.md, решение 13); путь и
               раннер остаются доступны рядом, а не пропадают. */}
@@ -223,12 +227,19 @@ function PipelineCard({
   runs,
   runsKnown,
   navigate,
+  choices,
+  busy,
+  onApply,
 }: {
   readonly pipeline: PipelineView;
   readonly runs: readonly RunOverview[];
   /** Обзор уже пришёл: только тогда пустой список значит «прогонов нет». */
   readonly runsKnown: boolean;
   readonly navigate: (href: string) => void;
+  /** Варианты выбора из настроек; пока их нет, выбор не показывается. */
+  readonly choices?: AgentChoices | undefined;
+  readonly busy: boolean;
+  readonly onApply: ApplySelection;
 }): JSX.Element {
   const [selected, setSelected] = useState<string | undefined>(undefined);
 
@@ -286,7 +297,47 @@ function PipelineCard({
           />
         )}
 
-        {job === undefined ? <p className="note dim">This pipeline has no jobs.</p> : <JobCard job={job} />}
+        {/* Выбор пользователя для всего пайплайна: политика сильно меняет
+            смысл записи, поэтому названа рядом с ней вместе с источником. */}
+        <div className="pipeline-agents">
+          <div className="small dim">
+            agent selection · agent_policy <b>{pipeline.agentPolicy ?? 'force'}</b>
+            {pipeline.agentPolicyFile === undefined ? '' : ` (${pipeline.agentPolicyFile})`}
+          </div>
+          {pipeline.agentEntry?.mark === undefined ? null : (
+            <div className="ctx dim entry-mark">{entryMarkLabel(pipeline.agentEntry.mark, pipeline.agentPolicy)}</div>
+          )}
+          {/* Без `name` документ записей выбора не читает: выбор, сохранённый
+              под подставленным именем, ничего бы не изменил. */}
+          {pipeline.agentEntryName !== undefined ? null : (
+            <div className="ctx dim entry-mark">
+              this pipeline has no name — add name: to the document to choose its agents here
+            </div>
+          )}
+          {choices === undefined || pipeline.agentEntryName === undefined ? null : (
+            <AgentSelector
+              key={JSON.stringify(pipeline.agentEntry ?? null)}
+              target={{ pipeline: pipeline.agentEntryName }}
+              entry={pipeline.agentEntry}
+              choices={choices}
+              busy={busy}
+              onApply={onApply}
+            />
+          )}
+        </div>
+
+        {job === undefined ? (
+          <p className="note dim">This pipeline has no jobs.</p>
+        ) : (
+          <JobCard
+            job={job}
+            pipeline={pipeline.agentEntryName ?? pipeline.name}
+            {...(pipeline.agentPolicy === undefined ? {} : { agentPolicy: pipeline.agentPolicy })}
+            {...(choices === undefined || pipeline.agentEntryName === undefined ? {} : { choices })}
+            busy={busy}
+            onApply={onApply}
+          />
+        )}
       </CardContent>
 
       {/* Прогоны — на своём экране; здесь довольно счёта и последнего исхода. */}
@@ -330,6 +381,9 @@ export function Pipelines({
 }): JSX.Element {
   const [pipelines, setPipelines] = useState<readonly PipelineView[] | undefined>(undefined);
   const [error, setError] = useState<string | undefined>(undefined);
+  const [choices, setChoices] = useState<AgentChoices | undefined>(undefined);
+  const [busy, setBusy] = useState(false);
+  const [saveError, setSaveError] = useState<string | undefined>(undefined);
 
   useEffect(() => {
     // Инвентарь пайплайнов не приходит потоком (демон не следит за файлами
@@ -337,7 +391,23 @@ export function Pipelines({
     fetchPipelines()
       .then((data) => setPipelines(data.pipelines))
       .catch((failure: Error) => setError(failure.message));
+    // Агенты и tier — из тех же настроек, что показывает экран «Агенты», без
+    // пробы CLI. Без настроек экран остаётся читающим: выбирать не из чего.
+    fetchSettings()
+      .then((settings) => setChoices(agentChoices(settings)))
+      .catch(() => setChoices(undefined));
   }, []);
+
+  const apply = (target: PipelineAgentTarget, selection: PipelineAgentSelection | null): void => {
+    setBusy(true);
+    setSaveError(undefined);
+    // Ответ — заново раскрытые пайплайны: запись могла проиграть документу, и
+    // карточка обязана показать итог, а не то, что пользователь хотел.
+    savePipelineAgent(target, selection)
+      .then((data) => setPipelines(data.pipelines))
+      .catch((failure: Error) => setSaveError(failure.message))
+      .finally(() => setBusy(false));
+  };
 
   if (error !== undefined) {
     return (
@@ -384,6 +454,12 @@ export function Pipelines({
   return (
     <>
       <PageHeader title={PAGE_TITLE} description={PAGE_DESCRIPTION} />
+      {saveError === undefined ? null : (
+        <Alert variant="destructive">
+          <AlertTitle>Could not save the selection</AlertTitle>
+          <AlertDescription>{saveError}</AlertDescription>
+        </Alert>
+      )}
       {withPipelines.map((group) => (
         <section key={group.projectKey} className="pipelines-project">
           {group.projectPath === undefined ? (
@@ -407,6 +483,9 @@ export function Pipelines({
               runs={pipelineGroup.runs}
               runsKnown={overview !== undefined}
               navigate={navigate}
+              choices={choices}
+              busy={busy}
+              onApply={apply}
             />
           ))}
         </section>
