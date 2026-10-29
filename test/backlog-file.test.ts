@@ -31,20 +31,20 @@ function fieldOf(text: string, name: string): string | undefined {
 describe('backlog file: finishItem', () => {
   it('проставляет исход пункту без исхода', () => {
     const path = makeFile(backlog('in_progress'));
-    assert.equal(finishItem(path, 'some-item', 'done'), 'set');
+    assert.equal(finishItem(path, 'test', 'some-item', 'done'), 'set');
     assert.equal(fieldOf(readFileSync(path, 'utf8'), 'status'), 'done');
   });
 
   it('уже проставленный исход не переписывается — ни другим статусом, ни причиной', () => {
     const path = makeFile(backlog('done'));
     const before = readFileSync(path, 'utf8');
-    assert.equal(finishItem(path, 'some-item', 'failed', 'поздняя причина'), 'already-final');
+    assert.equal(finishItem(path, 'test', 'some-item', 'failed', 'поздняя причина'), 'already-final');
     assert.equal(readFileSync(path, 'utf8'), before, 'файл обязан остаться байт в байт прежним');
   });
 
   it('многострочная причина сводится в одну строку и урезается', () => {
     const path = makeFile(backlog('in_progress'));
-    finishItem(path, 'some-item', 'failed', `начало\n${'ы'.repeat(REASON_LIMIT * 2)}\nконец`);
+    finishItem(path, 'test', 'some-item', 'failed', `начало\n${'ы'.repeat(REASON_LIMIT * 2)}\nконец`);
 
     const reason = fieldOf(readFileSync(path, 'utf8'), 'reason') ?? '';
     assert.ok(!reason.includes('\n'));
@@ -55,13 +55,13 @@ describe('backlog file: finishItem', () => {
   it('режим файла сохраняется', () => {
     const path = makeFile(backlog('in_progress'));
     chmodSync(path, 0o664);
-    finishItem(path, 'some-item', 'done');
+    finishItem(path, 'test', 'some-item', 'done');
     assert.equal(statSync(path).mode & 0o777, 0o664);
   });
 
   it('отсутствующий пункт — отказ, называющий слаг и файл', () => {
     const path = makeFile(backlog('in_progress'));
-    assert.throws(() => finishItem(path, 'нет-такого', 'done'), (error: unknown) => {
+    assert.throws(() => finishItem(path, 'test', 'нет-такого', 'done'), (error: unknown) => {
       assert.ok(error instanceof StepcastError);
       assert.match(error.message, /нет-такого/);
       assert.equal(error.file, path);

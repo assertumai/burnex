@@ -1,9 +1,9 @@
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { open } from 'node:fs/promises';
-import { uptime } from 'node:os';
 import { join } from 'node:path';
 
 import { StepcastError } from '../../../../kernel/errors.js';
+import { isProcessAlive } from '../../../../kernel/process.js';
 import { describeSchemaFailure } from '../../../../kernel/schema-failure.js';
 import { JOURNAL_FORMAT, probeJournalFormat } from './format.js';
 import {
@@ -403,16 +403,6 @@ export function readUsageSoft(paths: RunPaths): UsageSummaryResult {
 }
 
 /**
- * Момент последней загрузки машины. `os.uptime()` округлён до секунд, поэтому
- * граница берётся с запасом в минуту: ошибиться в сторону «прогон жив»
- * безопаснее (планировщик пропустит момент), чем в сторону «мёртв» (два
- * прогона одного пайплайна разом).
- */
-function bootTimeMs(now: number): number {
-  return now - uptime() * 1000 - 60_000;
-}
-
-/**
  * Прогон жив, если его состояние `running`, процесс с идентификатором из
  * манифеста существует и сам прогон начат после последней загрузки машины.
  * Манифест без `pid` (прежняя форма) считается неживым: сигнал 0 ничего не
@@ -445,15 +435,7 @@ export function isRunAlive(paths: RunPaths, now: number = Date.now()): boolean {
   }
   if (manifest.pid === undefined) return false;
 
-  const startedAt = Date.parse(manifest.started_at);
-  if (!Number.isNaN(startedAt) && startedAt < bootTimeMs(now)) return false;
-
-  try {
-    process.kill(manifest.pid, 0);
-    return true;
-  } catch (error) {
-    return (error as NodeJS.ErrnoException).code === 'EPERM';
-  }
+  return isProcessAlive(manifest.pid, Date.parse(manifest.started_at), now);
 }
 
 /**

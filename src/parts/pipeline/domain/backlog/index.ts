@@ -1,5 +1,13 @@
 export { parse, effectiveGroup, toRecord, type BacklogEntry, type BacklogFieldPosition } from './parse.js';
 export { isFree, selectItems, DEFAULT_STALE_HOURS } from './select.js';
+export {
+  withBacklogLock,
+  withBacklogLockAsync,
+  backlogLockPath,
+  BacklogLockTimeoutError,
+  type LockOwner,
+  type LockWaitOptions,
+} from './lock.js';
 export { withFields, withoutFields } from './write.js';
 export { moveWithin, moveBetween, withStatus, type MoveBetweenResult } from './move.js';
 export {

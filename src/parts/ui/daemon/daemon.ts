@@ -4,6 +4,7 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 
 import { StepcastError } from '../../../kernel/errors.js';
+import { isProcessAlive } from '../../../kernel/process.js';
 
 /**
  * Жизненный цикл демона витрины.
@@ -54,13 +55,7 @@ export function readRecord(paths: DaemonPaths): DaemonRecord | undefined {
  * такой процесс и доступен ли он.
  */
 export function isAlive(pid: number): boolean {
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch (error) {
-    // EPERM означает «процесс есть, но чужой» — для нас он всё равно жив.
-    return (error as NodeJS.ErrnoException).code === 'EPERM';
-  }
+  return isProcessAlive(pid);
 }
 
 /** Запись о живом демоне. Осиротевшая запись стирается и не считается. */

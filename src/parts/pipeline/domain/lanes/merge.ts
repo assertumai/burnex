@@ -4,7 +4,13 @@ import { join, relative } from 'node:path';
 
 import { checkCompositeComposition, type AnchorKind } from '../anchor/index.js';
 import { StepcastError, isStepcastError } from '../../../../kernel/errors.js';
-import { REASON_LIMIT, finishItem, parseBacklogFile, tailLine } from '../backlog/index.js';
+import {
+  REASON_LIMIT,
+  finishItem,
+  parseBacklogFile,
+  tailLine,
+  withBacklogLock,
+} from '../backlog/index.js';
 import type { RunPaths } from '../../run/journal/paths.js';
 import { readManifest, readStatus } from '../../run/journal/reader.js';
 import type { RunStatus } from '../../run/journal/schema.js';
@@ -433,7 +439,7 @@ async function mergeLanesLegacy(options: MergeLanesOptions): Promise<readonly La
   const markFailed = (lane: string, reason: string): void => {
     if (!hasLaneItem(runDir, lane)) return;
     const item = readLaneItem(runDir, lane);
-    finishItem(file, item.slug, 'failed', reason);
+    finishItem(file, 'merge-lanes', item.slug, 'failed', reason);
   };
 
   /**
@@ -457,8 +463,15 @@ async function mergeLanesLegacy(options: MergeLanesOptions): Promise<readonly La
    * соседних (design.md, решение 10).
    */
   const rollback = (commits: ReadonlyMap<string, string>, backlog: Buffer | undefined): void => {
-    for (const [repo, sha] of commits) resetToCommit(repoDirOf(cwd, repo), sha);
-    if (backlog !== undefined) writeFileSync(file, backlog);
+    // `git reset --hard` переписывает и живой файл очереди, поэтому он идёт под
+    // lock'ом вместе с записью снимка. Проверка до отката — нет: держать lock на
+    // её минуты значило бы ронять соседний `pick` по пределу ожидания. Снимок
+    // возвращает файл целиком и затирает правки соседей, сделанные между
+    // снимком и откатом (docs/backlog.md).
+    withBacklogLock(file, 'merge-lanes', () => {
+      for (const [repo, sha] of commits) resetToCommit(repoDirOf(cwd, repo), sha);
+      if (backlog !== undefined) writeFileSync(file, backlog);
+    });
   };
 
   for (const lane of lanes) {
@@ -617,7 +630,7 @@ async function mergeLanesLegacy(options: MergeLanesOptions): Promise<readonly La
     // Правка очереди идёт до коммитов: улучшение и его бухгалтерия остаются
     // одним набором коммитов с одним сообщением, который `git revert`
     // снимает целиком.
-    finishItem(file, item.slug, 'done');
+    finishItem(file, 'merge-lanes', item.slug, 'done');
     const message = `${item.slug}: ${item.title ?? 'улучшение из очереди'}`;
     // Порядок — `commitOrder`: вложенные раньше ведущего их корня, репозиторий
     // очереди последним из тех, кого корень гитлинком не ведёт. В перечень
@@ -758,7 +771,7 @@ async function mergeLanesIsolated(
     const markFailed = (lane: string, reason: string): void => {
       if (!hasLaneItem(runDir, lane)) return;
       assertLiveFilesUnchanged(cwd, policy.liveFiles, liveSnapshot);
-      finishItem(file, readLaneItem(runDir, lane).slug, 'failed', reason);
+      finishItem(file, 'merge-lanes', readLaneItem(runDir, lane).slug, 'failed', reason);
       liveSnapshot = syncLiveFiles(cwd, integrationRoot, policy.liveFiles);
     };
     const integrationTreeClean = (): void =>
@@ -856,9 +869,11 @@ async function mergeLanesIsolated(
         break;
       }
       if (red !== undefined) {
-        for (const [repo, sha] of commitsBefore) resetToCommit(repoDirOf(integrationRoot, repo), sha);
-        if (backlogBefore === undefined) rmSync(integrationFile, { force: true });
-        else writeFileSync(integrationFile, backlogBefore);
+        withBacklogLock(integrationFile, 'merge-lanes', () => {
+          for (const [repo, sha] of commitsBefore) resetToCommit(repoDirOf(integrationRoot, repo), sha);
+          if (backlogBefore === undefined) rmSync(integrationFile, { force: true });
+          else writeFileSync(integrationFile, backlogBefore);
+        });
         const reason = reasonWithOutput(red.prefix, red.output);
         markFailed(lane, reason);
         record({ lane, kind: 'check_failed', reason });
@@ -873,14 +888,18 @@ async function mergeLanesIsolated(
       }
 
       try {
-        assertLiveFilesUnchanged(cwd, policy.liveFiles, liveSnapshot);
-        writebackLiveFiles({
-          sourceRoot: cwd,
-          workspaceRoot: integrationRoot,
-          liveFiles: writebackOnly,
-          snapshot: liveSnapshot,
+        // Сверка и возврат живых файлов в checkout — одной правкой под lock'ом:
+        // среди них может быть и файл очереди.
+        withBacklogLock(file, 'merge-lanes', () => {
+          assertLiveFilesUnchanged(cwd, policy.liveFiles, liveSnapshot);
+          writebackLiveFiles({
+            sourceRoot: cwd,
+            workspaceRoot: integrationRoot,
+            liveFiles: writebackOnly,
+            snapshot: liveSnapshot,
+          });
+          liveSnapshot = snapshotLiveFiles(cwd, policy.liveFiles);
         });
-        liveSnapshot = snapshotLiveFiles(cwd, policy.liveFiles);
         restoreWritebackOnly();
       } catch (error) {
         if (!isStepcastError(error)) throw error;
@@ -894,7 +913,7 @@ async function mergeLanesIsolated(
         continue;
       }
 
-      finishItem(integrationFile, item.slug, 'done');
+      finishItem(integrationFile, 'merge-lanes', item.slug, 'done');
       const message = `${item.slug}: ${item.title ?? 'улучшение из очереди'}`;
       const committed: string[] = [];
       const commits: Record<string, string> = {};
@@ -970,13 +989,23 @@ async function mergeLanesIsolated(
         // До первого update-ref: при обрыве известны оба SHA, оба дерева и
         // порядок всех репозиториев, включая ещё не начатые.
         writeRecovery();
-        for (const repo of publicationOrder) {
-          const stateDir = join(integrationDir, 'publication', lane, repo === '.' ? 'root' : repo.replaceAll('/', '__'));
-          publishPrepared({ repoDir: repoDirOf(cwd, repo), prepared: prepared.get(repo)!, stateDir });
-          sourceBases.set(repo, commits[repo]!);
-          published.push(repo);
-          writeRecovery();
-        }
+        // Публикация кладёт в checkout очередь из коммита результата
+        // (`status: done`) — это запись живой очереди, и она идёт под lock'ом.
+        // Отпечаток в publishPrepared её не спасает: правка соседа между
+        // проверкой выше и preparePublication вошла бы в отпечаток и была бы
+        // затёрта. Поэтому под lock'ом живые файлы сверяются заново — правка,
+        // успевшая до захвата, даёт publication_conflict, а не теряется. Сама
+        // подготовка (одноразовое дерево, cherry-pick) идёт до захвата.
+        withBacklogLock(file, 'merge-lanes', () => {
+          assertLiveFilesUnchanged(cwd, policy.liveFiles, liveSnapshot);
+          for (const repo of publicationOrder) {
+            const stateDir = join(integrationDir, 'publication', lane, repo === '.' ? 'root' : repo.replaceAll('/', '__'));
+            publishPrepared({ repoDir: repoDirOf(cwd, repo), prepared: prepared.get(repo)!, stateDir });
+            sourceBases.set(repo, commits[repo]!);
+            published.push(repo);
+            writeRecovery();
+          }
+        });
         rmSync(recoveryPath, { force: true });
       } catch (error) {
         if (!isStepcastError(error)) throw error;
@@ -985,18 +1014,21 @@ async function mergeLanesIsolated(
           error.message,
         );
         try {
-          for (const repo of [...published].reverse()) {
-            const stateDir = join(
-              integrationDir,
-              'publication',
-              lane,
-              repo === '.' ? 'root' : repo.replaceAll('/', '__'),
-            );
-            rollbackPrepared({ repoDir: repoDirOf(cwd, repo), prepared: prepared.get(repo)!, stateDir });
-            sourceBases.set(repo, prepared.get(repo)!.base);
-            published.pop();
-            writeRecovery();
-          }
+          // Возврат тоже переписывает живую очередь — под тем же lock'ом.
+          withBacklogLock(file, 'merge-lanes', () => {
+            for (const repo of [...published].reverse()) {
+              const stateDir = join(
+                integrationDir,
+                'publication',
+                lane,
+                repo === '.' ? 'root' : repo.replaceAll('/', '__'),
+              );
+              rollbackPrepared({ repoDir: repoDirOf(cwd, repo), prepared: prepared.get(repo)!, stateDir });
+              sourceBases.set(repo, prepared.get(repo)!.base);
+              published.pop();
+              writeRecovery();
+            }
+          });
           rmSync(recoveryPath, { force: true });
         } catch (rollbackError) {
           reason = reasonWithOutput(

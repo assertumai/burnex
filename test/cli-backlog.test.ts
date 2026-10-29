@@ -1,11 +1,14 @@
 import assert from 'node:assert/strict';
-import { execFileSync } from 'node:child_process';
-import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { execFileSync, spawn } from 'node:child_process';
+import { existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { hostname } from 'node:os';
 import { join, basename } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { describe, it } from 'node:test';
 
 import { run, type CliIo } from '../src/parts/cli/main.js';
 import { ExitCode, type ExitCodeValue } from '../src/kernel/errors.js';
+import { findPackageRoot } from '../src/parts/pipeline/domain/package-schema.js';
 import { shortRunId } from '../src/parts/pipeline/run/journal/paths.js';
 import { gitCommit, gitInit } from './helpers.js';
 import { tempDir } from './tmp.js';
@@ -626,5 +629,92 @@ describe('CLI: stepcast backlog settle', () => {
     assert.equal(result.code, ExitCode.ok, result.stderr);
     assert.deepEqual(headFiles(dir), ['backlog.md']);
     assert.match(porcelainAt(dir), /stray\.txt/, 'посторонний файл остаётся незакоммиченным');
+  });
+});
+
+describe('CLI: очередь под lock-файлом', () => {
+  const cliBin = join(findPackageRoot(fileURLToPath(new URL('.', import.meta.url))), 'dist', 'src', 'bin.js');
+
+  /** Отдельный процесс бинаря: гонку писателей можно проверить только между процессами. */
+  function spawnBacklog(cwd: string, argv: readonly string[]): Promise<{ code: number | null; stdout: string }> {
+    return new Promise((done) => {
+      const child = spawn(process.execPath, [cliBin, 'backlog', ...argv], {
+        cwd,
+        stdio: ['ignore', 'pipe', 'inherit'],
+      });
+      let stdout = '';
+      child.stdout.on('data', (chunk: Buffer) => {
+        stdout += chunk.toString();
+      });
+      child.on('exit', (code) => done({ code, stdout }));
+    });
+  }
+
+  function statusOf(text: string, slug: string): string | undefined {
+    const block = text.split(/^## /mu).find((part) => part.startsWith(slug));
+    return /^status: (.*)$/mu.exec(block ?? '')?.[1];
+  }
+
+  it('два одновременных pick над двумя свободными пунктами выдают разные пункты', async () => {
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      const dir = bed(item('one', COMPLETE), item('two', COMPLETE));
+
+      const results = await Promise.all([spawnBacklog(dir, ['pick']), spawnBacklog(dir, ['pick'])]);
+
+      assert.deepEqual(results.map((r) => r.code), [0, 0]);
+      const slugs = results.map((r) => (JSON.parse(r.stdout) as readonly { slug: string }[]).map((e) => e.slug));
+      assert.deepEqual(slugs.flat().sort(), ['one', 'two']);
+      const text = readFileSync(join(dir, 'backlog.md'), 'utf8');
+      assert.equal(statusOf(text, 'one'), 'in_progress');
+      assert.equal(statusOf(text, 'two'), 'in_progress');
+    }
+  });
+
+  it('два одновременных finish разным пунктам — оба исхода в файле', async () => {
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      const dir = bed(
+        item('one', { ...COMPLETE, status: 'in_progress' }),
+        item('two', { ...COMPLETE, status: 'in_progress' }),
+      );
+
+      const results = await Promise.all([
+        spawnBacklog(dir, ['finish', 'one', '--status', 'done']),
+        spawnBacklog(dir, ['finish', 'two', '--status', 'failed', '--reason', 'красная']),
+      ]);
+
+      assert.deepEqual(results.map((r) => r.code), [0, 0]);
+      const text = readFileSync(join(dir, 'backlog.md'), 'utf8');
+      assert.equal(statusOf(text, 'one'), 'done');
+      assert.equal(statusOf(text, 'two'), 'failed');
+    }
+  });
+
+  it('отказавший finish не оставляет lock-файла', async () => {
+    const dir = bed(item('one', COMPLETE));
+
+    const result = await backlog(dir, ['finish', 'нет-такого', '--status', 'done']);
+
+    assert.equal(result.code, ExitCode.configError);
+    assert.equal(existsSync(join(dir, '.backlog.lock')), false);
+  });
+
+  it('list при занятом lock-файле отвечает сразу и других lock-файлов не создаёт', async () => {
+    const dir = bed(item('one', COMPLETE));
+    const lock = join(dir, '.backlog.lock');
+    const held = JSON.stringify({
+      pid: process.pid,
+      host: hostname(),
+      command: 'backlog pick',
+      acquired_at: new Date().toISOString(),
+    });
+    writeFileSync(lock, held);
+    const started = Date.now();
+
+    const result = await backlog(dir, ['list']);
+
+    assert.equal(result.code, ExitCode.ok);
+    assert.ok(Date.now() - started < 5000, 'list не ждёт писателя');
+    assert.deepEqual(readdirSync(dir).sort(), ['.backlog.lock', 'backlog.md']);
+    assert.equal(readFileSync(lock, 'utf8'), held);
   });
 });

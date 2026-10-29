@@ -4,14 +4,17 @@ import { join } from 'node:path';
 import { z } from 'zod';
 
 import {
+  BacklogLockTimeoutError,
   moveBetween,
   moveWithin,
   parseBacklogFile,
   readBacklogFile,
   withFields,
   withStatus,
+  withBacklogLockAsync,
   withoutFields,
   writeBacklogFile,
+  type LockWaitOptions,
 } from '../../../pipeline/domain/backlog/index.js';
 import { isStepcastError } from '../../../../kernel/errors.js';
 import { listProjects } from '../../../pipeline/run/journal/reader.js';
@@ -37,7 +40,16 @@ import { declaration } from './declaration.js';
  * колонка `archive` — не состояние, а файл: `archived.md` рядом с
  * `backlog.md` (`docs/backlog.md`). Поэтому перенос в архив статус пункта не
  * трогает: архив хранит исход таким, каким он был.
+ *
+ * Правит доска под lock'ом очереди (`withBacklogLockAsync`): второй писатель
+ * у очереди всё же бывает — `backlog pick` и `finish` идущего прогона.
  */
+
+/**
+ * Параметры ожидания lock'а доски. Умолчания — договор (50 мс / 10 с); поле
+ * изменяемо только ради теста, которому незачем ждать предел целиком.
+ */
+export const boardLockWait: { current: LockWaitOptions } = { current: {} };
 
 const PostBodySchema = z
   .object({
@@ -121,37 +133,49 @@ const handleMove: ApiHandler = async (req, res, env) => {
       return;
     }
 
-    const tasksText = readOrEmpty(tasksFile);
-    const archiveText = readOrEmpty(archiveFile);
+    // Один захват на оба файла: перенос читает и правит пару, и соседний
+    // писатель между ними потерял бы свою правку. Ожидание — таймером, чтобы
+    // демон отвечал на другие запросы, пока этот ждёт очередь.
+    const found = await withBacklogLockAsync(tasksFile, 'ui scrum move', () => {
+      const tasksText = readOrEmpty(tasksFile);
+      const archiveText = readOrEmpty(archiveFile);
 
-    const inTasks = holdsSlug(tasksFile, tasksText, slug);
-    const inArchive = holdsSlug(archiveFile, archiveText, slug);
-    if (!inTasks && !inArchive) {
+      const inTasks = holdsSlug(tasksFile, tasksText, slug);
+      const inArchive = holdsSlug(archiveFile, archiveText, slug);
+      if (!inTasks && !inArchive) return false;
+
+      const fromFile = inTasks ? tasksFile : archiveFile;
+      const toFile = column === 'archive' ? archiveFile : tasksFile;
+
+      if (fromFile === toFile) {
+        const text = fromFile === tasksFile ? tasksText : archiveText;
+        const moved = moveWithin(text, slug, before, fromFile);
+        // Статус проставляется после перестановки: `withFields` ищет пункт
+        // разбором, и порядок строк к этому моменту уже окончательный.
+        writeBacklogFile(fromFile, column === 'archive' ? moved : withStatus(moved, slug, column));
+      } else {
+        const fromText = fromFile === tasksFile ? tasksText : archiveText;
+        const toText = toFile === tasksFile ? tasksText : archiveText;
+        const result = moveBetween(fromText, toText, slug, before, fromFile, toFile);
+        // Оба файла пишутся по очереди, и атомарности на пару у записи нет:
+        // отказ второй записи оставил бы пункт в обоих файлах. Источник поэтому
+        // пишется вторым — пункт, задвоенный на мгновение, виден на доске
+        // дважды, а пункт, пропавший из обоих, не виден нигде.
+        writeBacklogFile(toFile, column === 'archive' ? result.to : withStatus(result.to, slug, column));
+        writeBacklogFile(fromFile, result.from);
+      }
+      return true;
+    }, boardLockWait.current);
+    if (!found) {
       sendJson(res, 404, { error: `Item ${slug} not found in ${TASKS_FILE} or ${ARCHIVE_FILE}` });
       return;
     }
-
-    const fromFile = inTasks ? tasksFile : archiveFile;
-    const toFile = column === 'archive' ? archiveFile : tasksFile;
-
-    if (fromFile === toFile) {
-      const text = fromFile === tasksFile ? tasksText : archiveText;
-      const moved = moveWithin(text, slug, before, fromFile);
-      // Статус проставляется после перестановки: `withFields` ищет пункт
-      // разбором, и порядок строк к этому моменту уже окончательный.
-      writeBacklogFile(fromFile, column === 'archive' ? moved : withStatus(moved, slug, column));
-    } else {
-      const fromText = fromFile === tasksFile ? tasksText : archiveText;
-      const toText = toFile === tasksFile ? tasksText : archiveText;
-      const result = moveBetween(fromText, toText, slug, before, fromFile, toFile);
-      // Оба файла пишутся по очереди, и атомарности на пару у записи нет:
-      // отказ второй записи оставил бы пункт в обоих файлах. Источник поэтому
-      // пишется вторым — пункт, задвоенный на мгновение, виден на доске
-      // дважды, а пункт, пропавший из обоих, не виден нигде.
-      writeBacklogFile(toFile, column === 'archive' ? result.to : withStatus(result.to, slug, column));
-      writeBacklogFile(fromFile, result.from);
-    }
   } catch (error) {
+    if (error instanceof BacklogLockTimeoutError) {
+      // Запрос верен, очередь занята другим писателем: повторить можно.
+      sendJson(res, 409, { error: error.message });
+      return;
+    }
     if (isStepcastError(error)) {
       sendJson(res, 400, { error: error.message, ...(error.at === undefined ? {} : { at: error.at }) });
       return;
@@ -266,20 +290,28 @@ const handleEdit: ApiHandler = async (req, res, env) => {
   const archiveFile = join(project.path, ARCHIVE_FILE);
 
   try {
-    const tasksText = readOrEmpty(tasksFile);
-    const file = holdsSlug(tasksFile, tasksText, slug) ? tasksFile : archiveFile;
-    const text = file === tasksFile ? tasksText : readOrEmpty(archiveFile);
-    if (!holdsSlug(file, text, slug)) {
+    const found = await withBacklogLockAsync(tasksFile, 'ui scrum edit', () => {
+      const tasksText = readOrEmpty(tasksFile);
+      const file = holdsSlug(tasksFile, tasksText, slug) ? tasksFile : archiveFile;
+      const text = file === tasksFile ? tasksText : readOrEmpty(archiveFile);
+      if (!holdsSlug(file, text, slug)) return false;
+
+      const edited = withoutFields(withFields(text, slug, set), slug, remove);
+      // Разбор всего файла заново — проверка перед записью: схема ловит и
+      // негодный `track`, и `repos`, который она разбирает в перечень.
+      parseBacklogFile(file, edited);
+      writeBacklogFile(file, edited);
+      return true;
+    }, boardLockWait.current);
+    if (!found) {
       sendJson(res, 404, { error: `Item ${slug} not found in ${TASKS_FILE} or ${ARCHIVE_FILE}` });
       return;
     }
-
-    const edited = withoutFields(withFields(text, slug, set), slug, remove);
-    // Разбор всего файла заново — проверка перед записью: схема ловит и
-    // негодный `track`, и `repos`, который она разбирает в перечень.
-    parseBacklogFile(file, edited);
-    writeBacklogFile(file, edited);
   } catch (error) {
+    if (error instanceof BacklogLockTimeoutError) {
+      sendJson(res, 409, { error: error.message });
+      return;
+    }
     if (isStepcastError(error)) {
       sendJson(res, 400, { error: error.message, ...(error.at === undefined ? {} : { at: error.at }) });
       return;

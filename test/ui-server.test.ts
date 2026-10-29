@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawn } from 'node:child_process';
 import { get, request } from 'node:http';
 import { describe, it, type TestContext } from 'node:test';
 
@@ -12,13 +12,18 @@ import {
   rmSync,
   statSync,
   symlinkSync,
+  unlinkSync,
   utimesSync,
   writeFileSync,
 } from 'node:fs';
+import { hostname } from 'node:os';
 import { dirname, join, relative } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import { buildSteps } from '../src/parts/ui/steps.js';
+import { backlogLockPath } from '../src/parts/pipeline/domain/backlog/index.js';
+import { boardLockWait } from '../src/parts/ui/screens/scrum/server.js';
+import { findPackageRoot } from '../src/parts/pipeline/domain/package-schema.js';
 import { resetModelDiscoveryCache } from '../src/parts/pipeline/backend/models.js';
 import { dashboardPath } from '../src/parts/ui/daemon/assets.js';
 import { createUiServer, LOOPBACK, type UiServer } from '../src/parts/ui/daemon/server.js';
@@ -764,6 +769,114 @@ describe('screen-scrum: перенос пункта доской', () => {
     );
 
     assert.equal(moved.code, 400);
+  });
+
+  describe('lock очереди', () => {
+    /** Занять lock проекта «живым» владельцем — этим же процессом. */
+    function holdLock(projectRoot: string): string {
+      const lock = backlogLockPath(join(projectRoot, 'backlog.md'));
+      writeFileSync(
+        lock,
+        JSON.stringify({
+          pid: process.pid,
+          host: hostname(),
+          command: 'backlog pick',
+          acquired_at: new Date().toISOString(),
+        }),
+      );
+      return lock;
+    }
+
+    it('занятый и вскоре отпущенный lock перенос ждёт и проходит', async (t) => {
+      const { runsRoot, projectRoot } = makeJournalBed();
+      seedRun(runsRoot, projectRoot, { runId: 'a' });
+      const tasks = join(projectRoot, 'backlog.md');
+      writeFileSync(tasks, ITEMS(ITEM('one', 'todo'), ITEM('two', 'todo')));
+      const server = await startServer(t, { runsRoot });
+      const lock = holdLock(projectRoot);
+      setTimeout(() => unlinkSync(lock), 150);
+      boardLockWait.current = { intervalMs: 10, timeoutMs: 5000 };
+      t.after(() => {
+        boardLockWait.current = {};
+      });
+
+      const moved = await sendJson(
+        server,
+        movePayload({ project: projectKey(projectRoot), slug: 'two', column: 'todo', before: 'one' }),
+      );
+
+      assert.equal(moved.code, 200);
+      const text = readFileSync(tasks, 'utf8');
+      assert.ok(text.indexOf('## two') < text.indexOf('## one'));
+      assert.equal(existsSync(lock), false);
+    });
+
+    it('по пределу — 409 с владельцем, а демон отвечает на другие запросы', async (t) => {
+      const { runsRoot, projectRoot } = makeJournalBed();
+      seedRun(runsRoot, projectRoot, { runId: 'a' });
+      const tasks = join(projectRoot, 'backlog.md');
+      writeFileSync(tasks, ITEMS(ITEM('one', 'todo'), ITEM('two', 'todo')));
+      const before = readFileSync(tasks, 'utf8');
+      const server = await startServer(t, { runsRoot });
+      const lock = holdLock(projectRoot);
+      boardLockWait.current = { intervalMs: 10, timeoutMs: 600 };
+      t.after(() => {
+        boardLockWait.current = {};
+      });
+
+      const pending = sendJson(
+        server,
+        movePayload({ project: projectKey(projectRoot), slug: 'two', column: 'todo', before: 'one' }),
+      );
+      await settle(100);
+      const other = await fetchJson(server, '/api/overview');
+      const moved = await pending;
+
+      assert.equal(other.code, 200, 'демон отвечает, пока перенос ждёт очередь');
+      assert.equal(moved.code, 409);
+      assert.match(String(pick(moved.json, 'error')), /backlog pick/u);
+      assert.equal(readFileSync(tasks, 'utf8'), before);
+      assert.equal(existsSync(lock), true);
+    });
+
+    it('перенос доской и finish отдельным процессом одновременно — оба в файлах', async (t) => {
+      const cliBin = join(findPackageRoot(fileURLToPath(new URL('.', import.meta.url))), 'dist', 'src', 'bin.js');
+      boardLockWait.current = { intervalMs: 5, timeoutMs: 8000 };
+      t.after(() => {
+        boardLockWait.current = {};
+      });
+      const { runsRoot, projectRoot } = makeJournalBed();
+      seedRun(runsRoot, projectRoot, { runId: 'a' });
+      const server = await startServer(t, { runsRoot });
+      const tasks = join(projectRoot, 'backlog.md');
+
+      for (let attempt = 0; attempt < 3; attempt += 1) {
+        writeFileSync(tasks, ITEMS(ITEM('one', 'in_progress'), ITEM(`old-${attempt}`, 'done')));
+        // Оба писателя упираются в занятый lock и после его снятия сходятся
+        // впритык — иначе запуск процесса развёл бы их во времени.
+        const lock = holdLock(projectRoot);
+        const finished = new Promise<number | null>((done) => {
+          const child = spawn(process.execPath, [cliBin, 'backlog', 'finish', 'one', '--status', 'done'], {
+            cwd: projectRoot,
+            stdio: ['ignore', 'ignore', 'inherit'],
+          });
+          child.on('exit', done);
+        });
+        const moved = sendJson(
+          server,
+          movePayload({ project: projectKey(projectRoot), slug: `old-${attempt}`, column: 'archive' }),
+        );
+        await settle(300);
+        unlinkSync(lock);
+
+        assert.equal(await finished, 0);
+        assert.equal((await moved).code, 200);
+        const text = readFileSync(tasks, 'utf8');
+        assert.equal(fieldOf(text, 'one', 'status'), 'done', 'исход finish не потерян');
+        assert.doesNotMatch(text, new RegExp(`## old-${attempt}`, 'u'), 'перенос не потерян');
+        assert.match(readFileSync(join(projectRoot, 'archived.md'), 'utf8'), new RegExp(`## old-${attempt}`, 'u'));
+      }
+    });
   });
 });
 

@@ -2,6 +2,7 @@ import { chmodSync, readFileSync, statSync } from 'node:fs';
 
 import { StepcastError, isStepcastError } from '../../../../kernel/errors.js';
 import { atomicWrite } from '../../run/journal/writer.js';
+import { withBacklogLock } from './lock.js';
 import { parse, type BacklogEntry } from './parse.js';
 import { withFields } from './write.js';
 
@@ -115,20 +116,26 @@ export type FinishOutcome = 'set' | 'already-final';
  */
 export function finishItem(
   file: string,
+  command: string,
   slug: string,
   status: 'done' | 'failed',
   reason?: string,
 ): FinishOutcome {
-  const text = readBacklogFile(file);
-  const entries = parseBacklogFile(file, text);
-  const entry = entries.find((candidate) => candidate.slug === slug);
-  if (entry === undefined) {
-    throw new StepcastError(`пункт «${slug}» в очереди не найден`, { file, at: slug });
-  }
+  // Чтение, проверка исхода и запись — один цикл под lock'ом очереди: иначе
+  // два одновременных исхода разным пунктам теряют один из них. `command` —
+  // имя писателя для lock-файла, по нему видно, кто держит очередь.
+  return withBacklogLock(file, command, () => {
+    const text = readBacklogFile(file);
+    const entries = parseBacklogFile(file, text);
+    const entry = entries.find((candidate) => candidate.slug === slug);
+    if (entry === undefined) {
+      throw new StepcastError(`пункт «${slug}» в очереди не найден`, { file, at: slug });
+    }
 
-  if (entry.data.status === 'done' || entry.data.status === 'failed') return 'already-final';
+    if (entry.data.status === 'done' || entry.data.status === 'failed') return 'already-final';
 
-  const values = status === 'failed' ? { status, reason: oneLine(reason ?? '') } : { status };
-  writeBacklogFile(file, withFields(text, slug, values));
-  return 'set';
+    const values = status === 'failed' ? { status, reason: oneLine(reason ?? '') } : { status };
+    writeBacklogFile(file, withFields(text, slug, values));
+    return 'set';
+  });
 }

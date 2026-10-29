@@ -9,6 +9,7 @@ import {
   readBacklogFile,
   selectItems,
   toRecord,
+  withBacklogLock,
   withFields,
   writeBacklogFile,
   type BacklogEntry,
@@ -131,25 +132,7 @@ function runPick(
   const now = new Date().toISOString();
   const nowMs = Date.parse(now);
 
-  const text = readBacklogFile(file);
-  const entries = parseBacklogFile(file, text);
-
-  // Названный пункт проверяется до отбора: «пункта нет» и «пункт занят» —
-  // разные беды, и обе обязаны прозвучать словами. Молчаливая пустая выдача
-  // на опечатку в слаге выглядела бы как «свободных пунктов нет».
   const only = stringFlag(args.flags, 'only');
-  if (only !== undefined) {
-    const named = entries.find((entry) => entry.slug === only);
-    if (named === undefined) {
-      throw new StepcastError(`пункт «${only}» в очереди не найден`, { file, at: only });
-    }
-    if (!isFree(named, nowMs, staleMs)) {
-      throw new StepcastError(
-        `пункт «${only}» не свободен: status ${named.data.status}`,
-        { file, at: only, hint: 'свободны todo и зависший in_progress' },
-      );
-    }
-  }
 
   const lanesOption = stringFlag(args.flags, 'lanes');
   if (lanesOption !== undefined) {
@@ -159,7 +142,7 @@ function runPick(
     if (args.flags['slots'] !== undefined) {
       throw new StepcastError('ключи --lanes и --slots взаимно исключают друг друга: форма выдачи одна');
     }
-    runPickLanes(args, file, cwd, text, entries, now, nowMs, staleMs, lanesOption, only, write, writeErr);
+    runPickLanes(args, file, cwd, now, nowMs, staleMs, lanesOption, only, write, writeErr);
     return ExitCode.ok;
   }
 
@@ -168,19 +151,57 @@ function runPick(
     throw new StepcastError('ключ --slots требует целого положительного числа');
   }
 
-  const chosen = selectItems(entries, slots, nowMs, staleMs, only);
-  if (chosen.length > 0) writeBacklogFile(file, applyPick(text, chosen, now));
+  const chosen = claimItems(file, slots, only, now, nowMs, staleMs);
 
   write(JSON.stringify(chosen.map(toRecord), null, 2));
   return ExitCode.ok;
+}
+
+/**
+ * Выбрать пункты и пометить их `in_progress` одним захватом очереди.
+ *
+ * Чтение, проверка названного пункта, отбор и запись обязаны идти под одним
+ * lock'ом: иначе два параллельных `pick` читают один файл, видят одни и те же
+ * свободные пункты и выдают их дважды.
+ */
+function claimItems(
+  file: string,
+  count: number,
+  only: string | undefined,
+  now: string,
+  nowMs: number,
+  staleMs: number,
+): readonly BacklogEntry[] {
+  return withBacklogLock(file, 'backlog pick', () => {
+    const text = readBacklogFile(file);
+    const entries = parseBacklogFile(file, text);
+
+    // Названный пункт проверяется до отбора: «пункта нет» и «пункт занят» —
+    // разные беды, и обе обязаны прозвучать словами. Молчаливая пустая выдача
+    // на опечатку в слаге выглядела бы как «свободных пунктов нет».
+    if (only !== undefined) {
+      const named = entries.find((entry) => entry.slug === only);
+      if (named === undefined) {
+        throw new StepcastError(`пункт «${only}» в очереди не найден`, { file, at: only });
+      }
+      if (!isFree(named, nowMs, staleMs)) {
+        throw new StepcastError(
+          `пункт «${only}» не свободен: status ${named.data.status}`,
+          { file, at: only, hint: 'свободны todo и зависший in_progress' },
+        );
+      }
+    }
+
+    const chosen = selectItems(entries, count, nowMs, staleMs, only);
+    if (chosen.length > 0) writeBacklogFile(file, applyPick(text, chosen, now));
+    return chosen;
+  });
 }
 
 function runPickLanes(
   args: ParsedArgs,
   file: string,
   cwd: string,
-  text: string,
-  entries: readonly BacklogEntry[],
   now: string,
   nowMs: number,
   staleMs: number,
@@ -195,10 +216,12 @@ function runPickLanes(
   // часть из них у процесса.
   const declaredRunDir = stringFlag(args.flags, 'run-dir');
   const runDir = declaredRunDir === undefined ? undefined : resolvePath(cwd, declaredRunDir);
+  // Каталог дорожек готов до правки очереди и до захвата: отказ подготовки не
+  // должен оставить пункты `in_progress` без каталога, а lock — висеть на
+  // файловых операциях, которые очереди не касаются.
   if (runDir !== undefined) prepareRunDir(runDir);
 
-  const chosen = selectItems(entries, lanes.length, nowMs, staleMs, only);
-  if (chosen.length > 0) writeBacklogFile(file, applyPick(text, chosen, now));
+  const chosen = claimItems(file, lanes.length, only, now, nowMs, staleMs);
 
   const result: Record<string, unknown> = {};
 
@@ -308,7 +331,7 @@ function runFinish(args: ParsedArgs, slug: string | undefined, file: string): Ex
   // Чтение, сведение причины к одной строке и неприкосновенность уже
   // проставленного исхода — забота `parts/pipeline/domain/backlog/file.ts`: тем же кодом
   // проставляет исход и сведение дорожек.
-  finishItem(file, slug, status, reason);
+  finishItem(file, 'backlog finish', slug, status, reason);
   return ExitCode.ok;
 }
 
@@ -346,7 +369,7 @@ function runSettle(
     const item = readLaneItem(runDir, lane);
     // Пункт с уже проставленным исходом `finishItem` не трогает: settle
     // закрывает заход, а не переписывает его результат.
-    if (finishItem(file, item.slug, 'failed', SETTLE_REASON) === 'already-final') continue;
+    if (finishItem(file, 'backlog settle', item.slug, 'failed', SETTLE_REASON) === 'already-final') continue;
     settled += 1;
     write(`пункт «${item.slug}» (дорожка ${lane}) помечен failed: ${SETTLE_REASON}`);
   }
