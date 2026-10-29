@@ -3309,6 +3309,49 @@ jobs:
   });
 });
 
+describe('run-resume: работа, пропущенная объявлением шага', () => {
+  // `skip: declared` — не решение графа: у работы есть записи шагов, и план
+  // переносит только `condition` без них. Код пропуска мог выйти по состоянию,
+  // которое с тех пор изменилось, поэтому шаг исполняется заново.
+  const DECLARED = `
+version: 1
+kind: pipeline
+name: пропуск-объявлением
+skip_exit_code: 78
+jobs:
+  проба:
+    session: per_step
+    steps:
+      - id: проба
+        run: [sh, -c, 'echo заход >> след.txt; test -f готово.txt || exit 78']
+  хвост:
+    session: per_step
+    steps:
+      - id: хвост
+        run: [sh, -c, 'test -f маркер.txt']
+`;
+
+  it('не переносит пропуск и переисполняет его шаг', async () => {
+    const b = bed({ 'stepcast.yml': DECLARED });
+    const first = await firstRun(b);
+    assert.equal(first.status, 'failed', 'хвост падает: маркера нет');
+    const probe = readStatus(first.journal.paths).jobs.find((job) => job.id === 'проба');
+    assert.equal(probe?.status, 'skipped');
+    assert.equal(probe?.skip, 'declared');
+    assert.equal(probe?.steps[0]?.status, 'skipped');
+
+    b.project.write('маркер.txt', 'есть');
+    b.project.write('готово.txt', 'есть');
+
+    const plan = planFor(b, first);
+    assert.equal(decisions(plan)['проба/проба'], 'rerun', 'шаг со статусом skipped не переносится');
+
+    const second = await resume(b, first);
+    assert.equal(second.status, 'success');
+    assert.equal(readStatus(second.journal.paths).jobs.find((job) => job.id === 'проба')?.status, 'success');
+  });
+});
+
 describe('run-resume: работа с циклом until возвращает правки всех итераций', () => {
   // Заход 7594f2 пайплайна measure-improvement: реализация прошла гейт на
   // восьмой итерации, возобновление с candidate1 переиспользовало её, но в

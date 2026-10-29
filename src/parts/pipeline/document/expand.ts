@@ -807,6 +807,27 @@ function toAttempts(
   };
 }
 
+/**
+ * Код пропуска (`skip_exit_code`): число 1..255 либо подстановка, раскрытая к
+ * разбору. `0` — код успеха, и он сделал бы всякий успех пропуском; выше 255
+ * код возврата процесса POSIX не передаёт. Диапазон проверяется над
+ * раскрытым значением, поэтому `${params.*}` ловится так же, как литерал.
+ */
+function toSkipExitCode(
+  raw: string | number,
+  substitutions: SubstitutionMap,
+  at: string,
+): number {
+  const code = toCount(raw, at, substitutions, parseExitCode, at);
+  if (code < 1 || code > 255) {
+    throw new StepcastError(`skip_exit_code = ${code} вне диапазона 1..255`, {
+      at,
+      hint: '0 — код успеха, а процесс не вернёт больше 255. Годится редкий код, например 78',
+    });
+  }
+  return code;
+}
+
 /** Путь к файлу, объявленному в документе: разрешается от самого документа. */
 function resolveDeclaredPath(value: string, declaringFile: string): string {
   return isAbsolute(value) ? value : resolvePath(dirname(declaringFile), value);
@@ -1208,6 +1229,27 @@ interface StepDefaults {
    * и отличает уровень объявления друг от друга (design.md, решение 2).
    */
   readonly mcp: McpServers | undefined;
+  /**
+   * Код пропуска, унаследованный командным шагом: место подключения ?? тело
+   * работы ?? пайплайн, уже раскрытый и проверенный. Шаг `agent` и плагинный
+   * вид его не читают — у них нет кода выхода, принадлежащего автору документа.
+   */
+  readonly skipExitCode: number | undefined;
+}
+
+/**
+ * Действующий код пропуска командного шага: свой ключ, иначе унаследованный.
+ * Ключ шага раскрывается в области шага, поэтому путь ошибки называет его.
+ */
+function stepSkipExitCode(
+  raw: string | number | undefined,
+  ctx: BuiltinStepParseContext,
+): { readonly skipExitCode?: number } {
+  const code =
+    raw === undefined
+      ? ctx.defaults.skipExitCode
+      : toSkipExitCode(raw, ctx.substitutions, `${ctx.at}.skip_exit_code`);
+  return code === undefined ? {} : { skipExitCode: code };
 }
 
 /**
@@ -1310,6 +1352,7 @@ function parseRunStep(raw: RawStep, ctx: BuiltinStepParseContext): StepParseResu
       ...common,
       kind: 'run',
       command: raw.run,
+      ...stepSkipExitCode(raw.skip_exit_code, ctx),
       ...(onFail === undefined ? {} : { onFail }),
       ...(raw.output_schema === undefined
         ? {}
@@ -1359,6 +1402,8 @@ function parseUsesStep(raw: RawStep, ctx: BuiltinStepParseContext): StepParseRes
       // читатель мог бы опознать шаг до разрешения.
       path: usesResolved?.absolutePath ?? raw.uses,
       args: [],
+      // Код — с места вызова, не из манифеста: манифест его не объявляет.
+      ...stepSkipExitCode(raw.skip_exit_code, ctx),
       ...(onFail === undefined ? {} : { onFail }),
       // Сведённые параметры — с применёнными умолчаниями, если состав
       // прошёл проверку, иначе то, что передало место вызова: шаг всё
@@ -1410,6 +1455,7 @@ function parseScriptStep(raw: RawStep, ctx: BuiltinStepParseContext): StepParseR
       path: raw.script,
       args,
       ...(raw.runner === undefined ? {} : { runner: raw.runner }),
+      ...stepSkipExitCode(raw.skip_exit_code, ctx),
       ...(onFail === undefined ? {} : { onFail }),
       ...(inputResult === undefined ? {} : { input: inputResult.value }),
       ...(raw.output_schema === undefined
@@ -2213,6 +2259,7 @@ export function expandPipeline(options: ExpandOptions): ExpandedPipeline {
           ...(entry.context === undefined ? {} : { context: entry.context }),
           ...(entry.context_upstream === undefined ? {} : { context_upstream: entry.context_upstream }),
           ...(entry.budget === undefined ? {} : { budget: entry.budget }),
+          ...(entry.skip_exit_code === undefined ? {} : { skip_exit_code: entry.skip_exit_code }),
         },
         overrideScope,
         at,
@@ -2313,6 +2360,17 @@ export function expandPipeline(options: ExpandOptions): ExpandedPipeline {
     const jobMcp: McpServers | undefined =
       body.mcp === undefined ? undefined : toMcp(body.mcp as RawMcp);
     const stepMcp = jobMcp ?? pipelineMcp;
+
+    // Место подключения уже наложено на тело (`body = { ...body, ...overrides }`),
+    // так что `body.skip_exit_code` — это «место подключения ?? тело работы».
+    // Путь ключа в обоих случаях `jobs.<имя>.skip_exit_code`, а подстановка
+    // корня записана под путём `skip_exit_code`.
+    const jobSkipExitCode =
+      body.skip_exit_code !== undefined
+        ? toSkipExitCode(body.skip_exit_code as string | number, substitutions, `${at}.skip_exit_code`)
+        : doc.skip_exit_code !== undefined
+          ? toSkipExitCode(doc.skip_exit_code, substitutions, 'skip_exit_code')
+          : undefined;
 
     const output = body.output as { from?: string; schema?: string } | undefined;
     if (output !== undefined && output.from === undefined) {
@@ -2419,6 +2477,7 @@ export function expandPipeline(options: ExpandOptions): ExpandedPipeline {
             sessionMode,
             permissions: jobPermissions,
             mcp: stepMcp,
+            skipExitCode: jobSkipExitCode,
           },
           config,
           substitutions,

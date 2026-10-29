@@ -2329,6 +2329,18 @@ async function runJobSteps(
     // причине, потому что статус у работы всё равно один.
     const dataViolation = foldJobData(context, job);
 
+    // Шаг сказал «делать нечего» кодом выхода: остальные шаги не идут, работа
+    // пропущена, а не упала, и `output` у неё не публикуется. Нарушение
+    // объявления `data` от исхода шага не зависит и остаётся отказом.
+    if (status === 'skipped') {
+      if (dataViolation !== undefined) return { status: 'failed', reason: dataViolation };
+      return {
+        status: 'skipped',
+        skip: 'declared',
+        reason: `шаг ${step.id}: ${reason ?? 'шаг объявил пропуск'}`,
+      };
+    }
+
     if (status !== 'success') {
       const detail = reason === undefined ? undefined : `шаг ${step.id}: ${reason}`;
       const joined = [detail, dataViolation].filter((part) => part !== undefined).join('; ');
@@ -2876,7 +2888,10 @@ async function runCommandStep(
       return resolved.outcome;
     }
 
-    if (abort.waitTrigger !== undefined) {
+    // Пропущенный шаг судей не звал и расхода не нёс: ожидать сброса окна ради
+    // повтора шага, который объявил «делать нечего», незачем — исход отдаётся
+    // как есть, а окно ждёт следующий шаг, которому оно понадобится.
+    if (abort.waitTrigger !== undefined && result.status !== 'skipped') {
       // Реальная отмена уже настигла прогон — ждать нечего, шаг canceled.
       // `exceeded` в этом исходе не отдаётся: иначе runJobSteps прочёл бы
       // его как основание для budget_exceeded и затёр бы canceled, который
@@ -3458,6 +3473,11 @@ export function stepEnv(
             contractInputPath: join(stepDirPath, 'input.json'),
             contractOutputPath: join(stepDirPath, 'output.json'),
           }
+        : {}),
+      // И шагу, и его проверкам (`grant: 'check'`): предикат `script` может
+      // держать то же соглашение. Агентскому шагу кода не положено.
+      ...((step.kind === 'run' || step.kind === 'script') && step.skipExitCode !== undefined
+        ? { skipExitCode: step.skipExitCode }
         : {}),
     }),
     deny: pipeline.envDeny,

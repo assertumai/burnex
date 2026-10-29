@@ -23,9 +23,12 @@ export type StatusValue = z.infer<typeof StatusValueSchema>;
  * годности дорожки не отменяет. `halted` — прогон до работы не дошёл:
  * остановка после отказа либо неразрешённые зависимости; такой пропуск
  * означает недоделанную дорожку, и различать их обязан журнал, а не
- * догадка читателя по тексту причины.
+ * догадка читателя по тексту причины. `declared` — работа исполнялась, а её
+ * шаг кодом выхода (`skip_exit_code`) сказал «делать нечего»: это не решение
+ * графа (у работы есть записи шагов, и возобновление её не переносит) и не
+ * недоделка (дорожка свою ветку прошла).
  */
-export const SKIP_KINDS = ['condition', 'halted'] as const;
+export const SKIP_KINDS = ['condition', 'halted', 'declared'] as const;
 
 export const SkipKindSchema = z.enum(SKIP_KINDS);
 

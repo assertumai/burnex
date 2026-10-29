@@ -165,6 +165,12 @@ export interface InjectedContext {
    */
   readonly contractInputPath?: string;
   readonly contractOutputPath?: string;
+  /**
+   * Действующий код пропуска командного шага (`skip_exit_code`). Скрипт
+   * выходит им, не повторяя число из документа, — правка документа тогда не
+   * расходится со скриптом. Не объявлен — переменной нет вовсе.
+   */
+  readonly skipExitCode?: number;
 }
 
 export function injectedVariables(context: InjectedContext): Record<string, string> {
@@ -186,5 +192,6 @@ export function injectedVariables(context: InjectedContext): Record<string, stri
       : { STEPCAST_PREV_FAILURE: context.previousFailurePath }),
     ...(context.contractInputPath === undefined ? {} : { STEPCAST_INPUT: context.contractInputPath }),
     ...(context.contractOutputPath === undefined ? {} : { STEPCAST_OUTPUT: context.contractOutputPath }),
+    ...(context.skipExitCode === undefined ? {} : { STEPCAST_SKIP_EXIT_CODE: String(context.skipExitCode) }),
   };
 }

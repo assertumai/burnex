@@ -20,6 +20,80 @@ function refusal(project: Project): StepcastError {
   throw new Error('пайплайн разобрался, хотя не должен был');
 }
 
+describe('schema-diagnostics: skip_exit_code', () => {
+  // Ключа нет в общей части шага: у агентского и плагинного шагов нет кода
+  // выхода, и их строгие схемы отклоняют его обычным «неизвестный ключ».
+  it('отклоняет ключ на шаге agent, называя шаг и ключ', () => {
+    const error = refusal(
+      makeProject({
+        'stepcast.yml': `kind: pipeline
+name: t
+jobs:
+  build:
+    steps:
+      - id: think
+        prompt: подумай
+        skip_exit_code: 78
+`,
+      }),
+    );
+    assert.match(error.message, /skip_exit_code/);
+    assert.equal(error.at, 'jobs.build.steps.0');
+  });
+
+  it('отклоняет ключ на шаге decision, называя шаг и ключ', () => {
+    const error = refusal(
+      makeProject({
+        'stepcast.yml': `kind: pipeline
+name: t
+jobs:
+  build:
+    steps:
+      - id: gate
+        skip_exit_code: 78
+        decision:
+          prompt: слить?
+          outcomes: { approve: continue }
+`,
+      }),
+    );
+    assert.match(error.message, /skip_exit_code/);
+    assert.equal(error.at, 'jobs.build.steps.0');
+  });
+
+  it('принимает ключ на run, script, uses, работе, месте подключения и корне', () => {
+    const project = makeProject({
+      'stepcast.yml': `kind: pipeline
+name: t
+skip_exit_code: 78
+jobs:
+  site:
+    uses: ./jobs/x.yml
+    skip_exit_code: 78
+  build:
+    skip_exit_code: 78
+    steps:
+      - { id: a, run: [echo, ok], skip_exit_code: 78 }
+      - { id: b, script: probe.sh, skip_exit_code: 78 }
+      - { id: c, uses: noop, skip_exit_code: 78 }
+`,
+      'jobs/x.yml': `kind: job
+steps:
+  - { id: a, run: [echo, ok] }
+`,
+      '.stepcast/scripts/probe.sh': '#!/bin/sh\nexit 0\n',
+      '.stepcast/steps/noop/step.yml': `version: 1
+kind: step
+name: noop
+description: Ничего не делает.
+file: ./main.cjs
+`,
+      '.stepcast/steps/noop/main.cjs': 'process.exit(0);\n',
+    });
+    assert.doesNotThrow(() => expandPipeline({ pipelinePath: project.path('stepcast.yml'), config: project.config }));
+  });
+});
+
 describe('schema-diagnostics: отказ схемы называет причину', () => {
   // Сценарий: «Неизвестный ключ работы»
   it('называет неизвестный ключ работы, а не обобщённое Invalid input', () => {

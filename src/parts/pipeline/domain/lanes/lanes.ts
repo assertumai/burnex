@@ -45,6 +45,10 @@ export function knownLanes(jobs: readonly JobRecord[]): readonly string[] {
  * success» объявляло бы такую дорожку негодной ровно за то, ради чего она
  * заведена.
  *
+ * Пропуск, который объявил сам шаг кодом выхода (`skip: declared`), годности
+ * тоже не отменяет: работа дорожки сказала «делать нечего», а свою ветку
+ * прошла. Дорожка, где пропущено всё, по-прежнему незаполненный слот.
+ *
  * Пропуск по остановке прогона (`skip: halted` — остановка после отказа,
  * неразрешённые зависимости) считается наравне с отказом: там дорожка не
  * прошла свою ветку до конца, и свести её значило бы наложить недоделанное.
@@ -61,7 +65,9 @@ export function evaluateLane(jobs: readonly JobRecord[], lane: string): LaneOutc
   // `skip` нет вовсе, и различать там нечего.
   if (records.every((job) => job.status === 'skipped')) return { kind: 'empty' };
 
-  const attempted = records.filter((job) => !(job.status === 'skipped' && job.skip === 'condition'));
+  const attempted = records.filter(
+    (job) => !(job.status === 'skipped' && (job.skip === 'condition' || job.skip === 'declared')),
+  );
   if (attempted.every((job) => job.status === 'success')) return { kind: 'ready' };
 
   return {

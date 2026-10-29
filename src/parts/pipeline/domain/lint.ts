@@ -1400,6 +1400,24 @@ function checkStep(
 
   checkEnv(step.env, envDenyMatchers, envDenyPatterns, job.source, `${at}.env`, push);
 
+  // Выход кодом пропуска разбирается до `expect` (`runStep.ts`), поэтому
+  // ожидание того же кода недостижимо: шаг, вышедший им, станет пропуском, а не
+  // пройдёт предикат. Значение предиката число уже здесь — подстановка,
+  // нераскрытая к разбору, отклонена раньше, и молча пропускать нечего.
+  if ((step.kind === 'run' || step.kind === 'script') && step.skipExitCode !== undefined) {
+    for (const predicate of step.expect) {
+      if (predicate.kind === 'exit_code' && predicate.value === step.skipExitCode) {
+        push({
+          severity: 'error',
+          message: `Шаг ${job.id}/${step.id}: expect exit_code ${predicate.value} совпадает с кодом пропуска skip_exit_code ${step.skipExitCode}`,
+          file: job.source,
+          at: `${at}.expect`,
+          hint: 'Выход этим кодом объявлен пропуском и до expect не доходит — ожидание недостижимо. Выберите другой код пропуска или уберите ожидание',
+        });
+      }
+    }
+  }
+
   if (step.kind === 'run' && typeof step.command === 'string') {
     // Вывод модели — это данные. В строковой форме они попадают в командную
     // строку оболочки, и подстановка становится исполнением.

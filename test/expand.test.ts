@@ -5818,3 +5818,272 @@ jobs:
     });
   });
 });
+
+// Сценарий: «Код пропуска командного шага»
+describe('pipeline-definition: skip_exit_code', () => {
+  type CommandLike = { readonly kind: string; readonly skipExitCode?: number };
+  const codes = (project: Project, jobIndex = 0): Array<number | undefined> =>
+    expand(project).pipeline.jobs[jobIndex]!.steps.map((step) => (step as CommandLike).skipExitCode);
+
+  it('без объявления поля нет нигде', () => {
+    const project = makeProject({
+      'stepcast.yml': `
+kind: pipeline
+jobs:
+  build:
+    steps:
+      - { id: a, run: [echo, ok] }
+`,
+    });
+    assert.deepEqual(codes(project), [undefined]);
+    assert.equal('skipExitCode' in expand(project).pipeline.jobs[0]!.steps[0]!, false);
+  });
+
+  it('ключ шага действует на самом шаге', () => {
+    const project = makeProject({
+      'stepcast.yml': `
+kind: pipeline
+jobs:
+  build:
+    steps:
+      - { id: a, run: [echo, ok], skip_exit_code: 78 }
+      - { id: b, run: [echo, ok] }
+`,
+    });
+    assert.deepEqual(codes(project), [78, undefined]);
+  });
+
+  it('пайплайн, тело работы и место подключения — каждый уровень по отдельности', () => {
+    const pipelineLevel = makeProject({
+      'stepcast.yml': `
+kind: pipeline
+skip_exit_code: 70
+jobs:
+  build:
+    steps:
+      - { id: a, run: [echo, ok] }
+`,
+    });
+    assert.deepEqual(codes(pipelineLevel), [70]);
+
+    const bodyLevel = makeProject({
+      'stepcast.yml': `
+kind: pipeline
+jobs:
+  build:
+    skip_exit_code: 71
+    steps:
+      - { id: a, run: [echo, ok] }
+`,
+    });
+    assert.deepEqual(codes(bodyLevel), [71]);
+
+    const siteLevel = makeProject({
+      'stepcast.yml': `
+kind: pipeline
+jobs:
+  build:
+    uses: ./jobs/build.yml
+    skip_exit_code: 72
+`,
+      'jobs/build.yml': `
+kind: job
+steps:
+  - { id: a, run: [echo, ok] }
+`,
+    });
+    assert.deepEqual(codes(siteLevel), [72]);
+  });
+
+  it('ближайший уровень перекрывает дальние: шаг, место подключения, тело работы', () => {
+    const project = makeProject({
+      'stepcast.yml': `
+kind: pipeline
+skip_exit_code: 70
+jobs:
+  site:
+    uses: ./jobs/body.yml
+    skip_exit_code: 72
+  body:
+    uses: ./jobs/body.yml
+  inline:
+    skip_exit_code: 71
+    steps:
+      - { id: a, run: [echo, ok] }
+      - { id: b, run: [echo, ok], skip_exit_code: 73 }
+`,
+      'jobs/body.yml': `
+kind: job
+skip_exit_code: 71
+steps:
+  - { id: a, run: [echo, ok] }
+`,
+    });
+    const jobs = expand(project).pipeline.jobs;
+    const of = (id: string): Array<number | undefined> =>
+      jobs.find((job) => job.id === id)!.steps.map((step) => (step as CommandLike).skipExitCode);
+    assert.deepEqual(of('site'), [72], 'место подключения перекрывает тело работы');
+    assert.deepEqual(of('body'), [71], 'тело работы перекрывает пайплайн');
+    assert.deepEqual(of('inline'), [71, 73], 'шаг перекрывает работу');
+  });
+
+  it('script берёт унаследованный код, uses — код с места вызова', () => {
+    const project = makeProject({
+      'stepcast.yml': `
+kind: pipeline
+skip_exit_code: 70
+jobs:
+  build:
+    steps:
+      - { id: a, script: probe.sh }
+      - { id: b, script: probe.sh, skip_exit_code: 74 }
+`,
+      '.stepcast/scripts/probe.sh': '#!/bin/sh\nexit 0\n',
+    });
+    const job = expandScript(project, isolatedScriptRoots(project)).pipeline.jobs[0]!;
+    assert.deepEqual(
+      job.steps.map((step) => (step as CommandLike).skipExitCode),
+      [70, 74],
+    );
+  });
+
+  it('uses-шаг берёт код с места вызова, а не из манифеста', () => {
+    const project = makeProject({
+      'stepcast.yml': `
+kind: pipeline
+skip_exit_code: 70
+jobs:
+  build:
+    steps:
+      - { id: a, uses: noop }
+      - { id: b, uses: noop, skip_exit_code: 75 }
+`,
+      '.stepcast/steps/noop/step.yml': `
+version: 1
+kind: step
+name: noop
+description: Ничего не делает.
+file: ./main.cjs
+`,
+      '.stepcast/steps/noop/main.cjs': 'process.exit(0);\n',
+    });
+    const job = expandUses(project, usesStepRoots(project)).pipeline.jobs[0]!;
+    assert.deepEqual(
+      job.steps.map((step) => (step as CommandLike).skipExitCode),
+      [70, 75],
+    );
+  });
+
+  it('${params.*} раскрывается в число', () => {
+    const project = makeProject({
+      'stepcast.yml': `
+kind: pipeline
+jobs:
+  build:
+    uses: ./jobs/build.yml
+    with: { code: 78 }
+`,
+      'jobs/build.yml': `
+kind: job
+params:
+  code: { type: int, required: true }
+skip_exit_code: "\${params.code}"
+steps:
+  - { id: a, run: [echo, ok] }
+  - { id: b, run: [echo, ok], skip_exit_code: "\${params.code}" }
+`,
+    });
+    assert.deepEqual(codes(project), [78, 78]);
+  });
+
+  it('работа с agent и run: у agent поля нет, у run есть', () => {
+    const project = makeProject({
+      'stepcast.yml': `
+kind: pipeline
+skip_exit_code: 78
+jobs:
+  build:
+    steps:
+      - { id: think, prompt: подумай }
+      - { id: probe, run: [echo, ok] }
+`,
+    });
+    const steps = expand(project).pipeline.jobs[0]!.steps;
+    assert.equal('skipExitCode' in steps[0]!, false);
+    assert.equal((steps[1] as CommandLike).skipExitCode, 78);
+  });
+
+  it('смена кода меняет ключ шага', () => {
+    const body = (code: number): Project =>
+      makeProject({
+        'stepcast.yml': `
+kind: pipeline
+jobs:
+  build:
+    steps:
+      - { id: a, run: [echo, ok], skip_exit_code: ${code} }
+`,
+      });
+    assert.notEqual(
+      JSON.stringify(expand(body(78)).pipeline.jobs[0]!.steps[0]),
+      JSON.stringify(expand(body(79)).pipeline.jobs[0]!.steps[0]),
+    );
+  });
+
+  for (const bad of ['0', '256', '1.5', '-1']) {
+    it(`отказывает на ${bad} и называет место ключа`, () => {
+      const project = makeProject({
+        'stepcast.yml': `
+kind: pipeline
+jobs:
+  build:
+    steps:
+      - { id: a, run: [echo, ok], skip_exit_code: ${bad} }
+`,
+      });
+      const error = thrown(() => expand(project));
+      assert.equal(error.at, 'jobs.build.steps.0.skip_exit_code');
+    });
+  }
+
+  it('отказ на значении уровня работы называет ключ работы', () => {
+    const project = makeProject({
+      'stepcast.yml': `
+kind: pipeline
+jobs:
+  build:
+    skip_exit_code: 300
+    steps:
+      - { id: a, run: [echo, ok] }
+`,
+    });
+    assert.equal(thrown(() => expand(project)).at, 'jobs.build.skip_exit_code');
+  });
+
+  it('отказ на значении корня называет ключ корня', () => {
+    const project = makeProject({
+      'stepcast.yml': `
+kind: pipeline
+skip_exit_code: 0
+jobs:
+  build:
+    steps:
+      - { id: a, run: [echo, ok] }
+`,
+    });
+    assert.equal(thrown(() => expand(project)).at, 'skip_exit_code');
+  });
+
+  it('отложенное пространство в значении отклоняется', () => {
+    const project = makeProject({
+      'stepcast.yml': `
+kind: pipeline
+jobs:
+  build:
+    steps:
+      - { id: a, run: [echo, ok], skip_exit_code: "\${env.CODE}" }
+`,
+    });
+    assert.match(thrown(() => expand(project)).message, /отложенное пространство/);
+  });
+});

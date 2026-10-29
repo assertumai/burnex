@@ -58,6 +58,26 @@ describe('lanes: evaluateLane', () => {
     assert.deepEqual(evaluateLane(jobs, 'a'), { kind: 'ready' });
   });
 
+  it('работа, пропущенная объявлением шага (`declared`), годности не отменяет', () => {
+    // Шаг сказал «делать нечего» кодом выхода: работа свою ветку прошла.
+    const jobs = [job('propose', 'a', 'success'), skipped('verify', 'a', 'declared')];
+    assert.deepEqual(evaluateLane(jobs, 'a'), { kind: 'ready' });
+  });
+
+  it('дорожка, где все работы пропущены объявлением, — незаполненный слот', () => {
+    const jobs = [skipped('propose', 'a', 'declared'), skipped('verify', 'a', 'declared')];
+    assert.deepEqual(evaluateLane(jobs, 'a'), { kind: 'empty' });
+  });
+
+  it('`declared` не прячет рядом стоящий отказ', () => {
+    const jobs = [skipped('propose', 'a', 'declared'), job('verify', 'a', 'failed')];
+    const outcome = evaluateLane(jobs, 'a');
+    assert.equal(outcome.kind, 'unfit');
+    if (outcome.kind === 'unfit') {
+      assert.deepEqual(outcome.jobs, [{ id: 'verify', status: 'failed' }]);
+    }
+  });
+
   it('работа, пропущенная остановкой прогона, делает дорожку негодной', () => {
     const jobs = [job('propose', 'a', 'success'), skipped('verify', 'a', 'halted')];
     const outcome = evaluateLane(jobs, 'a');

@@ -573,6 +573,16 @@
       },
       "additionalProperties": false
     },
+    "skip_exit_code": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "number"
+        }
+      ]
+    },
     "mcp": {
       "type": "object",
       "propertyNames": {
@@ -974,6 +984,16 @@
                   }
                 },
                 "additionalProperties": false
+              },
+              "skip_exit_code": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ]
               }
             },
             "required": [
@@ -1310,6 +1330,16 @@
                   }
                 },
                 "additionalProperties": false
+              },
+              "skip_exit_code": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ]
               },
               "until": {
                 "type": "object",
@@ -2507,6 +2537,16 @@
                             "pattern": "^[a-z][a-z0-9_-]{0,63}$"
                           }
                         },
+                        "skip_exit_code": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "number"
+                            }
+                          ]
+                        },
                         "run": {
                           "anyOf": [
                             {
@@ -2956,6 +2996,16 @@
                             "type": "string",
                             "pattern": "^[a-z][a-z0-9_-]{0,63}$"
                           }
+                        },
+                        "skip_exit_code": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "number"
+                            }
+                          ]
                         },
                         "script": {
                           "type": "string",
@@ -3414,6 +3464,16 @@
                             "type": "string",
                             "pattern": "^[a-z][a-z0-9_-]{0,63}$"
                           }
+                        },
+                        "skip_exit_code": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "number"
+                            }
+                          ]
                         },
                         "uses": {
                           "type": "string"

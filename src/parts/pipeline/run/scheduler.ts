@@ -22,7 +22,7 @@ export interface JobOutcome {
   readonly reason?: string;
   /** Причина неуспеха из закрытого перечня `halt.ts`. */
   readonly cause?: HaltCauseValue;
-  /** Происхождение пропуска: решение графа либо остановка прогона. */
+  /** Происхождение пропуска: решение графа, остановка прогона либо объявление шага. */
   readonly skip?: SkipKind;
   /** Результаты check последней итерации, когда причина — until_not_met. */
   readonly lastCheck?: readonly PredicateResult[];

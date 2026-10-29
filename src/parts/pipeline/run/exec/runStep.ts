@@ -102,6 +102,37 @@ export async function executeRunStep(options: RunStepOptions): Promise<RunStepRe
 
       last = result;
 
+      // Код пропуска проверяется до `evaluate`: разбор stdout по
+      // `output_schema`, чтение файла выхода `script`, предикаты и судьи — всё
+      // это живёт в `evaluate`, а шаг, сказавший «делать нечего», выхода не
+      // пишет, и промах контракта не должен стать причиной. Пропуск терминален:
+      // повтор вернул бы тот же ответ, а `attempts` рассчитаны на неудачи.
+      if (
+        result.outcome === 'exited' &&
+        step.skipExitCode !== undefined &&
+        result.exitCode === step.skipExitCode
+      ) {
+        allResults.push([
+          {
+            predicate: 'skip_exit_code',
+            passed: true,
+            hard: true,
+            expected: step.skipExitCode,
+            actual: result.exitCode,
+          },
+        ]);
+        const skipped: AttemptRecord = {
+          attempt: plan.attempt,
+          status: 'skipped',
+          reason: `шаг объявил пропуск: код ${step.skipExitCode}`,
+          started_at: startedAt,
+          finished_at: new Date().toISOString(),
+          exit_code: result.exitCode,
+        };
+        records.push(skipped);
+        return { passed: false, value: skipped, terminal: true };
+      }
+
       const results =
         result.outcome === 'exited'
           ? await evaluate(step, result, plan)
@@ -148,8 +179,9 @@ export async function executeRunStep(options: RunStepOptions): Promise<RunStepRe
     },
   });
 
-  const cancelled = records.at(-1)?.status === 'canceled';
-  const status: StatusValue = cancelled ? 'canceled' : loop.passed ? 'success' : 'failed';
+  const lastStatus = records.at(-1)?.status;
+  const status: StatusValue =
+    lastStatus === 'canceled' ? 'canceled' : lastStatus === 'skipped' ? 'skipped' : loop.passed ? 'success' : 'failed';
 
   return {
     status,

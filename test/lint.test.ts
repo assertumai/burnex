@@ -1985,6 +1985,44 @@ jobs:
   });
 });
 
+describe('pipeline-definition: skip_exit_code и expect exit_code', () => {
+  const project = (root: string, step: string): Project =>
+    makeProject({
+      'stepcast.yml': `kind: pipeline
+${root}jobs:
+  build:
+    steps:
+      - ${step}
+`,
+    });
+
+  it('код пропуска шага равен expect exit_code — ошибка называет шаг и оба значения', () => {
+    const found = lint(project('', '{ id: a, run: [echo, ok], skip_exit_code: 78, expect: [{ exit_code: 78 }] }')).filter(
+      (item) => item.severity === 'error',
+    );
+    assert.equal(found.length, 1, JSON.stringify(found));
+    assert.match(found[0]!.message, /build\/a/);
+    assert.match(found[0]!.message, /exit_code 78/);
+    assert.match(found[0]!.message, /skip_exit_code 78/);
+    assert.equal(found[0]!.at, 'jobs.build.steps.0.expect');
+  });
+
+  it('код пропуска с пайплайна совпал с expect шага — ошибка', () => {
+    const found = lint(project('skip_exit_code: 78\n', '{ id: a, run: [echo, ok], expect: [{ exit_code: 78 }] }')).filter(
+      (item) => item.severity === 'error',
+    );
+    assert.equal(found.length, 1, JSON.stringify(found));
+    assert.match(found[0]!.message, /skip_exit_code 78/);
+  });
+
+  it('разные коды — тишина', () => {
+    const found = lint(project('skip_exit_code: 78\n', '{ id: a, run: [echo, ok], expect: [{ exit_code: 3 }] }')).filter(
+      (item) => item.severity === 'error',
+    );
+    assert.deepEqual(found, []);
+  });
+});
+
 describe('pipeline-definition: путь копии при неподходящем режиме', () => {
   it('отклоняет путь размещения рабочей копии при режиме, отличном от copy', () => {
     const project = makeProject({

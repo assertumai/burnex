@@ -630,6 +630,66 @@ jobs:
   });
 });
 
+describe('pipeline-execution: пропуск, объявленный шагом (skip: declared)', () => {
+  const DECLARED: JobOutcome = { status: 'skipped', reason: 'шаг объявил пропуск', skip: 'declared' };
+
+  // Пропуск отказом не считается: `isFailure` его не включает, и этот тест
+  // держит свойство, чтобы будущая правка не сломала его молча.
+  it('fail_fast: true не останавливает независимую соседнюю работу', async () => {
+    const result = await drive(
+      pipelineOf(`
+kind: pipeline
+fail_fast: true
+jobs:
+  пустая: { steps: [${STEP}] }
+  сосед: { needs: [], steps: [${STEP}] }
+`),
+      { пустая: DECLARED },
+    );
+    assert.deepEqual(result.executed.sort(), ['пустая', 'сосед']);
+    assert.equal(result.statuses.get('сосед'), 'success');
+    assert.equal(result.status, 'success');
+  });
+
+  it('зависимая с единственной пропущенной зависимостью пропускается условием', async () => {
+    const result = await drive(
+      pipelineOf(`
+kind: pipeline
+jobs:
+  пустая: { steps: [${STEP}] }
+  после: { needs: [пустая], steps: [${STEP}] }
+`),
+      { пустая: DECLARED },
+    );
+    assert.equal(result.statuses.get('после'), 'skipped');
+    assert.deepEqual(result.executed, ['пустая']);
+  });
+
+  it('зависимая от пропущенной и успешной работ on: success исполняется', async () => {
+    const result = await drive(
+      pipelineOf(`
+kind: pipeline
+jobs:
+  пустая: { steps: [${STEP}] }
+  рядом: { steps: [${STEP}] }
+  обе: { needs: [пустая, рядом], steps: [${STEP}] }
+`),
+      { пустая: DECLARED },
+    );
+    assert.equal(result.statuses.get('обе'), 'success');
+  });
+
+  it('итог прогона из success и declared — success', () => {
+    assert.equal(
+      overallStatus([
+        { id: 'a', status: 'success' },
+        { id: 'b', status: 'skipped' },
+      ]),
+      'success',
+    );
+  });
+});
+
 describe('pipeline-execution: исходы', () => {
   // Сценарий: «Отказ работы»
   it('прогон с отказавшей работой завершается отказом', async () => {

@@ -219,6 +219,8 @@ export interface RunStep extends StepCommon {
   /** Список argv либо строка для оболочки. */
   readonly command: readonly string[] | string;
   readonly onFail?: { readonly analyze: string; readonly prompt: string };
+  /** Действующий код пропуска (`skip_exit_code`), см. `skipExitCode` у `ScriptStep`. */
+  readonly skipExitCode?: number;
   /**
    * Схема, объявляющая структурированный выход командного шага. Присутствие
    * поля включает разбор stdout как одного JSON-документа — без него
@@ -327,6 +329,14 @@ export interface ScriptStep extends StepCommon {
   /** Имя раннера, объявленное на шаге явно — побеждает расширение и shebang. */
   readonly runner?: string;
   readonly onFail?: { readonly analyze: string; readonly prompt: string };
+  /**
+   * Код выхода (1..255), которым шаг объявляет «делать нечего»: выход этим
+   * кодом — пропуск работы, а не успех и не отказ (`skip_exit_code`). Уже
+   * действующий для шага: свой ключ, иначе место подключения, иначе тело
+   * работы, иначе пайплайн — исполнитель об уровнях не знает. У `uses`-шага
+   * код берётся с места вызова, не из манифеста.
+   */
+  readonly skipExitCode?: number;
   /**
    * Объявленный вход шага — JSON-дерево, раскрытое типизированной подстановкой
    * (design.md, решение 4). Не объявлен — движок пишет `input.json` пустым

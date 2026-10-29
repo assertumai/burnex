@@ -596,6 +596,14 @@ export function buildDocumentSchemas(
     attempts: AttemptsSchema.optional(),
   };
 
+  /**
+   * Код выхода, которым командный шаг объявляет «делать нечего». Не в
+   * `StepCommonShape`: у шага `agent` и у плагинного вида кода выхода нет, и
+   * строгие схемы этих ветвей отклоняют ключ сами. На корне, в теле работы и на
+   * месте подключения тот же ключ — наследуемое значение для командных шагов.
+   */
+  const SkipExitCodeShape = { skip_exit_code: count.optional() };
+
   const AgentStepSchema = z
     .object({
       ...StepCommonShape,
@@ -612,6 +620,7 @@ export function buildDocumentSchemas(
     .object({
       ...StepCommonShape,
       ...StepSecretsShape,
+      ...SkipExitCodeShape,
       run: z.union([z.string(), z.array(z.string())]),
       on_fail: z.object({ analyze: z.string(), prompt: z.string() }).strict().optional(),
       output_schema: z.string().optional(),
@@ -635,6 +644,7 @@ export function buildDocumentSchemas(
     .object({
       ...StepCommonShape,
       ...StepSecretsShape,
+      ...SkipExitCodeShape,
       script: z.string().min(1).regex(/\S/),
       args: z.array(z.string()).optional(),
       runner: z.string().optional(),
@@ -659,6 +669,7 @@ export function buildDocumentSchemas(
     .object({
       ...StepCommonShape,
       ...StepSecretsShape,
+      ...SkipExitCodeShape,
       uses: UsesNameSchema,
       with: z.record(z.string(), z.unknown()).optional(),
       on_fail: z.object({ analyze: z.string(), prompt: z.string() }).strict().optional(),
@@ -777,6 +788,7 @@ export function buildDocumentSchemas(
     // проверяется тем же разбором, что и ключ при записи (`assertDataKey`).
     data: z.array(z.string()).optional(),
     budget: BudgetSchema.optional(),
+    ...SkipExitCodeShape,
     until: UntilSchema.optional(),
     permissions: PermissionsSchema.optional(),
     mcp: McpSchema.optional(),
@@ -841,6 +853,7 @@ export function buildDocumentSchemas(
       context: z.array(ContextEntrySchema).optional(),
       context_upstream: ContextUpstreamSchema.optional(),
       budget: BudgetSchema.optional(),
+      ...SkipExitCodeShape,
     })
     .strict();
 
@@ -908,6 +921,7 @@ export function buildDocumentSchemas(
         .strict()
         .optional(),
       budget: BudgetSchema.optional(),
+      ...SkipExitCodeShape,
       mcp: McpSchema.optional(),
       concurrency: count.optional(),
       fail_fast: z.boolean().optional(),

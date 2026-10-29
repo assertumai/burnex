@@ -3,7 +3,8 @@ import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, it } from 'node:test';
 
-import { buildStepEnv, type EnvLayers } from '../src/parts/pipeline/run/exec/env.js';
+import { buildStepEnv, injectedVariables, type EnvLayers, type InjectedContext } from '../src/parts/pipeline/run/exec/env.js';
+import { stepEnv } from '../src/parts/pipeline/run/runner.js';
 import { tempDir } from './tmp.js';
 
 /** Слои без секретов — тест добавляет только то, что проверяет. */
@@ -21,6 +22,60 @@ function onPlatform<T>(platform: NodeJS.Platform, run: () => T): T {
     if (original !== undefined) Object.defineProperty(process, 'platform', original);
   }
 }
+
+describe('injectedVariables: STEPCAST_SKIP_EXIT_CODE', () => {
+  const base: InjectedContext = {
+    runId: 'r',
+    runDir: '/r',
+    binPath: '/bin',
+    jobId: 'j',
+    jobDir: '/r/j',
+    attempt: 1,
+    workspace: '/w',
+    artifacts: '/a',
+    scratch: '/s',
+  };
+
+  it('выставляется при объявленном коде', () => {
+    assert.equal(injectedVariables({ ...base, skipExitCode: 78 }).STEPCAST_SKIP_EXIT_CODE, '78');
+  });
+
+  it('не выставляется, когда код не объявлен', () => {
+    assert.equal('STEPCAST_SKIP_EXIT_CODE' in injectedVariables(base), false);
+  });
+
+  // `stepEnv` читает из контекста прогона немного: хватает урезанного слепка.
+  const context = {
+    expanded: { pipeline: { secrets: [], envFiles: [], env: {}, envDeny: [] } },
+    secretValues: new Map(),
+    baseEnv: {},
+    journal: {
+      paths: { runId: 'r', dir: '/r', artifacts: '/a', jobs: '/r/jobs' },
+      prepareJob: () => '/r/j',
+      event: () => undefined,
+    },
+    engine: { entry: '/bin' },
+    cwd: '/w',
+    projectRoot: '/w',
+    reportedDenials: new Set(),
+    reportedWithheld: new Set(),
+  } as unknown as Parameters<typeof stepEnv>[3];
+  const job = { id: 'j', env: {} } as unknown as Parameters<typeof stepEnv>[1];
+  const common = { id: 's', env: {} };
+
+  it('stepEnv отдаёт код командному шагу и его проверкам', () => {
+    const step = { ...common, kind: 'run', skipExitCode: 78 } as unknown as Parameters<typeof stepEnv>[0];
+    assert.equal(stepEnv(step, job, 1, context, '/r/j/s').STEPCAST_SKIP_EXIT_CODE, '78');
+    assert.equal(stepEnv(step, job, 1, context, '/r/j/s', 'check').STEPCAST_SKIP_EXIT_CODE, '78');
+  });
+
+  it('stepEnv не выставляет переменную без кода и агентскому шагу', () => {
+    const run = { ...common, kind: 'run' } as unknown as Parameters<typeof stepEnv>[0];
+    const agent = { ...common, kind: 'agent' } as unknown as Parameters<typeof stepEnv>[0];
+    assert.equal('STEPCAST_SKIP_EXIT_CODE' in stepEnv(run, job, 1, context, '/r/j/s'), false);
+    assert.equal('STEPCAST_SKIP_EXIT_CODE' in stepEnv(agent, job, 1, context, '/r/j/s'), false);
+  });
+});
 
 describe('buildStepEnv: секреты', () => {
   it('секрет доходит мимо env_deny и не попадает в denied', () => {
