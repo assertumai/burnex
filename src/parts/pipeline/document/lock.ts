@@ -184,6 +184,7 @@ export function jobToPlain(job: Job): Record<string, unknown> {
     context_upstream: job.contextUpstream,
     ...(job.output === undefined ? {} : { output: job.output }),
     ...(job.data.length === 0 ? {} : { data: job.data }),
+    ...(job.outputs.length === 0 ? {} : { outputs: job.outputs }),
     ...(job.budget === undefined ? {} : { budget: budgetToPlain(job.budget) }),
     // Только при повторе: замок работы без ключа не меняется ни на байт.
     ...(job.attempts.max > 1 ? { attempts: { max: job.attempts.max } } : {}),

@@ -15,6 +15,7 @@ import { availableNames, nativePredicateNames, nativeStepKindNames, type Registr
 import { backendsInUse, describeSecretParamsIssue } from '../secrets/declaration.js';
 import { isGitWorktree } from './anchor/git.js';
 import { workspaceInheritanceDiagnostics } from '../run/inherit.js';
+import { keyRejection, MAX_OUTPUT_KEYS, needsJobSegment } from '../run/jobOutputs.js';
 import {
   describeCopyRejection,
   describeNoCommitForWorktree,
@@ -30,10 +31,12 @@ import type {
   ExpandedPipeline,
   Job,
   McpServers,
+  Pipeline,
   Predicate,
   Step,
   Substitution,
 } from '../document/model.js';
+import type { Graph } from './graph.js';
 
 /**
  * Статическая проверка раскрытого пайплайна.
@@ -760,6 +763,7 @@ export function lintPipeline(expanded: ExpandedPipeline, given: LintOptions): Di
     checkCondition(job, upstreamOf, declaredInputs, graph.byId, pipeline.concurrency, pipeline.file, laneOf, push);
     checkJobSubstitutions(job, upstreamOf, substitutions, graph.byId, pipeline.file, push);
     checkJobDataSubstitutions(job, substitutions, graph.byId, pipeline.file, push);
+    checkJobOutputs(job, graph, pipeline, push);
     checkDisplaySubstitutions(job, substitutions, graph.byId, pipeline.file, push);
     checkContextUpstream(job, upstreamOf, push);
     checkLaneNeeds(job, laneOf, pipeline.file, push);
@@ -1362,6 +1366,149 @@ function checkJobDataSubstitutions(
           producer.data.length === 0
             ? `Работа ${other} не объявляет ни одного ключа данных`
             : `Объявлены: ${producer.data.join(', ')}`,
+      });
+    }
+  }
+}
+
+const NEEDS_REFERENCE = /\$\{?NEEDS_([A-Za-z0-9_]+)/g;
+
+/** Тексты работы, где упоминание `$NEEDS_…` что-то значит: команды `run` и предикаты `cmd`. */
+function commandTexts(job: Job): { readonly text: string; readonly at: string }[] {
+  const out: { text: string; at: string }[] = [];
+  for (const step of job.steps) {
+    const at = `jobs.${job.id}.steps.${step.index - 1}`;
+    if (step.kind === 'run') {
+      const parts = typeof step.command === 'string' ? [step.command] : step.command;
+      for (const part of parts) out.push({ text: part, at: `${at}.run` });
+    }
+    if (step.kind === 'plugin') continue;
+    for (const predicate of step.expect) {
+      if (predicate.kind === 'cmd') out.push({ text: predicate.command, at: `${at}.expect` });
+    }
+  }
+  for (const predicate of job.until?.check ?? []) {
+    if (predicate.kind === 'cmd') out.push({ text: predicate.command, at: `jobs.${job.id}.until` });
+  }
+  return out;
+}
+
+/**
+ * Выходы работы (`outputs:`) и упоминания `$NEEDS_<РАБОТА>_<КЛЮЧ>` в её командах
+ * (job-outputs-key-value, design.md, решение 8).
+ *
+ * Упоминание необъявленного ключа — ошибка именно потому, что статически
+ * существование ключа доказать нечем; пайплайн, который на него полагается,
+ * объявляет его. Проверяется только текст документа: ссылка из внешнего
+ * скрипта, который зовёт `run`, статически не видна.
+ */
+function checkJobOutputs(
+  job: Job,
+  graph: Graph,
+  pipeline: Pipeline,
+  push: (diagnostic: Diagnostic) => void,
+): void {
+  const at = `jobs.${job.id}`;
+  const policy = { envDeny: pipeline.envDeny, secretEnvs: pipeline.secrets.map((secret) => secret.env) };
+
+  const seen = new Set<string>();
+  for (const key of job.outputs) {
+    if (seen.has(key)) {
+      push({
+        severity: 'error',
+        message: `Работа ${job.id} объявляет выход «${key}» повторно`,
+        file: job.source,
+        at: `${at}.outputs`,
+      });
+      continue;
+    }
+    seen.add(key);
+    const rejection = keyRejection(job.id, key, policy);
+    if (rejection !== undefined) {
+      push({
+        severity: 'error',
+        message: `Работа ${job.id} не может объявить выход «${key}»: ${rejection}`,
+        file: job.source,
+        at: `${at}.outputs`,
+        hint: 'Секреты выходами не передают — для них есть secrets:',
+      });
+    }
+  }
+  if (seen.size > MAX_OUTPUT_KEYS) {
+    push({
+      severity: 'error',
+      message: `Работа ${job.id} объявляет ${seen.size} выходов — предел ${MAX_OUTPUT_KEYS}`,
+      file: job.source,
+      at: `${at}.outputs`,
+    });
+  }
+
+  const direct = graph.dependencies.get(job.id) ?? [];
+  const bySegment = new Map<string, string[]>();
+  for (const id of direct) {
+    const segment = needsJobSegment(id);
+    bySegment.set(segment, [...(bySegment.get(segment) ?? []), id]);
+  }
+  for (const [segment, ids] of bySegment) {
+    if (ids.length < 2) continue;
+    push({
+      severity: 'error',
+      message: `Прямые зависимости ${ids.join(' и ')} работы ${job.id} дают один сегмент NEEDS_${segment}_ — их выходы не различить`,
+      file: job.source,
+      at: `${at}.needs`,
+      hint: 'Переименуйте одну из работ: идентификаторы различаются только дефисом, подчёркиванием или регистром',
+    });
+  }
+
+  const reported = new Set<string>();
+  for (const { text, at: where } of commandTexts(job)) {
+    for (const match of text.matchAll(NEEDS_REFERENCE)) {
+      const name = match[1] as string;
+      if (reported.has(name)) continue;
+      reported.add(name);
+
+      const reference = `NEEDS_${name}`;
+      const prefixed = direct.filter((id) => name.startsWith(`${needsJobSegment(id)}_`));
+      if (prefixed.length === 0) {
+        const indirect = [...graph.byId.keys()].find((id) => name.startsWith(`${needsJobSegment(id)}_`));
+        push({
+          severity: 'error',
+          message: `Работа ${job.id} упоминает ${reference}, но не зависит напрямую от работы, которая его публикует`,
+          file: job.source,
+          at: where,
+          hint:
+            indirect === undefined
+              ? 'Выходы получают только прямые зависимости (needs)'
+              : `Добавьте ${indirect} в needs: выходы получают только прямые зависимости`,
+        });
+        continue;
+      }
+
+      // Подходит только та зависимость, у которой остаток имени — её объявленный ключ.
+      const declaring = prefixed.filter((id) =>
+        graph.byId.get(id)?.outputs.includes(name.slice(needsJobSegment(id).length + 1)) === true,
+      );
+      if (declaring.length === 1) continue;
+      if (declaring.length > 1) {
+        push({
+          severity: 'error',
+          message: `Ссылка ${reference} в работе ${job.id} неоднозначна: подходят работы ${declaring.join(' и ')}`,
+          file: job.source,
+          at: where,
+          hint: 'Переименуйте ключ или работу, чтобы имя читалось одним способом',
+        });
+        continue;
+      }
+      const producers = prefixed.map((id) => {
+        const declared = graph.byId.get(id)?.outputs ?? [];
+        return `${id}: ${declared.length === 0 ? 'выходов не объявлено' : declared.join(', ')}`;
+      });
+      push({
+        severity: 'error',
+        message: `Работа ${job.id} упоминает ${reference} — ключ не объявлен в outputs работы ${prefixed.join(' и ')}`,
+        file: job.source,
+        at: where,
+        hint: `Объявлено — ${producers.join('; ')}`,
       });
     }
   }

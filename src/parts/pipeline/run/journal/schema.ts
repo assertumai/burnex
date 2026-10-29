@@ -342,6 +342,13 @@ export const StepRecordSchema = z
      * ожидающего вида, дождавшегося решения.
      */
     decision: DecisionRecordSchema.optional(),
+    /**
+     * Выходы работы, внесённые этим шагом `run` (job-outputs-key-value): ключи,
+     * которых до него не было или чьё значение он изменил. По ним `resume`
+     * переносит выходы только переиспользованных шагов. Нет у шага, ничего не
+     * опубликовавшего.
+     */
+    outputs: z.record(z.string(), z.string()).optional(),
   })
   .strict();
 
@@ -363,6 +370,12 @@ export const JobRecordSchema = z
      * каждом событии журнала — конкурентная запись была бы гонкой.
      */
     data: z.record(z.string(), z.string()).optional(),
+    /**
+     * Выходы, принятые движком из `$STEPCAST_JOB_OUTPUTS` (job-outputs-key-value).
+     * Источник для переменных `NEEDS_*` потребителей — запись, а не файл. Поле
+     * необязательно: запись прогона прежней версии читается как работа без выходов.
+     */
+    outputs: z.record(z.string(), z.string()).optional(),
     /** Число выполненных итераций цикла. У работы без цикла отсутствует. */
     iterations: z.number().int().positive().optional(),
     /** Число использованных попыток работы. Есть только у работы с `attempts.max > 1`. */

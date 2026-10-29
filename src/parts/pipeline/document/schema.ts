@@ -818,6 +818,11 @@ export function buildDocumentSchemas(
     // (см. design.md решение 2), значит нужно именно перечисление. Каждое имя
     // проверяется тем же разбором, что и ключ при записи (`assertDataKey`).
     data: z.array(z.string()).optional(),
+    // Имена выходов, которые работа обязана опубликовать в
+    // `$STEPCAST_JOB_OUTPUTS`. Форму имени проверяет разбор документа тем же
+    // выражением, что и движок (`run/jobOutputs.ts`): здесь нужно сообщение с
+    // именем работы, а схема его не знает.
+    outputs: z.array(z.string()).optional(),
     budget: BudgetSchema.optional(),
     ...SkipExitCodeShape,
     ...ShellShape,

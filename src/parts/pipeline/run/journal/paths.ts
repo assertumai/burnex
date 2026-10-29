@@ -151,6 +151,15 @@ export function jobDir(paths: RunPaths, jobId: string): string {
 }
 
 /**
+ * Файл выходов работы: шаги `run` дописывают в него `ключ=значение`
+ * (`$STEPCAST_JOB_OUTPUTS`). Один на работу — набор выходов свойство работы,
+ * а не шага.
+ */
+export function jobOutputsPath(paths: RunPaths, jobId: string): string {
+  return join(jobDir(paths, jobId), 'outputs.env');
+}
+
+/**
  * Каталог черновиков работы: общее место на всю работу, а не на шаг, — агент
  * пишет туда, не задумываясь, доживёт ли файл до следующего шага. Лежит под
  * `paths.jobs`, а значит вне рабочего дерева при любом режиме `workspace`:

@@ -62,6 +62,8 @@ describe('injectedVariables: STEPCAST_SKIP_EXIT_CODE', () => {
     projectRoot: '/w',
     reportedDenials: new Set(),
     reportedWithheld: new Set(),
+    graph: { dependencies: new Map() },
+    records: new Map(),
   } as unknown as Parameters<typeof stepEnv>[3];
   const job = { id: 'j', env: {}, attempts: { max: 1 } } as unknown as Parameters<typeof stepEnv>[1];
   const common = { id: 's', env: {} };
@@ -89,6 +91,16 @@ describe('injectedVariables: STEPCAST_SKIP_EXIT_CODE', () => {
       const env = stepEnv(step, retrying, 1, second, '/r/j/s', grant);
       assert.equal(env.STEPCAST_JOB_ATTEMPT, '2');
       assert.equal(env.STEPCAST_JOB_ATTEMPT_MAX, '3');
+    }
+  });
+
+  it('STEPCAST_JOB_OUTPUTS есть только у шага run и его проверок', () => {
+    const of = (kind: string): Parameters<typeof stepEnv>[0] =>
+      ({ ...common, kind }) as unknown as Parameters<typeof stepEnv>[0];
+    for (const grant of ['step', 'check'] as const) {
+      assert.equal(stepEnv(of('run'), job, 1, context, '/r/j/s', grant).STEPCAST_JOB_OUTPUTS, '/r/jobs/j/outputs.env');
+      assert.equal('STEPCAST_JOB_OUTPUTS' in stepEnv(of('agent'), job, 1, context, '/r/j/s', grant), false);
+      assert.equal('STEPCAST_JOB_OUTPUTS' in stepEnv(of('script'), job, 1, context, '/r/j/s', grant), false);
     }
   });
 

@@ -587,6 +587,7 @@ describe('раскрытие отложенных подстановок в with
       contextUpstream: 'all',
       inputs: [],
       data: [],
+      outputs: [],
       attempts: { max: 1 },
       steps: [
         {

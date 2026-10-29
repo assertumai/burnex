@@ -1,4 +1,4 @@
-import { readFileSync, rmSync } from 'node:fs';
+import { readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { StepcastError } from '../../../../kernel/errors.js';
@@ -150,6 +150,24 @@ export function writeJobDataUnchecked(jobDirPath: string, data: JobData): void {
  */
 export function resetJobData(jobDirPath: string): void {
   rmSync(jobDataPath(jobDirPath), { force: true });
+}
+
+/**
+ * Завести пустой файл выходов в начале исполнения работы. Усечение, а не
+ * удаление: путь отдаётся шагам переменной окружения, и дописывающий `>>`
+ * должен находить файл на месте; выходы упавшей попытки до новой не доходят.
+ */
+export function resetJobOutputs(filePath: string): void {
+  writeFileSync(filePath, '');
+}
+
+/** Прочитать файл выходов. Отсутствующий файл — пустой: шаг мог его удалить. */
+export function readJobOutputsText(filePath: string): string {
+  try {
+    return readFileSync(filePath, 'utf8');
+  } catch {
+    return '';
+  }
 }
 
 /**

@@ -494,6 +494,7 @@ const FIXED_JOB: Job = {
   contextUpstream: 'all',
   inputs: [],
   data: [],
+  outputs: [],
   attempts: { max: 1 },
   steps: [FIXED_STEP],
 };

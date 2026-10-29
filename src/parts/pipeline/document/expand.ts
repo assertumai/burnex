@@ -21,6 +21,7 @@ import { Ajv2020 } from 'ajv/dist/2020.js';
 
 import { StepcastError } from '../../../kernel/errors.js';
 import { assertDataKey } from '../run/journal/data.js';
+import { JOB_OUTPUT_KEY } from '../run/jobOutputs.js';
 import { findProjectRoot } from '../run/journal/paths.js';
 import { findPackageRoot, packagedSchemaPath, packagedWrapperPath } from '../domain/package-schema.js';
 import { builtinRegistry } from '../../builtin.js';
@@ -385,6 +386,28 @@ function toDataDeclaration(
         cause: error,
       });
     }
+  }
+  return names;
+}
+
+/**
+ * Разобрать объявление `outputs`: форма имени проверяется здесь, при разборе,
+ * тем же выражением, что и ключ в файле выходов, и ошибка называет работу.
+ */
+function toOutputsDeclaration(
+  raw: readonly string[] | undefined,
+  declaringFile: string,
+  at: string,
+  jobId: string,
+): readonly string[] {
+  const names = raw ?? [];
+  for (const name of names) {
+    if (JOB_OUTPUT_KEY.test(name)) continue;
+    throw new StepcastError(`Работа ${jobId} объявляет выход с недопустимым именем «${name}»`, {
+      file: declaringFile,
+      at: `${at}.outputs`,
+      hint: `Имя выхода подходит под ${JOB_OUTPUT_KEY.source}: оно становится частью переменной NEEDS_<РАБОТА>_<КЛЮЧ>`,
+    });
   }
   return names;
 }
@@ -2492,6 +2515,7 @@ export function expandPipeline(options: ExpandOptions): ExpandedPipeline {
         (body.context_upstream as ContextUpstream | undefined) ?? doc.context_upstream ?? 'all',
       inputs: (body.inputs as readonly string[] | undefined) ?? [],
       data: toDataDeclaration(body.data as readonly string[] | undefined, declaringFile, at),
+      outputs: toOutputsDeclaration(body.outputs as readonly string[] | undefined, declaringFile, at, id),
       attempts: toJobAttempts(
         body.attempts as { max: string | number } | undefined,
         config.limits,

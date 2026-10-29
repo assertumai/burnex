@@ -505,12 +505,14 @@ claimed_by: run:2026-10-29T20-18-35Z-47d7a8
 
 ## job-outputs-key-value
 
-status: todo
+status: done
 title: Строковые выходы работы `outputs` для командных шагов через `NEEDS_*`
 why: Структурированный выход работы требует `output_schema` и JSON в stdout; скрипту, которому нужно отдать дальше одну-две строки (хеш, имя ветки), это тяжело. Burnex дал файл `key=value` и переменные зависимым работам.
 done_when: Шаг `run` получает путь в `STEPCAST_JOB_OUTPUTS` и дописывает `key=value`; работы с прямым `needs` получают `NEEDS_<JOB>_<KEY>`; ключ `^[A-Za-z_][A-Za-z0-9_]{0,63}$`, значение до 4096 байт, до 32 на работу, имя, похожее на секрет, отклоняется; необъявленный в `outputs:` ключ работу не ограничивает, объявленный и не опубликованный — отказ; `lint` проверяет `$NEEDS_*` по объявленному набору; тесты.
 group: engine-cli
 source: docs/burnex-after-stepcast.md, раздел 1 «Выходные значения работы»
+started_at: 2026-10-29T21:01:16.262Z
+claimed_by: run:2026-10-29T21-01-14Z-5a6475
 
 ## resume-from-dashboard-button
 

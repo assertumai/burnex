@@ -185,6 +185,17 @@ export interface InjectedContext {
    * расходится со скриптом. Не объявлен — переменной нет вовсе.
    */
   readonly skipExitCode?: number;
+  /**
+   * Файл выходов работы (`STEPCAST_JOB_OUTPUTS`). Передан вызывающим только
+   * для шага `run`: `script` публикует через свой контракт, агент — через
+   * `stepcast data` (job-outputs-key-value, design.md, цели и не-цели).
+   */
+  readonly jobOutputsPath?: string;
+  /**
+   * Переменные `NEEDS_<РАБОТА>_<КЛЮЧ>` от прямых зависимостей. Лежат в слое
+   * `injected`, поэтому не перекрываются `env:` и не вычёркиваются `env_deny`.
+   */
+  readonly needs?: Readonly<Record<string, string>>;
 }
 
 export function injectedVariables(context: InjectedContext): Record<string, string> {
@@ -216,5 +227,7 @@ export function injectedVariables(context: InjectedContext): Record<string, stri
     ...(context.contractInputPath === undefined ? {} : { STEPCAST_INPUT: context.contractInputPath }),
     ...(context.contractOutputPath === undefined ? {} : { STEPCAST_OUTPUT: context.contractOutputPath }),
     ...(context.skipExitCode === undefined ? {} : { STEPCAST_SKIP_EXIT_CODE: String(context.skipExitCode) }),
+    ...(context.jobOutputsPath === undefined ? {} : { STEPCAST_JOB_OUTPUTS: context.jobOutputsPath }),
+    ...context.needs,
   };
 }

@@ -71,8 +71,16 @@ import { computeStepKey, upstreamForKey } from './stepKey.js';
 import { prepareWorkspace, type PreparedWorkspace } from './workspace.js';
 import { syncLiveFiles, writebackLiveFiles } from './liveFiles.js';
 import { createWaitState } from './waitState.js';
-import { jobDataPath, readJobData, resetJobData, writeJobDataUnchecked } from './journal/data.js';
-import { jobDir, jobScratchDir, shortRunId } from './journal/paths.js';
+import {
+  jobDataPath,
+  readJobData,
+  readJobOutputsText,
+  resetJobData,
+  resetJobOutputs,
+  writeJobDataUnchecked,
+} from './journal/data.js';
+import { jobDir, jobOutputsPath, jobScratchDir, shortRunId } from './journal/paths.js';
+import { MAX_OUTPUT_KEYS, needsVarName, parseJobOutputs, type OutputPolicy } from './jobOutputs.js';
 import { findStepDir } from './journal/reader.js';
 import { appendUsageRecord, usageRecord } from './journal/usageStore.js';
 import { RunJournal } from './journal/writer.js';
@@ -1484,6 +1492,14 @@ async function runJob(
   // возобновлении.
   if (firstPass) transferJobData(context, job);
 
+  // Файл выходов заводится пустым в начале каждого исполнения работы (первая
+  // попытка и проход цикла; перезапуск `attempts` делает то же в
+  // `prepareJobRetry`), а выходы переиспользованных шагов приходят из их
+  // записей (`foldJobOutputs`).
+  bookkeep({ journal, job: job.id }, 'сброс файла выходов работы', () => {
+    resetJobOutputs(jobOutputsPath(journal.paths, job.id));
+  });
+
   // Ниже по коду `context` — контекст работы: у него своя рабочая директория.
   //
   // Источник знания заводится здесь же, по этой самой директории, а не один
@@ -1578,7 +1594,7 @@ async function runJob(
         iterations: iteration,
       });
 
-      if (passed) return outcome;
+      if (passed) return unpublishedOutputs(context, job) ?? outcome;
       previousCheck = results;
 
       if (context.usage.check(jobScopes(job, context)) !== undefined) {
@@ -1764,6 +1780,7 @@ function resetLoopParticipants(context: RunContext, runtime: LoopRuntime): void 
     const scope = { journal, job: id };
     bookkeep(scope, 'сброс данных участника перед проходом', () => {
       resetJobData(jobDir(journal.paths, id));
+      resetJobOutputs(jobOutputsPath(journal.paths, id));
       rmSync(join(journal.paths.artifacts, `${id}.json`), { force: true });
     });
     const index = context.outputs.findIndex((output) => output.job === id);
@@ -1775,6 +1792,7 @@ function resetLoopParticipants(context: RunContext, runtime: LoopRuntime): void 
       // заданные поля, и оставшиеся от него причина или пропуск описывали бы чужой проход.
       const {
         data: _data,
+        outputs: _outputs,
         iterations: _iterations,
         output: _output,
         reason: _reason,
@@ -1836,11 +1854,18 @@ function prepareJobRetry(
   // Данные упавшей попытки до потребителей `${jobs.<id>.data.*}` не доходят.
   bookkeep(scope, 'сброс данных работы перед попыткой', () => {
     resetJobData(jobDir(journal.paths, job.id));
+    // Выходы упавшей попытки тоже: перезапуск с первого шага не должен их видеть.
+    resetJobOutputs(jobOutputsPath(journal.paths, job.id));
   });
   // Шаги упавшей попытки из записи уходят тоже: между попытками состояние
   // прогона иначе показывало бы упавший шаг при работе в `running`, а записи
   // шагов — по требованию — записи последней попытки, которая ещё не начала.
-  const { data: _published, iterations: _iterations, ...fresh } = context.records.get(job.id) as JobRecord;
+  const {
+    data: _published,
+    outputs: _publishedOutputs,
+    iterations: _iterations,
+    ...fresh
+  } = context.records.get(job.id) as JobRecord;
   context.records.set(job.id, { ...fresh, steps: [] });
 
   // Расход шагов уходящей попытки запечатывается: ключ `${job}/${step}#${attempt}`
@@ -1930,6 +1955,7 @@ function jobEnv(job: Job, context: RunContext): Record<string, string> {
       workspace: context.cwd,
       artifacts: context.journal.paths.artifacts,
       scratch: jobScratchDir(context.journal.paths, job.id),
+      needs: needsVariables(context, job).variables,
     }),
     deny: pipeline.envDeny,
     cwd: context.projectRoot,
@@ -2368,6 +2394,11 @@ async function runJobSteps(
   /** `output.from` назвал переиспользованный шаг, а его выход не перенёсся. */
   let outputFromStepMissing = false;
 
+  // Коллизия `NEEDS_*` от двух производителей — отказ до первого шага, а не
+  // тихое перекрытие; повтор воспроизвёл бы её же.
+  const { collision } = needsVariables(context, job);
+  if (collision !== undefined) return { status: 'failed', reason: collision, terminal: true };
+
   for (const [position, step] of job.steps.entries()) {
     // Ключ шага держится на нераскрытом определении: отложенные подстановки
     // пространства `run` уникальны для каждого прогона, и раскрытый текст
@@ -2419,7 +2450,8 @@ async function runJobSteps(
         ...(context.records.get(job.id) as JobRecord),
         steps: [...steps],
       });
-      const dataViolation = foldJobData(context, job);
+      // Запись шага уже несёт его выходы из исходного прогона: дописывать её незачем.
+      const { violation: dataViolation } = foldPublished(context, job, step, reused);
       if (dataViolation !== undefined) return { status: 'failed', reason: dataViolation, terminal: true };
       if (
         (step.kind === 'agent' ||
@@ -2751,7 +2783,8 @@ async function runJobSteps(
     // таймауту или бюджету, обязан отдать наружу свою причину и свой
     // `cause`. Нарушение объявления при этом не теряется: оно дописывается к
     // причине, потому что статус у работы всё равно один.
-    const dataViolation = foldJobData(context, job);
+    const { violation: dataViolation, published: publishedOutputs } = foldPublished(context, job, step);
+    attachPublishedOutputs(context, job, steps, stepDirPath, publishedOutputs);
 
     // Шаг сказал «делать нечего» кодом выхода: остальные шаги не идут, работа
     // пропущена, а не упала, и `output` у неё не публикуется. Нарушение
@@ -2782,6 +2815,13 @@ async function runJobSteps(
     // нет — перечень закрыт, и ни одна его строка про это не говорит; так же
     // возвращается отказ по неперенесённому выходу шага ниже.
     if (dataViolation !== undefined) return { status: 'failed', reason: dataViolation, terminal: true };
+  }
+
+  // У работы с `until` итерация — ещё не конец работы: недостачу проверяет
+  // `runIterations` после сошедшейся итерации.
+  if (job.until === undefined) {
+    const unpublished = unpublishedOutputs(context, job);
+    if (unpublished !== undefined) return unpublished;
   }
 
   if (outputFromStepMissing) {
@@ -3958,6 +3998,11 @@ export function stepEnv(
       ...((step.kind === 'run' || step.kind === 'script') && step.skipExitCode !== undefined
         ? { skipExitCode: step.skipExitCode }
         : {}),
+      // Только шагу `run` и его проверкам: у остальных видов свой контракт публикации.
+      ...(step.kind === 'run' ? { jobOutputsPath: jobOutputsPath(context.journal.paths, job.id) } : {}),
+      // Слой injected: `env:` работы и шага чужой выход не перекрывает, а `env_deny`
+      // его не вычёркивает — производитель уже отклонил похожие на секрет имена.
+      needs: needsVariables(context, job).variables,
     }),
     deny: pipeline.envDeny,
     cwd: context.projectRoot,
@@ -4147,6 +4192,169 @@ function transferJobData(context: RunContext, job: Job): void {
   bookkeep({ journal: context.journal, job: job.id }, 'перенос данных работы', () => {
     writeJobDataUnchecked(target, allowed);
   });
+}
+
+/** Правила допустимости выхода — те же, что у линта: `env_deny` и переменные секретов пайплайна. */
+function outputPolicy(context: RunContext): OutputPolicy {
+  const { pipeline } = context.expanded;
+  return { envDeny: pipeline.envDeny, secretEnvs: pipeline.secrets.map((secret) => secret.env) };
+}
+
+/**
+ * Принять опубликованное шагом: данные работы и, у шага `run`, её выходы.
+ * Причины двух нарушений объединяются — статус у работы один. `published` —
+ * выходы, внесённые именно этим шагом: их несёт запись шага.
+ */
+function foldPublished(
+  context: RunContext,
+  job: Job,
+  step: Step,
+  reused?: StepRecord,
+): { readonly violation?: string; readonly published?: Readonly<Record<string, string>> } {
+  const outputs = step.kind === 'run' ? foldJobOutputs(context, job, reused) : {};
+  const parts = [foldJobData(context, job), outputs.violation].filter((part) => part !== undefined);
+  return {
+    ...(parts.length === 0 ? {} : { violation: parts.join('; ') }),
+    ...(outputs.published === undefined ? {} : { published: outputs.published }),
+  };
+}
+
+/**
+ * Принять выходы работы из `outputs.env` в её запись `status.json`.
+ *
+ * Файл читается и проверяется целиком после каждого шага `run`: ошибка
+ * называет шаг, который её внёс, а не конец работы. В отличие от
+ * `foldJobData` объявление записи не ограничивает — необъявленный ключ
+ * принимается (design.md, решение 1). Принятое ложится поверх уже лежащего в
+ * записи — там могут быть выходы переиспользованных шагов, которых пустой файл
+ * не знает, — и предел числа ключей проверяется по объединённому набору:
+ * иначе шаг, переписавший файл через `>`, обходил бы его.
+ *
+ * Переиспользованный шаг файла не пишет: его выходы берутся из его записи в
+ * исходном прогоне (`reused.outputs`). Поэтому при `resume` переносятся
+ * только выходы переиспользованных шагов, а ключ, опубликованный шагом,
+ * который теперь исполняется заново, должен быть опубликован заново.
+ *
+ * Возвращает выходы, внесённые этим шагом, — ключи, которых в записи не было
+ * или чьё значение он изменил. Нарушение роняет работу, и ничего из этого
+ * прохода в запись не попадает.
+ */
+function foldJobOutputs(
+  context: RunContext,
+  job: Job,
+  reused?: StepRecord,
+): { readonly violation?: string; readonly published?: Readonly<Record<string, string>> } {
+  const record = context.records.get(job.id);
+  if (record === undefined) return {};
+
+  let incoming: Readonly<Record<string, string>>;
+  if (reused === undefined) {
+    const text = readJobOutputsText(jobOutputsPath(context.journal.paths, job.id));
+    const parsed = parseJobOutputs(job.id, text, outputPolicy(context));
+    if (!parsed.ok) return { violation: parsed.reason };
+    incoming = parsed.outputs;
+  } else {
+    incoming = reused.outputs ?? {};
+  }
+
+  const published = Object.fromEntries(
+    Object.entries(incoming).filter(([key, value]) => record.outputs?.[key] !== value),
+  );
+  if (Object.keys(published).length === 0) return {};
+
+  const outputs = { ...record.outputs, ...published };
+  if (Object.keys(outputs).length > MAX_OUTPUT_KEYS) {
+    return { violation: `работа ${job.id}: больше ${MAX_OUTPUT_KEYS} различных ключей выходов` };
+  }
+  context.records.set(job.id, { ...record, outputs });
+  context.refreshStatus();
+  return { published };
+}
+
+/**
+ * Объявленные выходы, которых работа не опубликовала. Работа с шагом,
+ * завершённым как `shadow`, освобождена: её внешнее действие не исполнялось, и
+ * иначе каждый прогон насухо падал бы на выходе, которого по построению не
+ * могло появиться (design.md, решение 9).
+ *
+ * Проверяется один раз, когда все шаги работы завершились успехом: у работы
+ * без цикла — в конце `runJobSteps`, у работы с `until` — после сошедшейся
+ * итерации (`runIterations`). Ключ, который публикует только итерация, где
+ * проверка сошлась, ранние итерации не роняет.
+ */
+function unpublishedOutputs(context: RunContext, job: Job): JobOutcome | undefined {
+  if (job.outputs.length === 0) return undefined;
+  const record = context.records.get(job.id);
+  if (record?.steps.some((step) => step.reason === 'shadow')) return undefined;
+  const published = record?.outputs ?? {};
+  const missing = job.outputs.filter((key) => !Object.hasOwn(published, key));
+  if (missing.length === 0) return undefined;
+  // Причины у отказа нет (перечень закрыт, `halt.ts`), поэтому `attempts`
+  // его не повторяет: недостача — свойство скриптов работы, а не сбой.
+  return {
+    status: 'failed',
+    reason: `работа ${job.id} объявила выходы, но не опубликовала: ${missing.join(', ')}`,
+  };
+}
+
+/**
+ * Записать в запись шага выходы, которые он внёс: при `resume` переносятся
+ * выходы ровно тех шагов, что переиспользуются (`foldJobOutputs`).
+ */
+function attachPublishedOutputs(
+  context: RunContext,
+  job: Job,
+  steps: StepRecord[],
+  stepDirPath: string,
+  published: Readonly<Record<string, string>> | undefined,
+): void {
+  if (published === undefined) return;
+  const last = steps.at(-1);
+  if (last === undefined) return;
+  const updated: StepRecord = { ...last, outputs: { ...last.outputs, ...published } };
+  steps[steps.length - 1] = updated;
+  context.journal.writeStepJson(stepDirPath, 'step.json', updated);
+  context.records.set(job.id, {
+    ...(context.records.get(job.id) as JobRecord),
+    steps: [...steps],
+  });
+  context.refreshStatus();
+}
+
+/**
+ * Переменные `NEEDS_<РАБОТА>_<КЛЮЧ>` для работы-потребителя: выходы её прямых
+ * зависимостей (`needs` или все предшествующие при `needs: all`), которые
+ * завершились успехом. Транзитивные производители, упавшие, пропущенные и
+ * отменённые не дают ничего: частично опубликованное — не результат.
+ *
+ * Значения берутся из записей в памяти движка, а не из файлов: шаг с доступом
+ * к каталогу прогона не должен менять принятое после завершения производителя.
+ * Две зависимости, давшие одно имя, — `collision`: тихое перекрытие одного
+ * выхода другим недопустимо, потребитель падает до первого шага.
+ */
+function needsVariables(
+  context: RunContext,
+  job: Job,
+): { readonly variables: Record<string, string>; readonly collision?: string } {
+  const variables: Record<string, string> = {};
+  const owners = new Map<string, string>();
+  for (const dependency of context.graph.dependencies.get(job.id) ?? []) {
+    const record = context.records.get(dependency);
+    if (record?.status !== 'success' || record.outputs === undefined) continue;
+    for (const [key, value] of Object.entries(record.outputs)) {
+      const name = needsVarName(dependency, key);
+      const owner = owners.get(name);
+      if (owner !== undefined && owner !== dependency) {
+        return {
+          variables,
+          collision: `работы ${owner} и ${dependency} дают потребителю ${job.id} одну переменную ${name}`,
+        };
+      }
+      owners.set(name, dependency);
+      variables[name] = value;
+    }
+  }
+  return { variables };
 }
 
 /**

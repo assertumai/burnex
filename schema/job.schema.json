@@ -281,6 +281,12 @@
         "type": "string"
       }
     },
+    "outputs": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
     "budget": {
       "type": "object",
       "properties": {
