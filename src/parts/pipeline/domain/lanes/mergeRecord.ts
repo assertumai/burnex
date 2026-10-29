@@ -21,7 +21,9 @@ export type LaneMergeKind =
   | 'check_failed'
   | 'no_contribution'
   | 'not_reached'
-  | 'already_merged';
+  | 'already_merged'
+  /** Пункт дорожки забрал другой прогон: результат не сведён, исход не проставлен. */
+  | 'foreign_owner';
 
 export interface LaneMergeRecord {
   readonly lane: string;
@@ -46,6 +48,7 @@ const MERGE_KINDS: ReadonlySet<string> = new Set<LaneMergeKind>([
   'no_contribution',
   'not_reached',
   'already_merged',
+  'foreign_owner',
 ]);
 
 const MERGE_FILE = /^merge-(.+)\.json$/;

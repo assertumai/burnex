@@ -7,9 +7,11 @@ import { StepcastError, isStepcastError } from '../../../../kernel/errors.js';
 import {
   REASON_LIMIT,
   finishItem,
+  foreignOwnerOf,
   parseBacklogFile,
   tailLine,
   withBacklogLock,
+  type FinishOwner,
 } from '../backlog/index.js';
 import type { RunPaths } from '../../run/journal/paths.js';
 import { readManifest, readStatus } from '../../run/journal/reader.js';
@@ -82,6 +84,14 @@ export interface MergeLanesOptions {
    * подставляется.
    */
   readonly repoChecks?: ReadonlyMap<string, string>;
+  /**
+   * Исход пунктов проставляется от имени прогона: пункт, перехваченный
+   * другим владельцем, не получает ни `done`, ни `failed`, а сведение идёт
+   * дальше — о пропуске сообщает `onForeign` владельца. Прогон и его родство
+   * по `resumed_from` знает журнал, а не это ядро, поэтому владелец приходит
+   * от вызывающей команды. Без него исход проставляется как прежде.
+   */
+  readonly finishOwner?: FinishOwner;
 }
 
 export type LaneMergeResult =
@@ -102,7 +112,49 @@ export type LaneMergeResult =
   | { readonly lane: string; readonly kind: 'no_contribution'; readonly reason: string }
   | { readonly lane: string; readonly kind: 'not_reached'; readonly reason: string }
   /** Дорожка, чей записанный в каталоге прогона исход уже — «сведена». */
-  | { readonly lane: string; readonly kind: 'already_merged'; readonly reason: string };
+  | { readonly lane: string; readonly kind: 'already_merged'; readonly reason: string }
+  /** Пункт дорожки забрал другой прогон: результат не сведён, исход пункту не проставлен. */
+  | { readonly lane: string; readonly kind: 'foreign_owner'; readonly slug: string; readonly reason: string };
+
+/**
+ * Исход дорожки, чей пункт забрал другой владелец. Результат такой дорожки не
+ * коммитится: работу по пункту ведёт его владелец, и сведи её этот прогон —
+ * тот же пункт свёл бы и владелец, повторив работу либо упёршись в конфликт.
+ */
+function foreignOwnerResult(lane: string, slug: string, claimedBy: string): LaneMergeResult {
+  return {
+    lane,
+    kind: 'foreign_owner',
+    slug,
+    reason: `пункт «${slug}» забрал ${claimedBy}: результат дорожки не сведён, исход не проставлен`,
+  };
+}
+
+/**
+ * Проставить пункту сведённой дорожки `done`. Возвращает владельца, если пункт
+ * успели забрать между проверкой до наложения и этой отметкой: тогда отметки
+ * нет, и вызывающий обязан снять наложенное. О пропуске говорит исход
+ * `foreign_owner`, а не `onForeign` владельца, — строка не печатается дважды.
+ */
+function finishDone(file: string, slug: string, owner: FinishOwner | undefined): string | undefined {
+  let foreign: string | undefined;
+  const outcome = finishItem(
+    file,
+    'merge-lanes',
+    slug,
+    'done',
+    undefined,
+    owner === undefined
+      ? undefined
+      : { isOwn: owner.isOwn, onForeign: (claimedBy) => (foreign = claimedBy) },
+  );
+  return outcome === 'foreign-owner' ? foreign : undefined;
+}
+
+/** Чужой владелец пункта дорожки до наложения — без владельца прогона судить не о чем. */
+function foreignOwnerBeforeApply(file: string, slug: string, owner: FinishOwner | undefined): string | undefined {
+  return owner === undefined || !existsSync(file) ? undefined : foreignOwnerOf(file, 'merge-lanes', slug, owner);
+}
 
 /** Причина с хвостом чужого вывода: приставка целиком, вывод — сколько влезло. */
 function reasonWithOutput(prefix: string, output: string): string {
@@ -439,7 +491,7 @@ async function mergeLanesLegacy(options: MergeLanesOptions): Promise<readonly La
   const markFailed = (lane: string, reason: string): void => {
     if (!hasLaneItem(runDir, lane)) return;
     const item = readLaneItem(runDir, lane);
-    finishItem(file, 'merge-lanes', item.slug, 'failed', reason);
+    finishItem(file, 'merge-lanes', item.slug, 'failed', reason, options.finishOwner);
   };
 
   /**
@@ -531,6 +583,14 @@ async function mergeLanesLegacy(options: MergeLanesOptions): Promise<readonly La
       continue;
     }
     const item = readLaneItem(runDir, lane);
+
+    // Пункт, который забрал другой прогон, не накладывается вовсе: дерево
+    // остаётся нетронутым, и откатывать нечего.
+    const foreignBefore = foreignOwnerBeforeApply(file, item.slug, options.finishOwner);
+    if (foreignBefore !== undefined) {
+      record(foreignOwnerResult(lane, item.slug, foreignBefore));
+      continue;
+    }
 
     const range = laneAnchorRange(paths, lane);
     const affected = range === undefined ? [] : affectedRepos(kind, nestedRepos, range);
@@ -630,7 +690,26 @@ async function mergeLanesLegacy(options: MergeLanesOptions): Promise<readonly La
     // Правка очереди идёт до коммитов: улучшение и его бухгалтерия остаются
     // одним набором коммитов с одним сообщением, который `git revert`
     // снимает целиком.
-    finishItem(file, 'merge-lanes', item.slug, 'done');
+    const foreignAtDone = finishDone(file, item.slug, options.finishOwner);
+    if (foreignAtDone !== undefined) {
+      // Пункт забрали, пока шла проверка: наложенное снимается тем же
+      // адресным откатом, что и после красной проверки, но очередь
+      // возвращается к нынешнему содержимому — с записью нового владельца.
+      rollback(commitsBefore, snapshotBacklog());
+      record(foreignOwnerResult(lane, item.slug, foreignAtDone));
+      try {
+        assertRunTreeClean();
+      } catch (error) {
+        if (!isStepcastError(error)) throw error;
+        stoppedAt = {
+          lane,
+          basis: 'unconfirmed_rollback',
+          prefix: `откат дорожки «${lane}» не подтверждён: `,
+          output: error.message,
+        };
+      }
+      continue;
+    }
     const message = `${item.slug}: ${item.title ?? 'улучшение из очереди'}`;
     // Порядок — `commitOrder`: вложенные раньше ведущего их корня, репозиторий
     // очереди последним из тех, кого корень гитлинком не ведёт. В перечень
@@ -771,7 +850,7 @@ async function mergeLanesIsolated(
     const markFailed = (lane: string, reason: string): void => {
       if (!hasLaneItem(runDir, lane)) return;
       assertLiveFilesUnchanged(cwd, policy.liveFiles, liveSnapshot);
-      finishItem(file, 'merge-lanes', readLaneItem(runDir, lane).slug, 'failed', reason);
+      finishItem(file, 'merge-lanes', readLaneItem(runDir, lane).slug, 'failed', reason, options.finishOwner);
       liveSnapshot = syncLiveFiles(cwd, integrationRoot, policy.liveFiles);
     };
     const integrationTreeClean = (): void =>
@@ -824,6 +903,13 @@ async function mergeLanesIsolated(
       }
 
       const item = readLaneItem(runDir, lane);
+      // Очередь живого checkout'а, а не интеграционная копия: новый владелец
+      // пишет туда.
+      const foreignBefore = foreignOwnerBeforeApply(file, item.slug, options.finishOwner);
+      if (foreignBefore !== undefined) {
+        record(foreignOwnerResult(lane, item.slug, foreignBefore));
+        continue;
+      }
       const range = laneAnchorRange(paths, lane);
       const affected = range === undefined ? [] : affectedRepos(kind, nestedRepos, range);
       const commitsBefore = new Map(
@@ -913,7 +999,23 @@ async function mergeLanesIsolated(
         continue;
       }
 
-      finishItem(integrationFile, 'merge-lanes', item.slug, 'done');
+      const foreignAtDone = finishDone(integrationFile, item.slug, options.finishOwner);
+      if (foreignAtDone !== undefined) {
+        withBacklogLock(integrationFile, 'merge-lanes', () => {
+          for (const [repo, sha] of commitsBefore) resetToCommit(repoDirOf(integrationRoot, repo), sha);
+          if (backlogBefore === undefined) rmSync(integrationFile, { force: true });
+          else writeFileSync(integrationFile, backlogBefore);
+        });
+        record(foreignOwnerResult(lane, item.slug, foreignAtDone));
+        try {
+          integrationTreeClean();
+        } catch (error) {
+          if (!isStepcastError(error)) throw error;
+          stoppedAt = { lane, reason: `откат интеграционного дерева не подтверждён: ${error.message}` };
+          retainIntegration = true;
+        }
+        continue;
+      }
       const message = `${item.slug}: ${item.title ?? 'улучшение из очереди'}`;
       const committed: string[] = [];
       const commits: Record<string, string> = {};

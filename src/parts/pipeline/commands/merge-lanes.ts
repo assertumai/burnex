@@ -3,6 +3,8 @@ import { resolve as resolvePath } from 'node:path';
 import { resolveConfig, type Config } from '../config/resolve.js';
 import { ExitCode, StepcastError, type ExitCodeValue } from '../../../kernel/errors.js';
 import { findProjectRoot } from '../run/journal/paths.js';
+import { runOwner } from '../domain/backlog/index.js';
+import { finishOwnerOfRun } from '../run/journal/owner.js';
 import { readManifest, resolveRun } from '../run/journal/reader.js';
 import { mergeLanes, type LaneMergeResult } from '../domain/lanes/merge.js';
 import { commandRow } from '../../../kernel/cli/commandRow.js';
@@ -104,6 +106,13 @@ export async function runMergeLanesCommand(
   const file = resolvePath(sourceRoot, stringFlag(args.flags, 'file') ?? 'backlog.md');
 
   const repoChecks = repoChecksFrom(config);
+  const finishOwner = finishOwnerOfRun(
+    config.runs.root,
+    projectRoot,
+    paths.runId,
+    (claimedBy, slug) =>
+      write(`пункт «${slug}» не помечен: им владеет ${claimedBy}, а не ${runOwner(paths.runId)}`),
+  );
 
   const results = await mergeLanes({
     paths,
@@ -111,6 +120,7 @@ export async function runMergeLanesCommand(
     lanes,
     check,
     file,
+    finishOwner,
     ...(config.project.nestedRepos === undefined ? {} : { nestedRepos: config.project.nestedRepos }),
     ...(repoChecks === undefined ? {} : { repoChecks }),
   });

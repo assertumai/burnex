@@ -72,7 +72,7 @@ steps:
       [
         sh,
         -c,
-        'if [ -n "${params.item}" ]; then ONLY="--only ${params.item}"; else ONLY=""; fi; "$STEPCAST_BIN" backlog pick --lanes a $ONLY --run-dir "$STEPCAST_RUN_DIR" | "$STEPCAST_BIN" project repos',
+        'if [ -n "${params.item}" ]; then ONLY="--only ${params.item}"; else ONLY=""; fi; "$STEPCAST_BIN" backlog pick --lanes a $ONLY --owner "run:$(basename "$STEPCAST_RUN_DIR")" --run-dir "$STEPCAST_RUN_DIR" | "$STEPCAST_BIN" project repos',
       ]
     timeout: 1m
     output_schema: stepcast:backlog-slots

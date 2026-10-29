@@ -6,11 +6,14 @@ import {
   checkNeeds,
   declaresNeeds,
   isFree,
+  isRunOwner,
   missingRefs,
   finishItem,
   needsMet,
   parseBacklogFile,
+  parseRunOwner,
   readArchivedEntries,
+  runOwner,
   readBacklogFile,
   selectItems,
   statusResolver,
@@ -18,15 +21,19 @@ import {
   unmetNeeds,
   withBacklogLock,
   withFields,
+  withoutFields,
   writeBacklogFile,
   type BacklogEntry,
   type BacklogRecord,
+  type FinishOwner,
+  type OwnerJudge,
   type StatusOf,
 } from '../domain/backlog/index.js';
 import { resolveConfig } from '../config/resolve.js';
 import { mergeJobData } from '../run/journal/data.js';
 import { atomicWrite } from '../run/journal/writer.js';
-import { shortRunId } from '../run/journal/paths.js';
+import { findProjectRoot, shortRunId } from '../run/journal/paths.js';
+import { finishOwnerOfRun, runOwnerJudge } from '../run/journal/owner.js';
 import { ExitCode, StepcastError, type ExitCodeValue } from '../../../kernel/errors.js';
 import { readLaneItem, takenLanes } from '../domain/lanes/item.js';
 import { commitPath, nestedRepoOf } from '../domain/lanes/tree.js';
@@ -51,6 +58,45 @@ const SETTLE_REASON = 'заход до сведения дорожки не до
 function stringFlag(flags: ParsedArgs['flags'], name: string): string | undefined {
   const value = flags[name];
   return typeof value === 'string' ? value : undefined;
+}
+
+/**
+ * Ключ `--owner`: владелец-прогон `run:<id>`. Неверная форма — ошибка
+ * конфигурации до захвата очереди: молча записать в `claimed_by` строку,
+ * о которой никто не сумеет судить, значило бы вернуть пункту порог давности
+ * под видом владельца.
+ */
+function ownerFlag(flags: ParsedArgs['flags']): string | undefined {
+  const owner = stringFlag(flags, 'owner');
+  if (owner !== undefined && !isRunOwner(owner)) {
+    throw new StepcastError(`ключ --owner требует владельца вида run:<id прогона>, получено «${owner}»`, {
+      hint: 'идентификатор прогона — непустой, без пробелов и /',
+    });
+  }
+  return owner;
+}
+
+/**
+ * Исход от имени прогона `runId`. Владелец, равный `run:<runId>`, свой сразу:
+ * для такого ответа не нужны ни конфигурация, ни журнал прогонов. Они
+ * читаются лишь ради родства по `resumed_from` — когда владелец пункта иной.
+ */
+function runFinishOwner(
+  file: string,
+  cwd: string,
+  runId: string,
+  onForeign?: (claimedBy: string, slug: string) => void,
+): FinishOwner {
+  const own = runOwner(runId);
+  let kinship: FinishOwner | undefined;
+  return {
+    isOwn: (claimedBy) => {
+      if (claimedBy === own) return true;
+      kinship ??= finishOwnerOfRun(resolveConfig({ cwd }).config.runs.root, findProjectRoot(dirname(file)), runId);
+      return kinship.isOwn(claimedBy);
+    },
+    ...(onForeign === undefined ? {} : { onForeign }),
+  };
 }
 
 function numberFlag(flags: ParsedArgs['flags'], name: string): number | undefined {
@@ -108,7 +154,7 @@ export function runBacklogCommand(
     case 'pick':
       return runPick(args, file, cwd, write, writeErr);
     case 'finish':
-      return runFinish(args, slug, file);
+      return runFinish(args, slug, file, cwd, writeErr);
     case 'settle':
       return runSettle(args, file, cwd, write);
     default:
@@ -163,6 +209,7 @@ function runPick(
   const nowMs = Date.parse(now);
 
   const only = stringFlag(args.flags, 'only');
+  const owner = ownerFlag(args.flags);
 
   const lanesOption = stringFlag(args.flags, 'lanes');
   if (lanesOption !== undefined) {
@@ -172,7 +219,7 @@ function runPick(
     if (args.flags['slots'] !== undefined) {
       throw new StepcastError('ключи --lanes и --slots взаимно исключают друг друга: форма выдачи одна');
     }
-    runPickLanes(args, file, cwd, now, nowMs, staleMs, lanesOption, only, write, writeErr);
+    runPickLanes(args, file, cwd, now, nowMs, staleMs, lanesOption, only, owner, write, writeErr);
     return ExitCode.ok;
   }
 
@@ -181,7 +228,7 @@ function runPick(
     throw new StepcastError('ключ --slots требует целого положительного числа');
   }
 
-  const chosen = claimItems(file, slots, only, now, nowMs, staleMs, writeErr);
+  const chosen = claimItems(file, cwd, slots, only, owner, now, nowMs, staleMs, writeErr);
 
   write(JSON.stringify(chosen.map(toRecord), null, 2));
   return ExitCode.ok;
@@ -196,8 +243,10 @@ function runPick(
  */
 function claimItems(
   file: string,
+  cwd: string,
   count: number,
   only: string | undefined,
+  owner: string | undefined,
   now: string,
   nowMs: number,
   staleMs: number,
@@ -207,6 +256,7 @@ function claimItems(
     const text = readBacklogFile(file);
     const entries = parseBacklogFile(file, text);
     const statusOf = checkedStatusOf(file, entries);
+    const ownerOf = ownerJudgeFor(file, cwd, entries, writeErr);
 
     // Названный пункт проверяется до отбора: «пункта нет» и «пункт занят» —
     // разные беды, и обе обязаны прозвучать словами. Молчаливая пустая выдача
@@ -216,10 +266,10 @@ function claimItems(
       if (named === undefined) {
         throw new StepcastError(`пункт «${only}» в очереди не найден`, { file, at: only });
       }
-      if (!isFree(named, nowMs, staleMs)) {
+      if (!isFree(named, nowMs, staleMs, ownerOf)) {
         throw new StepcastError(
           `пункт «${only}» не свободен: status ${named.data.status}`,
-          { file, at: only, hint: 'свободны todo и зависший in_progress' },
+          { file, at: only, hint: 'свободны todo, in_progress мёртвого владельца и зависший in_progress без владельца' },
         );
       }
       if (statusOf !== undefined && !needsMet(named, statusOf)) {
@@ -259,10 +309,39 @@ function claimItems(
       (entry) => missingRefs(entry, queueDir),
       (entry, missing) =>
         writeErr(`backlog pick: пункт «${entry.slug}» пропущен: нет файла ${missing[0]} (goal/details)`),
+      ownerOf,
     );
-    if (chosen.length > 0) writeBacklogFile(file, applyPick(text, chosen, now));
+    if (chosen.length > 0) writeBacklogFile(file, applyPick(text, chosen, now, owner));
     return chosen;
   });
+}
+
+/**
+ * Судья владельцев для отбора — только когда в очереди есть `in_progress` с
+ * `claimed_by`: очередь без владельцев не зависит от устройства проекта, как
+ * и прежде. Отказ конфигурации не останавливает `pick`: все владельцы тогда
+ * `unknown`, то есть прежний порог давности — безопаснее остановки очереди.
+ */
+function ownerJudgeFor(
+  file: string,
+  cwd: string,
+  entries: readonly BacklogEntry[],
+  writeErr: (line: string) => void,
+): OwnerJudge | undefined {
+  const needed = entries.some(
+    (entry) => entry.data.status === 'in_progress' && entry.data.claimed_by !== undefined,
+  );
+  if (!needed) return undefined;
+  try {
+    const { config } = resolveConfig({ cwd });
+    return runOwnerJudge(config.runs.root, findProjectRoot(dirname(file)));
+  } catch (error) {
+    if (!(error instanceof StepcastError)) throw error;
+    writeErr(
+      `backlog pick: владельцы пунктов не проверены, действует порог давности: ${error.message}`,
+    );
+    return () => 'unknown';
+  }
 }
 
 function runPickLanes(
@@ -274,6 +353,7 @@ function runPickLanes(
   staleMs: number,
   lanesOption: string,
   only: string | undefined,
+  owner: string | undefined,
   write: (line: string) => void,
   writeErr: (line: string) => void,
 ): void {
@@ -288,7 +368,7 @@ function runPickLanes(
   // файловых операциях, которые очереди не касаются.
   if (runDir !== undefined) prepareRunDir(runDir);
 
-  const chosen = claimItems(file, lanes.length, only, now, nowMs, staleMs, writeErr);
+  const chosen = claimItems(file, cwd, lanes.length, only, owner, now, nowMs, staleMs, writeErr);
 
   const result: Record<string, unknown> = {};
 
@@ -371,16 +451,34 @@ function publishPickedTitles(
   }
 }
 
-/** Проставить `status: in_progress` и общую метку `started_at` выбранным пунктам. */
-function applyPick(text: string, chosen: readonly BacklogEntry[], now: string): string {
+/**
+ * Проставить `status: in_progress`, общую метку `started_at` и владельца
+ * выбранным пунктам. Без владельца `claimed_by` снимается: пункт, отобранный у
+ * мёртвого прогона вызовом без `--owner`, иначе хранил бы мёртвого владельца и
+ * тут же снова считался бы зависшим.
+ */
+function applyPick(text: string, chosen: readonly BacklogEntry[], now: string, owner?: string): string {
   let result = text;
   for (const entry of chosen) {
-    result = withFields(result, entry.slug, { status: 'in_progress', started_at: now });
+    result =
+      owner === undefined
+        ? withoutFields(
+            withFields(result, entry.slug, { status: 'in_progress', started_at: now }),
+            entry.slug,
+            ['claimed_by'],
+          )
+        : withFields(result, entry.slug, { status: 'in_progress', started_at: now, claimed_by: owner });
   }
   return result;
 }
 
-function runFinish(args: ParsedArgs, slug: string | undefined, file: string): ExitCodeValue {
+function runFinish(
+  args: ParsedArgs,
+  slug: string | undefined,
+  file: string,
+  cwd: string,
+  writeErr: (line: string) => void,
+): ExitCodeValue {
   if (slug === undefined) {
     throw new StepcastError('finish требует слаг пункта первым позиционным аргументом');
   }
@@ -395,10 +493,22 @@ function runFinish(args: ParsedArgs, slug: string | undefined, file: string): Ex
     throw new StepcastError('исход failed требует ключа --reason с причиной');
   }
 
+  const owner = ownerFlag(args.flags);
+  const runId = owner === undefined ? undefined : parseRunOwner(owner);
+
   // Чтение, сведение причины к одной строке и неприкосновенность уже
   // проставленного исхода — забота `parts/pipeline/domain/backlog/file.ts`: тем же кодом
   // проставляет исход и сведение дорожек.
-  finishItem(file, 'backlog finish', slug, status, reason);
+  // Забранный другим прогоном пункт — не отказ: закрывающий шаг не должен
+  // валить прогон из-за того, что работу у него забрали, как и при уже
+  // проставленном исходе. Причина слышна в stderr.
+  const finishOwner =
+    runId === undefined
+      ? undefined
+      : runFinishOwner(file, cwd, runId, (claimedBy) =>
+          writeErr(`backlog finish: пункт «${slug}» не тронут: им владеет ${claimedBy}, а не ${owner}`),
+        );
+  finishItem(file, 'backlog finish', slug, status, reason, finishOwner);
   return ExitCode.ok;
 }
 
@@ -430,19 +540,35 @@ function runSettle(
     return ExitCode.ok;
   }
 
+  // Исход проставляется от имени прогона, чей каталог закрывается: пункт,
+  // перехваченный другим прогоном, чужой заход не закрывает. Конфигурация
+  // читается лишь ради владельца, отличного от своего прогона: settle по
+  // очереди без чужих владельцев от устройства проекта не зависит, как и прежде.
+  const finishOwner = runFinishOwner(file, cwd, basename(runDir));
+
   let settled = 0;
+  let foreign = 0;
 
   for (const lane of lanes) {
     const item = readLaneItem(runDir, lane);
     // Пункт с уже проставленным исходом `finishItem` не трогает: settle
     // закрывает заход, а не переписывает его результат.
-    if (finishItem(file, 'backlog settle', item.slug, 'failed', SETTLE_REASON) === 'already-final') continue;
+    const outcome = finishItem(file, 'backlog settle', item.slug, 'failed', SETTLE_REASON, finishOwner);
+    if (outcome === 'already-final') continue;
+    if (outcome === 'foreign-owner') {
+      foreign += 1;
+      write(`пункт «${item.slug}» (дорожка ${lane}) пропущен: его забрал другой прогон, исход не проставлен`);
+      continue;
+    }
     settled += 1;
     write(`пункт «${item.slug}» (дорожка ${lane}) помечен failed: ${SETTLE_REASON}`);
   }
 
   if (settled === 0) {
-    write('все взятые пункты уже свели свой исход — проставлять нечего');
+    // Пункт, который забрал другой прогон, своего исхода не свёл: называть его
+    // сведённым значило бы скрыть, что исход ему проставит чужой заход.
+    if (foreign === 0) write('все взятые пункты уже свели свой исход — проставлять нечего');
+    else write(`проставлять нечего: забранных другим прогоном пунктов ${foreign}, остальные уже свели свой исход`);
     return ExitCode.ok;
   }
 
@@ -482,12 +608,18 @@ export const row = commandRow(
         },
         'stale-hours': {
           kind: 'number',
-          description: 'pick: порог давности зависшего in_progress в часах, по умолчанию 6',
+          description:
+            'pick: порог давности зависшего in_progress в часах, по умолчанию 6; для пунктов без владельца или с владельцем, о котором не судить',
         },
         'run-dir': {
           kind: 'string',
           description:
             'pick --lanes: каталог для файлов item-<дорожка>.json на каждую заполненную дорожку; settle: тот же каталог, обязателен',
+        },
+        owner: {
+          kind: 'string',
+          description:
+            'pick: записать владельца пункта run:<id прогона>; finish: проставить исход, только если пункт не забран другим прогоном',
         },
         status: { kind: 'string', description: 'finish: исход done либо failed' },
         reason: { kind: 'string', description: 'finish --status failed: причина отказа' },

@@ -157,6 +157,13 @@ export const BacklogItemSchema = z.looseObject({
   group: BacklogSlugSchema.optional(),
   track: BacklogTrackSchema.optional(),
   started_at: z.string().optional(),
+  /**
+   * Владелец взятого пункта — поле движка, как `started_at`. Значение любой
+   * формы разбирается: правка руками не должна ронять очередь, а форму
+   * `run:<id>` проверяет только ключ `--owner` (`owner.ts`); владелец иной
+   * формы просто «не судим».
+   */
+  claimed_by: z.string().optional(),
   reason: z.string().optional(),
   repos: RepoListSchema.optional(),
   needs: NeedsListSchema.optional(),

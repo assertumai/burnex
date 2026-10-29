@@ -1,5 +1,6 @@
 export { parse, effectiveGroup, toRecord, type BacklogEntry, type BacklogFieldPosition } from './parse.js';
 export { isFree, selectItems, DEFAULT_STALE_HOURS, type MissingRefsOf } from './select.js';
+export { parseRunOwner, runOwner, isRunOwner, type OwnerState, type OwnerJudge } from './owner.js';
 export { missingRefs, refsOf } from './refs.js';
 export {
   withBacklogLock,
@@ -30,8 +31,10 @@ export {
   oneLine,
   tailLine,
   finishItem,
+  foreignOwnerOf,
   REASON_LIMIT,
   type FinishOutcome,
+  type FinishOwner,
 } from './file.js';
 export {
   BacklogSlugSchema,

@@ -9,8 +9,9 @@ import { describe, it } from 'node:test';
 import { run, type CliIo } from '../src/parts/cli/main.js';
 import { ExitCode, type ExitCodeValue } from '../src/kernel/errors.js';
 import { findPackageRoot } from '../src/parts/pipeline/domain/package-schema.js';
-import { shortRunId } from '../src/parts/pipeline/run/journal/paths.js';
-import { gitCommit, gitInit } from './helpers.js';
+import { findProjectRoot, shortRunId } from '../src/parts/pipeline/run/journal/paths.js';
+import { RunJournal } from '../src/parts/pipeline/run/journal/writer.js';
+import { gitCommit, gitInit, withHome } from './helpers.js';
 import { tempDir } from './tmp.js';
 
 /**
@@ -786,6 +787,239 @@ describe('CLI: stepcast backlog settle', () => {
     assert.equal(result.code, ExitCode.ok, result.stderr);
     assert.deepEqual(headFiles(dir), ['backlog.md']);
     assert.match(porcelainAt(dir), /stray\.txt/, 'посторонний файл остаётся незакоммиченным');
+  });
+});
+
+describe('CLI: владелец пункта --owner', () => {
+  const OLD = '2020-01-01T00:00:00.000Z';
+
+  /** `backlog` с подменённым HOME: корень журнала прогонов — каталог внутри него. */
+  async function ownerBacklog(dir: string, home: string, argv: readonly string[]): Promise<Result> {
+    return withHome(home, () => backlog(dir, argv));
+  }
+
+  function runsRootOf(home: string): string {
+    return join(home, '.stepcast', 'runs');
+  }
+
+  /** Прогон проекта очереди в журнале под HOME; `pid` живой — свой, мёртвый — несуществующий. */
+  function makeRun(
+    dir: string,
+    home: string,
+    runId: string,
+    spec: { readonly status: 'running' | 'success'; readonly alive: boolean; readonly resumedFrom?: string },
+  ): void {
+    const projectRoot = findProjectRoot(dir);
+    const journal = RunJournal.create({ runsRoot: runsRootOf(home), projectRoot, runId });
+    journal.writeManifest({
+      run_id: runId,
+      pipeline: 'demo',
+      pipeline_file: join(projectRoot, 'stepcast.yml'),
+      lock_hash: 'abc',
+      project_root: projectRoot,
+      workspace: { mode: 'cwd' },
+      inputs: {},
+      git: {},
+      backends: {},
+      started_at: new Date().toISOString(),
+      pid: spec.alive ? process.pid : 999_999_999,
+      ...(spec.resumedFrom === undefined ? {} : { resumed_from: spec.resumedFrom }),
+    });
+    journal.writeStatus({
+      run_id: runId,
+      pipeline: 'demo',
+      lock_hash: 'abc',
+      status: spec.status,
+      workspace: { mode: 'cwd' },
+      inputs: {},
+      jobs: [],
+      budget: { tokens_used: 0, wallclock_ms: 0 },
+      updated_at: new Date().toISOString(),
+    });
+  }
+
+  const read = (dir: string): string => readFileSync(join(dir, 'backlog.md'), 'utf8');
+
+  describe('pick', () => {
+    it('--owner run:R1 пишет claimed_by вместе со status и started_at', async () => {
+      const dir = bed(item('an-item', COMPLETE));
+      const result = await backlog(dir, ['pick', '--owner', 'run:R1']);
+
+      assert.equal(result.code, ExitCode.ok, result.stderr);
+      assert.equal(fieldOf(read(dir), 'an-item', 'claimed_by'), 'run:R1');
+      assert.equal(fieldOf(read(dir), 'an-item', 'status'), 'in_progress');
+      assert.ok(fieldOf(read(dir), 'an-item', 'started_at'));
+      const [entry] = JSON.parse(result.stdout) as readonly Record<string, unknown>[];
+      assert.ok(entry !== undefined && !('claimed_by' in entry), 'в запись пункта владелец не входит');
+    });
+
+    it('--owner run:R2 по зависшему пункту заменяет владельца', async () => {
+      const home = tempDir('backlog-home-');
+      const dir = bed(item('an-item', { ...COMPLETE, status: 'in_progress', started_at: OLD, claimed_by: 'run:R1' }));
+      const result = await ownerBacklog(dir, home, ['pick', '--owner', 'run:R2']);
+
+      assert.equal(result.code, ExitCode.ok, result.stderr);
+      assert.equal(fieldOf(read(dir), 'an-item', 'claimed_by'), 'run:R2');
+    });
+
+    it('pick без --owner снимает claimed_by', async () => {
+      const home = tempDir('backlog-home-');
+      const dir = bed(item('an-item', { ...COMPLETE, status: 'in_progress', started_at: OLD, claimed_by: 'run:R1' }));
+      const result = await ownerBacklog(dir, home, ['pick']);
+
+      assert.equal(result.code, ExitCode.ok, result.stderr);
+      assert.equal(fieldOf(read(dir), 'an-item', 'status'), 'in_progress');
+      assert.equal(fieldOf(read(dir), 'an-item', 'claimed_by'), undefined);
+    });
+
+    it('неверная форма --owner — код 2, файл не тронут', async () => {
+      const dir = bed(item('an-item', COMPLETE));
+      const before = read(dir);
+      for (const owner of ['R1', 'run:', 'run:a/b', 'run:a b']) {
+        const result = await backlog(dir, ['pick', '--owner', owner]);
+        assert.equal(result.code, ExitCode.configError, owner);
+        assert.match(result.stderr, /--owner/);
+        assert.equal(read(dir), before, owner);
+      }
+    });
+
+    it('мёртвый владелец освобождает свежий пункт', async () => {
+      const home = tempDir('backlog-home-');
+      const dir = bed(
+        item('an-item', { ...COMPLETE, status: 'in_progress', started_at: new Date().toISOString(), claimed_by: 'run:R1' }),
+      );
+      makeRun(dir, home, 'R1', { status: 'success', alive: false });
+
+      const result = await ownerBacklog(dir, home, ['pick', '--owner', 'run:R2']);
+
+      assert.equal(result.code, ExitCode.ok, result.stderr);
+      assert.equal(fieldOf(read(dir), 'an-item', 'claimed_by'), 'run:R2');
+    });
+
+    it('живой владелец держит пункт старше порога, --only отказывает «не свободен»', async () => {
+      const home = tempDir('backlog-home-');
+      const dir = bed(item('an-item', { ...COMPLETE, status: 'in_progress', started_at: OLD, claimed_by: 'run:R1' }));
+      makeRun(dir, home, 'R1', { status: 'running', alive: true });
+      const before = read(dir);
+
+      const free = await ownerBacklog(dir, home, ['pick', '--owner', 'run:R2']);
+      assert.equal(free.code, ExitCode.ok, free.stderr);
+      assert.deepEqual(JSON.parse(free.stdout), []);
+
+      const named = await ownerBacklog(dir, home, ['pick', '--only', 'an-item', '--owner', 'run:R2']);
+      assert.equal(named.code, ExitCode.configError);
+      assert.match(named.stderr, /не свободен/);
+      assert.equal(read(dir), before);
+    });
+
+    it('очередь без владельцев работает в каталоге без конфигурации проекта', async () => {
+      const dir = bed(item('an-item', { ...COMPLETE, status: 'in_progress', started_at: OLD }));
+      assert.equal(existsSync(join(dir, '.stepcast')), false);
+
+      const result = await backlog(dir, ['pick', '--owner', 'run:R2']);
+
+      assert.equal(result.code, ExitCode.ok, result.stderr);
+      assert.equal(result.stderr, '');
+      assert.equal(fieldOf(read(dir), 'an-item', 'claimed_by'), 'run:R2');
+    });
+  });
+
+  describe('finish', () => {
+    it('свой пункт получает исход', async () => {
+      const home = tempDir('backlog-home-');
+      const dir = bed(item('an-item', { ...COMPLETE, status: 'in_progress', claimed_by: 'run:R1' }));
+      const result = await ownerBacklog(dir, home, ['finish', 'an-item', '--status', 'done', '--owner', 'run:R1']);
+
+      assert.equal(result.code, ExitCode.ok, result.stderr);
+      assert.equal(fieldOf(read(dir), 'an-item', 'status'), 'done');
+    });
+
+    it('пункт предка по resume получает исход', async () => {
+      const home = tempDir('backlog-home-');
+      const dir = bed(item('an-item', { ...COMPLETE, status: 'in_progress', claimed_by: 'run:R0' }));
+      makeRun(dir, home, 'R0', { status: 'success', alive: false });
+      makeRun(dir, home, 'R1', { status: 'running', alive: true, resumedFrom: 'R0' });
+
+      const result = await ownerBacklog(dir, home, ['finish', 'an-item', '--status', 'done', '--owner', 'run:R1']);
+
+      assert.equal(result.code, ExitCode.ok, result.stderr);
+      assert.equal(fieldOf(read(dir), 'an-item', 'status'), 'done');
+    });
+
+    it('пункт без владельца получает исход', async () => {
+      const home = tempDir('backlog-home-');
+      const dir = bed(item('an-item', { ...COMPLETE, status: 'in_progress' }));
+      const result = await ownerBacklog(dir, home, ['finish', 'an-item', '--status', 'done', '--owner', 'run:R1']);
+
+      assert.equal(result.code, ExitCode.ok, result.stderr);
+      assert.equal(fieldOf(read(dir), 'an-item', 'status'), 'done');
+    });
+
+    it('чужой пункт не тронут: код 0, stderr называет владельца', async () => {
+      const home = tempDir('backlog-home-');
+      const dir = bed(item('an-item', { ...COMPLETE, status: 'in_progress', claimed_by: 'run:R2' }));
+      const before = read(dir);
+      const result = await ownerBacklog(dir, home, [
+        'finish', 'an-item', '--status', 'failed', '--reason', 'п', '--owner', 'run:R1',
+      ]);
+
+      assert.equal(result.code, ExitCode.ok, result.stderr);
+      assert.match(result.stderr, /an-item/);
+      assert.match(result.stderr, /run:R2/);
+      assert.equal(read(dir), before);
+    });
+
+    it('already-final раньше проверки владельца', async () => {
+      const home = tempDir('backlog-home-');
+      const dir = bed(item('an-item', { ...COMPLETE, status: 'done', claimed_by: 'run:R2' }));
+      const result = await ownerBacklog(dir, home, ['finish', 'an-item', '--status', 'failed', '--reason', 'п', '--owner', 'run:R1']);
+
+      assert.equal(result.code, ExitCode.ok, result.stderr);
+      assert.equal(result.stderr, '');
+      assert.equal(fieldOf(read(dir), 'an-item', 'status'), 'done');
+    });
+
+    it('неверная форма --owner — код 2', async () => {
+      const dir = bed(item('an-item', { ...COMPLETE, status: 'in_progress' }));
+      const result = await backlog(dir, ['finish', 'an-item', '--status', 'done', '--owner', 'R1']);
+      assert.equal(result.code, ExitCode.configError);
+    });
+  });
+
+  describe('settle', () => {
+    function itemFile(runDir: string, lane: string, slug: string): void {
+      writeFileSync(join(runDir, `item-${lane}.json`), JSON.stringify({ slug, title: `Улучшение ${slug}` }));
+    }
+
+    it('пункт, перехваченный другим прогоном, остаётся in_progress с его владельцем', async () => {
+      const home = tempDir('backlog-home-');
+      const dir = gitBed(item('an-item', { ...COMPLETE, status: 'in_progress', claimed_by: 'run:R2' }));
+      const runDir = tempDir('backlog-rundir-');
+      itemFile(runDir, 'a', 'an-item');
+      const before = read(dir);
+
+      const result = await ownerBacklog(dir, home, ['settle', '--run-dir', runDir]);
+
+      assert.equal(result.code, ExitCode.ok, result.stderr);
+      assert.equal(read(dir), before);
+      assert.equal(fieldOf(read(dir), 'an-item', 'claimed_by'), 'run:R2');
+      assert.match(result.stdout, /пропущен/);
+      assert.doesNotMatch(result.stdout, /помечен failed/);
+      assert.doesNotMatch(result.stdout, /все взятые пункты уже свели свой исход/);
+      assert.match(result.stdout, /забранных другим прогоном пунктов 1/);
+    });
+
+    it('свой пункт закрывается от имени прогона своего каталога', async () => {
+      const home = tempDir('backlog-home-');
+      const runDir = tempDir('backlog-rundir-');
+      const dir = gitBed(item('an-item', { ...COMPLETE, status: 'in_progress', claimed_by: `run:${basename(runDir)}` }));
+      itemFile(runDir, 'a', 'an-item');
+
+      const result = await ownerBacklog(dir, home, ['settle', '--run-dir', runDir]);
+
+      assert.equal(result.code, ExitCode.ok, result.stderr);
+      assert.equal(fieldOf(read(dir), 'an-item', 'status'), 'failed');
+    });
   });
 });
 

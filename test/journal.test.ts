@@ -38,6 +38,7 @@ import {
   shortRunId,
   stepDirName,
 } from '../src/parts/pipeline/run/journal/paths.js';
+import { isRunOrAncestor, runOwnerJudge } from '../src/parts/pipeline/run/journal/owner.js';
 import { AttemptRecordSchema, RunStatusSchema, type RunStatus } from '../src/parts/pipeline/run/journal/schema.js';
 import { StepcastError } from '../src/kernel/errors.js';
 import { expandPipeline } from '../src/parts/pipeline/document/expand.js';
@@ -1781,5 +1782,79 @@ describe('run-journal: версия формата и диагноз чтени�
     writeFileSync(paths.events, `${lines.join('\n')}\n${JSON.stringify(tampered)}\n`);
 
     assert.equal(readResetHint(runsRoot, projectRoot, '/tmp/stepcast.yml'), undefined);
+  });
+});
+
+describe('run-journal: судья владельца пункта очереди', () => {
+  interface RunSpec {
+    readonly status: RunStatus['status'];
+    readonly pid?: number;
+    readonly resumedFrom?: string;
+  }
+
+  function makeRun(b: Bed, runId: string, spec: RunSpec): void {
+    const journal = RunJournal.create({ runsRoot: b.runsRoot, projectRoot: b.projectRoot, runId });
+    journal.writeManifest({
+      ...sampleManifest(runId),
+      project_root: b.projectRoot,
+      started_at: RECENT,
+      ...(spec.pid === undefined ? {} : { pid: spec.pid }),
+      ...(spec.resumedFrom === undefined ? {} : { resumed_from: spec.resumedFrom }),
+    });
+    journal.writeStatus(sampleStatus(runId, { status: spec.status, jobs: [] }));
+  }
+
+  it('нет каталога прогона — unknown, форма не run: — unknown', () => {
+    const b = bed();
+    const judge = runOwnerJudge(b.runsRoot, b.projectRoot);
+    assert.equal(judge('run:нет-такого'), 'unknown');
+    assert.equal(judge('human:alice'), 'unknown');
+    assert.equal(judge('run:'), 'unknown');
+  });
+
+  it('running с живым pid — alive', () => {
+    const b = bed();
+    makeRun(b, 'live', { status: 'running', pid: process.pid });
+    assert.equal(runOwnerJudge(b.runsRoot, b.projectRoot)('run:live'), 'alive');
+  });
+
+  it('завершённый прогон и running с мёртвым pid — dead', () => {
+    const b = bed();
+    makeRun(b, 'done-run', { status: 'success', pid: process.pid });
+    makeRun(b, 'dead-pid', { status: 'running', pid: 999_999_999 });
+    const judge = runOwnerJudge(b.runsRoot, b.projectRoot);
+    assert.equal(judge('run:done-run'), 'dead');
+    assert.equal(judge('run:dead-pid'), 'dead');
+  });
+
+  it('мёртвый владелец с живым продолжением по resumed_from — alive', () => {
+    const b = bed();
+    makeRun(b, 'origin', { status: 'failed', pid: 999_999_999 });
+    makeRun(b, 'middle', { status: 'failed', pid: 999_999_999, resumedFrom: 'origin' });
+    makeRun(b, 'tail', { status: 'running', pid: process.pid, resumedFrom: 'middle' });
+    const judge = runOwnerJudge(b.runsRoot, b.projectRoot);
+    assert.equal(judge('run:origin'), 'alive');
+    assert.equal(judge('run:middle'), 'alive');
+  });
+
+  it('цикл resumed_from не зацикливает обход', () => {
+    const b = bed();
+    makeRun(b, 'cycle-a', { status: 'failed', pid: 999_999_999, resumedFrom: 'cycle-b' });
+    makeRun(b, 'cycle-b', { status: 'running', pid: process.pid, resumedFrom: 'cycle-a' });
+    makeRun(b, 'outside', { status: 'failed', pid: 999_999_999 });
+    const judge = runOwnerJudge(b.runsRoot, b.projectRoot);
+    assert.equal(judge('run:cycle-a'), 'alive');
+    assert.equal(judge('run:outside'), 'dead');
+    assert.equal(isRunOrAncestor(b.runsRoot, projectKey(b.projectRoot), 'нет', 'cycle-a'), false);
+  });
+
+  it('isRunOrAncestor: сам прогон и предок — да, потомок и чужой — нет', () => {
+    const b = bed();
+    const key = projectKey(b.projectRoot);
+    makeRun(b, 'parent', { status: 'failed', pid: 999_999_999 });
+    makeRun(b, 'child', { status: 'running', pid: process.pid, resumedFrom: 'parent' });
+    assert.equal(isRunOrAncestor(b.runsRoot, key, 'child', 'child'), true);
+    assert.equal(isRunOrAncestor(b.runsRoot, key, 'parent', 'child'), true);
+    assert.equal(isRunOrAncestor(b.runsRoot, key, 'child', 'parent'), false);
   });
 });

@@ -4,7 +4,19 @@ import { fileURLToPath } from 'node:url';
 import { describe, it } from 'node:test';
 
 import { StepcastError } from '../src/kernel/errors.js';
-import { parse, effectiveGroup, toRecord, isFree, selectItems, statusResolver, withFields } from '../src/parts/pipeline/domain/backlog/index.js';
+import {
+  parse,
+  effectiveGroup,
+  toRecord,
+  isFree,
+  isRunOwner,
+  parseRunOwner,
+  runOwner,
+  selectItems,
+  statusResolver,
+  withFields,
+} from '../src/parts/pipeline/domain/backlog/index.js';
+import type { OwnerJudge, OwnerState } from '../src/parts/pipeline/domain/backlog/index.js';
 import { BacklogSlotsResponseSchema } from '../src/parts/pipeline/domain/backlog/schema.js';
 import type { BacklogEntry } from '../src/parts/pipeline/domain/backlog/index.js';
 
@@ -491,6 +503,82 @@ describe('backlog: свобода пункта', () => {
       assert.equal(freeOf(status, { started_at: '2026-08-23T05:00:00.000Z' }), false, `status=${status}`);
       assert.equal(freeOf(status), false, `status=${status} без started_at`);
     }
+  });
+});
+
+describe('backlog: владелец пункта', () => {
+  const NOW = Date.parse('2026-08-23T12:00:00.000Z');
+  const STALE_MS = 6 * 3600_000;
+  const FRESH = '2026-08-23T11:00:00.000Z';
+  const OLD = '2026-08-23T05:00:00.000Z';
+
+  const judgeOf = (state: OwnerState): OwnerJudge => () => state;
+
+  function freeWith(fields: Readonly<Record<string, string>>, judge?: OwnerJudge): boolean {
+    const entries = parse(backlogText(item('some-item', { ...COMPLETE, status: 'in_progress', ...fields })));
+    return isFree(entryOf(entries, 'some-item'), NOW, STALE_MS, judge);
+  }
+
+  it('claimed_by любой формы разбирается и не входит в запись пункта', () => {
+    for (const owner of ['run:R1', 'run:', 'human:alice', 'что угодно']) {
+      const entries = parse(backlogText(item('some-item', { ...COMPLETE, claimed_by: owner })));
+      assert.equal(entryOf(entries, 'some-item').data.claimed_by, owner);
+      assert.ok(!('claimed_by' in toRecord(entryOf(entries, 'some-item'))));
+    }
+  });
+
+  it('форма run:<id>: R1, run:, run:a/b и run:a b отвергаются', () => {
+    assert.equal(parseRunOwner('run:2026-10-29T07-00-40Z-e5cfd6'), '2026-10-29T07-00-40Z-e5cfd6');
+    assert.equal(parseRunOwner('R1'), undefined);
+    assert.equal(parseRunOwner('run:'), undefined);
+    assert.equal(parseRunOwner('run:a/b'), undefined);
+    assert.equal(parseRunOwner('run:a b'), undefined);
+    assert.equal(isRunOwner('run:R1'), true);
+    assert.equal(runOwner('R1'), 'run:R1');
+  });
+
+  it('мёртвый владелец освобождает свежий пункт', () => {
+    assert.equal(freeWith({ started_at: FRESH, claimed_by: 'run:R1' }, judgeOf('dead')), true);
+  });
+
+  it('живой владелец удерживает пункт старше порога', () => {
+    assert.equal(freeWith({ started_at: OLD, claimed_by: 'run:R1' }, judgeOf('alive')), false);
+  });
+
+  it('unknown, нет судьи и нет claimed_by — прежний порог давности', () => {
+    assert.equal(freeWith({ started_at: FRESH, claimed_by: 'run:R1' }, judgeOf('unknown')), false);
+    assert.equal(freeWith({ started_at: OLD, claimed_by: 'run:R1' }, judgeOf('unknown')), true);
+    assert.equal(freeWith({ started_at: FRESH, claimed_by: 'run:R1' }), false);
+    assert.equal(freeWith({ started_at: OLD, claimed_by: 'run:R1' }), true);
+    assert.equal(freeWith({ started_at: FRESH }, judgeOf('dead')), false);
+    assert.equal(freeWith({ started_at: OLD }, judgeOf('alive')), true);
+  });
+
+  it('судья не спрашивается о todo', () => {
+    const entries = parse(backlogText(item('some-item', { ...COMPLETE, claimed_by: 'run:R1' })));
+    const judge: OwnerJudge = () => assert.fail('судья не нужен');
+    assert.equal(isFree(entryOf(entries, 'some-item'), NOW, STALE_MS, judge), true);
+  });
+
+  it('живой владелец держит группу даже старше порога, мёртвый — отпускает', () => {
+    const text = backlogText(
+      item('held', { ...COMPLETE, status: 'in_progress', started_at: OLD, claimed_by: 'run:R1', group: 'g' }),
+      item('next', { ...COMPLETE, group: 'g' }),
+    );
+    const entries = parse(text);
+    const alive = selectItems(entries, 2, NOW, STALE_MS, undefined, undefined, undefined, undefined, judgeOf('alive'));
+    assert.deepEqual(alive.map((entry) => entry.slug), []);
+    const dead = selectItems(entries, 2, NOW, STALE_MS, undefined, undefined, undefined, undefined, judgeOf('dead'));
+    assert.deepEqual(dead.map((entry) => entry.slug), ['held']);
+  });
+
+  it('свежий пункт мёртвого владельца берётся отбором раньше todo', () => {
+    const text = backlogText(
+      item('fresh-todo', { ...COMPLETE }),
+      item('orphan', { ...COMPLETE, status: 'in_progress', started_at: FRESH, claimed_by: 'run:R1' }),
+    );
+    const chosen = selectItems(parse(text), 1, NOW, STALE_MS, undefined, undefined, undefined, undefined, judgeOf('dead'));
+    assert.deepEqual(chosen.map((entry) => entry.slug), ['orphan']);
   });
 });
 

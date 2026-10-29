@@ -10,6 +10,7 @@ import type { Config } from '../src/parts/pipeline/config/resolve.js';
 import { ExitCode, StepcastError, type ExitCodeValue } from '../src/kernel/errors.js';
 import { expandPipeline } from '../src/parts/pipeline/document/expand.js';
 import { runPaths } from '../src/parts/pipeline/run/journal/paths.js';
+import { finishOwnerOfRun } from '../src/parts/pipeline/run/journal/owner.js';
 import { mergeLanes } from '../src/parts/pipeline/domain/lanes/merge.js';
 import { readLaneMerge } from '../src/parts/pipeline/domain/lanes/mergeRecord.js';
 import { applyRun } from '../src/parts/pipeline/run/apply.js';
@@ -384,6 +385,34 @@ describe('core: mergeLanes — публикация поверх нечисто�
     assert.equal(readFileSync(project.path('backlog.md'), 'utf8'), 'concurrent');
   });
 
+  it('дорожку пункта, который забрал другой прогон, не публикует и очередь не трогает', async () => {
+    const project = makeProject({
+      'stepcast.yml': dirtyTreeLanePipeline(SUCCESS_A),
+      'backlog.md': `${backlogItem('a-item')}claimed_by: run:R2\n`,
+    });
+    gitInit(project);
+    commit(project, 'начальный');
+    const baseHead = headShaAt(project.root);
+    const runsRoot = tempDir('lanes-runs-');
+    const result = await runLanes(project, runsRoot);
+    writeItem(result.journal.paths.dir, 'a', 'a-item', 'A');
+    const queueBefore = readFileSync(project.path('backlog.md'), 'utf8');
+
+    const outcomes = await mergeLanes({
+      paths: result.journal.paths,
+      cwd: project.root,
+      lanes: ['a'],
+      check: 'exit 0',
+      file: project.path('backlog.md'),
+      finishOwner: finishOwnerOfRun(runsRoot, project.root, result.journal.paths.runId),
+    });
+
+    assert.deepEqual(outcomes.map((o) => o.kind), ['foreign_owner']);
+    assert.equal(headShaAt(project.root), baseHead);
+    assert.equal(existsSync(project.path('a.txt')), false);
+    assert.equal(readFileSync(project.path('backlog.md'), 'utf8'), queueBefore);
+  });
+
   it('возвращает commit_on_success: false в checkout, но не включает его в коммит', async () => {
     const project = makeProject({
       'stepcast.yml': dirtyTreeLanePipelineWithNotes('printf "от a\\n" > a.txt; printf "lane\\n" > notes.md'),
@@ -658,6 +687,89 @@ describe('core: mergeLanes — наложение и порядок', () => {
     const text = readFileSync(backlogFile, 'utf8');
     assert.equal(statusOf(text, 'a-item'), 'done');
     assert.equal(statusOf(text, 'b-item'), 'done');
+  });
+
+  it('дорожка пункта, перехваченного другим прогоном, не сводится и не коммитится, своя сводится', async () => {
+    const project = makeProject({ 'stepcast.yml': twoLanePipeline(SUCCESS_A, SUCCESS_B) });
+    gitInit(project);
+    commit(project, 'начальный');
+    const runsRoot = tempDir('lanes-runs-');
+    const result = await runLanes(project, runsRoot);
+    const { runId } = result.journal.paths;
+
+    const backlogFile = project.path('backlog.md');
+    writeFileSync(
+      backlogFile,
+      `${backlogItem('a-item')}claimed_by: run:R2\n\n${backlogItem('b-item')}claimed_by: run:${runId}\n`,
+    );
+    commit(project, 'добавлена очередь');
+    writeItem(result.journal.paths.dir, 'a', 'a-item', 'Заголовок A');
+    writeItem(result.journal.paths.dir, 'b', 'b-item', 'Заголовок B');
+
+    const before = commitCount(project);
+    const outcomes = await mergeLanes({
+      paths: result.journal.paths,
+      cwd: project.root,
+      lanes: ['a', 'b'],
+      check: 'exit 0',
+      file: backlogFile,
+      finishOwner: finishOwnerOfRun(runsRoot, project.root, runId),
+    });
+
+    assert.deepEqual(
+      outcomes.map((o) => o.kind),
+      ['foreign_owner', 'merged'],
+      'чужой владелец сведение не роняет',
+    );
+    const foreign = outcomes[0];
+    assert.ok(foreign?.kind === 'foreign_owner');
+    assert.equal(foreign.slug, 'a-item');
+    assert.match(foreign.reason, /run:R2/);
+    assert.equal(readLaneMerge(result.journal.paths.dir, 'a')?.kind, 'foreign_owner');
+
+    assert.equal(commitCount(project), before + 1, 'коммит только у своей дорожки');
+    assert.deepEqual(commitMessages(project, 1), ['b-item: Заголовок B']);
+    assert.equal(existsSync(project.path('a.txt')), false, 'результат чужой дорожки в дерево не лёг');
+    assert.equal(readFileSync(project.path('b.txt'), 'utf8'), 'от b\n');
+
+    const text = readFileSync(backlogFile, 'utf8');
+    assert.equal(statusOf(text, 'a-item'), 'in_progress');
+    assert.equal(fieldOf(text, 'a-item', 'claimed_by'), 'run:R2');
+    assert.equal(statusOf(text, 'b-item'), 'done');
+  });
+
+  it('пункт, перехваченный во время проверки, снимает наложенное: коммита нет, владелец цел', async () => {
+    const project = makeProject({ 'stepcast.yml': oneLanePipeline(SUCCESS_A) });
+    gitInit(project);
+    commit(project, 'начальный');
+    const runsRoot = tempDir('lanes-runs-');
+    const result = await runLanes(project, runsRoot);
+    const { runId } = result.journal.paths;
+
+    const backlogFile = project.path('backlog.md');
+    writeFileSync(backlogFile, `${backlogItem('a-item')}claimed_by: run:${runId}\n`);
+    commit(project, 'добавлена очередь');
+    writeItem(result.journal.paths.dir, 'a', 'a-item', 'Заголовок A');
+    // Проверка — окно гонки: пока она идёт, пункт забирает другой прогон.
+    const claimed = join(tempDir('lanes-claim-'), 'backlog.md');
+    writeFileSync(claimed, `${backlogItem('a-item')}claimed_by: run:R2\n`);
+
+    const before = commitCount(project);
+    const outcomes = await mergeLanes({
+      paths: result.journal.paths,
+      cwd: project.root,
+      lanes: ['a'],
+      check: `cp "${claimed}" "${backlogFile}"`,
+      file: backlogFile,
+      finishOwner: finishOwnerOfRun(runsRoot, project.root, runId),
+    });
+
+    assert.deepEqual(outcomes.map((o) => o.kind), ['foreign_owner']);
+    assert.equal(commitCount(project), before);
+    assert.equal(existsSync(project.path('a.txt')), false, 'наложенное снято');
+    const text = readFileSync(backlogFile, 'utf8');
+    assert.equal(statusOf(text, 'a-item'), 'in_progress');
+    assert.equal(fieldOf(text, 'a-item', 'claimed_by'), 'run:R2');
   });
 
   it('вторая дорожка ложится на дерево, уже несущее первую', async () => {

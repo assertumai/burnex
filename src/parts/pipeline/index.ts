@@ -111,6 +111,9 @@ export {
   oneLine,
   tailLine,
   finishItem,
+  parseRunOwner,
+  runOwner,
+  isRunOwner,
   REASON_LIMIT,
   DEFAULT_STALE_HOURS,
   BacklogSlugSchema,
@@ -125,6 +128,9 @@ export {
   type BacklogRecord,
   type BacklogSlotsResponse,
   type FinishOutcome,
+  type FinishOwner,
+  type OwnerState,
+  type OwnerJudge,
 } from './domain/backlog/index.js';
 export { laneJobs, knownLanes, evaluateLane, type LaneJobStatus, type LaneOutcome } from './domain/lanes/lanes.js';
 export { assertCleanTree, currentCommit, resetToCommit, commitAll } from './domain/lanes/tree.js';

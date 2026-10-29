@@ -133,7 +133,43 @@ export function tailLine(value: string, limit: number): string {
 }
 
 /** Исход попытки проставить пункту очереди его исход. */
-export type FinishOutcome = 'set' | 'already-final';
+export type FinishOutcome = 'set' | 'already-final' | 'foreign-owner';
+
+/**
+ * Кто проставляет исход от имени прогона. Предикат «свой» приходит
+ * аргументом: родство прогонов по `resumed_from` живёт в журнале, а очередь
+ * журнала знать не должна.
+ */
+export interface FinishOwner {
+  /** Владелец пункта (`claimed_by`) — это сам проставляющий либо его предок по `resume`. */
+  readonly isOwn: (claimedBy: string) => boolean;
+  /** Вызывается под lock'ом при исходе `foreign-owner` с владельцем пункта. */
+  readonly onForeign?: (claimedBy: string, slug: string) => void;
+}
+
+/**
+ * Чужой владелец пункта — `claimed_by`, который `owner` своим не признаёт, —
+ * либо `undefined`: владельца нет, он свой, исход уже проставлен или пункта в
+ * очереди нет (о последнем отказом скажет `finishItem`). Сведение дорожек
+ * спрашивает это до наложения: результат работы, которую забрал другой
+ * прогон, не коммитится вовсе, а не только остаётся без отметки в очереди.
+ */
+export function foreignOwnerOf(
+  file: string,
+  command: string,
+  slug: string,
+  owner: FinishOwner,
+): string | undefined {
+  return withBacklogLock(file, command, () => {
+    const entry = parseBacklogFile(file, readBacklogFile(file)).find(
+      (candidate) => candidate.slug === slug,
+    );
+    if (entry === undefined) return undefined;
+    if (entry.data.status === 'done' || entry.data.status === 'failed') return undefined;
+    const claimedBy = entry.data.claimed_by;
+    return claimedBy !== undefined && !owner.isOwn(claimedBy) ? claimedBy : undefined;
+  });
+}
 
 /**
  * Проставить пункту исход, если он ещё не проставлен.
@@ -142,6 +178,11 @@ export type FinishOutcome = 'set' | 'already-final';
  * после сведения дорожек или `finish` после отказа сети) не должен состязаться
  * за последнее слово — первый проставленный исход и есть окончательный.
  * Отсутствующий пункт — отказ: молча потерять бухгалтерию нельзя.
+ *
+ * С `owner` пункт, которым владеет чужой прогон, не правится: его забрал
+ * другой заход, и исход чужой работы — не наш. Проверка идёт после
+ * `already-final`, чтобы уже проставленный исход читался одинаково для всех.
+ * Пункт без `claimed_by` правится: его взяли без владельца, спорить не с кем.
  */
 export function finishItem(
   file: string,
@@ -149,6 +190,7 @@ export function finishItem(
   slug: string,
   status: 'done' | 'failed',
   reason?: string,
+  owner?: FinishOwner,
 ): FinishOutcome {
   // Чтение, проверка исхода и запись — один цикл под lock'ом очереди: иначе
   // два одновременных исхода разным пунктам теряют один из них. `command` —
@@ -162,6 +204,12 @@ export function finishItem(
     }
 
     if (entry.data.status === 'done' || entry.data.status === 'failed') return 'already-final';
+
+    const claimedBy = entry.data.claimed_by;
+    if (owner !== undefined && claimedBy !== undefined && !owner.isOwn(claimedBy)) {
+      owner.onForeign?.(claimedBy, slug);
+      return 'foreign-owner';
+    }
 
     const values = status === 'failed' ? { status, reason: oneLine(reason ?? '') } : { status };
     writeBacklogFile(file, withFields(text, slug, values));

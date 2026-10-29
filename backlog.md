@@ -347,12 +347,13 @@ started_at: 2026-10-29T06:25:50.757Z
 
 ## backlog-claimed-by-owner
 
-status: todo
+status: done
 title: Владелец взятого пункта `claimed_by` вместо порога давности
 why: Зависший `in_progress` определяется по `--stale-hours`, и долгий честный прогон на седьмом часу отдаётся второму заходу, а оборвавшийся через минуту ждёт шесть часов. Живость владельца (процесс прогона) — точный признак.
 done_when: `pick --owner run:<id>` пишет `claimed_by`; пункт с владельцем зависший, если процесс прогона мёртв, а не по возрасту; `finish --owner` с чужим владельцем ничего не меняет и говорит об этом; `--stale-hours` остаётся для пунктов без владельца; тесты обоих путей.
 group: backlog-queue
 source: docs/burnex-after-stepcast.md, раздел 5 «Новые поля пункта и статус postponed»
+started_at: 2026-10-29T07:00:42.355Z
 
 ## backlog-add-show-commands
 
