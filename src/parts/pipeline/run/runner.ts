@@ -42,6 +42,8 @@ import { backendsInUse } from '../secrets/declaration.js';
 import { namedSecrets, resolveBackendCredentials, resolveSecrets } from './secrets.js';
 import { executeRunStep } from './exec/runStep.js';
 import { runJudgePass } from './exec/judgePass.js';
+import { planAttempt } from './exec/attempts.js';
+import { loadPriceCatalog, type PriceCatalog } from './budget/priceCatalog.js';
 import { runPluginStep } from './exec/pluginStep.js';
 import { evaluatePredicates, validateAgainstSchema, validateAgainstSchemaFile } from '../expect/evaluate.js';
 import { createKnowledgeSource } from '../domain/knowledge/source.js';
@@ -152,6 +154,11 @@ export interface RunOptions {
    */
   readonly engineLocator?: () => EngineLocation;
   /**
+   * Подмена каталога цен: тесты оценивают по своим ценам, а не по поставляемым,
+   * которые правятся по тарифам провайдеров.
+   */
+  readonly priceCatalog?: PriceCatalog;
+  /**
    * Наблюдение за потоком событий: вызывается синхронно с записью каждого
    * события в журнал, рядом со снимком накопленного расхода прогона.
    * Событие `run.started` доставляется раньше, чем накопитель расхода
@@ -228,6 +235,10 @@ export async function runPipeline(options: RunOptions): Promise<RunResult> {
     runsRoot: config.runs.root,
     ...(config.project.nestedRepos === undefined ? {} : { nestedRepos: config.project.nestedRepos }),
   });
+
+  // Каталог цен читается один раз и до журнала: повреждённый файл поставки
+  // останавливает старт названной ошибкой, не оставляя каталога прогона.
+  const priceCatalog = options.priceCatalog ?? loadPriceCatalog();
 
   // Умолчание реестра раскрывается один раз на прогон: каждый вызов
   // `builtinRegistry()` поднимает корневой контекст, а спрашивают его и
@@ -373,6 +384,7 @@ export async function runPipeline(options: RunOptions): Promise<RunResult> {
 
   const usage = new UsageAccumulator(
     (backend) => config.backends[backend]?.cacheReadWeight ?? 1,
+    priceCatalog.asOf,
   );
   usageForEvents.current = usage;
   const records = new Map<string, JobRecord>(
@@ -441,6 +453,7 @@ export async function runPipeline(options: RunOptions): Promise<RunResult> {
     anchorKind,
     sourceCommits,
     engine,
+    priceCatalog,
     runCwd: options.cwd,
     graph,
     completedWorkspaces,
@@ -598,6 +611,7 @@ export async function runPipeline(options: RunOptions): Promise<RunResult> {
 
   requireAdapters(context);
   warnAboutDegradedBackends(context);
+  warnAboutUnpricedCalls(context);
   requireStrictPermissionsSupport(context);
   requireMcpSupport(context);
   requireEffortSupport(context);
@@ -647,6 +661,10 @@ export async function runPipeline(options: RunOptions): Promise<RunResult> {
         ...(usage.costUnreportedAttemptCount() === 0
           ? {}
           : { cost_unreported_attempts: usage.costUnreportedAttemptCount() }),
+        ...(usage.runCostSource() === undefined ? {} : { cost_source: usage.runCostSource() }),
+        ...(usage.runCostCatalogAsOf() === undefined
+          ? {}
+          : { cost_catalog_as_of: usage.runCostCatalogAsOf() }),
         wallclock_ms: usage.elapsedMs(),
         ...(pipeline.budget?.wallclockMs === undefined
           ? {}
@@ -839,6 +857,12 @@ export interface RunContext extends RunOptions {
   readonly journal: RunJournal;
   readonly records: Map<string, JobRecord>;
   readonly usage: UsageAccumulator;
+  /**
+   * Каталог цен, прочитанный один раз на старте: оценка расхода для бэкенда,
+   * который цену не сообщает. Необязателен ради вызывающих, что собирают
+   * контекст исполнения напрямую, — без него оценки просто нет.
+   */
+  readonly priceCatalog?: PriceCatalog;
   readonly outputs: UpstreamOutput[];
   readonly adapters: Map<string, BackendAdapter>;
   /** Предел одновременных вызовов бэкенда, общий на прогон. */
@@ -978,6 +1002,57 @@ function warnAboutDegradedBackends(context: RunContext): void {
       capability: 'sessions',
       detail: 'session: shared исполняется как per_step',
     });
+  }
+}
+
+/**
+ * Прогноз до первой траты: какие вызовы модели денежный потолок не увидит.
+ * Вызов «без цены» — бэкенд цены не сообщает (`reportsCost !== true`: отсутствие
+ * признака значит «неизвестно»), а модель не объявлена либо её нет в каталоге.
+ * Объявленная и найденная в каталоге модель оценивается движком, поэтому
+ * предупреждения не требует. Модель попытки — та же, что выберет исполнение
+ * (`plan.model ?? step.model`), поэтому проверяется каждая достижимая ступень
+ * эскалации, а не только модель шага: попытки 2+ на другой модели иначе прошли
+ * бы мимо потолка без предупреждения. Прогон из-за этого не останавливается; факт —
+ * `budget.cost_unreported` и `costLimitUnapplied` — по-прежнему ловит тех,
+ * кто цену обещал и не сообщил.
+ */
+function warnAboutUnpricedCalls(context: RunContext): void {
+  const { pipeline } = context.expanded;
+  if (!anyCostBudgetDeclared(pipeline)) return;
+
+  const seen = new Set<string>();
+  const check = (job: Job, step: Step, backend: string, model: string | undefined, judge: boolean): void => {
+    const adapter = adapterOf(backend, context);
+    if (adapter.capabilities.reportsCost === true) return;
+    // Каталог ищется по имени адаптера — тому же, что окажется в `Usage.backend`
+    // и по которому цену найдёт сам вызов.
+    if (model !== undefined && context.priceCatalog?.find(adapter.name, model) !== undefined) return;
+    const key = [job.id, step.id, judge ? 'judge' : 'step', backend, model ?? ''].join('\u0000');
+    if (seen.has(key)) return;
+    seen.add(key);
+    context.journal.event({
+      kind: 'budget.cost_unpriced',
+      job: job.id,
+      step: step.id,
+      backend,
+      ...(model === undefined ? {} : { model }),
+      ...(judge ? { judge: true } : {}),
+    });
+  };
+
+  for (const job of pipeline.jobs) {
+    for (const step of job.steps) {
+      if (step.kind === 'agent') {
+        for (let attempt = 1; attempt <= step.attempts.max; attempt += 1) {
+          check(job, step, step.agent, planAttempt(attempt, step.attempts).model ?? step.model, false);
+        }
+      }
+      for (const predicate of step.expect ?? []) {
+        if (predicate.kind !== 'judge') continue;
+        check(job, step, predicate.agent ?? context.config.defaults.agent, predicate.model, true);
+      }
+    }
   }
 }
 
@@ -2759,6 +2834,7 @@ async function runCommandStep(
               exceeded ??= found;
               abort.trigger(found);
             },
+            ...(context.priceCatalog === undefined ? {} : { priceCatalog: context.priceCatalog }),
           });
           if (attemptUsage !== undefined) checkCostUnreported(context, job, step, plan.attempt);
           return judgeResults;
@@ -3097,10 +3173,12 @@ async function runAgentStep(
             exceeded ??= found;
             abort.trigger(found);
           },
+          ...(context.priceCatalog === undefined ? {} : { priceCatalog: context.priceCatalog }),
         });
         checkCostUnreported(context, job, step, plan.attempt);
         return results;
       },
+      ...(context.priceCatalog === undefined ? {} : { priceCatalog: context.priceCatalog }),
       onUsage: (current, attempt) => {
         context.usage.record(job.id, step.id, attempt, current);
         const found = context.usage.check(budgetScopes(), current);

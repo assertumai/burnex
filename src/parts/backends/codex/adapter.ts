@@ -39,6 +39,8 @@ export function createCodexAdapter(config: BackendConfig): BackendAdapter {
       strictPermissions: config.strictPermissions,
       mcp: config.mcp,
       effort: true,
+      // Поток Codex несёт только токены; цену даёт каталог цен движка.
+      reportsCost: false,
       sessionIdSource: 'backend',
     },
 

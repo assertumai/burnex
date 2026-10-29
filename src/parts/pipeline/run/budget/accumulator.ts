@@ -1,6 +1,7 @@
 import { formatDuration, formatMoney, formatTokens } from '../../../../kernel/units.js';
 import type { Budget } from '../../document/model.js';
-import type { BudgetDimension, Usage, UsageReport } from '../journal/schema.js';
+import { effectiveCost } from '../../backend/types.js';
+import type { BudgetDimension, CostSource, Usage, UsageReport } from '../journal/schema.js';
 
 /**
  * Учёт расхода и применение бюджета.
@@ -87,8 +88,18 @@ interface Counters {
   cacheWrite: number;
   billable: number;
   costMicroUsd: number;
-  /** Число попыток в области, для которых цена известна: 0 отличает молчание от факта. */
+  /**
+   * Число попыток в области, для которых действующая цена известна (из
+   * любого источника): 0 отличает молчание от факта.
+   */
   costReportedAttempts: number;
+  /**
+   * Сколько из них содержат сообщённую цену и сколько — оценку по каталогу.
+   * Попытка с судьёй на другой модели может содержать обе (`mixed`), поэтому
+   * это не разбиение: источник уровня выводится из обоих счётчиков.
+   */
+  costFromReported: number;
+  costFromCatalog: number;
   wallclockMs: number;
   attempts: number;
   backend: string;
@@ -110,12 +121,23 @@ function emptyCounters(): Counters {
     billable: 0,
     costMicroUsd: 0,
     costReportedAttempts: 0,
+    costFromReported: 0,
+    costFromCatalog: 0,
     wallclockMs: 0,
     attempts: 0,
     backend: '',
     model: undefined,
     peak: undefined,
   };
+}
+
+/** Источник цены области по числу попыток каждого вида; `undefined`, если цены нет. */
+function sourceOf(counters: {
+  readonly costFromReported: number;
+  readonly costFromCatalog: number;
+}): CostSource | undefined {
+  if (counters.costFromCatalog > 0) return counters.costFromReported > 0 ? 'mixed' : 'catalog';
+  return counters.costFromReported > 0 ? 'reported' : undefined;
 }
 
 /** Максимум двух необязательных величин: несообщённое не участвует и не выигрывает как ноль. */
@@ -135,6 +157,8 @@ function maxOptional(a: number | undefined, b: number | undefined): number | und
 export interface UsageSnapshot {
   readonly tokens: number;
   readonly costMicroUsd?: number;
+  /** Источник денежной суммы; нет, пока нет и суммы. */
+  readonly costSource?: CostSource;
   readonly elapsedMs: number;
   readonly costUnreportedAttempts: number;
 }
@@ -177,7 +201,11 @@ export class UsageAccumulator {
    */
   private readonly carried = new Map<string, Counters>();
 
-  constructor(private readonly cacheReadWeight: (backend: string) => number) {}
+  constructor(
+    private readonly cacheReadWeight: (backend: string) => number,
+    /** Дата прейскуранта каталога цен: уходит в сводку, если в расходе есть оценка. */
+    private readonly catalogAsOf?: string,
+  ) {}
 
   /**
    * Заменить накопленное по попытке: расход приходит нарастающим итогом —
@@ -208,7 +236,7 @@ export class UsageAccumulator {
       if (usage[field] === null) this.unreported.add(field);
     }
     if (usage.peak_prefix_tokens === undefined) this.unreported.add('peak_prefix_tokens');
-    if (usage.reported_cost_usd === undefined) {
+    if (effectiveCost(usage) === undefined) {
       this.costUnreportedAttempts.add(key);
     } else {
       this.costUnreportedAttempts.delete(key);
@@ -227,6 +255,8 @@ export class UsageAccumulator {
     target.billable += current.billable - previous.billable;
     target.costMicroUsd += current.costMicroUsd - previous.costMicroUsd;
     target.costReportedAttempts += current.costReportedAttempts - previous.costReportedAttempts;
+    target.costFromReported += current.costFromReported - previous.costFromReported;
+    target.costFromCatalog += current.costFromCatalog - previous.costFromCatalog;
     target.wallclockMs += current.wallclockMs - previous.wallclockMs;
     target.attempts += 1 - previous.attempts;
   }
@@ -255,9 +285,19 @@ export class UsageAccumulator {
     return this.run.costMicroUsd;
   }
 
-  /** Ни одна попытка за весь прогон не сообщила цены. */
+  /** Ни одна попытка за весь прогон не получила цены — ни от бэкенда, ни из каталога. */
   runCostNeverReported(): boolean {
     return this.run.costReportedAttempts === 0;
+  }
+
+  /** Источник денежной суммы прогона; `undefined`, пока цены не было. */
+  runCostSource(): CostSource | undefined {
+    return sourceOf(this.run);
+  }
+
+  /** Дата прейскуранта — только если в расходе прогона есть оценка по каталогу. */
+  runCostCatalogAsOf(): string | undefined {
+    return this.run.costFromCatalog > 0 ? this.catalogAsOf : undefined;
   }
 
   /** Число попыток, чей известный на сейчас расход не содержит цены. */
@@ -284,9 +324,11 @@ export class UsageAccumulator {
 
   /** Снимок расхода прогона теми же вызовами, что собирают блок `budget` состояния. */
   snapshot(): UsageSnapshot {
+    const costSource = this.runCostSource();
     return {
       tokens: this.runTokens(),
       ...(this.runCostNeverReported() ? {} : { costMicroUsd: this.runCostMicroUsd() }),
+      ...(costSource === undefined ? {} : { costSource }),
       elapsedMs: this.elapsedMs(),
       costUnreportedAttempts: this.costUnreportedAttemptCount(),
     };
@@ -536,13 +578,17 @@ export class UsageAccumulator {
           wallclock_ms: number;
           costMicroUsd: number;
           costReportedAttempts: number;
+          costFromReported: number;
+          costFromCatalog: number;
           /** Максимум по попыткам шага (включая запечатанные) — не сумма. */
           peak: number | undefined;
           attempts: Map<
             number,
-            UsageReport['jobs'][string]['steps'][string]['attempts'][number] & {
+            Omit<UsageReport['jobs'][string]['steps'][string]['attempts'][number], 'cost_source'> & {
               costMicroUsd: number;
               costReportedAttempts: number;
+              costFromReported: number;
+              costFromCatalog: number;
             }
           >;
         }
@@ -560,7 +606,16 @@ export class UsageAccumulator {
 
         const existing =
           steps[stepId] ??
-          { billable_tokens: 0, wallclock_ms: 0, costMicroUsd: 0, costReportedAttempts: 0, peak: undefined, attempts: new Map() };
+          {
+            billable_tokens: 0,
+            wallclock_ms: 0,
+            costMicroUsd: 0,
+            costReportedAttempts: 0,
+            costFromReported: 0,
+            costFromCatalog: 0,
+            peak: undefined,
+            attempts: new Map(),
+          };
         const priorAttempt = existing.attempts.get(attempt);
         // Переисполнение шага запечатывает старую попытку под тем же номером
         // (`sealStep`): её пик не должен теряться, когда новая попытка с тем
@@ -574,6 +629,8 @@ export class UsageAccumulator {
           wallclock_ms: (priorAttempt?.wallclock_ms ?? 0) + step.wallclockMs,
           costMicroUsd: (priorAttempt?.costMicroUsd ?? 0) + step.costMicroUsd,
           costReportedAttempts: (priorAttempt?.costReportedAttempts ?? 0) + step.costReportedAttempts,
+          costFromReported: (priorAttempt?.costFromReported ?? 0) + step.costFromReported,
+          costFromCatalog: (priorAttempt?.costFromCatalog ?? 0) + step.costFromCatalog,
           ...(attemptPeak === undefined ? {} : { peak_prefix_tokens: attemptPeak }),
         });
         steps[stepId] = {
@@ -581,6 +638,8 @@ export class UsageAccumulator {
           wallclock_ms: existing.wallclock_ms + step.wallclockMs,
           costMicroUsd: existing.costMicroUsd + step.costMicroUsd,
           costReportedAttempts: existing.costReportedAttempts + step.costReportedAttempts,
+          costFromReported: existing.costFromReported + step.costFromReported,
+          costFromCatalog: existing.costFromCatalog + step.costFromCatalog,
           peak: maxOptional(existing.peak, step.peak),
           attempts: existing.attempts,
         };
@@ -588,20 +647,20 @@ export class UsageAccumulator {
       jobs[jobId] = {
         billable_tokens: counters.billable,
         wallclock_ms: counters.wallclockMs,
-        ...(counters.costReportedAttempts > 0 ? { cost_usd: counters.costMicroUsd / 1_000_000 } : {}),
+        ...costFields(counters),
         steps: Object.fromEntries(
           Object.entries(steps).map(([stepId, step]) => [
             stepId,
             {
               billable_tokens: step.billable_tokens,
               wallclock_ms: step.wallclock_ms,
-              ...(step.costReportedAttempts > 0 ? { cost_usd: step.costMicroUsd / 1_000_000 } : {}),
+              ...costFields(step),
               ...(step.peak === undefined ? {} : { peak_prefix_tokens: step.peak }),
               attempts: [...step.attempts.values()]
                 .sort((a, b) => a.attempt - b.attempt)
-                .map(({ costMicroUsd, costReportedAttempts, ...attempt }) => ({
+                .map(({ costMicroUsd, costReportedAttempts, costFromReported, costFromCatalog, ...attempt }) => ({
                   ...attempt,
-                  ...(costReportedAttempts > 0 ? { cost_usd: costMicroUsd / 1_000_000 } : {}),
+                  ...costFields({ costMicroUsd, costReportedAttempts, costFromReported, costFromCatalog }),
                 })),
             },
           ]),
@@ -619,8 +678,9 @@ export class UsageAccumulator {
         cache_write: this.run.cacheWrite,
         billable_tokens: this.run.billable,
         wallclock_ms: this.elapsedMs(),
-        ...(this.run.costReportedAttempts > 0 ? { cost_usd: this.run.costMicroUsd / 1_000_000 } : {}),
+        ...costFields(this.run),
       },
+      ...(this.runCostCatalogAsOf() === undefined ? {} : { cost_catalog_as_of: this.runCostCatalogAsOf() }),
       unreported: [
         ...this.unreported,
         ...(this.costUnreportedAttempts.size > 0 ? ['reported_cost_usd'] : []),
@@ -628,6 +688,18 @@ export class UsageAccumulator {
       jobs,
     };
   }
+}
+
+/** Цена и её источник уровня сводки; обоих нет, пока на уровне не было цены. */
+function costFields(counters: {
+  readonly costMicroUsd: number;
+  readonly costReportedAttempts: number;
+  readonly costFromReported: number;
+  readonly costFromCatalog: number;
+}): { cost_usd?: number; cost_source?: CostSource } {
+  const source = sourceOf(counters);
+  if (counters.costReportedAttempts === 0 || source === undefined) return {};
+  return { cost_usd: counters.costMicroUsd / 1_000_000, cost_source: source };
 }
 
 /**
@@ -640,6 +712,9 @@ function toCounters(usage: Usage, cacheReadWeight: number): Counters {
   const tokensOut = usage.tokens_out ?? 0;
   const cacheRead = usage.cache_read ?? 0;
   const cacheWrite = usage.cache_write ?? 0;
+  // Действующая цена, а не сырая сообщённая: запись прежней формы даёт ту же
+  // сообщённую цену, запись с оценкой — оценку.
+  const cost = effectiveCost(usage);
 
   return {
     tokensIn,
@@ -647,9 +722,10 @@ function toCounters(usage: Usage, cacheReadWeight: number): Counters {
     cacheRead,
     cacheWrite,
     billable: Math.round(tokensIn + tokensOut + cacheWrite + cacheRead * cacheReadWeight),
-    costMicroUsd:
-      usage.reported_cost_usd === undefined ? 0 : Math.round(usage.reported_cost_usd * 1_000_000),
-    costReportedAttempts: usage.reported_cost_usd === undefined ? 0 : 1,
+    costMicroUsd: cost === undefined ? 0 : Math.round(cost.usd * 1_000_000),
+    costReportedAttempts: cost === undefined ? 0 : 1,
+    costFromReported: cost !== undefined && cost.source !== 'catalog' ? 1 : 0,
+    costFromCatalog: cost !== undefined && cost.source !== 'reported' ? 1 : 0,
     wallclockMs: usage.wallclock_ms,
     attempts: 1,
     backend: usage.backend,

@@ -7,7 +7,9 @@ import {
   resolveRun,
   type UsageSummaryUnavailable,
 } from '../run/journal/reader.js';
-import type { AttemptRecord, UsageAttemptReport, UsageReport } from '../run/journal/schema.js';
+import type { AttemptRecord, CostSource, UsageAttemptReport, UsageReport } from '../run/journal/schema.js';
+import { effectiveCost } from '../backend/types.js';
+import { estimateMark, estimateNote, mergeCostSources } from '../run/budget/costSource.js';
 import { formatDuration, formatMoney, formatTokens } from '../../../kernel/units.js';
 import { ExitCode, type ExitCodeValue } from '../../../kernel/errors.js';
 import { formatColumns } from '../../../kernel/cli/output.js';
@@ -43,15 +45,21 @@ const BILLABLE_COLUMN = COLUMNS.indexOf('списано');
 const PEAK_COLUMN = COLUMNS.indexOf('пик');
 const COST_COLUMN = COLUMNS.indexOf('цена');
 
+/** Цена уровня с источником: без источника (сводка прежней формы) она сообщённая. */
+interface CostValue {
+  readonly usd: number | undefined;
+  readonly source: CostSource | undefined;
+}
+
 function totalCells(
   billable: number | undefined,
   wallclockMs: number | undefined,
-  costUsd: number | undefined,
+  cost: CostValue,
 ): string[] {
   const cells = COLUMNS.map(() => '');
   cells[TIME_COLUMN] = timeCell(wallclockMs);
   cells[BILLABLE_COLUMN] = tokensCell(billable);
-  cells[COST_COLUMN] = costCell(costUsd);
+  cells[COST_COLUMN] = costCell(cost);
   return cells;
 }
 
@@ -64,10 +72,10 @@ function totalCells(
 function stepCells(
   billable: number | undefined,
   wallclockMs: number | undefined,
-  costUsd: number | undefined,
+  cost: CostValue,
   peak: number | undefined,
 ): string[] {
-  const cells = totalCells(billable, wallclockMs, costUsd);
+  const cells = totalCells(billable, wallclockMs, cost);
   cells[PEAK_COLUMN] = tokensCell(peak);
   return cells;
 }
@@ -96,9 +104,12 @@ export function runUsageCommand(
   const { summary, unavailable } = readUsageSoft(paths);
 
   write(`прогон ${shortRunId(status.run_id)}  ${status.pipeline}  ${status.status}`);
-  const costTotal = summary?.total.cost_usd ?? status.budget.cost_used_usd;
+  const costTotal: CostValue =
+    summary?.total.cost_usd !== undefined
+      ? { usd: summary.total.cost_usd, source: summary.total.cost_source }
+      : { usd: status.budget.cost_used_usd, source: status.budget.cost_source };
   write(
-    `расход: ${formatTokens(summary?.total.billable_tokens ?? status.budget.tokens_used)} токенов, ${formatDuration(summary?.total.wallclock_ms ?? status.budget.wallclock_ms)}, ${costTotal === undefined ? DASH : formatMoney(Math.round(costTotal * 1_000_000))}`,
+    `расход: ${formatTokens(summary?.total.billable_tokens ?? status.budget.tokens_used)} токенов, ${formatDuration(summary?.total.wallclock_ms ?? status.budget.wallclock_ms)}, ${costCell(costTotal)}`,
   );
 
   const rows: string[][] = [['', ...COLUMNS]];
@@ -118,13 +129,22 @@ export function runUsageCommand(
         ...totalCells(
           sumOrUnreported(laneReports.map((report) => report?.billable_tokens)),
           sumOrUnreported(laneReports.map((report) => report?.wallclock_ms)),
-          sumOrUnreported(laneReports.map((report) => report?.cost_usd)),
+          {
+            usd: sumOrUnreported(laneReports.map((report) => report?.cost_usd)),
+            source: mergeCostSources(laneReports.map((report) => report?.cost_source)),
+          },
         ),
       ]);
     }
 
     const jobReport = summary?.jobs[job.id];
-    rows.push([`  ${job.id}`, ...totalCells(jobReport?.billable_tokens, jobReport?.wallclock_ms, jobReport?.cost_usd)]);
+    rows.push([
+      `  ${job.id}`,
+      ...totalCells(jobReport?.billable_tokens, jobReport?.wallclock_ms, {
+        usd: jobReport?.cost_usd,
+        source: jobReport?.cost_source,
+      }),
+    ]);
     for (const step of job.steps) {
       const stepReport = jobReport?.steps[step.id];
       rows.push([
@@ -132,7 +152,7 @@ export function runUsageCommand(
         ...stepCells(
           stepReport?.billable_tokens,
           stepReport?.wallclock_ms,
-          stepReport?.cost_usd,
+          { usd: stepReport?.cost_usd, source: stepReport?.cost_source },
           stepReport?.peak_prefix_tokens,
         ),
       ]);
@@ -146,7 +166,16 @@ export function runUsageCommand(
   // Живость спрашивается только у незаконченной сводки: у подведённой она
   // ничего не меняет, а лишний обход файлов прогона не бесплатен.
   const alive = summary?.partial === true && isRunAlive(paths);
-  for (const line of incompleteness(summary, unavailable, status.budget.cost_unreported_attempts, alive)) {
+  // Дата — из самой сводки: старый прогон показывает прейскурант, по которому
+  // считался, а не тот, что установлен сейчас.
+  const catalogAsOf = summary?.cost_catalog_as_of ?? status.budget.cost_catalog_as_of;
+  for (const line of incompleteness(
+    summary,
+    unavailable,
+    status.budget.cost_unreported_attempts,
+    alive,
+    catalogAsOf,
+  )) {
     write(line);
   }
 
@@ -180,7 +209,11 @@ function attemptCells(
     // — расхождение, которое таблица ничем не объясняет. Значение из
     // status.json остаётся запасным: оно переживает gc сводки.
     tokensCell(billable?.peak_prefix_tokens ?? usage.peak_prefix_tokens),
-    costCell(billable?.cost_usd ?? usage.reported_cost_usd),
+    costCell(
+      billable?.cost_usd !== undefined
+        ? { usd: billable.cost_usd, source: billable.cost_source }
+        : { usd: effectiveCost(usage)?.usd, source: effectiveCost(usage)?.source },
+    ),
   ];
 }
 
@@ -199,8 +232,10 @@ function timeCell(value: number | undefined): string {
 }
 
 /** Прочерк вместо нуля: несообщённая цена — не то же самое, что нулевая. */
-function costCell(usd: number | undefined): string {
-  return usd === undefined ? DASH : formatMoney(Math.round(usd * 1_000_000));
+function costCell(cost: CostValue): string {
+  return cost.usd === undefined
+    ? DASH
+    : `${estimateMark(cost.source)}${formatMoney(Math.round(cost.usd * 1_000_000))}`;
 }
 
 /**
@@ -214,8 +249,11 @@ function incompleteness(
   unavailable: UsageSummaryUnavailable | undefined,
   costUnreportedAttempts: number | undefined,
   alive: boolean,
+  catalogAsOf: string | undefined,
 ): string[] {
   const notes: string[] = [];
+
+  if (catalogAsOf !== undefined) notes.push(estimateNote(catalogAsOf));
 
   if (unavailable === 'missing') {
     // Живая запись пишет usage.json сразу при старте прогона (writeStatus в

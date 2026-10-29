@@ -393,6 +393,8 @@ describe('codex-backend: возможности и манифест плагин
       strictPermissions: false,
       mcp: false,
       effort: true,
+      // Поток Codex несёт токены, а не цену: цену даёт каталог цен движка.
+      reportsCost: false,
       sessionIdSource: 'backend',
     });
   });

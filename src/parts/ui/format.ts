@@ -83,6 +83,23 @@ export function fmtMoney(usd: number | null | undefined): string {
   return `$${usd.toFixed(Math.abs(usd) >= 1 ? 2 : 4)}`;
 }
 
+/**
+ * Сумма с пометкой источника: оценка по каталогу и смесь с ней печатаются
+ * с `≈` — тем же знаком, что в `stepcast usage`. Без источника (прогон
+ * прежней формы) цена сообщённая.
+ */
+export function fmtCost(usd: number | null | undefined, source?: string): string {
+  const text = fmtMoney(usd);
+  return text === DASH || (source !== 'catalog' && source !== 'mixed') ? text : `≈${text}`;
+}
+
+/** Подсказка к метке: источник и дата прейскуранта; для сообщённой цены её нет. */
+export function costTitle(source?: string, asOf?: string): string | undefined {
+  if (source !== 'catalog' && source !== 'mixed') return undefined;
+  const what = source === 'catalog' ? 'оценка по каталогу цен' : 'смешанная: сообщённая цена и оценка по каталогу';
+  return asOf === undefined ? what : `${what} от ${asOf}`;
+}
+
 export function fmtBytes(bytes: number): string {
   if (bytes >= 1024 * 1024) return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
   if (bytes >= 1024) return `${(bytes / 1024).toFixed(1)} KB`;

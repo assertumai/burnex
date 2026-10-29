@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, it } from 'node:test';
 
+import { createCodexAdapter } from '../src/parts/backends/codex/index.js';
 import { claudeModelDiscovery, createClaudeAdapter, parseResetAt } from '../src/parts/backends/claude/adapter.js';
 import {
   authRefusalLine,
@@ -13,7 +14,7 @@ import {
   resultLine,
   toolUseLine,
 } from '../src/parts/pipeline/backend/fake.js';
-import { emptyUsage, mergeUsage, sumUsage } from '../src/parts/pipeline/backend/types.js';
+import { effectiveCost, emptyUsage, mergeUsage, sumUsage } from '../src/parts/pipeline/backend/types.js';
 import { createSessionRegistry, executeAgentStep } from '../src/parts/pipeline/run/exec/agentStep.js';
 import { runJudgePass } from '../src/parts/pipeline/run/exec/judgePass.js';
 import { createBackendSlots } from '../src/parts/pipeline/backend/slots.js';
@@ -2305,5 +2306,63 @@ describe('step-execution: отказ бэкенда прекращает поп�
 
     assert.equal(backend.invocations.length, 3, 'отказ без классификации тратит все попытки как раньше');
     assert.equal(result.last?.refusal, undefined);
+  });
+});
+
+describe('model-price-catalog: действующая цена в расходе', () => {
+  const base = emptyUsage('fake', 'm', 1);
+
+  it('sumUsage сводит разные источники в mixed и складывает действующую цену', () => {
+    const sum = sumUsage(
+      { ...base, reported_cost_usd: 0.5, cost_usd: 0.5, cost_source: 'reported' },
+      { ...base, cost_usd: 0.25, cost_source: 'catalog' },
+    );
+    assert.equal(sum.cost_usd, 0.75);
+    assert.equal(sum.cost_source, 'mixed');
+    assert.equal(sum.reported_cost_usd, 0.5, 'сырое поле остаётся тем, что сказал бэкенд');
+  });
+
+  it('sumUsage сохраняет общий источник частей', () => {
+    const catalog = sumUsage(
+      { ...base, cost_usd: 1, cost_source: 'catalog' },
+      { ...base, cost_usd: 2, cost_source: 'catalog' },
+    );
+    assert.equal(catalog.cost_source, 'catalog');
+    const reported = sumUsage(
+      { ...base, cost_usd: 1, cost_source: 'reported' },
+      { ...base, cost_usd: 2, cost_source: 'reported' },
+    );
+    assert.equal(reported.cost_source, 'reported');
+  });
+
+  it('сумма определена, если цена есть хотя бы у одной части; без обеих цены нет', () => {
+    const one = sumUsage({ ...base, cost_usd: 1, cost_source: 'catalog' }, base);
+    assert.equal(one.cost_usd, 1);
+    assert.equal(one.cost_source, 'catalog');
+    const none = sumUsage(base, base);
+    assert.equal(none.cost_usd, undefined);
+    assert.equal(none.cost_source, undefined);
+  });
+
+  it('запись прежней формы читается как сообщённая цена', () => {
+    assert.deepEqual(effectiveCost({ reported_cost_usd: 0.4 }), { usd: 0.4, source: 'reported' });
+    assert.equal(effectiveCost({}), undefined);
+    const mixed = sumUsage({ ...base, reported_cost_usd: 0.4 }, { ...base, cost_usd: 0.1, cost_source: 'catalog' });
+    assert.equal(mixed.cost_usd, 0.5);
+    assert.equal(mixed.cost_source, 'mixed');
+  });
+
+  it('адаптеры объявляют reportsCost: Claude — да, Codex — нет, поддельный — да по умолчанию', () => {
+    assert.equal(createClaudeAdapter(BACKEND).capabilities.reportsCost, true);
+    assert.equal(
+      createCodexAdapter({ ...BACKEND, command: 'codex', strictPermissions: false }).capabilities.reportsCost,
+      false,
+    );
+    assert.equal(createFakeBackend({ lines: [] }).adapter.capabilities.reportsCost, true);
+    assert.equal(
+      createFakeBackend({ capabilities: { reportsCost: false }, lines: [] }).adapter.capabilities.reportsCost,
+      false,
+    );
+    assert.equal(createFakeBackend({ name: 'codex', lines: [] }).adapter.name, 'codex');
   });
 });

@@ -409,6 +409,7 @@ export async function runPluginStep(
                 return seen === undefined;
               },
               onUsage: recordUsage,
+              ...(context.priceCatalog === undefined ? {} : { priceCatalog: context.priceCatalog }),
             });
 
       const allResults = outputFailure === undefined ? evaluated : [...evaluated, outputFailure];

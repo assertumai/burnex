@@ -36,7 +36,8 @@ import {
   type RunSelection,
   type StatsOutcome,
 } from '../api';
-import { fmtBytes, fmtDuration, fmtMoney, fmtTime, fmtTokens, pluralRuns } from '../format';
+import { fmtBytes, fmtDuration, fmtTime, fmtTokens, pluralRuns } from '../format';
+import { Cost } from '../components/Cost';
 import { TargetLink } from '../routeLink';
 import { RUN_TARGET } from '../screens/run';
 import { withCurrentOption } from '../../../src/parts/ui/filters';
@@ -816,7 +817,7 @@ export function Runs({
                   </TableCell>
                   <TableCell className="small">{fmtTime(run.startedAt)}</TableCell>
                   <TableCell className="num">{fmtDuration(runDuration(run, now))}</TableCell>
-                  <TableCell className="num">{fmtMoney(run.usage?.costUsd ?? null)}</TableCell>
+                  <TableCell className="num"><Cost usd={run.usage?.costUsd ?? null} source={run.usage?.costSource} asOf={run.usage?.costCatalogAsOf} /></TableCell>
                   <TableCell className="num">
                     <TokenCell run={run} />
                   </TableCell>

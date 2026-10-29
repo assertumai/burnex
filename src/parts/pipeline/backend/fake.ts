@@ -9,6 +9,11 @@ import { createClaudeAdapter } from '../../backends/claude/adapter.js';
  * отдельной, намеренно небольшой группой тестов.
  */
 export interface FakeBackendOptions {
+  /**
+   * Имя адаптера — оно же `Usage.backend`. Нужно проверкам каталога цен,
+   * который ищет модель по имени бэкенда («codex»), а не по слову «fake».
+   */
+  readonly name?: string;
   readonly capabilities?: Partial<BackendCapabilities>;
   /**
    * Строки потока, которые «выдаст» бэкенд. Разбираются как у Claude Code.
@@ -59,13 +64,16 @@ export function createFakeBackend(options: FakeBackendOptions): FakeBackend {
   });
 
   const adapter: BackendAdapter = {
-    name: 'fake',
+    name: options.name ?? 'fake',
     capabilities: {
       sessions: options.capabilities?.sessions ?? true,
       structuredOutput: options.capabilities?.structuredOutput ?? true,
       strictPermissions: options.capabilities?.strictPermissions ?? true,
       mcp: options.capabilities?.mcp ?? true,
       effort: options.capabilities?.effort ?? true,
+      // Разбор — как у Claude, а он цену сообщает: умолчание сохраняет
+      // поведение существующих тестов.
+      reportsCost: options.capabilities?.reportsCost ?? true,
       // Разбор строится поверх адаптера Claude (см. `parser` выше) — то же
       // направление, что и у него, если тест не объявил своё.
       sessionIdSource: options.capabilities?.sessionIdSource ?? 'engine',

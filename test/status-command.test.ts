@@ -298,3 +298,28 @@ describe('CLI: stepcast status — исход сведения дорожек', 
     assert.match(text, /дорожка b: сведение не выполнялось/);
   });
 });
+
+describe('CLI: stepcast status — источник цены', () => {
+  function render(budget: Record<string, unknown>): string {
+    const { runsRoot, projectRoot, home } = makeJournalBed();
+    const journal = seedRun(runsRoot, projectRoot, {
+      budget: { tokens_used: 1000, wallclock_ms: 60_000, cost_limit_usd: 10, ...budget },
+    });
+    const { lines, write } = capture();
+    withHome(home, () => runStatusCommand(args({ run: journal.paths.runId }), write, projectRoot));
+    return lines.join('\n');
+  }
+
+  it('помечает оценённый и смешанный расход ≈ и называет дату прейскуранта', () => {
+    for (const cost_source of ['catalog', 'mixed']) {
+      const text = render({ cost_used_usd: 2.5, cost_source, cost_catalog_as_of: '2026-10-01' });
+      assert.match(text, /≈\$2\.50 из \$10\.00/);
+      assert.match(text, /≈ — оценка по каталогу цен от 2026-10-01/);
+    }
+  });
+
+  it('сообщённый расход и состояние прежней формы выводятся без метки', () => {
+    assert.equal(render({ cost_used_usd: 2.5, cost_source: 'reported' }).includes('≈'), false);
+    assert.equal(render({ cost_used_usd: 2.5 }).includes('≈'), false);
+  });
+});

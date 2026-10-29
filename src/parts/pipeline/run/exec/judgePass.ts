@@ -14,6 +14,7 @@ import { judgeVerdictSchemaPath, parseVerdict } from '../../expect/verdict.js';
 import type { PredicateResult, Usage } from '../journal/schema.js';
 import type { RunJournal } from '../journal/writer.js';
 import type { Predicate } from '../../document/model.js';
+import { priceUsage, type PriceCatalog } from '../budget/priceCatalog.js';
 import { runProcess } from './process.js';
 
 /**
@@ -71,6 +72,8 @@ export interface JudgePassOptions {
   /** Действующий бюджет ещё не исчерпан — проверяется перед каждым вызовом. */
   readonly canCall: () => boolean;
   readonly onUsage: (usage: Usage) => void;
+  /** Каталог цен: судья оценивается по своим бэкенду и модели до сложения с попыткой. */
+  readonly priceCatalog?: PriceCatalog;
 }
 
 export async function runJudgePass(
@@ -116,6 +119,7 @@ export async function runJudgePass(
       ...(options.backendSlots === undefined ? {} : { backendSlots: options.backendSlots }),
       journal: options.journal,
       callIndex: options.nextCallIndex(),
+      ...(options.priceCatalog === undefined ? {} : { priceCatalog: options.priceCatalog }),
     });
 
     options.onUsage(call.usage);
@@ -157,6 +161,7 @@ interface CallJudgeOptions {
   readonly backendSlots?: BackendSlots;
   readonly journal: RunJournal;
   readonly callIndex: number;
+  readonly priceCatalog?: PriceCatalog;
 }
 
 interface CallJudgeResult {
@@ -245,7 +250,7 @@ async function callJudge(options: CallJudgeOptions): Promise<CallJudgeResult> {
     : await options.backendSlots.run(adapter.name, runBackendProcess);
 
   if (carry.trim() !== '') handle(carry);
-  usage = { ...usage, wallclock_ms: process_.wallclockMs };
+  usage = priceUsage({ ...usage, wallclock_ms: process_.wallclockMs }, options.priceCatalog);
 
   const verdict = process_.outcome === 'exited' ? parseVerdict(structured) : undefined;
 

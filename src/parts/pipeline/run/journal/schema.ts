@@ -36,6 +36,14 @@ export function isFailure(status: StatusValue): boolean {
   return status === 'failed' || status === 'budget_exceeded' || status === 'canceled';
 }
 
+/**
+ * Откуда взята цена: `reported` — сообщил бэкенд, `catalog` — оценка движка
+ * по каталогу цен, `mixed` — в сумме есть и то и другое.
+ */
+export const CostSourceSchema = z.enum(['reported', 'catalog', 'mixed']);
+
+export type CostSource = z.infer<typeof CostSourceSchema>;
+
 export const UsageSchema = z
   .object({
     backend: z.string(),
@@ -54,6 +62,13 @@ export const UsageSchema = z
       )
       .optional(),
     reported_cost_usd: z.number().optional(),
+    /**
+     * Действующая цена вызова: сообщённая бэкендом либо оценка по каталогу
+     * цен. Читатель записи прежней формы, где поля нет, берёт
+     * `reported_cost_usd` с источником `reported` (`effectiveCost`).
+     */
+    cost_usd: z.number().optional(),
+    cost_source: CostSourceSchema.optional(),
     /**
      * Объём одного самого большого обращения — сумма tokens_in + cache_read +
      * cache_write того сообщения потока, где она была наибольшей. Не путать с
@@ -474,6 +489,10 @@ export const BudgetStateSchema = z
     cost_limit_usd: z.number().optional(),
     /** Попытки, чья цена неизвестна: объявленный денежный потолок мог не применяться. */
     cost_unreported_attempts: z.number().optional(),
+    /** Источник денежного расхода прогона; нет — сообщённый (состояние прежней формы). */
+    cost_source: CostSourceSchema.optional(),
+    /** Дата прейскуранта, если в расходе есть оценка по каталогу. */
+    cost_catalog_as_of: z.string().optional(),
     wallclock_ms: z.number(),
     wallclock_limit_ms: z.number().optional(),
     /**
@@ -544,6 +563,8 @@ export const UsageAttemptReportSchema = z
     wallclock_ms: z.number(),
     /** Отсутствует, если ни один сообщённый расход попытки не содержал цены. */
     cost_usd: z.number().optional(),
+    /** Источник цены; отсутствует у сводки прежней формы — тогда она сообщённая. */
+    cost_source: CostSourceSchema.optional(),
     /** Наибольший префикс обращения этой попытки. См. `UsageSchema`. */
     peak_prefix_tokens: z.number().optional(),
   })
@@ -568,8 +589,15 @@ export const UsageReportSchema = z
         billable_tokens: z.number(),
         wallclock_ms: z.number(),
         cost_usd: z.number().optional(),
+        cost_source: CostSourceSchema.optional(),
       })
       .strict(),
+    /**
+     * Дата прейскуранта, по которому считалась оценка: старый прогон
+     * показывает свою дату, а не дату каталога, установленного позже.
+     * Есть, только если в сводке есть оценка.
+     */
+    cost_catalog_as_of: z.string().optional(),
     /** Измерения, которых бэкенды не сообщили: учёт по ним неполон. */
     unreported: z.array(z.string()),
     jobs: z.record(
@@ -579,6 +607,7 @@ export const UsageReportSchema = z
           billable_tokens: z.number(),
           wallclock_ms: z.number(),
           cost_usd: z.number().optional(),
+          cost_source: CostSourceSchema.optional(),
           steps: z.record(
             z.string(),
             z
@@ -586,6 +615,7 @@ export const UsageReportSchema = z
                 billable_tokens: z.number(),
                 wallclock_ms: z.number(),
                 cost_usd: z.number().optional(),
+                cost_source: CostSourceSchema.optional(),
                 // Максимум по попыткам шага, не сумма. Отсутствует, если ни
                 // одна попытка не сообщила пика, — уровни работы и прогона
                 // этого поля не несут вовсе: величина теряет смысл ориентира
@@ -626,6 +656,7 @@ export const UsageStoreStepSliceSchema = z
     billable_tokens: z.number(),
     wallclock_ms: z.number(),
     cost_usd: z.number().optional(),
+    cost_source: CostSourceSchema.optional(),
   })
   .passthrough();
 
@@ -634,6 +665,7 @@ export const UsageStoreJobSliceSchema = z
     billable_tokens: z.number(),
     wallclock_ms: z.number(),
     cost_usd: z.number().optional(),
+    cost_source: CostSourceSchema.optional(),
     steps: z.record(z.string(), UsageStoreStepSliceSchema),
   })
   .passthrough();
@@ -672,8 +704,11 @@ export const UsageRecordSchema = z
         billable_tokens: z.number(),
         wallclock_ms: z.number(),
         cost_usd: z.number().optional(),
+        cost_source: CostSourceSchema.optional(),
       })
       .passthrough(),
+    /** Дата прейскуранта, если в расходе прогона есть оценка по каталогу. */
+    cost_catalog_as_of: z.string().optional(),
     /** Измерения, которых бэкенды не сообщили, — то же поле, что в `UsageReport`. */
     unreported: z.array(z.string()),
     /** Число попыток прогона, чей расход не содержал цены. */
@@ -760,6 +795,10 @@ export const EventSchema = z.discriminatedUnion('kind', [
   // Первая завершившаяся попытка без цены при объявленном денежном потолке:
   // молча довести прогон до конца значило бы соврать, что потолок применялся.
   z.object({ ...eventBase, kind: z.literal('budget.cost_unreported'), job: z.string(), step: z.string(), attempt: z.number().int().positive() }).strict(),
+  // Прогноз на старте, а не факт попытки: вызов, для которого цены не будет ни
+  // от бэкенда, ни из каталога, и денежный потолок его не проверит. Прогон
+  // из-за этого не останавливается.
+  z.object({ ...eventBase, kind: z.literal('budget.cost_unpriced'), job: z.string(), step: z.string(), backend: z.string(), model: z.string().optional(), judge: z.literal(true).optional() }).strict(),
   z.object({ ...eventBase, kind: z.literal('backend.degraded'), backend: z.string(), capability: z.string(), detail: z.string() }).strict(),
   z.object({ ...eventBase, kind: z.literal('backend.unparsed'), job: z.string(), step: z.string(), line: z.string() }).strict(),
   // Отказ бэкенда в разрешении на вызов инструмента в жёстком режиме прав.

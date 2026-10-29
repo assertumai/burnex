@@ -6,4 +6,4 @@
  * путь импорта, тот же, что у `router.tsx` над `routes.ts`.
  */
 
-export { fmtBytes, fmtDuration, fmtMoney, fmtSpan, fmtTime, fmtTokens, pluralRuns } from '../../src/parts/ui/format';
+export { costTitle, fmtBytes, fmtCost, fmtDuration, fmtMoney, fmtSpan, fmtTime, fmtTokens, pluralRuns } from '../../src/parts/ui/format';

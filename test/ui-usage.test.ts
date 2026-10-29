@@ -535,4 +535,53 @@ describe('ui-dashboard: расход поперёк прогонов', () => {
     assert.equal(usage.total.billableTokens, 100);
     assert.deepEqual(usage.models, [{ model: 'sonnet', billableTokens: 100, costUsd: 1 }]);
   });
+
+  it('оценка по каталогу видна на итоге, пайплайне, заходе и доле модели, а сообщённая цена — без метки', () => {
+    const { runsRoot, projectRoot } = makeJournalBed();
+    const priced = (runId: string, model: string, cost: number, source?: 'catalog') => ({
+      runId,
+      manifest: { started_at: '2026-08-01T09:00:00.000Z' },
+      usage: {
+        run_id: runId,
+        total: {
+          tokens_in: 90, tokens_out: 10, cache_read: 0, cache_write: 0, billable_tokens: 100, wallclock_ms: 1_000,
+          cost_usd: cost, ...(source === undefined ? {} : { cost_source: source }),
+        },
+        ...(source === undefined ? {} : { cost_catalog_as_of: '2026-01-02' }),
+        unreported: [],
+        jobs: {
+          build: {
+            billable_tokens: 100,
+            wallclock_ms: 1_000,
+            cost_usd: cost,
+            steps: {
+              write: {
+                billable_tokens: 100,
+                wallclock_ms: 1_000,
+                cost_usd: cost,
+                attempts: [{ attempt: 1, backend: 'codex', model, billable_tokens: 100, wallclock_ms: 1_000, cost_usd: cost }],
+              },
+            },
+          },
+        },
+      },
+    });
+    // Прогон прежней формы без источника — сообщённая цена.
+    seedRun(runsRoot, projectRoot, priced('legacy', 'opus', 1));
+    seedRun(runsRoot, projectRoot, priced('est', 'm1', 2, 'catalog'));
+
+    const now = new Date('2026-08-01T12:00:00.000Z');
+    const usage = buildUsage(runsRoot, buildOverview(runsRoot, now), { days: 1, now });
+
+    assert.equal(usage.total.costSource, 'mixed');
+    assert.equal(usage.pipelines[0]?.costSource, 'mixed');
+    const runs = new Map(usage.pipelines[0]?.runs.map((run) => [run.runId, run]));
+    assert.equal(runs.get('est')?.costSource, 'catalog');
+    assert.equal(runs.get('est')?.costCatalogAsOf, '2026-01-02');
+    assert.equal(runs.get('legacy')?.costSource, undefined);
+    assert.deepEqual(usage.models, [
+      { model: 'm1', billableTokens: 100, costUsd: 2, costSource: 'catalog' },
+      { model: 'opus', billableTokens: 100, costUsd: 1 },
+    ]);
+  });
 });

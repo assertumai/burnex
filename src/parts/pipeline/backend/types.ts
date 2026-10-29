@@ -1,6 +1,6 @@
 import type { BackendConfig } from '../config/resolve.js';
 import type { McpServers, Permissions } from '../document/model.js';
-import type { Usage } from '../run/journal/schema.js';
+import type { CostSource, Usage } from '../run/journal/schema.js';
 
 /**
  * Контракт адаптера агентского бэкенда.
@@ -26,6 +26,13 @@ export interface BackendCapabilities {
   readonly mcp: boolean;
   /** Умеет передать reasoning effort выбранному агентскому CLI. */
   readonly effort?: boolean;
+  /**
+   * Сообщает ли бэкенд цену вызова сам (`reported_cost_usd`). Необязательное
+   * поле: отсутствие значит «неизвестно» и для проверки на старте
+   * приравнивается к `false` — у чужого адаптера лучше лишнее предупреждение,
+   * чем молчание о шаге, который денежный потолок не защищает.
+   */
+  readonly reportsCost?: boolean;
   /**
    * Кто выдаёт идентификатор сессии. `'engine'` — движок заводит его до
    * запуска и передаёт бэкенду (Claude Code принимает `--session-id`).
@@ -276,7 +283,14 @@ export function mergeUsage(base: Usage, patch: Partial<Usage> | undefined): Usag
  * только если оно таким было у обоих, иначе за него считается то, что есть.
  */
 export function sumUsage(base: Usage, addition: Usage): Usage {
-  const cost = sumOptional(base.reported_cost_usd, addition.reported_cost_usd);
+  // Суммируется *сообщённая* цена, как и прежде: сырое поле остаётся тем,
+  // что сказал бэкенд. Действующая цена считается отдельно ниже.
+  const reported = sumOptional(base.reported_cost_usd, addition.reported_cost_usd);
+  const effective = [effectiveCost(base), effectiveCost(addition)].filter((part) => part !== undefined);
+  const cost = effective.length === 0 ? undefined : effective.reduce((sum, part) => sum + part.usd, 0);
+  const sources = new Set(effective.map((part) => part.source));
+  const source: CostSource | undefined =
+    sources.size === 0 ? undefined : sources.size === 1 ? [...sources][0]! : 'mixed';
   const peak = maxOptional(base.peak_prefix_tokens, addition.peak_prefix_tokens);
   return {
     backend: base.backend,
@@ -286,13 +300,27 @@ export function sumUsage(base: Usage, addition: Usage): Usage {
     cache_read: sumNullable(base.cache_read, addition.cache_read),
     cache_write: sumNullable(base.cache_write, addition.cache_write),
     wallclock_ms: base.wallclock_ms + addition.wallclock_ms,
-    ...(cost === undefined ? {} : { reported_cost_usd: cost }),
+    ...(reported === undefined ? {} : { reported_cost_usd: reported }),
+    ...(cost === undefined || source === undefined ? {} : { cost_usd: cost, cost_source: source }),
     // Пик — максимум одного обращения, а не сумма: два независимых вызова
     // (шаг и вызванный им судья) не складывают своих префиксов.
     ...(peak === undefined ? {} : { peak_prefix_tokens: peak }),
     // rate_limits намеренно не складывается: у окна лимитов нечего суммировать
     // — значение последнего сообщения и есть текущее состояние окна.
   };
+}
+
+/**
+ * Действующая цена записи расхода и её источник. Запись прежней формы
+ * (`cost_usd` нет) значила ровно сообщённую цену — её и возвращает; запись
+ * без обеих цен неучтена в деньгах.
+ */
+export function effectiveCost(
+  usage: Pick<Usage, 'reported_cost_usd' | 'cost_usd' | 'cost_source'>,
+): { readonly usd: number; readonly source: CostSource } | undefined {
+  if (usage.cost_usd !== undefined) return { usd: usage.cost_usd, source: usage.cost_source ?? 'reported' };
+  if (usage.reported_cost_usd !== undefined) return { usd: usage.reported_cost_usd, source: 'reported' };
+  return undefined;
 }
 
 function sumNullable(a: number | null, b: number | null): number | null {

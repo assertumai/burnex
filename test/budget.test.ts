@@ -1,6 +1,9 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
+import { writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { loadPriceCatalog, type PriceCatalog } from '../src/parts/pipeline/run/budget/priceCatalog.js';
 import { UsageAccumulator } from '../src/parts/pipeline/run/budget/accumulator.js';
 import {
   authRefusalLine,
@@ -37,6 +40,7 @@ async function run(
     readonly onEvent?: RunOptions['onEvent'];
     /** Заранее известный корень прогонов — нужен тесту, читающему журнал по ходу исполнения. */
     readonly runsRoot?: string;
+    readonly priceCatalog?: PriceCatalog;
   } = {},
 ): Promise<RunResult> {
   const runsRoot = options.runsRoot ?? tempDir('runs-');
@@ -51,6 +55,7 @@ async function run(
     cwd: project.root,
     ...(options.signal === undefined ? {} : { signal: options.signal }),
     ...(options.onEvent === undefined ? {} : { onEvent: options.onEvent }),
+    ...(options.priceCatalog === undefined ? {} : { priceCatalog: options.priceCatalog }),
     adapterFor: (name) => {
       const backend = backends[name];
       assert.ok(backend !== undefined, `нет поддельного бэкенда для «${name}»`);
@@ -2158,5 +2163,258 @@ jobs:
 
     assert.ok(snapshot !== undefined, 'событие job.finished для «a» не поймано');
     assert.equal(snapshot?.billable, snapshot?.tokensUsed);
+  });
+});
+
+describe('model-price-catalog: оценка по каталогу и предупреждение на старте', () => {
+  // Цены условные: 10 и 20 долларов за миллион токенов входа и выхода.
+  function priceCatalog(): PriceCatalog {
+    const path = join(tempDir('prices-'), 'model-prices.json');
+    writeFileSync(
+      path,
+      JSON.stringify({
+        format: 1,
+        as_of: '2026-01-02',
+        currency: 'USD',
+        unit: 'per_million_tokens',
+        sources: [],
+        models: [{ backend: 'codex', model: 'm1', aliases: [], input: 10, output: 20, cache_read: 1, cache_write: 5 }],
+      }),
+    );
+    return loadPriceCatalog(path);
+  }
+
+  const pipeline = (options: { readonly model?: string; readonly budget?: string; readonly judge?: string } = {}): string => `
+version: 1
+kind: pipeline
+name: priced
+${options.budget ?? 'budget:\n  cost: 1'}
+jobs:
+  build:
+    steps:
+      - id: plan
+        agent: worker
+        prompt: "Сделай план"
+${options.model === undefined ? '' : `        model: ${options.model}\n`}        expect:
+          - exit_code: 0
+${options.judge ?? ''}`;
+
+  // 100 000 входа и 50 000 выхода: 1.0 + 1.0 = $2.00 по условным ценам.
+  const codexLines = [initLine(), resultLine({ text: 'готово', tokensIn: 100_000, tokensOut: 50_000 })];
+
+  it('денежный потолок связывает по оценке на бэкенде без сообщённой цены', async () => {
+    const project = makeProject({ 'stepcast.yml': pipeline({ model: 'm1' }) });
+    const worker = createFakeBackend({ name: 'codex', capabilities: { reportsCost: false }, lines: codexLines });
+
+    const result = await run(project, { worker }, { priceCatalog: priceCatalog() });
+
+    assert.equal(stepStatus(result, 'build', 'plan'), 'budget_exceeded');
+    assert.equal(result.costLimitUnapplied, false, 'цена из каталога — это цена: потолок применялся');
+    const usage = readUsage(result.journal.paths);
+    assert.equal(usage.total.cost_usd, 2);
+    assert.equal(usage.total.cost_source, 'catalog');
+    assert.equal(usage.cost_catalog_as_of, '2026-01-02');
+    assert.equal(usage.jobs.build?.steps.plan?.cost_source, 'catalog');
+    assert.equal(usage.jobs.build?.steps.plan?.attempts[0]?.cost_source, 'catalog');
+    assert.equal(readStatus(result.journal.paths).budget.cost_source, 'catalog');
+    assert.equal(
+      readEvents(result.journal.paths).some((event) => event.kind === 'budget.cost_unpriced'),
+      false,
+      'модель есть в каталоге — предупреждать не о чем',
+    );
+  });
+
+  it('сообщённая цена главнее каталога, даже когда модель в нём есть', async () => {
+    const project = makeProject({ 'stepcast.yml': pipeline({ model: 'm1', budget: 'budget:\n  cost: 100' }) });
+    const worker = createFakeBackend({
+      name: 'codex',
+      capabilities: { reportsCost: false },
+      lines: [initLine(), resultLine({ text: 'готово', tokensIn: 100_000, tokensOut: 50_000, costUsd: 0.01 })],
+    });
+
+    const result = await run(project, { worker }, { priceCatalog: priceCatalog() });
+
+    const usage = readUsage(result.journal.paths);
+    assert.equal(usage.total.cost_usd, 0.01);
+    assert.equal(usage.total.cost_source, 'reported');
+    assert.equal(usage.cost_catalog_as_of, undefined, 'оценки нет — даты прейскуранта тоже');
+  });
+
+  it('модель вне каталога и необъявленная модель неучтены, прогон не останавливается', async () => {
+    for (const model of ['unknown', undefined]) {
+      const project = makeProject({
+        'stepcast.yml': pipeline({ ...(model === undefined ? {} : { model }), budget: 'budget:\n  cost: 100' }),
+      });
+      const worker = createFakeBackend({ name: 'codex', capabilities: { reportsCost: false }, lines: codexLines });
+
+      const result = await run(project, { worker }, { priceCatalog: priceCatalog() });
+
+      assert.equal(result.status, 'success');
+      assert.equal(result.costLimitUnapplied, true);
+      assert.equal(readUsage(result.journal.paths).total.cost_usd, undefined);
+      const unpriced = readEvents(result.journal.paths).filter((event) => event.kind === 'budget.cost_unpriced');
+      assert.equal(unpriced.length, 1);
+      const [event] = unpriced;
+      assert.ok(event?.kind === 'budget.cost_unpriced');
+      assert.deepEqual(
+        { job: event.job, step: event.step, backend: event.backend, model: event.model },
+        // Событие называет бэкенд так, как он объявлен у шага (agent), а не
+        // именем адаптера.
+        { job: 'build', step: 'plan', backend: 'worker', model },
+      );
+    }
+  });
+
+  it('адаптер без признака reportsCost получает предупреждение', async () => {
+    const project = makeProject({ 'stepcast.yml': pipeline({ budget: 'budget:\n  cost: 100' }) });
+    const worker = createFakeBackend({ lines: codexLines });
+    const { reportsCost: _reportsCost, ...capabilities } = worker.adapter.capabilities;
+    const bare: FakeBackend = { invocations: worker.invocations, adapter: { ...worker.adapter, capabilities } };
+
+    const result = await run(project, { worker: bare });
+
+    assert.equal(readEvents(result.journal.paths).filter((event) => event.kind === 'budget.cost_unpriced').length, 1);
+  });
+
+  it('бэкенд с reportsCost: true и прогон без budget.cost предупреждений не получают', async () => {
+    const reporting = makeProject({ 'stepcast.yml': pipeline({ budget: 'budget:\n  cost: 100' }) });
+    const claudeLike = createFakeBackend({
+      lines: [initLine(), resultLine({ text: 'готово', tokensIn: 10, tokensOut: 1, costUsd: 0.1 })],
+    });
+    const first = await run(reporting, { worker: claudeLike });
+    assert.equal(readEvents(first.journal.paths).some((event) => event.kind === 'budget.cost_unpriced'), false);
+
+    const noCost = makeProject({ 'stepcast.yml': pipeline({ budget: 'budget:\n  tokens: 1000000' }) });
+    const codexLike = createFakeBackend({ name: 'codex', capabilities: { reportsCost: false }, lines: codexLines });
+    const second = await run(noCost, { worker: codexLike }, { priceCatalog: priceCatalog() });
+    assert.equal(readEvents(second.journal.paths).some((event) => event.kind === 'budget.cost_unpriced'), false);
+  });
+
+  it('ступень эскалации на модели вне каталога получает предупреждение', async () => {
+    const project = makeProject({
+      'stepcast.yml': `
+version: 1
+kind: pipeline
+name: escalated
+budget:
+  cost: 100
+jobs:
+  build:
+    steps:
+      - id: plan
+        agent: worker
+        prompt: "Сделай план"
+        model: m1
+        attempts:
+          max: 3
+          escalation:
+            - model: m1
+            - model: big
+        expect:
+          - exit_code: 0
+`,
+    });
+    const worker = createFakeBackend({ name: 'codex', capabilities: { reportsCost: false }, lines: codexLines });
+
+    const result = await run(project, { worker }, { priceCatalog: priceCatalog() });
+
+    const unpriced = readEvents(result.journal.paths).filter((event) => event.kind === 'budget.cost_unpriced');
+    assert.deepEqual(
+      unpriced.map((event) => (event.kind === 'budget.cost_unpriced' ? [event.step, event.model] : [])),
+      [['plan', 'big']],
+      'модель шага и первой ступени есть в каталоге, третьей попытки — нет',
+    );
+  });
+
+  it('судья на той же модели, что и шаг, назван отдельно от шага', async () => {
+    const project = makeProject({
+      'stepcast.yml': pipeline({
+        model: 'unknown',
+        budget: 'budget:\n  cost: 100',
+        judge: '          - judge: "план полный"\n            hard: true\n            agent: worker\n            model: unknown\n',
+      }),
+    });
+    const worker = createFakeBackend({
+      name: 'codex',
+      capabilities: { reportsCost: false },
+      lines: [initLine(), resultLine({ text: 'готово', structured: { pass: true, reason: 'ок' }, tokensIn: 10, tokensOut: 1 })],
+    });
+
+    const result = await run(project, { worker }, { priceCatalog: priceCatalog() });
+
+    const unpriced = readEvents(result.journal.paths).filter((event) => event.kind === 'budget.cost_unpriced');
+    assert.deepEqual(
+      unpriced.map((event) => (event.kind === 'budget.cost_unpriced' ? event.judge ?? false : undefined)),
+      [false, true],
+    );
+  });
+
+  it('судья на другой модели оценивается по своей, а источник суммы — mixed', async () => {
+    const project = makeProject({
+      'stepcast.yml': pipeline({
+        budget: 'budget:\n  cost: 100',
+        judge: '          - judge: "план полный"\n            hard: true\n            agent: critic\n            model: m1\n',
+      }),
+    });
+    const worker = createFakeBackend({
+      lines: [initLine(), resultLine({ text: 'готово', tokensIn: 10, tokensOut: 1, costUsd: 0.5 })],
+    });
+    const critic = createFakeBackend({
+      name: 'codex',
+      capabilities: { reportsCost: false },
+      lines: [resultLine({ structured: { pass: true, reason: 'ок' }, tokensIn: 100_000, tokensOut: 50_000 })],
+    });
+
+    const result = await run(project, { worker, critic }, { priceCatalog: priceCatalog() });
+
+    const usage = readUsage(result.journal.paths);
+    assert.equal(usage.total.cost_usd, 2.5, 'сообщённые 0.5 и оценка судьи 2.0');
+    assert.equal(usage.jobs.build?.cost_source, 'mixed');
+    assert.equal(usage.jobs.build?.steps.plan?.cost_source, 'mixed');
+    assert.equal(usage.total.cost_source, 'mixed');
+    assert.equal(usage.cost_catalog_as_of, '2026-01-02');
+  });
+
+  it('сообщённая вопреки reportsCost: false цена учитывается как reported', async () => {
+    const project = makeProject({ 'stepcast.yml': pipeline({ budget: 'budget:\n  cost: 100' }) });
+    const worker = createFakeBackend({
+      capabilities: { reportsCost: false },
+      lines: [initLine(), resultLine({ text: 'готово', tokensIn: 10, tokensOut: 1, costUsd: 0.3 })],
+    });
+
+    const result = await run(project, { worker });
+
+    const usage = readUsage(result.journal.paths);
+    assert.equal(usage.total.cost_usd, 0.3);
+    assert.equal(usage.total.cost_source, 'reported');
+    assert.equal(result.costLimitUnapplied, false);
+  });
+
+  it('сводка прежней формы без cost_source читается', () => {
+    const legacy = {
+      run_id: 'r',
+      total: { tokens_in: 1, tokens_out: 1, cache_read: 0, cache_write: 0, billable_tokens: 2, wallclock_ms: 5, cost_usd: 0.5 },
+      unreported: [],
+      jobs: { build: { billable_tokens: 2, wallclock_ms: 5, cost_usd: 0.5, steps: {} } },
+    };
+    const parsed = UsageReportSchema.parse(legacy);
+    assert.equal(parsed.total.cost_source, undefined);
+    assert.equal(parsed.cost_catalog_as_of, undefined);
+  });
+
+  it('аккумулятор принимает запись прежней формы как сообщённую цену', () => {
+    const accumulator = new UsageAccumulator(() => 1, '2026-01-02');
+    accumulator.record('build', 'plan', 1, {
+      backend: 'fake',
+      tokens_in: 1,
+      tokens_out: 1,
+      cache_read: 0,
+      cache_write: 0,
+      wallclock_ms: 1,
+      reported_cost_usd: 0.5,
+    });
+    assert.equal(accumulator.runCostSource(), 'reported');
+    assert.equal(accumulator.runCostCatalogAsOf(), undefined);
+    assert.equal(accumulator.runCostMicroUsd(), 500_000);
   });
 });

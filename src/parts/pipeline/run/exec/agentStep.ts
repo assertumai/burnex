@@ -17,6 +17,7 @@ import {
 import type { AgentStep, McpServers } from '../../document/model.js';
 import type { Masker } from '../journal/mask.js';
 import type { AttemptRecord, PredicateResult, StatusValue, Usage } from '../journal/schema.js';
+import { priceUsage, type PriceCatalog } from '../budget/priceCatalog.js';
 import { runAttempts, type AttemptPlan } from './attempts.js';
 import { runProcess, type ProcessResult } from './process.js';
 
@@ -122,6 +123,8 @@ export interface AgentStepOptions {
    * ложится под чужую попытку, а замена по ключу стирает предыдущую.
    */
   readonly onUsage?: (usage: Usage, attempt: number) => void;
+  /** Каталог цен для оценки попытки, если бэкенд цену не сообщил. */
+  readonly priceCatalog?: PriceCatalog;
   readonly onUnparsed?: (line: string) => void;
   /** Один вызов на каждый отказ бэкенда в разрешении на вызов инструмента. */
   readonly onPermissionDenied?: (plan: AttemptPlan, tool: string, input: unknown) => void;
@@ -295,7 +298,11 @@ export async function executeAgentStep(options: AgentStepOptions): Promise<Agent
             if (event.text !== undefined) text = event.text;
             if (event.structured !== undefined) structured = event.structured;
             if (event.usage !== undefined) {
-              usage = mergeUsage(usage, event.usage);
+              // Итоговая запись закрывает расход вызова: цена оценивается здесь,
+              // а не после выхода процесса, чтобы денежный потолок связал
+              // попытку так же, как связывает сообщённую цену, — в этот же
+              // момент (решение 5).
+              usage = priceUsage(mergeUsage(usage, event.usage), options.priceCatalog);
               options.onUsage?.(usage, plan.attempt);
             }
             if (event.failed === true) failedByBackend = true;
@@ -355,7 +362,7 @@ export async function executeAgentStep(options: AgentStepOptions): Promise<Agent
         : await options.backendSlots.run(adapter.name, runBackendProcess);
 
       if (carry.trim() !== '') handleLine(carry);
-      usage = { ...usage, wallclock_ms: process_.wallclockMs };
+      usage = priceUsage({ ...usage, wallclock_ms: process_.wallclockMs }, options.priceCatalog);
       // Длительность известна только после завершения процесса, а по ходу
       // потока её в событиях нет. Без этой записи учёт работы и шага остаётся
       // с нулевым временем, которое выглядит измерением, а не пробелом.

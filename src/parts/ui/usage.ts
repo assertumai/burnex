@@ -1,6 +1,7 @@
 import { readUsageSoft } from '../pipeline/run/journal/reader.js';
 import { runPaths } from '../pipeline/run/journal/paths.js';
-import type { StatusValue, UsageRecord } from '../pipeline/run/journal/schema.js';
+import { isEstimate, mergeCostSources } from '../pipeline/run/budget/costSource.js';
+import type { CostSource, StatusValue, UsageRecord } from '../pipeline/run/journal/schema.js';
 import { UNKNOWN_MODEL, iterateAttempts, spread } from '../pipeline/run/journal/usageSpread.js';
 import { readUsageStore } from '../pipeline/run/journal/usageStore.js';
 import type { Overview, ProjectOverview, RunOverview } from './overview.js';
@@ -32,6 +33,14 @@ export { UNKNOWN_MODEL } from '../pipeline/run/journal/usageSpread.js';
  * наравне с прочими; число таких попыток названо на уровнях итога, пайплайна
  * и захода.
  *
+ * Источник цены (`costSource`) сводится тем же правилом, что в сводке
+ * прогона: общий источник частей либо `mixed`. Прогон с ценой, но без
+ * источника — прежней формы — при сведении считается сообщённым. Доля модели
+ * наследует источник прогонов, давших ей деньги: запись хранилища разреза
+ * моделей по источнику не несёт, поэтому доля смешанного прогона честно
+ * названа `mixed`, а не угадана. Поле стоит только у оценки — как и у
+ * прогона, его отсутствие значит «сообщённая цена».
+ *
  * Модуль читает диск и хранилище и живёт только в демоне — в отличие от
  * `routes.ts` и `grouping.ts`, витрина его не импортирует.
  */
@@ -39,6 +48,8 @@ export { UNKNOWN_MODEL } from '../pipeline/run/journal/usageSpread.js';
 export interface UsageMeasure {
   readonly billableTokens: number;
   readonly costUsd: number;
+  /** Источник денежной суммы; нет — денег в ней нет вовсе. */
+  readonly costSource?: CostSource;
 }
 
 export interface UsageModelSlice extends UsageMeasure {
@@ -65,6 +76,10 @@ export interface UsagePipelineRun {
   readonly billableTokens: number;
   /** `null` — цена прогона ни разу не сообщена, а не «потрачено ноль». */
   readonly costUsd: number | null;
+  /** Источник цены прогона; прогон прежней формы с ценой — `reported`. */
+  readonly costSource?: CostSource;
+  /** Дата прейскуранта, если в цене прогона есть оценка по каталогу. */
+  readonly costCatalogAsOf?: string;
   readonly costUnreportedAttempts: number;
   /** Ложно — прогон без сводки или со сводкой прежней формы: разреза нет вовсе. */
   readonly breakdownAvailable: boolean;
@@ -164,13 +179,27 @@ function runDay(startedAt: string | undefined): string | undefined {
 interface ModelDelta {
   tokens: number;
   cost: number;
+  sources?: (CostSource | undefined)[];
 }
 
 function addDelta(map: Map<string, ModelDelta>, model: string, delta: ModelDelta): void {
   const current = map.get(model) ?? { tokens: 0, cost: 0 };
   current.tokens += delta.tokens;
   current.cost += delta.cost;
+  if (delta.sources !== undefined) current.sources = [...(current.sources ?? []), ...delta.sources];
   map.set(model, current);
+}
+
+/** Источник цены прогона для сведения: прежняя форма с ценой — сообщённая, без цены — никакого. */
+function runCostSource(run: RunOverview): CostSource | undefined {
+  if (run.usage === undefined || run.usage.costUsd === null) return undefined;
+  return run.usage.costSource ?? 'reported';
+}
+
+/** Сведённый источник, если в сумме есть оценка; сообщённая сумма поля не несёт. */
+function estimateSource(sources: readonly (CostSource | undefined)[]): CostSource | undefined {
+  const merged = mergeCostSources(sources);
+  return isEstimate(merged) ? merged : undefined;
 }
 
 interface RunDecomposition {
@@ -296,8 +325,16 @@ function newestRunsFirst(runs: readonly UsagePipelineRun[]): UsagePipelineRun[] 
   return [...runs].sort((a, b) => at(b) - at(a));
 }
 
+function withSource<T extends object>(value: T, source: CostSource | undefined): T & { costSource?: CostSource } {
+  return source === undefined ? value : { ...value, costSource: source };
+}
+
 function modelSlices(map: ReadonlyMap<string, ModelDelta>): UsageModelSlice[] {
-  return sortByCost([...map].map(([model, delta]) => ({ model, billableTokens: delta.tokens, costUsd: delta.cost })));
+  return sortByCost(
+    [...map].map(([model, delta]) =>
+      withSource({ model, billableTokens: delta.tokens, costUsd: delta.cost }, estimateSource(delta.sources ?? [])),
+    ),
+  );
 }
 
 interface PipelineAccum {
@@ -307,6 +344,7 @@ interface PipelineAccum {
   readonly pipelineFile?: string;
   tokens: number;
   cost: number;
+  costSources: (CostSource | undefined)[];
   costUnreportedAttempts: number;
   runs: UsagePipelineRun[];
 }
@@ -353,13 +391,16 @@ export function buildUsage(runsRoot: string, overview: Overview, options: UsageO
   let runsWithoutBreakdown = 0;
   let totalTokens = 0;
   let totalCost = 0;
+  const totalSources: (CostSource | undefined)[] = [];
 
   for (const { project, run, day } of periodRuns) {
     const { modelDeltas, costUnreportedAttempts, breakdownAvailable } = decomposeRun(records, runsRoot, project.key, run);
     if (!breakdownAvailable) runsWithoutBreakdown += 1;
     totalCostUnreportedAttempts += costUnreportedAttempts;
+    const source = runCostSource(run);
 
-    for (const [model, delta] of modelDeltas) {
+    for (const [model, plain] of modelDeltas) {
+      const delta: ModelDelta = plain.cost > 0 ? { ...plain, sources: [source] } : plain;
       addDelta(modelTotals, model, delta);
       const dayMap = dayModelTotals.get(day) ?? new Map<string, ModelDelta>();
       addDelta(dayMap, model, delta);
@@ -374,6 +415,7 @@ export function buildUsage(runsRoot: string, overview: Overview, options: UsageO
       ...(identity.pipelineFile === undefined ? {} : { pipelineFile: identity.pipelineFile }),
       tokens: 0,
       cost: 0,
+      costSources: [],
       costUnreportedAttempts: 0,
       runs: [],
     };
@@ -383,6 +425,8 @@ export function buildUsage(runsRoot: string, overview: Overview, options: UsageO
     totalCost += runCost ?? 0;
     accum.tokens += runTokens;
     accum.cost += runCost ?? 0;
+    totalSources.push(source);
+    accum.costSources.push(source);
     accum.costUnreportedAttempts += costUnreportedAttempts;
     accum.runs.push({
       runId: run.runId,
@@ -392,6 +436,8 @@ export function buildUsage(runsRoot: string, overview: Overview, options: UsageO
       ...(run.status === undefined ? {} : { status: run.status }),
       billableTokens: runTokens,
       costUsd: runCost,
+      ...(run.usage?.costSource === undefined ? {} : { costSource: run.usage.costSource }),
+      ...(run.usage?.costCatalogAsOf === undefined ? {} : { costCatalogAsOf: run.usage.costCatalogAsOf }),
       costUnreportedAttempts,
       breakdownAvailable,
     });
@@ -402,12 +448,15 @@ export function buildUsage(runsRoot: string, overview: Overview, options: UsageO
   // (Решение 1): то же число, что показывают экран «Прогоны» и строки
   // пайплайнов ниже. С графиком он не расходится по устройству `spread` —
   // доли моделей складываются ровно в итог своего прогона (Решение 2).
-  const total: UsageTotal = {
-    billableTokens: totalTokens,
-    costUsd: totalCost,
-    costUnreportedAttempts: totalCostUnreportedAttempts,
-    runs: periodRuns.length,
-  };
+  const total: UsageTotal = withSource(
+    {
+      billableTokens: totalTokens,
+      costUsd: totalCost,
+      costUnreportedAttempts: totalCostUnreportedAttempts,
+      runs: periodRuns.length,
+    },
+    estimateSource(totalSources),
+  );
 
   const days: UsageDaySlice[] = eachDay(from, to).map((day) => ({
     day,
@@ -415,7 +464,7 @@ export function buildUsage(runsRoot: string, overview: Overview, options: UsageO
   }));
 
   const pipelines: UsagePipelineSlice[] = sortByCost(
-    [...pipelineAccum.values()].map((accum) => ({
+    [...pipelineAccum.values()].map((accum) => withSource({
       projectKey: accum.projectKey,
       ...(accum.projectPath === undefined ? {} : { projectPath: accum.projectPath }),
       pipeline: accum.pipeline,
@@ -424,7 +473,7 @@ export function buildUsage(runsRoot: string, overview: Overview, options: UsageO
       costUsd: accum.cost,
       costUnreportedAttempts: accum.costUnreportedAttempts,
       runs: newestRunsFirst(accum.runs),
-    })),
+    }, estimateSource(accum.costSources))),
   );
 
   return {

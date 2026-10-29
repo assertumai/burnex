@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
-import { fmtBytes, fmtDuration, fmtMoney, fmtSpan, fmtTokens, pluralRuns } from '../src/parts/ui/format.js';
+import { costTitle, fmtBytes, fmtCost, fmtDuration, fmtMoney, fmtSpan, fmtTokens, pluralRuns } from '../src/parts/ui/format.js';
 
 describe('ui-format: длительность', () => {
   it('не показывает разрядов, которых на часах не бывает', () => {
@@ -88,5 +88,26 @@ describe('ui-format: число «run»', () => {
     assert.equal(pluralRuns(11), '11 runs');
     assert.equal(pluralRuns(21), '21 runs');
     assert.equal(pluralRuns(111), '111 runs');
+  });
+});
+
+describe('ui-format: цена с пометкой источника', () => {
+  it('оценка и смесь получают ≈, сообщённая цена и прежняя форма — нет', () => {
+    assert.equal(fmtCost(1.5, 'catalog'), '≈$1.50');
+    assert.equal(fmtCost(0.25, 'mixed'), '≈$0.2500');
+    assert.equal(fmtCost(1.5, 'reported'), '$1.50');
+    assert.equal(fmtCost(1.5), '$1.50');
+  });
+
+  it('неизвестная цена остаётся прочерком без метки', () => {
+    assert.equal(fmtCost(null, 'catalog'), '—');
+  });
+
+  it('подсказка называет источник и дату, а для сообщённой цены её нет', () => {
+    assert.equal(costTitle('catalog', '2026-10-01'), 'оценка по каталогу цен от 2026-10-01');
+    assert.match(costTitle('mixed', '2026-10-01') ?? '', /смешанная.*от 2026-10-01/);
+    assert.equal(costTitle('catalog'), 'оценка по каталогу цен');
+    assert.equal(costTitle('reported', '2026-10-01'), undefined);
+    assert.equal(costTitle(undefined), undefined);
   });
 });

@@ -13,6 +13,7 @@ import type { RunPaths } from '../pipeline/run/journal/paths.js';
 import {
   ContextReportSchema,
   type AwaitingDecision,
+  type CostSource,
   type DecisionRecord,
   type StatusValue,
   type UsageRecord,
@@ -54,6 +55,8 @@ export interface UsageSnapshot {
   readonly wallclockMs: number | null;
   /** `null` также означает «ни одна попытка не сообщила цены», а не ноль. */
   readonly costUsd: number | null;
+  /** Источник цены; нет — сообщённая (запись прежней формы), метки не нужно. */
+  readonly costSource?: CostSource;
 }
 
 /** Модель одной попытки шага, как её сообщил бэкенд в `usage.json`. */
@@ -193,6 +196,11 @@ export interface RunSnapshot {
   readonly filesGone: boolean;
   /** Итог прогона — только у снимка, собранного по записи (`filesGone: true`). */
   readonly total?: UsageSnapshot;
+  /**
+   * Дата прейскуранта, по которому считалась оценка прогона, — из его сводки
+   * (старый прогон показывает свою дату). Есть, только если в расходе есть оценка.
+   */
+  readonly costCatalogAsOf?: string;
   /** Разрез по моделям — только у снимка, собранного по записи. */
   readonly models?: readonly { readonly model: string; readonly billableTokens: number; readonly costUsd: number | null }[];
   /**
@@ -244,6 +252,7 @@ function stepUsage(summary: UsageReport | undefined, jobId: string, stepId: stri
     billableTokens: step?.billable_tokens ?? null,
     wallclockMs: step?.wallclock_ms ?? null,
     costUsd: step?.cost_usd ?? null,
+    ...(step?.cost_source === undefined ? {} : { costSource: step.cost_source }),
   };
 }
 
@@ -271,6 +280,7 @@ function jobUsage(summary: UsageReport | undefined, jobId: string): UsageSnapsho
     billableTokens: job?.billable_tokens ?? null,
     wallclockMs: job?.wallclock_ms ?? null,
     costUsd: job?.cost_usd ?? null,
+    ...(job?.cost_source === undefined ? {} : { costSource: job.cost_source }),
   };
 }
 
@@ -495,6 +505,7 @@ export function buildSnapshot(paths: RunPaths, projectKeyValue: string): RunSnap
     ),
     swept,
     filesGone: false,
+    ...(summary?.cost_catalog_as_of === undefined ? {} : { costCatalogAsOf: summary.cost_catalog_as_of }),
     ...(problem === undefined ? {} : { problem }),
   };
 }
@@ -528,12 +539,14 @@ export function buildSnapshotFromRecord(record: UsageRecord, projectKeyValue: st
         billableTokens: step.billable_tokens,
         wallclockMs: step.wallclock_ms,
         costUsd: step.cost_usd ?? null,
+        ...(step.cost_source === undefined ? {} : { costSource: step.cost_source }),
       },
     })),
     usage: {
       billableTokens: job.billable_tokens,
       wallclockMs: job.wallclock_ms,
       costUsd: job.cost_usd ?? null,
+      ...(job.cost_source === undefined ? {} : { costSource: job.cost_source }),
     },
   }));
 
@@ -550,7 +563,9 @@ export function buildSnapshotFromRecord(record: UsageRecord, projectKeyValue: st
       billableTokens: record.total.billable_tokens,
       wallclockMs: record.total.wallclock_ms,
       costUsd: record.total.cost_usd ?? null,
+      ...(record.total.cost_source === undefined ? {} : { costSource: record.total.cost_source }),
     },
+    ...(record.cost_catalog_as_of === undefined ? {} : { costCatalogAsOf: record.cost_catalog_as_of }),
     models: Object.entries(record.models)
       .map(([model, slice]) => ({
         model,

@@ -1,5 +1,6 @@
 import type { BudgetDimension, Event } from '../run/journal/schema.js';
 import { describeBudgetAmounts, type UsageSnapshot } from '../run/budget/accumulator.js';
+import { estimateMark } from '../run/budget/costSource.js';
 import { inline } from '../domain/text.js';
 import { formatDuration, formatMoney, formatTokens } from '../../../kernel/units.js';
 
@@ -60,7 +61,10 @@ function budgetAddress(event: {
  */
 function budgetSuffix(usage: UsageSnapshot): string {
   const tokens = formatTokens(usage.tokens);
-  const cost = usage.costMicroUsd === undefined ? DASH : formatMoney(usage.costMicroUsd);
+  const cost =
+    usage.costMicroUsd === undefined
+      ? DASH
+      : `${estimateMark(usage.costSource)}${formatMoney(usage.costMicroUsd)}`;
   const unreportedNote =
     usage.costMicroUsd !== undefined && usage.costUnreportedAttempts > 0
       ? ` (${usage.costUnreportedAttempts} без цены)`
@@ -135,6 +139,11 @@ export function renderProgressLine(
       );
     case 'budget.resumed':
       return line(budgetAddress(event), `бюджет: пробуждение (${formatDuration(event.actual_ms)})`);
+    case 'budget.cost_unpriced':
+      return line(
+        `${event.job}/${event.step}`,
+        `предупреждение: у ${event.judge === true ? 'судьи шага' : 'вызова'} бэкенда ${inline(event.backend)}, модель ${event.model === undefined ? 'по умолчанию CLI' : inline(event.model)}, не будет цены ни от бэкенда, ни из каталога — budget.cost этот вызов не проверяет`,
+      );
     case 'backend.refused':
       return line(
         `${event.job}/${event.step}`,

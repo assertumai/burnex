@@ -841,3 +841,57 @@ jobs:
     assert.equal(gate?.awaiting?.prompt, 'продолжить?');
   });
 });
+
+describe('ui-dashboard: источник цены в снимке прогона', () => {
+  function seedPriced(source: 'reported' | 'catalog' | 'mixed' | undefined, asOf?: string) {
+    const bed = makeJournalBed();
+    const tag = source === undefined ? {} : { cost_source: source };
+    const journal = seedRun(bed.runsRoot, bed.projectRoot, {
+      runId: 'run-priced',
+      jobs: JOBS,
+      lock: lockText(),
+      usage: {
+        run_id: 'run-priced',
+        total: { tokens_in: 0, tokens_out: 0, cache_read: 0, cache_write: 0, billable_tokens: 300, wallclock_ms: 120_000, cost_usd: 1.5, ...tag },
+        ...(asOf === undefined ? {} : { cost_catalog_as_of: asOf }),
+        unreported: [],
+        jobs: {
+          producer: {
+            billable_tokens: 300,
+            wallclock_ms: 60_000,
+            cost_usd: 1.5,
+            ...tag,
+            steps: {
+              think: {
+                billable_tokens: 300,
+                wallclock_ms: 60_000,
+                cost_usd: 1.5,
+                ...tag,
+                attempts: [{ attempt: 1, backend: 'codex', billable_tokens: 300, wallclock_ms: 60_000, cost_usd: 1.5, ...tag }],
+              },
+            },
+          },
+        },
+      },
+    });
+    return buildSnapshot(journal.paths, projectKey(bed.projectRoot));
+  }
+
+  it('несёт источник цены работы и шага и дату прейскуранта прогона', () => {
+    const snapshot = seedPriced('catalog', '2026-10-01');
+    const producer = snapshot.jobs.find((job) => job.id === 'producer');
+
+    assert.equal(producer?.usage.costSource, 'catalog');
+    assert.equal(producer?.steps[0]?.usage.costSource, 'catalog');
+    assert.equal(snapshot.costCatalogAsOf, '2026-10-01');
+  });
+
+  it('у прогона прежней формы источника и даты нет — цена читается как сообщённая', () => {
+    const snapshot = seedPriced(undefined);
+    const producer = snapshot.jobs.find((job) => job.id === 'producer');
+
+    assert.equal('costSource' in (producer?.usage ?? {}), false);
+    assert.equal('costSource' in (producer?.steps[0]?.usage ?? {}), false);
+    assert.equal(snapshot.costCatalogAsOf, undefined);
+  });
+});

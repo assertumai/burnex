@@ -66,6 +66,7 @@ export function usageRecord(
     ...(manifest.finished_at === undefined ? {} : { finished_at: manifest.finished_at }),
     status: status.status,
     total: { ...report.total },
+    ...(report.cost_catalog_as_of === undefined ? {} : { cost_catalog_as_of: report.cost_catalog_as_of }),
     unreported: report.unreported,
     cost_unreported_attempts: costUnreportedAttempts,
     models: Object.fromEntries(
@@ -84,6 +85,7 @@ export function usageRecord(
           billable_tokens: job.billable_tokens,
           wallclock_ms: job.wallclock_ms,
           ...(job.cost_usd === undefined ? {} : { cost_usd: job.cost_usd }),
+          ...(job.cost_source === undefined ? {} : { cost_source: job.cost_source }),
           steps: Object.fromEntries(
             Object.entries(job.steps).map(([stepId, step]) => [
               stepId,
@@ -91,6 +93,7 @@ export function usageRecord(
                 billable_tokens: step.billable_tokens,
                 wallclock_ms: step.wallclock_ms,
                 ...(step.cost_usd === undefined ? {} : { cost_usd: step.cost_usd }),
+                ...(step.cost_source === undefined ? {} : { cost_source: step.cost_source }),
               },
             ]),
           ),

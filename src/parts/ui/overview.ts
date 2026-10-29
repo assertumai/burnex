@@ -11,7 +11,14 @@ import {
   type JournalProblem,
 } from '../pipeline/run/journal/reader.js';
 import { runPaths } from '../pipeline/run/journal/paths.js';
-import type { AwaitingDecision, StatusValue, UsageRecord } from '../pipeline/run/journal/schema.js';
+import type {
+  AwaitingDecision,
+  BudgetState,
+  CostSource,
+  StatusValue,
+  UsageRecord,
+  UsageReport,
+} from '../pipeline/run/journal/schema.js';
 import { readUsageStore } from '../pipeline/run/journal/usageStore.js';
 
 /**
@@ -87,12 +94,33 @@ export interface TokenBreakdown {
   readonly cacheWrite: number;
 }
 
+/**
+ * Источник цены прогона и дата прейскуранта: сводка точнее, состояние —
+ * запасной путь на окно до первой записи сводки. Нет ни того ни другого —
+ * поля нет, и цена читается как сообщённая (прогон прежней формы).
+ */
+function costProvenance(
+  summary: UsageReport | undefined,
+  budget: BudgetState,
+): { costSource?: CostSource; costCatalogAsOf?: string } {
+  const source = summary?.total.cost_source ?? budget.cost_source;
+  const asOf = summary?.cost_catalog_as_of ?? budget.cost_catalog_as_of;
+  return {
+    ...(source === undefined ? {} : { costSource: source }),
+    ...(asOf === undefined ? {} : { costCatalogAsOf: asOf }),
+  };
+}
+
 export interface RunUsageOverview {
   readonly billableTokens: number;
   readonly wallclockMs: number;
   readonly breakdown?: TokenBreakdown;
   /** `null` — цена ни разу не сообщена, а не «потрачено ноль». */
   readonly costUsd: number | null;
+  /** Источник цены; нет — сообщённая (прогон прежней формы). */
+  readonly costSource?: CostSource;
+  /** Дата прейскуранта, если в расходе прогона есть оценка по каталогу. */
+  readonly costCatalogAsOf?: string;
   /** Сводка расхода прочитана: `unreported` достоверен. */
   readonly aggregated: boolean;
   /**
@@ -217,6 +245,7 @@ function readRun(
             },
           }),
       costUsd: costUsd === undefined ? null : costUsd,
+      ...costProvenance(summary, state.budget),
       aggregated: summary !== undefined,
       partial: summary?.partial === true,
       unreported: summary?.unreported ?? [],
@@ -304,6 +333,8 @@ function overviewFromRecord(record: UsageRecord, projectPath: string | undefined
         cacheWrite: record.total.cache_write,
       },
       costUsd: record.total.cost_usd ?? null,
+      ...(record.total.cost_source === undefined ? {} : { costSource: record.total.cost_source }),
+      ...(record.cost_catalog_as_of === undefined ? {} : { costCatalogAsOf: record.cost_catalog_as_of }),
       aggregated: true,
       partial: false,
       unreported: record.unreported,

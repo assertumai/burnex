@@ -227,6 +227,35 @@ describe('ui-dashboard: обзор всех проектов и прогонов
     assert.equal(nosummary?.usage?.billableTokens, 0);
   });
 
+  // Требование ui-dashboard: источник цены прогона и дата прейскуранта в обзоре
+  it('несёт источник цены и дату прейскуранта, а у прогона прежней формы их нет', () => {
+    const { runsRoot, projectRoot } = makeJournalBed();
+    const total = { tokens_in: 100, tokens_out: 50, cache_read: 0, cache_write: 0, billable_tokens: 150, wallclock_ms: 5_000, cost_usd: 2 };
+    seedRun(runsRoot, projectRoot, {
+      runId: 'estimated',
+      usage: {
+        run_id: 'estimated',
+        total: { ...total, cost_source: 'catalog' },
+        cost_catalog_as_of: '2026-10-01',
+        unreported: [],
+        jobs: {},
+      },
+    });
+    seedRun(runsRoot, projectRoot, {
+      runId: 'legacy',
+      usage: { run_id: 'legacy', total, unreported: [], jobs: {} },
+    });
+
+    const runs = buildOverview(runsRoot).projects[0]?.runs ?? [];
+    const estimated = runs.find((run) => run.runId === 'estimated')?.usage;
+    const legacy = runs.find((run) => run.runId === 'legacy')?.usage;
+
+    assert.equal(estimated?.costSource, 'catalog');
+    assert.equal(estimated?.costCatalogAsOf, '2026-10-01');
+    assert.equal(legacy?.costSource, undefined);
+    assert.equal(legacy?.costCatalogAsOf, undefined);
+  });
+
   // Требование: «Прогон показывает расход с разрезом по видам токенов»
   it('раскладывает токены по видам у прогона со сводкой и молчит о разрезе без неё', () => {
     const { runsRoot, projectRoot } = makeJournalBed();

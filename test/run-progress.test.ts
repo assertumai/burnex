@@ -134,6 +134,18 @@ const PRINTABLE: readonly { readonly event: Event; readonly says: readonly RegEx
   },
   { event: { ...BASE, kind: 'budget.resumed', actual_ms: 60_050 }, says: [/пробуждение/] },
   {
+    event: { ...BASE, kind: 'budget.cost_unpriced', job: 'build', step: 'plan', backend: 'codex', model: 'gpt-x' },
+    says: [/build\/plan:/, /предупреждение/, /у вызова/, /codex/, /gpt-x/, /budget\.cost этот вызов не проверяет/],
+  },
+  {
+    event: { ...BASE, kind: 'budget.cost_unpriced', job: 'build', step: 'plan', backend: 'codex' },
+    says: [/build\/plan:/, /codex/, /модель по умолчанию CLI/, /budget\.cost этот вызов не проверяет/],
+  },
+  {
+    event: { ...BASE, kind: 'budget.cost_unpriced', job: 'build', step: 'plan', backend: 'critic', model: 'm2', judge: true },
+    says: [/build\/plan:/, /у судьи шага/, /critic/, /m2/, /budget\.cost этот вызов не проверяет/],
+  },
+  {
     event: {
       ...BASE,
       kind: 'backend.refused',

@@ -754,3 +754,70 @@ describe('CLI: stepcast usage', () => {
     assert.ok(lines.some((line) => line.startsWith('  build')));
   });
 });
+
+describe('CLI: stepcast usage — источник цены', () => {
+  /** Сводка с ценой на всех уровнях; источник и дата — параметры сценария. */
+  function summaryWith(options: {
+    readonly source?: 'reported' | 'catalog' | 'mixed';
+    readonly asOf?: string;
+  }): UsageReport {
+    const source = options.source === undefined ? {} : { cost_source: options.source };
+    return {
+      ...RETRIED_SUMMARY('r'),
+      total: { ...RETRIED_SUMMARY('r').total, cost_usd: 0.42, ...source },
+      ...(options.asOf === undefined ? {} : { cost_catalog_as_of: options.asOf }),
+      jobs: {
+        implement: {
+          billable_tokens: 430,
+          wallclock_ms: 150_000,
+          cost_usd: 0.42,
+          ...source,
+          steps: {
+            'write-code': {
+              billable_tokens: 430,
+              wallclock_ms: 150_000,
+              cost_usd: 0.42,
+              ...source,
+              attempts: [
+                { attempt: 1, backend: 'claude', model: 'sonnet', billable_tokens: 150, wallclock_ms: 60_000 },
+                { attempt: 2, backend: 'claude', model: 'opus', billable_tokens: 280, wallclock_ms: 90_000, cost_usd: 0.42, ...source },
+              ],
+            },
+          },
+        },
+      },
+    };
+  }
+
+  function render(summary: UsageReport): string[] {
+    const { runsRoot, projectRoot, home } = makeJournalBed();
+    const journal = seedRun(runsRoot, projectRoot, { jobs: RETRIED_STEP, usage: summary });
+    const { lines, write } = capture();
+    withHome(home, () => runUsageCommand(args([journal.paths.runId]), write, projectRoot));
+    return lines;
+  }
+
+  for (const source of ['catalog', 'mixed'] as const) {
+    it(`у суммы с источником ${source} ставит ≈ на всех уровнях и называет дату прейскуранта`, () => {
+      const lines = render(summaryWith({ source, asOf: '2026-10-01' }));
+
+      assert.match(lines.find((line) => line.startsWith('расход:')) ?? '', /≈\$0\.4200/);
+      assert.equal(cell(lines, '  implement', 'цена'), '≈$0.4200');
+      assert.equal(cell(lines, '    write-code', 'цена'), '≈$0.4200');
+      assert.equal(cell(lines, '      #2', 'цена'), '≈$0.4200');
+      assert.ok(lines.includes('≈ — оценка по каталогу цен от 2026-10-01'), lines.join('\n'));
+    });
+  }
+
+  it('у сообщённой цены метки и строки о каталоге нет', () => {
+    const lines = render(summaryWith({ source: 'reported' }));
+    assert.equal(lines.join('\n').includes('≈'), false);
+    assert.equal(cell(lines, '      #2', 'цена'), '$0.4200');
+  });
+
+  it('прогон прежней формы без cost_source выводится как сообщённый', () => {
+    const lines = render(summaryWith({}));
+    assert.equal(lines.join('\n').includes('≈'), false);
+    assert.equal(cell(lines, '    write-code', 'цена'), '$0.4200');
+  });
+});

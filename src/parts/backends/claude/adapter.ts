@@ -59,6 +59,8 @@ export function createClaudeAdapter(config: BackendConfig): BackendAdapter {
       strictPermissions: config.strictPermissions,
       mcp: config.mcp,
       effort: true,
+      // Итоговая запись `result` несёт `total_cost_usd`.
+      reportsCost: true,
       // Claude Code принимает `--session-id`: идентификатор заводит и
       // называет движок, не сам CLI.
       sessionIdSource: 'engine',

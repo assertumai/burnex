@@ -30,11 +30,17 @@ export interface TokenBreakdown {
   readonly cacheWrite: number;
 }
 
+/** Откуда взята цена; нет поля — сообщённая (прогон прежней формы). */
+export type CostSource = 'reported' | 'catalog' | 'mixed';
+
 export interface RunUsageOverview {
   readonly billableTokens: number;
   readonly wallclockMs: number;
   readonly breakdown?: TokenBreakdown;
   readonly costUsd: number | null;
+  readonly costSource?: CostSource;
+  /** Дата прейскуранта, если в расходе прогона есть оценка по каталогу. */
+  readonly costCatalogAsOf?: string;
   readonly aggregated: boolean;
   /** Сводка прочитана, но прогон ещё не завершён: величины накоплены, не подведены. */
   readonly partial: boolean;
@@ -170,6 +176,7 @@ export interface UsageSnapshot {
   readonly billableTokens: number | null;
   readonly wallclockMs: number | null;
   readonly costUsd: number | null;
+  readonly costSource?: CostSource;
 }
 
 export interface ContextBreakdown {
@@ -273,6 +280,8 @@ export interface RunSnapshot {
   readonly filesGone: boolean;
   /** Итог прогона — только когда `filesGone: true`. */
   readonly total?: UsageSnapshot;
+  /** Дата прейскуранта прогона — для подсказки к метке оценки. */
+  readonly costCatalogAsOf?: string;
   /** Разрез по моделям — только когда `filesGone: true`. */
   readonly models?: readonly { readonly model: string; readonly billableTokens: number; readonly costUsd: number | null }[];
   /** Диагноз беды чтения журнала: манифест, состояние, сводка расхода — в этом порядке. */
@@ -573,6 +582,7 @@ export interface BacklogOverview {
 export interface UsageMeasure {
   readonly billableTokens: number;
   readonly costUsd: number;
+  readonly costSource?: CostSource;
 }
 
 export interface UsageModelSlice extends UsageMeasure {
@@ -594,6 +604,8 @@ export interface UsagePipelineRun {
   readonly billableTokens: number;
   /** `null` — цена прогона ни разу не сообщена, а не «потрачено ноль». */
   readonly costUsd: number | null;
+  readonly costSource?: CostSource;
+  readonly costCatalogAsOf?: string;
   readonly costUnreportedAttempts: number;
   readonly breakdownAvailable: boolean;
 }

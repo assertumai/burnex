@@ -16,6 +16,7 @@ import {
 } from '@stepcast/ui';
 import { fetchRun, type JobSnapshot, type JournalProblem, type RunSnapshot, type StepSnapshot } from '../api';
 import { fmtDuration, fmtMoney, fmtSpan, fmtTime, fmtTokens } from '../format';
+import { Cost } from '../components/Cost';
 import { FileView } from '../components/FileView';
 import { JobGraph } from '../components/JobGraph';
 import { StepOutput } from '../components/StepOutput';
@@ -79,11 +80,14 @@ function Step({
   address,
   jobId,
   step,
+  asOf,
   navigate,
 }: {
   readonly address: string;
   readonly jobId: string;
   readonly step: StepSnapshot;
+  /** Дата прейскуранта прогона — для подсказки к метке оценки. */
+  readonly asOf: string | undefined;
   readonly navigate: (href: string) => void;
 }): JSX.Element {
   return (
@@ -121,7 +125,7 @@ function Step({
         )}
         <span className="kind">
           {fmtTokens(step.usage.billableTokens)} · {fmtDuration(step.usage.wallclockMs)} ·{' '}
-          {fmtMoney(step.usage.costUsd)}
+          <Cost usd={step.usage.costUsd} source={step.usage.costSource} asOf={asOf} />
         </span>
       </div>
 
@@ -263,10 +267,12 @@ function ProblemNotice({ problem }: { readonly problem: JournalProblem }): JSX.E
 function Job({
   address,
   job,
+  asOf,
   navigate,
 }: {
   readonly address: string;
   readonly job: JobSnapshot;
+  readonly asOf: string | undefined;
   readonly navigate: (href: string) => void;
 }): JSX.Element {
   return (
@@ -286,7 +292,7 @@ function Job({
         )}
         <span className="kind">
           {fmtTokens(job.usage.billableTokens)} · {fmtDuration(job.usage.wallclockMs)} ·{' '}
-          {fmtMoney(job.usage.costUsd)}
+          <Cost usd={job.usage.costUsd} source={job.usage.costSource} asOf={asOf} />
         </span>
       </div>
       {job.description === undefined ? null : <div className="desc">{job.description}</div>}
@@ -322,7 +328,7 @@ function Job({
       {job.data === undefined ? null : <Pairs label="data" pairs={job.data} />}
 
       {job.steps.map((step) => (
-        <Step key={step.id} address={address} jobId={job.id} step={step} navigate={navigate} />
+        <Step key={step.id} address={address} jobId={job.id} step={step} asOf={asOf} navigate={navigate} />
       ))}
     </div>
   );
@@ -448,7 +454,7 @@ export function RunDetail({
                 <CardTitle>Saved totals</CardTitle>
                 <span className="kind">
                   {fmtTokens(current.total.billableTokens)} · {fmtDuration(current.total.wallclockMs)} ·{' '}
-                  {fmtMoney(current.total.costUsd)}
+                  <Cost usd={current.total.costUsd} source={current.total.costSource} asOf={current.costCatalogAsOf} />
                 </span>
               </CardHeader>
               {current.models === undefined || current.models.length === 0 ? null : (
@@ -486,7 +492,7 @@ export function RunDetail({
       ) : (
         <Card className="run-card">
           <CardContent>
-            <Job address={address} job={job} navigate={navigate} />
+            <Job address={address} job={job} asOf={current.costCatalogAsOf} navigate={navigate} />
           </CardContent>
         </Card>
       )}
