@@ -328,6 +328,7 @@ export const BUILTIN_STEP_KIND_KEY_OWNERS: Readonly<Record<string, readonly stri
   output_schema: ['agent', 'run', 'script', 'uses'],
   uses: ['uses'],
   with: ['uses'],
+  external: ['agent', 'run', 'script', 'uses'],
 };
 
 /** Ключи, занятые вкладом вида шага в документе: объявленные `document.keys`, иначе — одно имя. */
@@ -621,9 +622,18 @@ export function buildDocumentSchemas(
    */
   const ShellShape = { shell: z.array(z.string()).optional() };
 
+  /**
+   * Объявление «шаг действует вовне рабочего дерева» (`shadow-run-mode`,
+   * design.md, решение 1). Только у четырёх встроенных видов: плагинному виду
+   * признак объявляется в контракте (`StepKindContribution.external`), а не в
+   * документе, и строгая ветвь плагинного шага ключ отклоняет сама.
+   */
+  const ExternalShape = { external: z.boolean().optional() };
+
   const AgentStepSchema = z
     .object({
       ...StepCommonShape,
+      ...ExternalShape,
       ...SelectionShape,
       session: z.string().optional(),
       prompt: z.string(),
@@ -637,6 +647,7 @@ export function buildDocumentSchemas(
     .object({
       ...StepCommonShape,
       ...StepSecretsShape,
+      ...ExternalShape,
       ...SkipExitCodeShape,
       ...ShellShape,
       run: z.union([z.string(), z.array(z.string())]),
@@ -662,6 +673,7 @@ export function buildDocumentSchemas(
     .object({
       ...StepCommonShape,
       ...StepSecretsShape,
+      ...ExternalShape,
       ...SkipExitCodeShape,
       script: z.string().min(1).regex(/\S/),
       args: z.array(z.string()).optional(),
@@ -687,6 +699,7 @@ export function buildDocumentSchemas(
     .object({
       ...StepCommonShape,
       ...StepSecretsShape,
+      ...ExternalShape,
       ...SkipExitCodeShape,
       uses: UsesNameSchema,
       with: z.record(z.string(), z.unknown()).optional(),

@@ -1,11 +1,11 @@
 import assert from 'node:assert/strict';
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, it } from 'node:test';
 
 import { createFakeBackend, resultLine, type FakeBackend } from '../src/parts/pipeline/backend/fake.js';
 import { StepcastError } from '../src/kernel/errors.js';
-import { findStepDir, readExpectReports, readStatus, readUsageSoft } from '../src/parts/pipeline/run/journal/reader.js';
+import { findStepDir, readEvents, readExpectReports, readStatus, readUsageSoft } from '../src/parts/pipeline/run/journal/reader.js';
 import { expandPipeline } from '../src/parts/pipeline/document/expand.js';
 import { resolveLate } from '../src/parts/pipeline/document/late.js';
 import { serializeLock } from '../src/parts/pipeline/document/lock.js';
@@ -16,11 +16,12 @@ import type { ContributionService } from '../src/kernel/kernel.js';
 import { applyContextPlugin, applyDeclarativePlugin } from '../src/kernel/load.js';
 import { registryFromKernel, stepKindNames, type Registry } from '../src/kernel/registry.js';
 import type { StepKindContribution, StepKindInput } from '../src/parts/pipeline/contract.js';
-import { DECLARATIVE_CONTRIBUTION_FIELDS } from '../src/parts/pipeline/contract.js';
+import { DECLARATIVE_CONTRIBUTION_FIELDS, StepcastPluginSchema } from '../src/parts/pipeline/contract.js';
 import { lintPipeline } from '../src/parts/pipeline/domain/lint.js';
 import { resolveConfig } from '../src/parts/pipeline/config/resolve.js';
 import { projectKey, runPaths } from '../src/parts/pipeline/run/journal/paths.js';
 import { runPipeline } from '../src/parts/pipeline/run/runner.js';
+import { assertShadowDeclarations } from '../src/parts/pipeline/run/shadow.js';
 import { buildPipelines } from '../src/parts/ui/pipelines.js';
 import { buildSnapshot } from '../src/parts/ui/snapshot.js';
 import { makeJournalBed, makeProject, seedRun, type Project } from './helpers.js';
@@ -73,7 +74,11 @@ ${stepYaml}
 async function run(
   project: Project,
   registry: Registry,
-  options: { readonly pipelinePath?: string; readonly backends?: Readonly<Record<string, FakeBackend>> } = {},
+  options: {
+    readonly pipelinePath?: string;
+    readonly backends?: Readonly<Record<string, FakeBackend>>;
+    readonly shadow?: boolean;
+  } = {},
 ): Promise<ReturnType<typeof runPipeline>> {
   const runsRoot = tempDir('runs-');
   const config = project.config;
@@ -84,6 +89,7 @@ async function run(
     projectRoot: project.root,
     cwd: project.root,
     registry,
+    ...(options.shadow === true ? { mode: 'shadow' as const } : {}),
     ...(backends === undefined
       ? {}
       : {
@@ -1170,5 +1176,204 @@ describe('step-kinds-registry: waits и способность ожидания 
     // Вклад вернул успех, но защёлка эффекта решения останавливает прогон
     // раньше, чем управление дошло до этого возврата (design.md, решение 5).
     assert.equal(result.status, 'canceled');
+  });
+});
+
+describe('shadow-run-mode: external и точка действия act вида шага', () => {
+  const PROBE = pipelineWith(`        http_probe:
+          url: https://example.org`);
+
+  /** Вид, совершающий два внешних действия через `act`; `performed` считает настоящие вызовы. */
+  function actingKind(performed: string[], seen: { returned?: unknown[]; hadAct?: boolean }) {
+    return {
+      external: true as const,
+      execute: async (input: StepKindInput) => {
+        seen.hadAct = input.act !== undefined;
+        const first = await input.act?.({ kind: 'post', summary: 'письмо', details: { to: 'a@b' } }, () => {
+          performed.push('post');
+          return 'sent';
+        });
+        const second = await input.act?.({ kind: 'label' }, async () => {
+          performed.push('label');
+          return 42;
+        });
+        seen.returned = [first, second];
+        return { exitCode: 0 };
+      },
+    };
+  }
+
+  it('в обычном режиме act вызывает perform и отдаёт результат, ничего не записывая', async () => {
+    const performed: string[] = [];
+    const seen: { returned?: unknown[]; hadAct?: boolean } = {};
+    const project = makeProject({ 'stepcast.yml': PROBE });
+    const result = await run(project, await stepKindRegistry(actingKind(performed, seen)));
+
+    assert.equal(result.status, 'success');
+    assert.deepEqual(performed, ['post', 'label']);
+    assert.deepEqual(seen.returned, ['sent', 42]);
+    const dir = findStepDir(result.journal.paths, 'build', 'probe');
+    assert.equal(existsSync(join(dir as string, 'action-1.json')), false);
+  });
+
+  it('в shadow-режиме perform не вызывается, пишутся action-1.json, action-2.json и события', async () => {
+    const performed: string[] = [];
+    const seen: { returned?: unknown[]; hadAct?: boolean } = {};
+    const project = makeProject({ 'stepcast.yml': PROBE });
+    const result = await run(project, await stepKindRegistry(actingKind(performed, seen)), { shadow: true });
+
+    assert.equal(result.status, 'success');
+    assert.deepEqual(performed, []);
+    assert.deepEqual(seen.returned, [undefined, undefined]);
+    const dir = findStepDir(result.journal.paths, 'build', 'probe') as string;
+    const first = JSON.parse(readFileSync(join(dir, 'action-1.json'), 'utf8'));
+    assert.equal(first.kind, 'plugin');
+    assert.equal(first.step_kind, 'http_probe');
+    assert.deepEqual(first.action, { kind: 'post', summary: 'письмо', details: { to: 'a@b' } });
+    // У пайплайна нет `env:` — и окружение процесса в запись не попадает.
+    assert.deepEqual(first.env_names, []);
+    assert.equal(JSON.parse(readFileSync(join(dir, 'action-2.json'), 'utf8')).action.kind, 'label');
+    const events = readEvents(result.journal.paths).filter((event) => event.kind === 'step.action');
+    assert.deepEqual(
+      events.map((event) => (event.kind === 'step.action' ? [event.step, event.n] : [])),
+      [['probe', 1], ['probe', 2]],
+    );
+  });
+
+  it('вид без external не получает act, а шаг плагина в shadow-режиме объявления не требует', async () => {
+    const seen: { hadAct?: boolean } = {};
+    const project = makeProject({ 'stepcast.yml': PROBE });
+    const registry = await stepKindRegistry({
+      execute: (input) => {
+        seen.hadAct = input.act !== undefined;
+        return { exitCode: 0 };
+      },
+    });
+    const result = await run(project, registry, { shadow: true });
+    assert.equal(result.status, 'success');
+    assert.equal(seen.hadAct, false);
+  });
+
+  it('decision и плагинный вид без external рядом со встроенными: проверка их не называет, оба исполняются', async () => {
+    const runsRoot = tempDir('runs-');
+    const project = makeProject({
+      'stepcast.yml': `
+version: 1
+kind: pipeline
+name: shadow-рядом
+jobs:
+  build:
+    steps:
+      - id: compile
+        run: [sh, -c, 'echo built > built.txt']
+        external: false
+      - id: undeclared
+        run: [echo, ok]
+      - id: gate
+        decision:
+          prompt: продолжить?
+          outcomes:
+            approve: continue
+      - id: probe
+        http_probe:
+          url: https://example.org
+`,
+    });
+    let probed = false;
+    const registry = await stepKindRegistry({
+      execute: () => {
+        probed = true;
+        return { exitCode: 0, text: 'ok' };
+      },
+    });
+    const expanded = expandPipeline({ pipelinePath: project.path('stepcast.yml'), config: project.config, registry });
+
+    // Проверка называет только встроенный шаг без объявления — ни `gate`, ни `probe`.
+    assert.throws(
+      () => assertShadowDeclarations(expanded.pipeline),
+      (error: unknown) => {
+        assert.ok(error instanceof StepcastError);
+        assert.match(error.message, /не объявлено: build\.undeclared$/);
+        return true;
+      },
+    );
+
+    // С объявленным `undeclared` проверка проходит, а прогон исполняет и
+    // решение, и плагинный шаг — без записи действий.
+    writeFileSync(
+      project.path('stepcast.yml'),
+      readFileSync(project.path('stepcast.yml'), 'utf8').replace('run: [echo, ok]', 'run: [echo, ok]\n        external: false'),
+    );
+    const declared = expandPipeline({ pipelinePath: project.path('stepcast.yml'), config: project.config, registry });
+    assert.doesNotThrow(() => assertShadowDeclarations(declared.pipeline));
+
+    let paths: RunPaths | undefined;
+    const promise = runPipeline({
+      expanded: declared,
+      config: { ...project.config, runs: { ...project.config.runs, root: runsRoot } },
+      projectRoot: project.root,
+      cwd: project.root,
+      registry,
+      mode: 'shadow',
+      decisionPollIntervalMs: 20,
+      onEvent: (event) => {
+        if (event.kind !== 'run.started') return;
+        paths = runPaths(runsRoot, projectKey(project.root), event.run_id);
+      },
+    });
+    const started = Date.now();
+    while (paths === undefined || (readStatus(paths).awaiting?.length ?? 0) === 0) {
+      if (Date.now() - started > 5000) throw new Error('ожидание решения не объявлено вовремя');
+      await new Promise((resolve) => setTimeout(resolve, 5));
+    }
+    writeDecisionRecord(paths, readStatus(paths).awaiting?.[0]?.wait_id as string, { outcome: 'approve' });
+
+    const result = await promise;
+    assert.equal(result.status, 'success');
+    assert.equal(probed, true, 'плагинный шаг исполнен');
+    assert.equal(existsSync(project.path('built.txt')), true, 'локальный шаг исполнен');
+    const steps = readStatus(result.journal.paths).jobs[0]?.steps ?? [];
+    for (const id of ['gate', 'probe']) {
+      const step = steps.find((candidate) => candidate.id === id);
+      assert.equal(step?.status, 'success', id);
+      assert.notEqual(step?.reason, 'shadow', id);
+      assert.equal(existsSync(join(findStepDir(result.journal.paths, 'build', id) as string, 'action-1.json')), false, id);
+    }
+    assert.equal(readEvents(result.journal.paths).some((event) => event.kind === 'step.action'), false);
+  });
+
+  it('описание действия, не представимое в JSON, — внятный отказ попытки в обоих режимах, perform не вызван', async () => {
+    for (const shadow of [false, true]) {
+      const performed: string[] = [];
+      const cyclic: Record<string, unknown> = {};
+      cyclic.self = cyclic;
+      const project = makeProject({ 'stepcast.yml': PROBE });
+      for (const details of [{ amount: 10n }, cyclic, { callback: () => 1 }]) {
+        const registry = await stepKindRegistry({
+          external: true,
+          execute: async (input) => {
+            await input.act?.({ kind: 'post', details }, () => performed.push('post'));
+            return { exitCode: 0 };
+          },
+        });
+        const result = await run(project, registry, { shadow });
+        assert.equal(result.status, 'failed', `shadow=${String(shadow)}`);
+        const reason = readStatus(result.journal.paths).jobs[0]?.steps[0]?.attempts.at(-1)?.reason ?? '';
+        assert.match(reason, /не представимо в JSON — action\.details/, reason);
+        const dir = findStepDir(result.journal.paths, 'build', 'probe') as string;
+        assert.equal(existsSync(join(dir, 'action-1.json')), false);
+      }
+      assert.deepEqual(performed, []);
+    }
+  });
+
+  it('external не значением true отклоняется схемой вклада, которой плагин проверяется при загрузке', () => {
+    const parsed = StepcastPluginSchema.safeParse({
+      name: 'bad',
+      steps: [{ ...fakeStepKind(), external: false }],
+    });
+    assert.equal(parsed.success, false);
+    assert.match(JSON.stringify(parsed.error?.issues), /steps.*external|external: true/);
+    assert.equal(StepcastPluginSchema.safeParse({ name: 'ok', steps: [{ ...fakeStepKind(), external: true }] }).success, true);
   });
 });

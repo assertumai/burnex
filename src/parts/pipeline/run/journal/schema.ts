@@ -447,6 +447,13 @@ export const RunManifestSchema = z
      * версии; `resume` берёт их отсюда, собственного флага у него нет.
      */
     env_overrides: z.record(z.string(), z.string()).optional(),
+    /**
+     * Режим прогона (`shadow-run-mode`): `shadow` — внешние действия объявленных
+     * шагов не совершались, а записаны. Ключа нет у обычного прогона и у прогона
+     * прежней версии — оба читаются как обычный режим; `resume` берёт режим
+     * отсюда, собственного флага у него нет.
+     */
+    mode: z.literal('shadow').optional(),
     git: z.object({ head: z.string().optional(), dirty_hash: z.string().optional() }).strict(),
     backends: z.record(z.string(), z.object({ command: z.string(), version: z.string().optional() }).strict()),
     started_at: z.string(),
@@ -790,6 +797,10 @@ export const EventSchema = z.discriminatedUnion('kind', [
   z.object({ ...eventBase, kind: z.literal('step.started'), job: z.string(), step: z.string(), attempt: z.number().int().positive() }).strict(),
   z.object({ ...eventBase, kind: z.literal('step.finished'), job: z.string(), step: z.string(), attempt: z.number().int().positive(), status: StatusValueSchema, reason: z.string().optional() }).strict(),
   z.object({ ...eventBase, kind: z.literal('step.stalled'), job: z.string(), step: z.string(), silent_ms: z.number() }).strict(),
+  // Внешнее действие шага записано, а не совершено (`shadow-run-mode`): `n` —
+  // сквозной номер действий шага, `path` — файл `action-<n>.json`. Достаточно,
+  // чтобы перечислить действия, не читая файлов.
+  z.object({ ...eventBase, kind: z.literal('step.action'), job: z.string(), step: z.string(), attempt: z.number().int().positive(), n: z.number().int().positive(), path: z.string() }).strict(),
   z.object({ ...eventBase, kind: z.literal('expect.failed'), job: z.string(), step: z.string(), attempt: z.number().int().positive(), predicate: z.string(), detail: z.string().optional() }).strict(),
   z.object({ ...eventBase, kind: z.literal('env.denied'), name: z.string(), pattern: z.string(), scope: z.string() }).strict(),
   // Переменная объявленного секрета вычеркнута из окружения шага, который

@@ -39,6 +39,7 @@ import { ExitCode, StepcastError, isStepcastError, type ExitCodeValue } from '..
 import { createSessionRegistry, executeAgentStep } from './exec/agentStep.js';
 import { buildStepEnv, injectedVariables, type EnvLayers } from './exec/env.js';
 import { validateEnvOverrides } from './envOverrides.js';
+import { assertShadowDeclarations, describeBuiltinAction, recordShadowAction } from './shadow.js';
 import { backendsInUse } from '../secrets/declaration.js';
 import { namedSecrets, resolveBackendCredentials, resolveSecrets } from './secrets.js';
 import { executeRunStep } from './exec/runStep.js';
@@ -134,6 +135,12 @@ export interface RunOptions {
    * переопределением, обязан продолжиться с ним же.
    */
   readonly envOverrides?: Readonly<Record<string, string>>;
+  /**
+   * Режим прогона (`run --shadow`): внешние действия объявленных шагов
+   * записываются, а не совершаются. Возобновление без собственного значения
+   * берёт режим из манифеста исходного прогона — флага у `resume` нет.
+   */
+  readonly mode?: 'shadow';
   /** Подмена адаптера бэкенда: тесты подставляют поддельный. */
   readonly adapterFor?: (name: string) => BackendAdapter;
   /**
@@ -240,6 +247,11 @@ export async function runPipeline(options: RunOptions): Promise<RunResult> {
   // Библиотечный вызов обходит `stepcast run`, а молча проигнорированное
   // переопределение хуже отказа.
   validateEnvOverrides(envOverrides, pipeline.env);
+
+  const mode = options.mode ?? options.resume?.source.manifest.mode;
+  // Та же проверка стоит в `run.ts` до `--dry-run`; здесь её проходят
+  // возобновление и библиотечный вызов, у которых `run.ts` нет.
+  if (mode === 'shadow') assertShadowDeclarations(pipeline);
 
   // До создания журнала: отказ на этом этапе не оставляет за собой директории
   // прогона, потому что прогона ещё нет.
@@ -356,6 +368,7 @@ export async function runPipeline(options: RunOptions): Promise<RunResult> {
     ...(options.resume === undefined ? {} : { resumed_from: options.resume.source.manifest.run_id }),
     inputs: pipeline.inputs,
     ...(Object.keys(envOverrides).length === 0 ? {} : { env_overrides: envOverrides }),
+    ...(mode === undefined ? {} : { mode }),
     git: {},
     backends: Object.fromEntries(
       Object.entries(config.backends).map(([name, backend]) => [name, { command: backend.command }]),
@@ -460,6 +473,7 @@ export async function runPipeline(options: RunOptions): Promise<RunResult> {
 
   const context: RunContext = {
     ...options,
+    ...(mode === undefined ? {} : { mode }),
     envOverrides,
     registry,
     secretValues,
@@ -2538,7 +2552,9 @@ async function runJobSteps(
     const outcome: StepOutcome =
       exceeded !== undefined
         ? { status: 'budget_exceeded', reason: describeExceeded(exceeded), attempts: [], results: [], exceeded }
-        : step.kind === 'run' || step.kind === 'script'
+        : context.mode === 'shadow' && step.kind !== 'plugin' && step.external === true
+          ? runShadowStep(step, job, context, stepDirPath)
+          : step.kind === 'run' || step.kind === 'script'
           ? await runCommandStep(
               step,
               job,
@@ -3062,6 +3078,39 @@ async function runPluginStepDispatch(
     };
   }
   return runPluginStep(step, job, context, stepDirPath, contribution, budgetScopes, changedPaths, iteration);
+}
+
+/**
+ * Шаг встроенного вида с `external: true` в shadow-режиме: не исполняется,
+ * действие записывается, исход — одна попытка `success` с причиной `shadow`
+ * (design.md `shadow-run-mode`, решения 4 и 5). `expect`, `output_schema` и
+ * судьи не проверяются: проверять нечего, а провал предиката на пустом выходе
+ * дал бы ложный красный прогон.
+ */
+function runShadowStep(
+  step: Extract<Step, { kind: 'agent' | 'run' | 'script' }>,
+  job: Job,
+  context: RunContext,
+  stepDirPath: string,
+): StepOutcome {
+  const startedAt = new Date().toISOString();
+  recordShadowAction(
+    context.journal,
+    { job: job.id, step: step.id, stepDir: stepDirPath },
+    1,
+    1,
+    describeBuiltinAction(step, {
+      cwd: context.cwd,
+      envNames: declaredEnvNames(step, job, context),
+      secrets: step.secrets ?? [],
+    }),
+  );
+  return {
+    status: 'success',
+    reason: 'shadow',
+    attempts: [{ attempt: 1, status: 'success', reason: 'shadow', started_at: startedAt, finished_at: new Date().toISOString() }],
+    results: [],
+  };
 }
 
 async function runCommandStep(
@@ -3844,6 +3893,23 @@ function secretLayers(
     else withheld[secret.env] = secret.name;
   }
   return { secrets, withheld };
+}
+
+/**
+ * Имена объявленного `env:` шага для записи shadow-действия (design.md
+ * `shadow-run-mode`, решение 5): пайплайн с переопределениями `--env`, работа,
+ * шаг — отсортированы, без повторов. Окружение процесса, `env_files` и
+ * внедрённые `STEPCAST_*` сюда не входят: они не часть объявления шага, а
+ * имена переменных оператора в журнал не должны уходить вовсе.
+ */
+export function declaredEnvNames(step: Step, job: Job, context: RunContext): string[] {
+  const { pipeline } = context.expanded;
+  const names = new Set([
+    ...Object.keys(pipelineEnv(pipeline, context)),
+    ...Object.keys(job.env),
+    ...Object.keys(step.env),
+  ]);
+  return [...names].sort();
 }
 
 /**

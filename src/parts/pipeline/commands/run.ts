@@ -10,6 +10,7 @@ import { resolvePipelineTarget } from '../domain/package-schema.js';
 import type { PipelineCommandEnv } from '../contract.js';
 import { runPipeline } from '../run/runner.js';
 import { validateEnvOverrides } from '../run/envOverrides.js';
+import { assertShadowDeclarations } from '../run/shadow.js';
 import type { UsageSnapshot } from '../run/budget/accumulator.js';
 import { renderProgressLine } from './progress.js';
 import { commandRow } from '../../../kernel/cli/commandRow.js';
@@ -52,8 +53,12 @@ export async function runRunCommand(
   });
 
   // До записи прогона: отказ не должен оставлять после себя каталог журнала.
+  const shadow = args.flags.shadow === true;
   try {
     validateEnvOverrides(envOverrides, expanded.pipeline.env);
+    // И при `--dry-run`: проверка объявлений — часть вопроса «пойдёт ли такой
+    // прогон», на который сухой запуск отвечает.
+    if (shadow) assertShadowDeclarations(expanded.pipeline);
   } catch (error) {
     if (!isStepcastError(error)) throw error;
     for (const line of formatDiagnostic({
@@ -97,6 +102,7 @@ export async function runRunCommand(
       ...(registry === undefined ? {} : { registry }),
       signal: controller.signal,
       ...(Object.keys(envOverrides).length === 0 ? {} : { envOverrides }),
+      ...(shadow ? { mode: 'shadow' as const } : {}),
       ...(onEvent === undefined ? {} : { onEvent }),
     });
 
@@ -199,6 +205,11 @@ export const row = commandRow<PipelineCommandEnv>(
           description: 'переопределить объявленную переменную env пайплайна на этот прогон: --env ИМЯ=значение',
         },
         'dry-run': { kind: 'boolean', description: 'только проверить, не запуская работы' },
+        shadow: {
+          kind: 'boolean',
+          description:
+            'исполнить локальное, а действия шагов с external: true записать, не совершая (external обязателен у каждого шага)',
+        },
         quiet: { kind: 'boolean', description: 'не печатать ход прогона' },
       },
     },

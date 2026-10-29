@@ -246,7 +246,31 @@ export interface StepKindInput<F = unknown> {
    * ожидания тому, кто сам распоряжается своим таймаутом.
    */
   readonly decision?: StepKindDecisions;
+  /**
+   * Единственный путь внешнего действия вида, объявившего `external: true`
+   * (`shadow-run-mode`, design.md, решение 7): `action` описывает действие,
+   * `perform` его совершает. В обычном режиме `act` вызывает `perform` и
+   * отдаёт его результат; в shadow-режиме `perform` не вызывается, описание
+   * записывается в журнал, а результат — `undefined`. У прочих видов поля нет.
+   */
+  readonly act?: StepKindAct;
 }
+
+/** Описание внешнего действия вида шага: что именно сделал бы `perform`. */
+export interface StepKindAction {
+  /** Короткое имя действия, например `post-comment`. */
+  readonly kind: string;
+  /** Одна строка для человека, читающего журнал. */
+  readonly summary?: string;
+  /** Любое JSON-представимое подробное описание: адресат, тело, параметры. */
+  readonly details?: unknown;
+}
+
+/** Способность `StepKindInput.act`. Результат — `undefined` в shadow-режиме, поэтому он в типе. */
+export type StepKindAct = <T>(
+  action: StepKindAction,
+  perform: () => Promise<T> | T,
+) => Promise<T | undefined>;
 
 /** Записать в журнал попытки — событие либо файл рядом с `stdout.log`. */
 export interface StepKindLog {
@@ -316,6 +340,15 @@ export interface StepKindContribution {
    * входе способность `StepKindInput.decision`.
    */
   readonly waits?: true;
+  /**
+   * «Вид действует вовне рабочего дерева» (`shadow-run-mode`, design.md,
+   * решение 7). Вид с этим полем получает во входе `StepKindInput.act` и
+   * обязан совершать внешние действия только через него: в shadow-режиме
+   * движок исполняет сам вид (его локальная часть остаётся проверяемой), а
+   * действие через `act` записывает вместо исполнения. Обойти `act` движок
+   * проверить не может — это обязательство автора вида.
+   */
+  readonly external?: true;
   /**
    * Собственная форма записи в документе (design.md, Решение 1) — необязательна:
    * вклад без неё узнаётся ключом-именем, и движок сам синтезирует ту же
@@ -540,6 +573,11 @@ const StepKindContributionSchema = z
     // объявить несуществующую третью возможность, и отказ обязан назвать её.
     waits: z
       .literal(true, 'вид либо распоряжается сроком сам (waits: true), либо не объявляет waits вовсе')
+      .optional(),
+    // Тем же приёмом, что `waits`: `external: false` — не «как раньше», а
+    // попытка объявить несуществующую третью возможность.
+    external: z
+      .literal(true, 'вид либо действует вовне (external: true), либо не объявляет external вовсе')
       .optional(),
     /** Собственная форма записи в документе (design.md, Решение 1) — необязательна. */
     document: StepKindDocumentFormSchema.optional(),

@@ -494,12 +494,14 @@ claimed_by: run:2026-10-29T20-03-28Z-99b7ce
 
 ## shadow-run-mode
 
-status: todo
+status: done
 title: Shadow-режим — прогон насухо с записью внешних действий
 why: Пайплайн, который пишет в MR, публикует пакет или шлёт сообщение, проверить без последствий нельзя: `--dry-run` только разбирает документ, а что именно сделал бы прогон, не показывает.
 done_when: `run --shadow` и `shadow: true` в `POST /api/run`, режим в `run.json` и у `resume`; непрозрачный шаг обязан объявить `external`, иначе отказ до старта; шаг с `external: true` не исполняется, пишутся `action-<n>.json` и событие `step.action`, из `env:` — только имена; плагин с `external` в контракте делает внешнее действие через точку действия движка; предикаты исполняются как обычно; тесты.
 group: engine-cli
 source: docs/burnex-after-stepcast.md, раздел 1 «Shadow-режим»
+started_at: 2026-10-29T20:18:36.877Z
+claimed_by: run:2026-10-29T20-18-35Z-47d7a8
 
 ## job-outputs-key-value
 

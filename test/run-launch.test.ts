@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { chmodSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, it } from 'node:test';
 
@@ -107,6 +107,27 @@ process.exit(17);
       'повторное наблюдение не должно множить терминальные события',
     );
     assert.equal(readEvents(paths).length, events.length);
+  });
+
+  it('shadow превращается в флаг --shadow дочернего stepcast run, без него argv прежний', async () => {
+    const { runsRoot, projectRoot } = makeJournalBed();
+    const key = projectKey(projectRoot);
+    const executable = join(projectRoot, 'argv-dump');
+    writeFileSync(
+      executable,
+      `#!/usr/bin/env node
+require('node:fs').writeFileSync(process.argv[1] + '.' + (process.argv.includes('--shadow') ? 'shadow' : 'plain'), JSON.stringify(process.argv.slice(2)));
+`,
+    );
+    chmodSync(executable, 0o700);
+
+    launchRun({ cwd: projectRoot, pipeline: 'stepcast.yml', runsRoot, projectKey: key, execPath: executable });
+    launchRun({ cwd: projectRoot, pipeline: 'stepcast.yml', runsRoot, projectKey: key, execPath: executable, shadow: true });
+    await waitFor(() => existsSync(`${executable}.plain`) && existsSync(`${executable}.shadow`));
+
+    const argvOf = (suffix: string): string[] => JSON.parse(readFileSync(`${executable}.${suffix}`, 'utf8'));
+    assert.deepEqual(argvOf('plain').slice(-2), ['run', 'stepcast.yml']);
+    assert.deepEqual(argvOf('shadow').slice(-3), ['run', 'stepcast.yml', '--shadow']);
   });
 
   it('достраивает терминальный журнал после обрыва посреди восстановления', () => {

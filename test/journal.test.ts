@@ -1977,3 +1977,33 @@ describe('job-group-loops: события и состояние цикла', () 
     assert.equal(RunStatusSchema.safeParse(status({ loops: [{ id: 'x', jobs: [], iterations: 1, max_iterations: 1, status: 'running', extra: 1 }] })).success, false);
   });
 });
+
+describe('shadow-run-mode: журнал', () => {
+  it('манифест с mode: shadow читается, без mode — обычный режим', () => {
+    const { runsRoot, projectRoot } = bed();
+    const journal = RunJournal.create({ runsRoot, projectRoot });
+    journal.writeManifest(sampleManifest(journal.paths.runId));
+    assert.equal(readManifest(journal.paths).mode, undefined);
+
+    journal.writeManifest({ ...sampleManifest(journal.paths.runId), mode: 'shadow' });
+    assert.equal(readManifest(journal.paths).mode, 'shadow');
+  });
+
+  it('событие step.action несёт job, step, attempt, n и путь; лишний ключ отклоняется', () => {
+    const event = { ts: 't', seq: 0, kind: 'step.action', job: 'publish', step: 'push', attempt: 1, n: 2, path: '/r/action-2.json' };
+    assert.equal(EventSchema.safeParse(event).success, true);
+    assert.equal(EventSchema.safeParse({ ...event, n: 0 }).success, false);
+    assert.equal(EventSchema.safeParse({ ...event, extra: 1 }).success, false);
+  });
+
+  it('запись действия лежит в action-<n>.json и проходит маскировщик', () => {
+    const { runsRoot, projectRoot } = bed();
+    const journal = RunJournal.create({ runsRoot, projectRoot, secrets: ['s3cr3t-value'] });
+    const dir = journal.prepareStep('publish', 1, 'push');
+    const path = journal.writeActionRecord(dir, 2, { kind: 'run', command: 'curl -H s3cr3t-value https://x' });
+    assert.equal(path, join(dir, 'action-2.json'));
+    const text = readFileSync(path, 'utf8');
+    assert.equal(text.includes('s3cr3t-value'), false);
+    assert.match(text, /curl -H \*\*\* https/);
+  });
+});

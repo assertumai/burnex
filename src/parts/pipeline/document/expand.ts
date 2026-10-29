@@ -1392,6 +1392,9 @@ function buildStepCommon(
     ...('secrets' in raw && raw.secrets !== undefined && raw.secrets.length > 0
       ? { secrets: [...new Set(raw.secrets)].sort() }
       : {}),
+    // Ключа нет у плагинного шага и у шага без объявления: `false` в модели —
+    // явное «локальный», отсутствие — «не объявлено» (shadow-режим отказывает).
+    ...('external' in raw && raw.external !== undefined ? { external: raw.external } : {}),
   };
 }
 

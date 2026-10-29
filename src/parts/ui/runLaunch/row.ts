@@ -58,6 +58,11 @@ const PostBodySchema = z
      * пайплайн; здесь — только форма: имя переменной и одна строка.
      */
     env: EnvSchema.optional(),
+    /**
+     * Shadow-режим: дочерний `stepcast run` получает `--shadow`. Наличие
+     * `external` у шагов проверяет он сам — здесь только форма значения.
+     */
+    shadow: z.boolean().optional(),
   })
   .strict();
 
@@ -116,6 +121,7 @@ const handlePost: ApiHandler = async (req, res, env) => {
     pipeline: parsed.data.pipeline,
     ...(parsed.data.inputs === undefined ? {} : { inputs: parsed.data.inputs }),
     ...(parsed.data.env === undefined ? {} : { env: parsed.data.env }),
+    ...(parsed.data.shadow === true ? { shadow: true } : {}),
   });
   // 202: подтверждение запуска, не обещание идентификатора прогона — он
   // появится в обзоре обычным тактом наблюдателя, когда дочерний процесс

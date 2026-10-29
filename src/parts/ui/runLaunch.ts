@@ -36,6 +36,8 @@ export interface LaunchRunOptions {
   readonly inputs?: Readonly<Record<string, string>>;
   /** Переопределения объявленного `env:` — ключами `--env имя=значение`. */
   readonly env?: Readonly<Record<string, string>>;
+  /** Shadow-режим прогона — флагом `--shadow` (`shadow-run-mode`). */
+  readonly shadow?: boolean;
   readonly execPath?: string;
   /** Куда сказать об отказе самого порождения. По умолчанию — журнал демона (`stderr`). */
   readonly onError?: (error: Error) => void;
@@ -76,6 +78,7 @@ export const launchRun: LaunchRunFn = (options) => {
   const argv = [binPath(), 'run', options.pipeline];
   for (const [name, value] of Object.entries(options.inputs ?? {})) argv.push('--input', `${name}=${value}`);
   for (const [name, value] of Object.entries(options.env ?? {})) argv.push('--env', `${name}=${value}`);
+  if (options.shadow === true) argv.push('--shadow');
 
   const child = spawn(options.execPath ?? process.execPath, argv, {
     cwd: options.cwd,

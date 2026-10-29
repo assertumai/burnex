@@ -17,7 +17,7 @@ import { asAgent, asRun, asScript, makeProject, MINIMAL_PIPELINE, type Project }
 import { tempDir } from './tmp.js';
 import type { ScriptRoots } from '../src/parts/pipeline/document/expand.js';
 import type { Predicate } from '../src/parts/pipeline/document/model.js';
-import { PipelineDocumentSchema } from '../src/parts/pipeline/document/schema.js';
+import { PipelineDocumentSchema, assertStepKindNameAvailable } from '../src/parts/pipeline/document/schema.js';
 import { createKernelShell } from '../src/parts/builtin.js';
 import { BUILTIN_ROWS } from '../src/parts/rows.js';
 import { registryFromKernel, type Registry } from '../src/kernel/registry.js';
@@ -6263,5 +6263,59 @@ ${JOBS}`;
       loops: { l: { jobs: ['a'], max_iterations: 2, on_exceed: 'stop' } },
     });
     assert.equal(parsed.success, false);
+  });
+});
+
+// Сценарий: «Объявление внешнего действия шага» (shadow-run-mode)
+describe('pipeline-definition: external', () => {
+  const stepOf = (project: Project) => expand(project).pipeline.jobs[0]!.steps[0]! as { external?: boolean };
+  const withStep = (line: string): Project =>
+    makeProject({ 'stepcast.yml': `\nkind: pipeline\njobs:\n  build:\n    steps:\n      - ${line}\n` });
+  const keyOf = (step: ReturnType<typeof stepOf>): string =>
+    computeStepKey({
+      lockHash: 'лок',
+      jobId: 'build',
+      step: step as never,
+      inputsFingerprint: undefined,
+      backendCommand: undefined,
+      upstream: [],
+    });
+
+  it('принят на четырёх встроенных видах', () => {
+    const steps = [
+      { id: 'a', run: ['echo', 'ok'], external: true },
+      { id: 'b', script: './s.sh', external: false },
+      { id: 'c', uses: 'echo-input', external: true },
+      { id: 'd', prompt: 'сделай', external: true },
+    ];
+    for (const step of steps) {
+      const parsed = PipelineDocumentSchema.safeParse({ kind: 'pipeline', jobs: { build: { steps: [step] } } });
+      assert.equal(parsed.success, true, JSON.stringify(step));
+    }
+  });
+
+  it('значение шага попадает в модель', () => {
+    assert.equal(stepOf(withStep('{ id: a, run: [echo, ok], external: true }')).external, true);
+    assert.equal(stepOf(withStep('{ id: a, run: [echo, ok], external: false }')).external, false);
+  });
+
+  it('не булево значение — ошибка разбора с путём ключа', () => {
+    const error = thrown(() => expand(withStep('{ id: a, run: [echo, ok], external: "yes" }')));
+    assert.match(String(error.at), /external/);
+  });
+
+  it('плагинный вид ключ занять не вправе, а шаг плагина с ним — неизвестный ключ', () => {
+    assert.throws(
+      () => assertStepKindNameAvailable('x', { name: 'x', document: { keys: ['external'] } }, new Map()),
+      /external.*встроенного вида/,
+    );
+  });
+
+  it('у шага без объявления поля нет, а ключ шага не зависит от него', () => {
+    const bare = stepOf(withStep('{ id: a, run: [echo, ok] }'));
+    assert.equal('external' in bare, false);
+    const declared = stepOf(withStep('{ id: a, run: [echo, ok], external: false }'));
+    assert.notEqual(keyOf(bare), keyOf(declared));
+    assert.equal(keyOf(bare), keyOf({ ...bare }));
   });
 });

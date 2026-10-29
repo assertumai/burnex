@@ -7,6 +7,7 @@ import { pluginContext } from '../../../../kernel/kernel.js';
 import { kernelFromRegistry } from '../../../../kernel/registry.js';
 import { DecisionHalt } from '../../contract.js';
 import type {
+  StepKindAct,
   StepKindContribution,
   StepKindDecisions,
   StepKindInput,
@@ -18,8 +19,9 @@ import { sumUsage } from '../../backend/types.js';
 import { describeExceeded, type BudgetScope, type Exceeded } from '../budget/accumulator.js';
 import { runAttempts, type AttemptPlan } from './attempts.js';
 import { runJudgePass } from './judgePass.js';
+import { jsonRepresentationProblem, recordShadowAction } from '../shadow.js';
 import type { RunContext, StepOutcome } from '../runner.js';
-import { adapterOf, describeStepTask, stepEnv } from '../runner.js';
+import { adapterOf, declaredEnvNames, describeStepTask, stepEnv } from '../runner.js';
 
 /**
  * Исполнение шага плагинного вида (design.md, решения 6 и 7).
@@ -124,6 +126,9 @@ export async function runPluginStep(
     scriptCallCount += 1;
     return scriptCallCount;
   };
+  // Сквозной по попыткам ряд `action-<n>.json`, как у `judge-<n>`: shadow-режим
+  // не должен затирать запись первой попытки записью второй.
+  let actionCount = 0;
 
   const loop = await runAttempts<StepRecord['attempts'][number]>({
     attempts: step.attempts,
@@ -199,6 +204,41 @@ export async function runPluginStep(
               },
             }
           : undefined;
+      // Точка внешнего действия — только виду, объявившему `external: true`,
+      // тем же приёмом, что `decision` у `waits`. В shadow-режиме вид исполняется
+      // целиком (его локальная часть остаётся проверяемой), а действие,
+      // пропущенное через `act`, записывается вместо исполнения.
+      const act: StepKindAct | undefined =
+        contribution.external === true
+          ? async (action, perform) => {
+              // Описание проверяется в обоих режимах: иначе плагин, отдающий
+              // BigInt или цикл, узнал бы об этом только в shadow-прогоне, и
+              // не внятным отказом, а исключением из записи журнала.
+              const problem = jsonRepresentationProblem(action, 'action');
+              if (problem !== undefined) {
+                throw new StepcastError(
+                  `Шаг ${job.id}.${step.id}: описание внешнего действия для act не представимо в JSON — ${problem}`,
+                );
+              }
+              if (context.mode !== 'shadow') return perform();
+              actionCount += 1;
+              recordShadowAction(
+                journal,
+                { job: job.id, step: step.id, stepDir: stepDirPath },
+                plan.attempt,
+                actionCount,
+                {
+                  kind: 'plugin',
+                  step_kind: step.name,
+                  action,
+                  cwd: context.cwd,
+                  env_names: declaredEnvNames(step, job, context),
+                  secrets: step.secrets ?? [],
+                },
+              );
+              return undefined;
+            }
+          : undefined;
       const input: StepKindInput = {
         fields: step.fields,
         step: { id: step.id, index: step.index, timeoutMs: step.timeoutMs },
@@ -211,6 +251,7 @@ export async function runPluginStep(
         log: makeLog(context, job, step, plan.attempt, stepDirPath),
         ctx: pluginContext(kernelFromRegistry(context.registry).ctx),
         ...(decision === undefined ? {} : { decision }),
+        ...(act === undefined ? {} : { act }),
       };
 
       let raced: Awaited<ReturnType<typeof raceWithTimeout>>;

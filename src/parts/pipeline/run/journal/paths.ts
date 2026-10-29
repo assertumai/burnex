@@ -214,6 +214,15 @@ export function scriptCallDir(stepDirPath: string, n: number): string {
   return join(stepDirPath, `script-${n}`);
 }
 
+/**
+ * Файл записи внешнего действия внутри каталога шага (`shadow-run-mode`).
+ * Номер сквозной для шага, как у `judgeCallDir`; файл, а не каталог — у записи
+ * нет потоков и артефактов.
+ */
+export function actionFilePath(stepDirPath: string, n: number): string {
+  return join(stepDirPath, `action-${n}.json`);
+}
+
 /** Имя каталога итерации: `iter-1`, `iter-2`, … */
 export function iterationDirName(iteration: number): string {
   return `iter-${iteration}`;

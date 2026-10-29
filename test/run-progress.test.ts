@@ -80,6 +80,10 @@ const PRINTABLE: readonly { readonly event: Event; readonly says: readonly RegEx
     says: [/build\/plan:/, /тишина 300с/],
   },
   {
+    event: { ...BASE, kind: 'step.action', job: 'build', step: 'plan', attempt: 1, n: 2, path: '/r/action-2.json' },
+    says: [/build\/plan:/, /действие 2/, /не совершено/],
+  },
+  {
     event: { ...BASE, kind: 'iteration.started', job: 'build', iteration: 2 },
     says: [/build:/, /итерация 2/, /начата/],
   },

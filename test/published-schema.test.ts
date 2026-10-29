@@ -802,3 +802,17 @@ describe('published-schema: секреты', () => {
     assert.equal(JSON.stringify(manifest).includes('secrets'), false);
   });
 });
+
+describe('published-schema: external', () => {
+  const published = JSON.parse(readSchemaFile('schema/pipeline.schema.json')) as Record<string, unknown>;
+  const pipelineWith = (step: Record<string, unknown>) => ({ kind: 'pipeline', jobs: { build: { steps: [step] } } });
+
+  it('булев external принят на четырёх встроенных видах, иное значение — нет', () => {
+    const validate = compileAny(published);
+    const steps = [{ run: ['echo'] }, { script: './x.sh' }, { uses: 'echo' }, { prompt: 'сделай' }];
+    for (const step of steps) {
+      assert.equal(validate(pipelineWith({ id: 'a', ...step, external: true })), true, JSON.stringify(step));
+      assert.equal(validate(pipelineWith({ id: 'a', ...step, external: 'yes' })), false, JSON.stringify(step));
+    }
+  });
+});

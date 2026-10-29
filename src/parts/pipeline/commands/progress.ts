@@ -115,6 +115,8 @@ export function renderProgressLine(
       );
     case 'step.stalled':
       return line(`${event.job}/${event.step}`, `тишина ${Math.round(event.silent_ms / 1000)}с`);
+    case 'step.action':
+      return line(`${event.job}/${event.step}`, `внешнее действие ${event.n} записано, не совершено`);
     case 'job.attempt.started':
       return line(event.job, `попытка работы ${event.attempt} начата`);
     case 'job.attempt.finished':

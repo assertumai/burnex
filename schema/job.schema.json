@@ -1030,6 +1030,9 @@
                 ],
                 "additionalProperties": false
               },
+              "external": {
+                "type": "boolean"
+              },
               "agent": {
                 "type": "string"
               },
@@ -1565,6 +1568,9 @@
                   "pattern": "^[a-z][a-z0-9_-]{0,63}$"
                 }
               },
+              "external": {
+                "type": "boolean"
+              },
               "skip_exit_code": {
                 "anyOf": [
                   {
@@ -2030,6 +2036,9 @@
                   "type": "string",
                   "pattern": "^[a-z][a-z0-9_-]{0,63}$"
                 }
+              },
+              "external": {
+                "type": "boolean"
               },
               "skip_exit_code": {
                 "anyOf": [
@@ -2498,6 +2507,9 @@
                   "type": "string",
                   "pattern": "^[a-z][a-z0-9_-]{0,63}$"
                 }
+              },
+              "external": {
+                "type": "boolean"
               },
               "skip_exit_code": {
                 "anyOf": [

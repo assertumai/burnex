@@ -5080,6 +5080,30 @@ describe('ui-daemon: POST /api/run', () => {
     assert.equal(calls.length, 1);
   });
 
+  it('shadow доезжает до пуска, не булево значение отклонено без пуска', async (t) => {
+    const { runsRoot, projectRoot } = makeJournalBed();
+    seedRun(runsRoot, projectRoot, { runId: 'seed' });
+    writeFileSync(join(projectRoot, 'stepcast.yml'), MINIMAL_PIPELINE_YAML);
+    const key = projectKey(projectRoot);
+    const { launchRun, calls } = stubLaunch();
+    const server = await createUiServer({ runsRoot, port: 0, launchRun });
+    t.after(() => server.close());
+
+    const post = (shadow: unknown) =>
+      sendJson(server, {
+        method: 'POST',
+        path: '/api/run',
+        body: JSON.stringify({ project: key, pipeline: 'stepcast.yml', shadow }),
+      });
+
+    assert.equal((await post(true)).code, 202);
+    assert.equal((calls[0] as { shadow?: unknown } | undefined)?.shadow, true);
+    assert.equal((await post(false)).code, 202);
+    assert.equal('shadow' in (calls[1] ?? {}), false);
+    assert.equal((await post('yes')).code, 400);
+    assert.equal(calls.length, 2);
+  });
+
   it('лишние поля тела отклонены', async (t) => {
     const { runsRoot, projectRoot } = makeJournalBed();
     seedRun(runsRoot, projectRoot, { runId: 'seed' });

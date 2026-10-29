@@ -8,12 +8,13 @@ import {
   symlinkSync,
   writeFileSync,
 } from 'node:fs';
-import { join } from 'node:path';
+import { basename, join } from 'node:path';
 
 import { StepcastError } from '../../../../kernel/errors.js';
 import { JOURNAL_FORMAT } from './format.js';
 import { createMasker, type Masker } from './mask.js';
 import {
+  actionFilePath,
   decisionRecordPath,
   jobDir,
   jobScratchDir,
@@ -269,6 +270,15 @@ export class RunJournal {
     // принадлежит дереву (`secrets-named-providers`, design.md, «Risks»).
     atomicWrite(path, UNMASKED_STEP_FILES.has(name) ? content : this.masker.mask(content));
     return path;
+  }
+
+  /**
+   * Записать внешнее действие шага, не совершённое в shadow-режиме. Идёт через
+   * `writeStepFile`, то есть через маскировщик: промпт и `input` могли нести
+   * значение секрета.
+   */
+  writeActionRecord(stepDirPath: string, n: number, record: unknown): string {
+    return this.writeStepJson(stepDirPath, basename(actionFilePath(stepDirPath, n)), record);
   }
 
   writeStepJson(dir: string, name: string, value: unknown): string {
