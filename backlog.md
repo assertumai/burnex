@@ -414,12 +414,15 @@ claimed_by: run:2026-10-29T10-28-15Z-0d0755
 
 ## model-price-catalog
 
-status: todo
+status: failed
 title: Каталог цен моделей — оценка стоимости, когда бэкенд цену не сообщил
 why: `budget.cost` не действует, если бэкенд не сообщил цену ни разу за прогон (`docs/pipeline-format.md`, «Деньги»); Codex и подписочные CLI часто её не дают, и денежный потолок молча выключен. Каталог даёт оценку по токенам и источник цены в отчёте.
 done_when: `src/builtin/prices/model-prices.json` поставляется с пакетом; цена попытки — `reported` из отчёта CLI, иначе `catalog` по токенам; источник виден в `stepcast usage` и в витрине; модель без цены по-прежнему не проверяется против `budget.cost`, и это сказано предупреждением на старте; тесты на оба источника.
 group: agent-selection
 source: docs/burnex-after-stepcast.md, раздел 3 «Каталог моделей и цены»
+started_at: 2026-10-29T11:06:16.826Z
+claimed_by: run:2026-10-29T11-06-14Z-e08b6f
+reason: заход до сведения дорожки не дошёл
 
 ## agent-policy-and-pipeline-agents
 
