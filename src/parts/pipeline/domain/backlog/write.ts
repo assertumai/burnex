@@ -81,3 +81,37 @@ export function withoutFields(text: string, slug: string, names: readonly string
 
   return result;
 }
+
+/**
+ * Вставить новый пункт и вернуть новый текст файла: сразу за пунктом `after`
+ * либо в конец. Остальной текст не трогается — ни порядок, ни пустые строки
+ * соседей, в отличие от пересборки файла из разобранных пунктов.
+ *
+ * Названный `after` обязан быть в тексте: вставка «куда-нибудь» при опечатке
+ * в слаге молча поставила бы пункт не туда, где его ждали.
+ */
+export function insertItem(
+  text: string,
+  slug: string,
+  fields: Readonly<Record<string, string>>,
+  after?: string,
+): string {
+  assertSingleLine('slug', slug);
+  const block = ['', `## ${slug}`, ''];
+  for (const [name, value] of Object.entries(fields)) {
+    assertSingleLine(name, value);
+    block.push(`${name}: ${value}`);
+  }
+
+  if (after === undefined) {
+    return `${text.replace(/\n*$/u, '')}\n${block.join('\n')}\n`;
+  }
+
+  const entry = parse(text).find((candidate) => candidate.slug === after);
+  if (entry === undefined) {
+    throw new StepcastError(`пункт «${after}» в очереди не найден`, { at: after });
+  }
+  const lines = text.split('\n');
+  lines.splice(entry.lastFieldLine + 1, 0, ...block);
+  return lines.join('\n');
+}

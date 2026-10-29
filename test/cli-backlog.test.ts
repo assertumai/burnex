@@ -1109,3 +1109,155 @@ describe('CLI: очередь под lock-файлом', () => {
     assert.equal(readFileSync(lock, 'utf8'), held);
   });
 });
+
+describe('CLI: stepcast backlog add', () => {
+  const NEW = ['--title', 'Новый', '--why', 'Затем', '--done-when', 'Готово'];
+
+  function queue(dir: string): string {
+    return readFileSync(join(dir, 'backlog.md'), 'utf8');
+  }
+
+  it('добавляет пункт в конец, прежний текст не меняется, list показывает его', async () => {
+    const dir = bed(item('first-item', COMPLETE), item('second-item', COMPLETE));
+    const before = queue(dir);
+
+    const result = await backlog(dir, ['add', 'new-item', ...NEW]);
+
+    assert.equal(result.code, ExitCode.ok, result.stderr);
+    const after = queue(dir);
+    assert.ok(after.startsWith(before.replace(/\n*$/u, '')));
+    assert.match(after, /\n## new-item\n\nstatus: todo\ntitle: Новый\nwhy: Затем\ndone_when: Готово\n$/u);
+    const listed = JSON.parse((await backlog(dir, ['list'])).stdout) as { slug: string }[];
+    assert.deepEqual(listed.map((entry) => entry.slug), ['first-item', 'second-item', 'new-item']);
+  });
+
+  it('--after ставит пункт сразу за названным, опциональные поля попадают в запись', async () => {
+    const dir = bed(item('first-item', COMPLETE), item('second-item', COMPLETE));
+    writeFileSync(join(dir, 'goal.md'), 'цель');
+
+    const result = await backlog(dir, [
+      'add', 'new-item', ...NEW,
+      '--after', 'first-item', '--group', 'grp', '--track', 'express', '--needs', 'second-item', '--goal', 'goal.md',
+    ]);
+
+    assert.equal(result.code, ExitCode.ok, result.stderr);
+    const listed = JSON.parse((await backlog(dir, ['list'])).stdout) as Record<string, unknown>[];
+    assert.deepEqual(listed.map((entry) => entry['slug']), ['first-item', 'new-item', 'second-item']);
+    assert.equal(listed[1]?.['group'], 'grp');
+    assert.equal(listed[1]?.['track'], 'express');
+    assert.deepEqual(listed[1]?.['needs'], ['second-item']);
+    assert.equal(listed[1]?.['goal'], 'goal.md');
+  });
+
+  it('--status postponed записывает статус, и pick пункт не берёт', async () => {
+    const dir = bed();
+
+    const added = await backlog(dir, ['add', 'new-item', ...NEW, '--status', 'postponed']);
+    const picked = await backlog(dir, ['pick']);
+
+    assert.equal(added.code, ExitCode.ok, added.stderr);
+    assert.match(queue(dir), /status: postponed/u);
+    assert.deepEqual(JSON.parse(picked.stdout), []);
+  });
+
+  it('отказы кодом 2 оставляют файл нетронутым', async () => {
+    const dir = bed(item('first-item', COMPLETE));
+    writeFileSync(join(dir, 'archived.md'), `# Архив\n\n${item('old-item', { ...COMPLETE, status: 'done' })}`);
+    const before = queue(dir);
+    const cases: readonly (readonly string[])[] = [
+      ['first-item', ...NEW],
+      ['old-item', ...NEW],
+      ['Bad_Slug', ...NEW],
+      ['new-item', '--why', 'з', '--done-when', 'к'],
+      ['new-item', '--title', '', '--why', 'з', '--done-when', 'к'],
+      ['new-item', ...NEW, '--needs', 'ghost'],
+      ['new-item', ...NEW, '--track', 'Не Слаг'],
+      ['new-item', ...NEW, '--goal', 'нет-файла.md'],
+      ['new-item', ...NEW, '--status', 'done'],
+      ['new-item', ...NEW, '--after', 'ghost'],
+      ['new-item', '--title', 'две\nстроки', '--why', 'з', '--done-when', 'к'],
+    ];
+
+    for (const argv of cases) {
+      const result = await backlog(dir, ['add', ...argv]);
+      assert.equal(result.code, ExitCode.configError, argv.join(' '));
+      assert.equal(queue(dir), before, argv.join(' '));
+    }
+    assert.deepEqual(readdirSync(dir).sort(), ['archived.md', 'backlog.md']);
+  });
+
+  it('без слага отказывает', async () => {
+    const dir = bed();
+
+    const result = await backlog(dir, ['add', ...NEW]);
+
+    assert.equal(result.code, ExitCode.configError);
+  });
+
+  it('зависимость на архивный пункт допустима', async () => {
+    const dir = bed();
+    writeFileSync(join(dir, 'archived.md'), `# Архив\n\n${item('old-item', { ...COMPLETE, status: 'done' })}`);
+
+    const result = await backlog(dir, ['add', 'new-item', ...NEW, '--needs', 'old-item']);
+
+    assert.equal(result.code, ExitCode.ok, result.stderr);
+  });
+
+  it('два одновременных add несут оба пункта', async () => {
+    const cliBin = join(findPackageRoot(fileURLToPath(new URL('.', import.meta.url))), 'dist', 'src', 'bin.js');
+    const spawnAdd = (cwd: string, slug: string): Promise<number | null> =>
+      new Promise((done) => {
+        const child = spawn(process.execPath, [cliBin, 'backlog', 'add', slug, ...NEW], { cwd, stdio: 'ignore' });
+        child.on('exit', (code) => done(code));
+      });
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      const dir = bed(item('first-item', COMPLETE));
+
+      const codes = await Promise.all([spawnAdd(dir, 'one-new'), spawnAdd(dir, 'two-new')]);
+
+      assert.deepEqual(codes, [0, 0]);
+      const slugs = (JSON.parse((await backlog(dir, ['list'])).stdout) as { slug: string }[]).map((e) => e.slug);
+      assert.deepEqual(slugs.sort(), ['first-item', 'one-new', 'two-new']);
+    }
+  });
+});
+
+describe('CLI: stepcast backlog show', () => {
+  it('печатает запись пункта и не правит файл', async () => {
+    const dir = bed(item('first-item', COMPLETE), item('second-item', { ...COMPLETE, track: 'express' }));
+    const before = readFileSync(join(dir, 'backlog.md'), 'utf8');
+
+    const result = await backlog(dir, ['show', 'second-item']);
+
+    assert.equal(result.code, ExitCode.ok, result.stderr);
+    const listed = JSON.parse((await backlog(dir, ['list'])).stdout) as unknown[];
+    assert.deepEqual(JSON.parse(result.stdout), listed[1]);
+    assert.equal(readFileSync(join(dir, 'backlog.md'), 'utf8'), before);
+  });
+
+  it('--run-dir пишет ту же запись в item-a.json', async () => {
+    const dir = bed(item('first-item', COMPLETE));
+    const runDir = join(dir, 'run', 'nested');
+
+    const result = await backlog(dir, ['show', 'first-item', '--run-dir', runDir]);
+
+    assert.equal(result.code, ExitCode.ok, result.stderr);
+    assert.deepEqual(JSON.parse(readFileSync(join(runDir, 'item-a.json'), 'utf8')), JSON.parse(result.stdout));
+  });
+
+  it('отсутствующий слаг: код 2, item-a.json не создаётся', async () => {
+    const dir = bed(item('first-item', COMPLETE));
+    const runDir = join(dir, 'run');
+
+    const result = await backlog(dir, ['show', 'ghost', '--run-dir', runDir]);
+
+    assert.equal(result.code, ExitCode.configError);
+    assert.equal(existsSync(join(runDir, 'item-a.json')), false);
+  });
+
+  it('без слага отказывает', async () => {
+    const dir = bed(item('first-item', COMPLETE));
+
+    assert.equal((await backlog(dir, ['show'])).code, ExitCode.configError);
+  });
+});

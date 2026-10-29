@@ -85,15 +85,24 @@ const HELP_TEXT = `ошибка: Не указана команда
       --foreground — держать сервер в текущем терминале, не отсоединяя его
   stepcast down — остановить витрину
   stepcast usage <run> — показать расход прогона по работам, шагам и попыткам
-  stepcast backlog <action> <slug> — вести очередь улучшений backlog.md: list|pick|finish|settle, см. docs/backlog.md
+  stepcast backlog <action> <slug> — вести очередь улучшений backlog.md: list|pick|finish|settle|add|show, см. docs/backlog.md
       --file — путь к файлу очереди, по умолчанию backlog.md в рабочем каталоге
       --slots — pick: сколько пунктов взять за раз, по умолчанию 1
       --lanes — pick: раздать по дорожкам, имена через запятую — a,b
       --only — pick: взять именно этот пункт по слагу, а не первый свободный по очерёдности
       --stale-hours — pick: порог давности зависшего in_progress в часах, по умолчанию 6; для пунктов без владельца или с владельцем, о котором не судить
-      --run-dir — pick --lanes: каталог для файлов item-<дорожка>.json на каждую заполненную дорожку; settle: тот же каталог, обязателен
+      --run-dir — pick --lanes: каталог для файлов item-<дорожка>.json на каждую заполненную дорожку; settle: тот же каталог, обязателен; show: записать пункт в item-a.json этого каталога
       --owner — pick: записать владельца пункта run:<id прогона>; finish: проставить исход, только если пункт не забран другим прогоном
-      --status — finish: исход done либо failed
+      --status — finish: исход done либо failed; add: статус нового пункта, todo (по умолчанию) либо postponed
+      --title — add: заголовок пункта, обязателен
+      --why — add: зачем пункт нужен, обязателен
+      --done-when — add: по чему пункт признаётся выполненным, обязателен
+      --group — add: слаг группы смежности
+      --track — add: метка веса, например express
+      --needs — add: слаги зависимостей через запятую
+      --goal — add: путь файла цели от каталога очереди
+      --details — add: пути файлов подробностей через запятую
+      --after — add: поставить пункт сразу за этим пунктом, по умолчанию в конец
       --reason — finish --status failed: причина отказа
   stepcast knowledge <action> — читать и проверять память репозитория: index|select|check|write, см. docs/knowledge.md
       --scope — select: области через запятую — src/**,test/**

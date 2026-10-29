@@ -10,7 +10,7 @@ export {
   type LockOwner,
   type LockWaitOptions,
 } from './lock.js';
-export { withFields, withoutFields } from './write.js';
+export { withFields, withoutFields, insertItem } from './write.js';
 export { moveWithin, moveBetween, withStatus, type MoveBetweenResult } from './move.js';
 export {
   statusResolver,

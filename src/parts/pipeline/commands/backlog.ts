@@ -8,7 +8,9 @@ import {
   isFree,
   isRunOwner,
   missingRefs,
+  archivedPathFor,
   finishItem,
+  insertItem,
   needsMet,
   parseBacklogFile,
   parseRunOwner,
@@ -42,7 +44,7 @@ import { PIPELINE_SERVICES } from '../services.js';
 import type { ParsedArgs } from '../../../kernel/cli/args.js';
 
 /**
- * `stepcast backlog list|pick|finish` — очередь улучшений, не зависящая от
+ * `stepcast backlog list|pick|finish|settle|add|show` — очередь улучшений, не зависящая от
  * устройства проекта: ни конфигурация, ни `.stepcast/`, ни каталог прогона ей
  * не нужны, только путь к файлу очереди. Подкоманда разбирается первым
  * позиционным аргументом самой командой: `parseArgs` вложенных команд не
@@ -50,7 +52,7 @@ import type { ParsedArgs } from '../../../kernel/cli/args.js';
  */
 
 const KEBAB_CASE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
-const ACTIONS = ['list', 'pick', 'finish', 'settle'] as const;
+const ACTIONS = ['list', 'pick', 'finish', 'settle', 'add', 'show'] as const;
 
 /** Единая причина `settle`: различимые причины несведения проставляет само сведение дорожек. */
 const SETTLE_REASON = 'заход до сведения дорожки не дошёл';
@@ -157,6 +159,10 @@ export function runBacklogCommand(
       return runFinish(args, slug, file, cwd, writeErr);
     case 'settle':
       return runSettle(args, file, cwd, write);
+    case 'add':
+      return runAdd(args, slug, file);
+    case 'show':
+      return runShow(args, slug, file, cwd, write);
     default:
       throw new StepcastError(
         `неизвестное действие «${action ?? ''}» у команды backlog, ожидалось одно из ${ACTIONS.join(', ')}`,
@@ -512,6 +518,127 @@ function runFinish(
   return ExitCode.ok;
 }
 
+/** Статусы, с которыми пункт можно завести: исход и работу проставляет петля, не автор. */
+const ADD_STATUSES = ['todo', 'postponed'] as const;
+
+/**
+ * Значение ключа `add`. Пустая строка — не «нет ключа», а ошибка вызова:
+ * молча выбросить её значило бы завести пункт не с теми полями, что просили.
+ */
+function addValue(flags: ParsedArgs['flags'], name: string, required: boolean): string | undefined {
+  const raw = flags[name];
+  if (raw === undefined) {
+    if (required) throw new StepcastError(`add требует ключа --${name}`);
+    return undefined;
+  }
+  if (typeof raw !== 'string' || raw.trim() === '') {
+    throw new StepcastError(`ключ --${name} требует непустого значения`);
+  }
+  return raw.trim();
+}
+
+/**
+ * `backlog add` — завести пункт. Чтение, все проверки и запись идут под одним
+ * lock'ом очереди, а запись — только когда итоговый файл разобран теми же
+ * читателями, что и остальные писатели: пункт, который `list` потом не
+ * прочтёт, заблокировал бы очередь целиком.
+ */
+function runAdd(args: ParsedArgs, slug: string | undefined, file: string): ExitCodeValue {
+  if (slug === undefined) {
+    throw new StepcastError('add требует слаг пункта первым позиционным аргументом');
+  }
+  if (!KEBAB_CASE.test(slug)) {
+    throw new StepcastError(`слаг «${slug}» не является слагом в kebab-case`);
+  }
+
+  const flags = args.flags;
+  const status = stringFlag(flags, 'status') ?? 'todo';
+  if (!(ADD_STATUSES as readonly string[]).includes(status)) {
+    throw new StepcastError(`ключ --status у add принимает ${ADD_STATUSES.join(' либо ')}, получено «${status}»`);
+  }
+  const after = addValue(flags, 'after', false);
+  const fields: Record<string, string> = { status };
+  for (const [flag, field, required] of [
+    ['title', 'title', true],
+    ['group', 'group', false],
+    ['track', 'track', false],
+    ['needs', 'needs', false],
+    ['goal', 'goal', false],
+    ['details', 'details', false],
+    ['why', 'why', true],
+    ['done-when', 'done_when', true],
+  ] as const) {
+    const value = addValue(flags, flag, required);
+    if (value !== undefined) fields[field] = value;
+  }
+
+  withBacklogLock(file, 'backlog add', () => {
+    const text = readBacklogFile(file);
+    const entries = parseBacklogFile(file, text);
+    if (entries.some((entry) => entry.slug === slug)) {
+      throw new StepcastError(`пункт «${slug}» уже есть в очереди`, { file, at: slug });
+    }
+    const archived = readArchivedEntries(file);
+    if (archived.some((entry) => entry.slug === slug)) {
+      throw new StepcastError(`пункт «${slug}» уже есть в архиве очереди`, { file: archivedPathFor(file), at: slug });
+    }
+
+    let next: string;
+    try {
+      next = insertItem(text, slug, fields, after);
+    } catch (error) {
+      if (!(error instanceof StepcastError)) throw error;
+      throw new StepcastError(error.message, { file, ...(error.at === undefined ? {} : { at: error.at }), cause: error });
+    }
+    const added = parseBacklogFile(file, next);
+    checkNeeds(added, archived);
+    const created = added.find((entry) => entry.slug === slug);
+    const missing = created === undefined ? [] : missingRefs(created, dirname(file));
+    if (missing.length > 0) {
+      throw new StepcastError(`пункт «${slug}» назвал материалы, которых нет: ${missing.join(', ')}`, {
+        file,
+        at: slug,
+        hint: `пути отсчитываются от каталога очереди ${dirname(file)}`,
+      });
+    }
+    writeBacklogFile(file, next);
+  });
+  return ExitCode.ok;
+}
+
+/**
+ * `backlog show` — запись одного пункта `backlog.md`. Очередь не правится и не
+ * блокируется: это чтение, как `list`. Файл дорожки пишется после успешного
+ * поиска, чтобы отказ не оставил `item-a.json`, который сведение приняло бы
+ * за взятый пункт.
+ */
+function runShow(
+  args: ParsedArgs,
+  slug: string | undefined,
+  file: string,
+  cwd: string,
+  write: (line: string) => void,
+): ExitCodeValue {
+  if (slug === undefined) {
+    throw new StepcastError('show требует слаг пункта первым позиционным аргументом');
+  }
+  const entries = parseBacklogFile(file, readBacklogFile(file));
+  const found = entries.find((entry) => entry.slug === slug);
+  if (found === undefined) {
+    throw new StepcastError(`пункт «${slug}» в очереди не найден`, { file, at: slug });
+  }
+  const json = JSON.stringify(toRecord(found), null, 2);
+
+  const declaredRunDir = stringFlag(args.flags, 'run-dir');
+  if (declaredRunDir !== undefined) {
+    const runDir = resolvePath(cwd, declaredRunDir);
+    prepareRunDir(runDir);
+    atomicWrite(join(runDir, 'item-a.json'), `${json}\n`);
+  }
+  write(json);
+  return ExitCode.ok;
+}
+
 /**
  * `backlog settle` — закрытие захода: каждому пункту, взятому в прогон
  * (файлы `item-<дорожка>.json` каталога прогона, см. `parts/pipeline/domain/lanes/item.ts`) и
@@ -596,7 +723,7 @@ export const row = commandRow(
   {
     name: 'backlog',
     spec: {
-      description: 'вести очередь улучшений backlog.md: list|pick|finish|settle, см. docs/backlog.md',
+      description: 'вести очередь улучшений backlog.md: list|pick|finish|settle|add|show, см. docs/backlog.md',
       positional: ['action', 'slug'],
       flags: {
         file: { kind: 'string', description: 'путь к файлу очереди, по умолчанию backlog.md в рабочем каталоге' },
@@ -614,14 +741,26 @@ export const row = commandRow(
         'run-dir': {
           kind: 'string',
           description:
-            'pick --lanes: каталог для файлов item-<дорожка>.json на каждую заполненную дорожку; settle: тот же каталог, обязателен',
+            'pick --lanes: каталог для файлов item-<дорожка>.json на каждую заполненную дорожку; settle: тот же каталог, обязателен; show: записать пункт в item-a.json этого каталога',
         },
         owner: {
           kind: 'string',
           description:
             'pick: записать владельца пункта run:<id прогона>; finish: проставить исход, только если пункт не забран другим прогоном',
         },
-        status: { kind: 'string', description: 'finish: исход done либо failed' },
+        status: {
+          kind: 'string',
+          description: 'finish: исход done либо failed; add: статус нового пункта, todo (по умолчанию) либо postponed',
+        },
+        title: { kind: 'string', description: 'add: заголовок пункта, обязателен' },
+        why: { kind: 'string', description: 'add: зачем пункт нужен, обязателен' },
+        'done-when': { kind: 'string', description: 'add: по чему пункт признаётся выполненным, обязателен' },
+        group: { kind: 'string', description: 'add: слаг группы смежности' },
+        track: { kind: 'string', description: 'add: метка веса, например express' },
+        needs: { kind: 'string', description: 'add: слаги зависимостей через запятую' },
+        goal: { kind: 'string', description: 'add: путь файла цели от каталога очереди' },
+        details: { kind: 'string', description: 'add: пути файлов подробностей через запятую' },
+        after: { kind: 'string', description: 'add: поставить пункт сразу за этим пунктом, по умолчанию в конец' },
         reason: { kind: 'string', description: 'finish --status failed: причина отказа' },
       },
     },

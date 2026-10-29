@@ -357,13 +357,15 @@ started_at: 2026-10-29T07:00:42.355Z
 
 ## backlog-add-show-commands
 
-status: todo
+status: done
 title: Команды `backlog add` и `backlog show`
 why: Пункт заводится только правкой файла руками, и агент петли, нашедший кандидата, записать его не может; `show` нужен диспетчеру, чтобы прочитать взятый пункт без правки очереди.
 done_when: `stepcast backlog add <slug> --title --why --done-when [--group] [--track] [--needs] [--goal] [--details] [--status todo|postponed] [--after slug]` добавляет пункт под lock'ом, все проверки до записи; `backlog show <slug> [--run-dir]` печатает пункт и с `--run-dir` пишет `item-a.json`; `docs/backlog.md` дополнен; тесты CLI.
 group: backlog-queue
 track: express
 source: docs/burnex-after-stepcast.md, раздел 5 «Команды»
+started_at: 2026-10-29T07:43:42.507Z
+claimed_by: run:2026-10-29T07-43-40Z-f1003c
 
 ## merge-lanes-onto-branch-tip
 

@@ -286,6 +286,8 @@ stepcast backlog list                                     [--file backlog.md]
 stepcast backlog pick    [--slots N | --lanes a,b] [--only слаг] [--owner run:<id>] [--stale-hours 6] [--run-dir путь] [--file backlog.md]
 stepcast backlog finish  <slug> --status done|failed [--reason …] [--owner run:<id>] [--file backlog.md]
 stepcast backlog settle  --run-dir путь                                      [--file backlog.md]
+stepcast backlog add     <slug> --title … --why … --done-when … [--group …] [--track …] [--needs a,b] [--goal путь] [--details пути] [--status todo|postponed] [--after слаг] [--file backlog.md]
+stepcast backlog show    <slug> [--run-dir путь]                             [--file backlog.md]
 ```
 
 Файл очереди — единственный вход команды: `--file`, по умолчанию
@@ -408,6 +410,39 @@ stderr печатается слаг и владелец, а команда за
 предком по `resumed_from` (продолжение дописывает исход работы источника);
 пункт без `claimed_by` правится. Сперва проверяется уже проставленный исход,
 затем владелец.
+
+### `add`
+
+```
+stepcast backlog add <slug> --title "…" --why "…" --done-when "…" [--after <slug>]
+```
+
+Заводит пункт, чтобы агент петли, нашедший кандидата, мог записать его, не
+правя файл руками. `--title`, `--why` и `--done-when` обязательны; `--group`,
+`--track`, `--needs`, `--goal` и `--details` необязательны и имеют ту же форму,
+что поля одноимённого пункта. `--status` принимает `todo` (по умолчанию) или
+`postponed`; исход и работу проставляет петля, не автор. Пункт встаёт сразу за
+пунктом `--after`, а без ключа — в конец файла; остальной текст файла не
+меняется.
+
+Цикл «прочитать → проверить → записать» идёт под lock'ом очереди, и все
+проверки предшествуют записи: слаг в kebab-case и свободный как в
+`backlog.md`, так и в `archived.md`; значения непустые и однострочные; форма
+полей — как у разбора; каждый слаг `needs` называет пункт очереди или архива,
+цикла нет; файлы `goal` и `details` существуют; `--after` называет пункт
+`backlog.md`. Любой отказ — код `2` с причиной, файл очереди не тронут.
+
+### `show`
+
+```
+stepcast backlog show <slug> [--run-dir <каталог>]
+```
+
+Печатает запись пункта `backlog.md` в той форме, что и элемент вывода `list`.
+С `--run-dir` та же запись пишется ещё и в `item-a.json` этого каталога
+(создаётся при необходимости): так диспетчер читает взятый пункт, не листая
+всю очередь. Очередь не правится и не блокируется. Слаг, которого нет в
+`backlog.md`, — отказ с кодом `2`, и `item-a.json` при этом не создаётся.
 
 ### `settle`
 
@@ -539,7 +574,7 @@ stepcast backlog pick --lanes a,b --run-dir путь | stepcast project repos [-
 Атомарная подмена файла защищает читателя от половины файла, но не писателя от
 писателя: между чтением и записью соседний процесс успевает записать своё. Поэтому
 каждый цикл «прочитать → поправить → записать» над `backlog.md` и `archived.md` —
-`backlog pick`, `finish`, `settle`, `merge-lanes` и перенос или правка на доске —
+`backlog pick`, `finish`, `settle`, `add`, `merge-lanes` и перенос или правка на доске —
 идёт под lock-файлом очереди.
 
 **Где лежит.** `stepcast-backlog.lock` в общем каталоге git
@@ -550,7 +585,7 @@ stepcast backlog pick --lanes a,b --run-dir путь | stepcast project repos [-
 
 **Что в нём записано.** JSON `{pid, host, command, acquired_at}`: номер процесса,
 имя машины, писатель (`backlog pick`, `backlog finish`, `backlog settle`,
-`merge-lanes`, `ui scrum move`, `ui scrum edit`) и время захвата ISO 8601.
+`backlog add`, `merge-lanes`, `ui scrum move`, `ui scrum edit`) и время захвата ISO 8601.
 
 **Ожидание.** Занятый lock опрашивается каждые 50 мс; через 10 с писатель
 отказывает с кодом `2`, называя путь lock-файла и владельца, и файлы очереди не
@@ -601,7 +636,9 @@ stepcast backlog pick --lanes a,b --run-dir путь | stepcast project repos [-
 оставляет файл в промежуточном состоянии) и точечна: существующее поле
 переписывается на своей строке, новое поле дописывается сразу за
 последним полем своего пункта. Строки остальных пунктов, преамбула и
-порядок пунктов в файле остаются посимвольно неизменными.
+порядок пунктов в файле остаются посимвольно неизменными. `backlog add`
+вставляет новый пункт целым блоком — за названным пунктом либо в конец, — не
+переписывая соседей.
 
 **Преамбула `backlog.md` этого репозитория продолжает дублировать формат.**
 Нормативное описание — `docs/backlog.md`, но вводный текст самого файла
