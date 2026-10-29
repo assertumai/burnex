@@ -9,7 +9,7 @@ import { describe, it } from 'node:test';
  * design.md `user-decision-steps`, решение 12) закреплена дважды: правилом
  * линта (`eslint.config.js`) и здесь. Линт решает построчно и не разворачивает
  * `**`-паттерн заранее — этот тест перечисляет модули на диске, так что новый
- * файл `src/parts/backends/codex/**`, `src/parts/backends/cursor/**` или
+ * файл `src/parts/backends/codex/**`, `src/parts/backends/cursor/**`, `src/parts/backends/copilot/**` или
  * `src/parts/pipeline/steps/decision/**`
  * проверяется без отдельной правки теста, а не только когда кто-то напишет
  * нарушающий импорт.
@@ -20,7 +20,7 @@ import { describe, it } from 'node:test';
  * из нескольких файлов (манифест отдельно от адаптера, поля отдельно от
  * исполнителя) остаётся законной раскладкой, а путь наружу, в ядро, отсюда не
  * ведёт никуда. Все каталоги — `src/parts/backends/codex`,
- * `src/parts/backends/cursor` и `src/parts/pipeline/steps/decision` — обходятся одним перечислением:
+ * `src/parts/backends/cursor`, `src/parts/backends/copilot` и `src/parts/pipeline/steps/decision` — обходятся одним перечислением:
  * граница у них одна и та же, а не её копии. `src/parts/backends/claude` в
  * перечне не значится (`source-tree-microkernel-layout`, Решение 8): адаптер
  * написан внутренними импортами и публичной поверхностью не пользуется —
@@ -44,6 +44,7 @@ const repoRoot = fileURLToPath(new URL('../../', import.meta.url));
 const surfaceRoots = [
   join(repoRoot, 'src/parts/backends/codex'),
   join(repoRoot, 'src/parts/backends/cursor'),
+  join(repoRoot, 'src/parts/backends/copilot'),
   join(repoRoot, 'src/parts/pipeline/steps/decision'),
 ];
 const pluginModule = resolve(repoRoot, 'src/plugin/index.ts');

@@ -1,4 +1,4 @@
-import type { AgentInvocation, BackendAdapter, BackendCapabilities, LaunchSpec } from './types.js';
+import type { AgentInvocation, BackendAdapter, BackendCapabilities, BackendEvent, LaunchSpec } from './types.js';
 import { createClaudeAdapter } from '../../backends/claude/adapter.js';
 
 /**
@@ -22,6 +22,11 @@ export interface FakeBackendOptions {
    * запуска этого бэкенда, с нуля.
    */
   readonly lines: readonly string[] | ((invocationIndex: number) => readonly string[]);
+  /**
+   * Свой разбор строки вместо разбора Claude — для событий, которых его поток
+   * не даёт (`text` текстового CLI).
+   */
+  readonly parseLine?: (line: string) => BackendEvent;
   /** Код возврата. Функцией — по тому же номеру запуска, что и `lines`. */
   readonly exitCode?: number | ((invocationIndex: number) => number);
   /**
@@ -112,7 +117,7 @@ export function createFakeBackend(options: FakeBackendOptions): FakeBackend {
         stdin: invocation.prompt,
       };
     },
-    parseLine: (line) => parser.parseLine(line),
+    parseLine: options.parseLine ?? ((line) => parser.parseLine(line)),
   };
 
   return { adapter, invocations };

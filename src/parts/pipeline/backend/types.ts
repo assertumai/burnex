@@ -137,6 +137,14 @@ export type BackendEvent =
       /** Отказы бэкенда в разрешении на вызов инструмента за эту попытку. */
       readonly permissionDenials?: readonly PermissionDenial[];
     }
+  /**
+   * Кусок текстового ответа: одна строка stdout CLI, который печатает простой
+   * текст, а не поток записей. Движок копит куски попытки и склеивает их через
+   * перевод строки, отсекая пустые куски по краям; `result` с текстом главнее. Копить строки самому адаптеру
+   * нельзя: экземпляр один на прогон и обслуживает одновременные шаги, их
+   * строки перемешались бы.
+   */
+  | { readonly kind: 'text'; readonly text: string }
   | { readonly kind: 'unparsed'; readonly line: string }
   | { readonly kind: 'ignored' }
   | {

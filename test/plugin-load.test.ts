@@ -788,3 +788,77 @@ describe('cursor-backend: загрузка плагина пакета', () => {
     assert.ok(existsSync(fileURLToPath(new URL('../../dist/src/parts/backends/cursor/index.js', import.meta.url))));
   });
 });
+
+describe('copilot-backend: загрузка плагина пакета', () => {
+  const MODULE = fileURLToPath(new URL('../src/parts/backends/copilot/index.js', import.meta.url));
+
+  // Сценарий: «Плагин объявлен»
+  it('объявленный ключом plugins, плагин даёт адаптер copilot с честными умолчаниями и без списка моделей', async () => {
+    const place = bed();
+    writeFileSync(place.projectPath, `plugins: [${JSON.stringify(MODULE)}]\n`);
+    const { resolved, registry } = await resolveWithPlugins(
+      { cwd: place.root, home: place.home, globalPath: place.globalPath, projectPath: place.projectPath },
+      {},
+    );
+
+    assert.deepEqual(availableNames(registry, 'backends'), ['claude', 'copilot']);
+    assert.equal(registry.plugins[0]?.name, 'copilot');
+    const backend = resolved.config.backends.copilot;
+    assert.equal(backend?.command, 'copilot');
+    assert.equal(backend?.sessions, false);
+    assert.equal(backend?.structuredOutput, false);
+    assert.equal(backend?.strictPermissions, false);
+    assert.equal(backend?.mcp, false);
+    assert.equal(backend?.concurrency, 2);
+    assert.equal(backend?.defaultModel, undefined);
+    assert.deepEqual(resolved.provenance.get('backends.copilot.sessions'), { kind: 'plugin', name: 'copilot' });
+    assert.equal(registry.backends.get('copilot')?.models, undefined, 'перечня моделей у вклада нет');
+
+    const adapter = resolveAdapter('copilot', resolved.config, registry);
+    assert.deepEqual(adapter.capabilities, {
+      sessions: false,
+      sessionIdSource: 'backend',
+      structuredOutput: false,
+      strictPermissions: false,
+      mcp: false,
+      effort: false,
+      reportsCost: false,
+    });
+  });
+
+  it('включить конфигурацией возможность, которой у CLI нет, адаптер не даёт', async () => {
+    const place = bed();
+    writeFileSync(
+      place.projectPath,
+      `plugins: [${JSON.stringify(MODULE)}]\nbackends:\n  copilot: { sessions: true, mcp: true, structured_output: true, strict_permissions: true }\n`,
+    );
+    const { resolved, registry } = await resolveWithPlugins(
+      { cwd: place.root, home: place.home, globalPath: place.globalPath, projectPath: place.projectPath },
+      {},
+    );
+
+    const { capabilities } = resolveAdapter('copilot', resolved.config, registry);
+    assert.equal(capabilities.sessions, false);
+    assert.equal(capabilities.mcp, false);
+    assert.equal(capabilities.structuredOutput, false);
+    assert.equal(capabilities.strictPermissions, false);
+  });
+
+  // Сценарий: «Плагин не объявлен»
+  it('без объявления бэкенд copilot не существует', () => {
+    const place = bed();
+    const config = resolved(place, { global: 'backends:\n  copilot:\n    command: copilot\n' });
+    assert.throws(
+      () => resolveAdapter('copilot', config.config, builtinRegistry()),
+      (error: unknown) => error instanceof StepcastError && /не предоставлен ни встроенно, ни плагином/.test(error.message),
+    );
+  });
+
+  it('подпуть пакета ведёт на собранный модуль', () => {
+    const pkg = JSON.parse(readFileSync(fileURLToPath(new URL('../../package.json', import.meta.url)), 'utf8')) as {
+      exports: Record<string, string>;
+    };
+    assert.equal(pkg.exports['./backends/copilot'], './dist/src/parts/backends/copilot/index.js');
+    assert.ok(existsSync(fileURLToPath(new URL('../../dist/src/parts/backends/copilot/index.js', import.meta.url))));
+  });
+});

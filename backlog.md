@@ -539,13 +539,15 @@ claimed_by: run:2026-10-29T22-02-52Z-1a92c1
 
 ## backend-copilot-adapter
 
-status: todo
+status: done
 title: Плагин бэкенда GitHub Copilot CLI
 why: Копилот покрывает команды с подпиской GitHub; в burnex адаптер написан, но на живом CLI не проверен — здесь признаком выполненности должен быть живой прогон.
 done_when: Плагин `stepcast/backends/copilot`: запуск с `--allow-all`, без сессий, usage и списка моделей, что честно записано в capability; effort отклоняется как у Cursor; один живой прогон шага записан в документе изменения; тесты адаптера.
 group: backends
 needs: backend-cursor-adapter
 source: docs/burnex-after-stepcast.md, раздел 3 «Новые бэкенды»
+started_at: 2026-10-29T22:42:40.885Z
+claimed_by: run:2026-10-29T22-42-39Z-0f2522
 
 ## schedule-catchup-and-keep-awake
 

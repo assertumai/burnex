@@ -47,6 +47,7 @@ const TMPDIR_IMPORT = "import { tmpdir } from 'node:os';\n";
  */
 const CODEX_PROBE = 'src/parts/backends/codex/проба.ts';
 const CURSOR_PROBE = 'src/parts/backends/cursor/проба.ts';
+const COPILOT_PROBE = 'src/parts/backends/copilot/проба.ts';
 const DECISION_PROBE = 'src/parts/pipeline/steps/decision/проба.ts';
 
 /**
@@ -252,6 +253,20 @@ describe('eslint: запреты импорта действуют одновр�
     }
     for (const specifier of CODEX_SURFACE) {
       const messages = await restrictedImports(CURSOR_PROBE, importLine(specifier));
+      assert.deepEqual(messages, [], `${specifier}: ${messages.join('\n')}`);
+    }
+  });
+
+  it('плагины пакета: граница действует и на каталог copilot', async () => {
+    for (const specifier of CODEX_INTERNAL) {
+      const messages = await restrictedImports(COPILOT_PROBE, importLine(specifier));
+      assert.ok(
+        messages.some((message) => message.includes('src/plugin/index.ts')),
+        `${specifier}: ${messages.join('\n')}`,
+      );
+    }
+    for (const specifier of CODEX_SURFACE) {
+      const messages = await restrictedImports(COPILOT_PROBE, importLine(specifier));
       assert.deepEqual(messages, [], `${specifier}: ${messages.join('\n')}`);
     }
   });

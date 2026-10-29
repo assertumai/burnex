@@ -32,7 +32,12 @@ import { makeProject } from './helpers.js';
 import { resolveConfig } from '../src/parts/pipeline/config/resolve.js';
 import type { BackendConfig, Config } from '../src/parts/pipeline/config/resolve.js';
 import type { AgentStep } from '../src/parts/pipeline/document/model.js';
-import type { AgentInvocation, BackendAdapter, BackendCapabilities } from '../src/parts/pipeline/backend/types.js';
+import type {
+  AgentInvocation,
+  BackendAdapter,
+  BackendCapabilities,
+  BackendEvent,
+} from '../src/parts/pipeline/backend/types.js';
 import { tempDir } from './tmp.js';
 
 const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
@@ -2516,5 +2521,47 @@ describe('model-price-catalog: действующая цена в расходе
       false,
     );
     assert.equal(createFakeBackend({ name: 'codex', lines: [] }).adapter.name, 'codex');
+  });
+});
+
+describe('agent-backend: событие text текстового CLI', () => {
+  // Строка с «=» в начале — итоговая запись result, остальные — куски text.
+  const parseTextLine = (line: string): BackendEvent =>
+    line.startsWith('=') ? { kind: 'result', text: line.slice(1) } : { kind: 'text', text: line };
+
+  async function stepText(lines: readonly string[]): Promise<string | undefined> {
+    const dir = tempDir('backend-');
+    const backend = createFakeBackend({ lines, parseLine: parseTextLine });
+    const result = await executeAgentStep({
+      step: makeAgentStep(),
+      adapter: backend.adapter,
+      cwd: dir,
+      stepDir: dir,
+      sessions: createSessionRegistry(),
+      buildPrompt: () => 'промпт',
+      env: () => ({ PATH: process.env.PATH ?? '' }),
+    });
+    assert.equal(result.status, 'success');
+    return result.last?.text;
+  }
+
+  it('куски склеиваются через перевод строки, завершающие пустые отсекаются', async () => {
+    assert.equal(await stepText(['Итог:', '', 'готово', '', '']), 'Итог:\n\nготово');
+  });
+
+  it('ведущие пустые куски отсекаются так же, как завершающие', async () => {
+    assert.equal(await stepText(['', '  ', 'Итог:', '', 'готово', '']), 'Итог:\n\nготово');
+  });
+
+  it('одни пустые куски — текста нет', async () => {
+    assert.equal(await stepText(['', '']), undefined);
+  });
+
+  it('result с текстом главнее кусков', async () => {
+    assert.equal(await stepText(['кусок', '=итог']), 'итог');
+  });
+
+  it('ни кусков, ни result — текста нет', async () => {
+    assert.equal(await stepText([]), undefined);
   });
 });

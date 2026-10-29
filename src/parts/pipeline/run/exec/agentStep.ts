@@ -259,6 +259,9 @@ export async function executeAgentStep(options: AgentStepOptions): Promise<Agent
       let usage = emptyUsage(adapter.name, resolvedModel, 0);
       const seenUsageMessageIds = new Set<string>();
       let text: string | undefined;
+      // Куски `text` текстового CLI; итоговый текст из них собирается после
+      // выхода процесса и только если ни один `result` текста не дал.
+      const pieces: string[] = [];
       let structured: unknown;
       let backendInit: Record<string, unknown> | undefined;
       let mcpServerStatus: readonly McpServerStatus[] | undefined;
@@ -316,6 +319,9 @@ export async function executeAgentStep(options: AgentStepOptions): Promise<Agent
               options.onPermissionDenied?.(plan, denial.tool, denial.input);
             }
             break;
+          case 'text':
+            pieces.push(event.text);
+            break;
           case 'unparsed':
             options.onUnparsed?.(event.line);
             break;
@@ -366,6 +372,13 @@ export async function executeAgentStep(options: AgentStepOptions): Promise<Agent
         : await options.backendSlots.run(adapter.name, runBackendProcess);
 
       if (carry.trim() !== '') handleLine(carry);
+      if (text === undefined) {
+        // Пустые куски по краям — отступы вывода CLI, а не часть ответа:
+        // отсекаются с обеих сторон, внутренние (между абзацами) остаются.
+        const first = pieces.findIndex((piece) => piece.trim() !== '');
+        const last = pieces.findLastIndex((piece) => piece.trim() !== '');
+        if (first !== -1) text = pieces.slice(first, last + 1).join('\n');
+      }
       usage = priceUsage({ ...usage, wallclock_ms: process_.wallclockMs }, options.priceCatalog);
       // Длительность известна только после завершения процесса, а по ходу
       // потока её в событиях нет. Без этой записи учёт работы и шага остаётся
