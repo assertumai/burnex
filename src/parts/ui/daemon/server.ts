@@ -18,7 +18,14 @@ import {
 import type { ActiveScreen, RequestEnv } from '../screens/registry.js';
 import { isApiPath, isPluginPath, isSafeSegment, isSharedPath, isWidgetPath } from '../routes.js';
 import { createWatcher, type Watcher } from './watcher.js';
-import { launchDecide as defaultLaunchDecide, launchRun as defaultLaunchRun, type LaunchDecideFn, type LaunchRunFn } from '../runLaunch.js';
+import {
+  launchDecide as defaultLaunchDecide,
+  launchResume as defaultLaunchResume,
+  launchRun as defaultLaunchRun,
+  type LaunchDecideFn,
+  type LaunchResumeFn,
+  type LaunchRunFn,
+} from '../runLaunch.js';
 import {
   createWidgetCompiler,
   errorModuleText,
@@ -96,6 +103,11 @@ export interface UiServerOptions {
    * нужна проверкам по той же причине, что и у `launchRun`.
    */
   readonly launchDecide?: LaunchDecideFn;
+  /**
+   * Возобновление по `POST /api/run/resume` — отсоединённый `stepcast resume`;
+   * подмена нужна проверкам по той же причине, что и у `launchRun`.
+   */
+  readonly launchResume?: LaunchResumeFn;
 }
 
 export interface UiServer {
@@ -466,6 +478,7 @@ export function createUiServer(options: UiServerOptions): Promise<UiServer> {
       activeScreens,
       launchRun: options.launchRun ?? defaultLaunchRun,
       launchDecide: options.launchDecide ?? defaultLaunchDecide,
+      launchResume: options.launchResume ?? defaultLaunchResume,
     };
     await handler(req, res, env);
   }

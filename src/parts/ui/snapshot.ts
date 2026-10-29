@@ -3,6 +3,7 @@ import { join, relative } from 'node:path';
 
 import {
   findStepDir,
+  isRunAlive,
   readManifestSoft,
   readStatusSoft,
   readUsageSoft,
@@ -194,6 +195,12 @@ export interface RunSnapshot {
    * несёт (Решение 5).
    */
   readonly filesGone: boolean;
+  /**
+   * Процесс прогона жив (`isRunAlive`). Ключ есть только у живого: по нему
+   * страница не предлагает возобновление, которое демон всё равно откажет
+   * (`409`). Статус `running` для этого мало — брошенный прогон остаётся в нём.
+   */
+  readonly alive?: true;
   /** Итог прогона — только у снимка, собранного по записи (`filesGone: true`). */
   readonly total?: UsageSnapshot;
   /**
@@ -510,6 +517,7 @@ export function buildSnapshot(paths: RunPaths, projectKeyValue: string): RunSnap
     ),
     swept,
     filesGone: false,
+    ...(isRunAlive(paths) ? { alive: true as const } : {}),
     ...(summary?.cost_catalog_as_of === undefined ? {} : { costCatalogAsOf: summary.cost_catalog_as_of }),
     ...(problem === undefined ? {} : { problem }),
   };

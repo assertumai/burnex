@@ -14,7 +14,7 @@ import {
   PageHeader,
   statusBadgeVariant,
 } from '@stepcast/ui';
-import { fetchRun, type JobSnapshot, type JournalProblem, type RunSnapshot, type StepSnapshot } from '../api';
+import { fetchRun, resumeRun, type JobSnapshot, type JournalProblem, type RunSnapshot, type StepSnapshot } from '../api';
 import { fmtDuration, fmtMoney, fmtSpan, fmtTime, fmtTokens } from '../format';
 import { Cost } from '../components/Cost';
 import { FileView } from '../components/FileView';
@@ -334,6 +334,61 @@ function Job({
   );
 }
 
+/**
+ * Возобновление с этой работы. Предстартовую проверку делает демон, поэтому
+ * отказ приходит ответом и остаётся рядом с кнопкой целой фразой; после
+ * принятия запроса прогон начинается позже, и кнопка говорит лишь, что он
+ * запущен.
+ */
+export interface ResumeNote {
+  readonly text: string;
+  readonly failed: boolean;
+}
+
+/** Нажатие кнопки как данные: отказ демона становится заметкой, а не исключением. */
+export async function requestResume(
+  address: string,
+  jobId: string,
+  resume: typeof resumeRun = resumeRun,
+): Promise<ResumeNote> {
+  try {
+    await resume({ run: address, from: jobId });
+    return { text: `Started a new run resumed from ${jobId}.`, failed: false };
+  } catch (cause) {
+    return { text: cause instanceof Error ? cause.message : String(cause), failed: true };
+  }
+}
+
+function ResumeFromJob({ address, jobId }: { readonly address: string; readonly jobId: string }): JSX.Element {
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState<ResumeNote | undefined>(undefined);
+
+  // Выбор другой работы — новый вопрос: ответ о прежней к ней не относится.
+  useEffect(() => setNote(undefined), [jobId]);
+
+  const resume = (): void => {
+    setBusy(true);
+    setNote(undefined);
+    void requestResume(address, jobId).then((result) => {
+      setBusy(false);
+      setNote(result);
+    });
+  };
+
+  return (
+    <div className="row">
+      <Button size="sm" variant="outline" disabled={busy} onClick={resume}>
+        Resume from this job
+      </Button>
+      {note === undefined ? null : (
+        <span className={note.failed ? 'desc resume-error' : 'desc'} role={note.failed ? 'alert' : 'status'}>
+          {note.text}
+        </span>
+      )}
+    </div>
+  );
+}
+
 function BackToRuns({ navigate }: { readonly navigate: (href: string) => void }): JSX.Element {
   return (
     <Button
@@ -492,6 +547,7 @@ export function RunDetail({
       ) : (
         <Card className="run-card">
           <CardContent>
+            {current.alive === true || current.filesGone ? null : <ResumeFromJob address={address} jobId={job.id} />}
             <Job address={address} job={job} asOf={current.costCatalogAsOf} navigate={navigate} />
           </CardContent>
         </Card>

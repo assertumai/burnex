@@ -1,8 +1,13 @@
 import { existsSync } from 'node:fs';
 
+import { z } from 'zod';
+
+import { resolveConfig } from '../../../pipeline/config/resolve.js';
 import { runPaths } from '../../../pipeline/run/journal/paths.js';
+import { isRunAlive, listProjects } from '../../../pipeline/run/journal/reader.js';
+import { planResume, readSourceRun } from '../../../pipeline/run/resumePlan.js';
 import { isStepcastError } from '../../../../kernel/errors.js';
-import { INVALID, readNonNegativeInt, sendJson } from '../../daemon/http.js';
+import { INVALID, readBody, readNonNegativeInt, sendJson } from '../../daemon/http.js';
 import { readJournalFile } from '../../file.js';
 import { parseRunAddress, snapshotOrRecord } from '../../runAddress.js';
 import { isSafeSegment } from '../../routes.js';
@@ -123,7 +128,79 @@ const handleStepOutput: ApiHandler = (req, res, env) => {
   }
 };
 
+const ResumeBodySchema = z.object({ run: z.string().min(1), from: z.string().min(1) }).strict();
+
+/**
+ * `POST /api/run/resume`: возобновление с выбранной работы. Демон проверяет
+ * запрос до порождения — отказ должен оказаться на кнопке, а `202` приходит
+ * раньше исполнения, — но файлов прогона не пишет: новый прогон с
+ * `resumed_from` создаёт порождённый `stepcast resume`, который перепроверит
+ * запрос по свежему состоянию.
+ */
+const handleResume: ApiHandler = async (req, res, env) => {
+  let body: string;
+  try {
+    body = await readBody(req);
+  } catch {
+    sendJson(res, 413, { error: 'Request body is too large' });
+    return;
+  }
+
+  let raw: unknown;
+  try {
+    raw = JSON.parse(body === '' ? '{}' : body) as unknown;
+  } catch {
+    sendJson(res, 400, { error: 'Request body is not valid JSON' });
+    return;
+  }
+
+  const parsed = ResumeBodySchema.safeParse(raw);
+  if (!parsed.success) {
+    sendJson(res, 400, { error: 'Request body does not match the format: run and from' });
+    return;
+  }
+
+  const address = parseRunAddress(parsed.data.run);
+  if (address === undefined) {
+    sendJson(res, 400, { error: 'run must look like <project>/<run>' });
+    return;
+  }
+
+  const paths = runPaths(env.runsRoot, address.key, address.runId);
+  if (!existsSync(paths.dir)) {
+    sendJson(res, 404, { error: `Run ${address.runId} not found` });
+    return;
+  }
+
+  if (isRunAlive(paths)) {
+    sendJson(res, 409, { error: 'The run is in progress: wait for it to finish before resuming' });
+    return;
+  }
+
+  const project = listProjects(env.runsRoot).find((entry) => entry.key === address.key);
+  if (project?.path === undefined) {
+    sendJson(res, 400, { error: `Project ${address.key} is unknown to the projects.json index` });
+    return;
+  }
+
+  try {
+    planResume({
+      cwd: project.path,
+      config: resolveConfig({ cwd: project.path }).config,
+      source: readSourceRun(paths),
+      from: parsed.data.from,
+    });
+  } catch (error) {
+    sendJson(res, 400, { error: isStepcastError(error) ? error.message : 'The run cannot be resumed from this job' });
+    return;
+  }
+
+  env.launchResume({ cwd: project.path, run: address.runId, from: parsed.data.from });
+  sendJson(res, 202, { ok: true });
+};
+
 export const row = screenRow(declaration.id, ['screens', 'api'], (ctx) => {
+  ctx.api.register('POST', '/api/run/resume', handleResume);
   ctx.screens.register(declaration);
   ctx.api.register('GET', '/api/run', handleSnapshot);
   ctx.api.register('GET', '/api/file', handleFile);

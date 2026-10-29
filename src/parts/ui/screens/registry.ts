@@ -9,7 +9,7 @@ import type { Kernel } from '../../../kernel/kernel.js';
 import type { KernelCache } from '../pipelines.js';
 import type { PluginsOverview } from '../plugins.js';
 import type { Watcher } from '../daemon/watcher.js';
-import type { LaunchDecideFn, LaunchRunFn } from '../runLaunch.js';
+import type { LaunchDecideFn, LaunchResumeFn, LaunchRunFn } from '../runLaunch.js';
 import type { ScreenDeclaration } from './declaration.js';
 
 export type { ScreenDeclaration, ScreenListing } from './declaration.js';
@@ -89,6 +89,11 @@ export interface RequestEnv {
    * проверенными значениями; демон в файлы прогонов по-прежнему не пишет.
    */
   readonly launchDecide: LaunchDecideFn;
+  /**
+   * Возобновление с выбранной работы — отсоединённый `stepcast resume --from`.
+   * Маршрут проверяет запрос до порождения; демон в журнал по-прежнему не пишет.
+   */
+  readonly launchResume: LaunchResumeFn;
 }
 
 export type ApiHandler = (req: IncomingMessage, res: ServerResponse, env: RequestEnv) => void | Promise<void>;

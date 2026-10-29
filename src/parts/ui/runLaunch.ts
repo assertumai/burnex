@@ -113,6 +113,39 @@ export const launchRun: LaunchRunFn = (options) => {
   child.unref();
 };
 
+export interface LaunchResumeOptions {
+  /** Корень проекта — рабочий каталог дочернего процесса. */
+  readonly cwd: string;
+  readonly run: string;
+  /** Работа, с которой возобновляется прогон (`--from`). */
+  readonly from: string;
+  readonly execPath?: string;
+  readonly onError?: (error: Error) => void;
+}
+
+export type LaunchResumeFn = (options: LaunchResumeOptions) => void;
+
+/**
+ * Породить `stepcast resume <run> --from <job>` отсоединённым процессом тем же
+ * приёмом, что `launchDecide`: новый прогон с `resumed_from` создаёт сама
+ * команда, демон журнал не пишет. Предстартовая проверка — в маршруте демона.
+ */
+export const launchResume: LaunchResumeFn = (options) => {
+  const argv = [binPath(), 'resume', options.run, '--from', options.from];
+
+  const child = spawn(options.execPath ?? process.execPath, argv, {
+    cwd: options.cwd,
+    detached: true,
+    stdio: 'ignore',
+  });
+  child.on('error', (error) => {
+    const report =
+      options.onError ?? ((cause: Error) => process.stderr.write(`stepcast resume не запустился: ${cause.message}\n`));
+    report(error);
+  });
+  child.unref();
+};
+
 export interface LaunchDecideOptions {
   /** Корень проекта — рабочий каталог дочернего процесса. */
   readonly cwd: string;

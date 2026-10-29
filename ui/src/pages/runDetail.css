@@ -8,6 +8,9 @@
 .run-card { margin-bottom: .8rem; }
 .run-card > .sc-card-content:first-child { margin-top: 0; }
 
+/* Отказ предстартовой проверки возобновления — рядом с кнопкой, не пропадает. */
+.resume-error { color: var(--sc-destructive, #b00020); }
+
 /* Короткий идентификатор в заголовке — тем же кеглем, что и в таблице,
    но не крупнее имени пайплайна рядом. */
 .sc-page-title .run-id { font-size: .85rem; font-weight: 500; }

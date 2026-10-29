@@ -516,13 +516,15 @@ claimed_by: run:2026-10-29T21-01-14Z-5a6475
 
 ## resume-from-dashboard-button
 
-status: todo
+status: done
 title: Кнопка «Resume from this job» на графе прогона в витрине
 why: `resume --from` есть только в CLI; с экрана прогона перезапустить с выбранной работы нельзя, хотя там и видно, где он сломался.
 done_when: У работы завершённого прогона на графе есть кнопка, зовущая `resume --from <job>` через демон; у идущего прогона кнопки нет; отказ предстартовой проверки показывается на кнопке; новый прогон несёт `resumed_from`; тест экрана.
 group: ui-runs
 track: express
 source: docs/burnex-after-stepcast.md, раздел 1 «Возобновление завершённого прогона»
+started_at: 2026-10-29T21:49:11.825Z
+claimed_by: run:2026-10-29T21-49-10Z-60682c
 
 ## backend-cursor-adapter
 

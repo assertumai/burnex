@@ -278,6 +278,8 @@ export interface RunSnapshot {
   readonly swept: boolean;
   /** У прогона нет каталога — снимок собран по записи хранилища расхода. */
   readonly filesGone: boolean;
+  /** Процесс прогона жив — ключ есть только тогда. */
+  readonly alive?: true;
   /** Итог прогона — только когда `filesGone: true`. */
   readonly total?: UsageSnapshot;
   /** Дата прейскуранта прогона — для подсказки к метке оценки. */
@@ -1025,6 +1027,20 @@ export async function decideRun(payload: {
 }): Promise<{ readonly ok: true }> {
   return json(
     await fetch('/api/run/decision', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(payload),
+    }),
+  );
+}
+
+/** Возобновление прогона с выбранной работы: отказ предстартовой проверки приходит ошибкой с причиной. */
+export async function resumeRun(payload: {
+  readonly run: string;
+  readonly from: string;
+}): Promise<{ readonly ok: true }> {
+  return json(
+    await fetch('/api/run/resume', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify(payload),

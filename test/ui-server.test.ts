@@ -34,7 +34,7 @@ import {
   type KernelCache,
 } from '../src/parts/ui/pipelines.js';
 import { hrefFor, type RouteTable } from '../src/parts/ui/routes.js';
-import { launchDecide, launchRun } from '../src/parts/ui/runLaunch.js';
+import { launchDecide, launchResume, launchRun } from '../src/parts/ui/runLaunch.js';
 import { declaration as runDeclaration } from '../src/parts/ui/screens/run/declaration.js';
 import { createWatcher, type Watcher } from '../src/parts/ui/daemon/watcher.js';
 import { resolveConfig, type Config } from '../src/parts/pipeline/config/resolve.js';
@@ -5361,6 +5361,129 @@ describe('ui-daemon: POST /api/run/decision', () => {
 
     const overview = await fetchJson(server, '/api/overview');
     assert.equal(overview.code, 200);
+  });
+});
+
+describe('ui-daemon: POST /api/run/resume', () => {
+  interface Resumed {
+    readonly cwd: string;
+    readonly run: string;
+    readonly from: string;
+  }
+
+  function stubResume(): { launchResume: (options: Resumed) => void; calls: Resumed[] } {
+    const calls: Resumed[] = [];
+    return { launchResume: (options) => calls.push(options), calls };
+  }
+
+  function seedResumable(status: 'success' | 'running' = 'success'): ReturnType<typeof makeJournalBed> & { key: string } {
+    const bed = makeJournalBed();
+    writeFileSync(
+      join(bed.projectRoot, 'stepcast.yml'),
+      'kind: pipeline\nname: demo\njobs:\n  build:\n    steps:\n      - id: code\n        run: echo hi\n',
+    );
+    seedRun(bed.runsRoot, bed.projectRoot, {
+      runId: 'seed',
+      status,
+      ...(status === 'running' ? { manifest: { started_at: new Date().toISOString(), pid: process.pid } } : {}),
+    });
+    return { ...bed, key: projectKey(bed.projectRoot) };
+  }
+
+  function post(server: Awaited<ReturnType<typeof createUiServer>>, body: unknown, origin?: string) {
+    return sendJson(server, {
+      method: 'POST',
+      path: '/api/run/resume',
+      body: typeof body === 'string' ? body : JSON.stringify(body),
+      ...(origin === undefined ? {} : { origin }),
+    });
+  }
+
+  it('проверенный запрос порождает ровно один stepcast resume --from и не пишет в каталог прогона', async (t) => {
+    const { runsRoot, projectRoot, key } = seedResumable();
+    const { launchResume, calls } = stubResume();
+    const server = await createUiServer({ runsRoot, port: 0, launchResume });
+    t.after(() => server.close());
+
+    const statusFile = runPaths(runsRoot, key, 'seed').status;
+    const before = readFileSync(statusFile, 'utf8');
+    const result = await post(server, { run: `${key}/seed`, from: 'build' });
+
+    assert.equal(result.code, 202);
+    assert.deepEqual(calls, [{ cwd: projectRoot, run: 'seed', from: 'build' }]);
+    assert.equal(readFileSync(statusFile, 'utf8'), before);
+  });
+
+  it('отсутствующий прогон — 404 без порождения', async (t) => {
+    const { runsRoot, key } = seedResumable();
+    const { launchResume, calls } = stubResume();
+    const server = await createUiServer({ runsRoot, port: 0, launchResume });
+    t.after(() => server.close());
+
+    const result = await post(server, { run: `${key}/нет`, from: 'build' });
+    assert.equal(result.code, 404);
+    assert.equal(calls.length, 0);
+  });
+
+  it('прогон с живым процессом — 409 без порождения', async (t) => {
+    const { runsRoot, key } = seedResumable('running');
+    const { launchResume, calls } = stubResume();
+    const server = await createUiServer({ runsRoot, port: 0, launchResume });
+    t.after(() => server.close());
+
+    const result = await post(server, { run: `${key}/seed`, from: 'build' });
+    assert.equal(result.code, 409);
+    assert.equal(calls.length, 0);
+  });
+
+  it('неизвестная работа — 400 с причиной движка и без порождения', async (t) => {
+    const { runsRoot, key } = seedResumable();
+    const { launchResume, calls } = stubResume();
+    const server = await createUiServer({ runsRoot, port: 0, launchResume });
+    t.after(() => server.close());
+
+    const result = await post(server, { run: `${key}/seed`, from: 'нет-такой' });
+    assert.equal(result.code, 400);
+    assert.match((result.json as { error: string }).error, /нет-такой/);
+    assert.equal(calls.length, 0);
+  });
+
+  it('битое тело — 400 без порождения', async (t) => {
+    const { runsRoot, key } = seedResumable();
+    const { launchResume, calls } = stubResume();
+    const server = await createUiServer({ runsRoot, port: 0, launchResume });
+    t.after(() => server.close());
+
+    assert.equal((await post(server, '{не json')).code, 400);
+    assert.equal((await post(server, { run: `${key}/seed` })).code, 400);
+    assert.equal((await post(server, { run: 'без-слеша', from: 'build' })).code, 400);
+    assert.equal(calls.length, 0);
+  });
+
+  it('сторонний Origin — 403 без порождения', async (t) => {
+    const { runsRoot, key } = seedResumable();
+    const { launchResume, calls } = stubResume();
+    const server = await createUiServer({ runsRoot, port: 0, launchResume });
+    t.after(() => server.close());
+
+    const result = await post(server, { run: `${key}/seed`, from: 'build' }, 'https://example.test');
+    assert.equal(result.code, 403);
+    assert.equal(calls.length, 0);
+  });
+
+  it('отказ порождения не роняет демон', async () => {
+    const { projectRoot } = makeJournalBed();
+    const errors: Error[] = [];
+    launchResume({
+      cwd: projectRoot,
+      run: 'seed',
+      from: 'build',
+      execPath: join(projectRoot, 'нет-такого-узла'),
+      onError: (error) => errors.push(error),
+    });
+    await settle();
+    assert.equal(errors.length, 1);
+    assert.match(errors[0]?.message ?? '', /ENOENT/);
   });
 });
 
