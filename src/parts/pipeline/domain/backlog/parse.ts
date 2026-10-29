@@ -154,6 +154,13 @@ function describeFailure(
     );
   }
 
+  if (field === 'needs') {
+    return new StepcastError(
+      `пункт «${raw.slug}»: needs «${String(candidate.needs)}» некорректно: ${issue.message}${suffix}`,
+      { at: raw.slug },
+    );
+  }
+
   if (field === 'group') {
     return new StepcastError(
       `пункт «${raw.slug}»: группа «${String(candidate.group)}» не является слагом в kebab-case${suffix}`,
@@ -185,5 +192,6 @@ export function toRecord(entry: BacklogEntry): BacklogRecord {
     // Поле repos уже разобрано схемой (RepoListSchema) в перечень имён;
     // отсутствие поля — пустой перечень, то есть корень дерева.
     repos: entry.data.repos ?? [],
+    needs: entry.data.needs ?? [],
   };
 }

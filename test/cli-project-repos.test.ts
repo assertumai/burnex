@@ -72,10 +72,11 @@ interface LaneRecord {
   readonly group: string;
   readonly track: string;
   readonly repos: readonly string[];
+  readonly needs: readonly string[];
 }
 
 function record(slug: string, repos: readonly string[] = []): LaneRecord {
-  return { slug, title: 'т', why: 'з', done_when: 'к', group: slug, track: '', repos };
+  return { slug, title: 'т', why: 'з', done_when: 'к', group: slug, track: '', repos, needs: [] };
 }
 
 function filledLane(slug: string, repos: readonly string[] = []): unknown {

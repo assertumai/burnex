@@ -340,6 +340,110 @@ describe('CLI: stepcast backlog pick --only', () => {
   });
 });
 
+describe('CLI: зависимости needs', () => {
+  function slugsOf(stdout: string): string[] {
+    return (JSON.parse(stdout) as readonly { slug: string }[]).map((entry) => entry.slug);
+  }
+
+  for (const status of ['todo', 'postponed', 'failed', 'in_progress']) {
+    it(`зависимость в статусе ${status} не даёт взять пункт, в том числе по имени`, async () => {
+      // `in_progress` — свежий: зависший пункт отбор взял бы снова, а здесь
+      // проверяется именно то, что идущая работа зависимость не выполняет.
+      const extra =
+        status === 'failed'
+          ? { reason: 'п' }
+          : status === 'in_progress'
+            ? { started_at: new Date().toISOString() }
+            : {};
+      const dir = bed(item('a', { ...COMPLETE, status, ...extra }), item('b', { ...COMPLETE, needs: 'a' }));
+      const before = readFileSync(join(dir, 'backlog.md'), 'utf8');
+
+      const only = await backlog(dir, ['pick', '--only', 'b']);
+      assert.equal(only.code, ExitCode.configError);
+      assert.match(only.stderr, /пункт «b» ждёт зависимостей: a \(/);
+      assert.match(only.stderr, new RegExp(status));
+      assert.equal(readFileSync(join(dir, 'backlog.md'), 'utf8'), before);
+
+      const picked = await backlog(dir, ['pick', '--slots', '2']);
+      assert.equal(picked.code, ExitCode.ok);
+      assert.deepEqual(slugsOf(picked.stdout), status === 'todo' ? ['a'] : []);
+      assert.notEqual(fieldOf(readFileSync(join(dir, 'backlog.md'), 'utf8'), 'b', 'status'), 'in_progress');
+    });
+  }
+
+  it('done в очереди выполняет зависимость', async () => {
+    const dir = bed(item('a', { ...COMPLETE, status: 'done' }), item('b', { ...COMPLETE, needs: 'a' }));
+    const result = await backlog(dir, ['pick', '--only', 'b']);
+    assert.equal(result.code, ExitCode.ok);
+    assert.deepEqual(slugsOf(result.stdout), ['b']);
+  });
+
+  it('done в archived.md выполняет зависимость', async () => {
+    const dir = bed(item('b', { ...COMPLETE, needs: 'a' }));
+    writeFileSync(join(dir, 'archived.md'), `# Архив\n\n${item('a', { ...COMPLETE, status: 'done' })}`);
+    const result = await backlog(dir, ['pick']);
+    assert.equal(result.code, ExitCode.ok);
+    assert.deepEqual(slugsOf(result.stdout), ['b']);
+  });
+
+  it('ждущий и postponed пункт группу не занимают', async () => {
+    const dir = bed(
+      item('a', { ...COMPLETE, status: 'postponed' }),
+      item('b', { ...COMPLETE, needs: 'a', group: 'shared' }),
+      item('p', { ...COMPLETE, status: 'postponed', group: 'shared' }),
+      item('c', { ...COMPLETE, group: 'shared' }),
+    );
+    const result = await backlog(dir, ['pick']);
+    assert.equal(result.code, ExitCode.ok);
+    assert.deepEqual(slugsOf(result.stdout), ['c']);
+  });
+
+  for (const [name, items, fragment] of [
+    ['неизвестный слаг', [item('b', { ...COMPLETE, needs: 'nope' })], /«b».*«nope»/],
+    [
+      'цикл',
+      [item('a', { ...COMPLETE, needs: 'b' }), item('b', { ...COMPLETE, needs: 'a' })],
+      /a → b → a/,
+    ],
+  ] as const) {
+    for (const argv of [['list'], ['pick']]) {
+      it(`${name}: ${argv[0]} отказывает кодом 2, очередь нетронута`, async () => {
+        const dir = bed(...items);
+        const before = readFileSync(join(dir, 'backlog.md'), 'utf8');
+        const result = await backlog(dir, argv);
+        assert.equal(result.code, ExitCode.configError);
+        assert.match(result.stderr, fragment);
+        assert.equal(readFileSync(join(dir, 'backlog.md'), 'utf8'), before);
+      });
+    }
+  }
+
+  it('неразбираемый archived.md отказывает, называя файл архива', async () => {
+    const dir = bed(item('b', { ...COMPLETE, needs: 'a' }));
+    writeFileSync(join(dir, 'archived.md'), '## a\n\nне поле\n');
+    const result = await backlog(dir, ['list']);
+    assert.equal(result.code, ExitCode.configError);
+    assert.match(result.stderr, /archived\.md/);
+  });
+
+  it('finish при битом needs у другого пункта проставляет исход', async () => {
+    const dir = bed(item('a', { ...COMPLETE, status: 'in_progress' }), item('b', { ...COMPLETE, needs: 'nope' }));
+    const result = await backlog(dir, ['finish', 'a', '--status', 'done']);
+    assert.equal(result.code, ExitCode.ok);
+    assert.equal(fieldOf(readFileSync(join(dir, 'backlog.md'), 'utf8'), 'a', 'status'), 'done');
+  });
+
+  it('выдача list и pick --lanes несёт needs', async () => {
+    const dir = bed(item('a', { ...COMPLETE, status: 'done' }), item('b', { ...COMPLETE, needs: 'a' }));
+    const listed = JSON.parse((await backlog(dir, ['list'])).stdout) as readonly { needs: string[] }[];
+    assert.deepEqual(listed.map((entry) => entry.needs), [[], ['a']]);
+
+    const lanes = await backlog(dir, ['pick', '--lanes', 'x']);
+    const parsed = JSON.parse(lanes.stdout) as { lanes: Record<string, { item: { needs: string[] } }> };
+    assert.deepEqual(parsed.lanes.x?.item.needs, ['a']);
+  });
+});
+
 describe('CLI: stepcast backlog pick публикует данные работы', () => {
   /** Каталог работы с объявлением — тот же вид, что заводит движок до первого шага. */
   function jobDirWithDeclaration(declared: readonly string[]): string {

@@ -5,6 +5,8 @@ import { z } from 'zod';
 
 import {
   BacklogLockTimeoutError,
+  checkNeeds,
+  declaresNeeds,
   moveBetween,
   moveWithin,
   parseBacklogFile,
@@ -157,6 +159,14 @@ const handleMove: ApiHandler = async (req, res, env) => {
         const fromText = fromFile === tasksFile ? tasksText : archiveText;
         const toText = toFile === tasksFile ? tasksText : archiveText;
         const result = moveBetween(fromText, toText, slug, before, fromFile, toFile);
+        // Пункт, вернувшийся из архива, приносит в граф свои `needs`, которых
+        // никто не проверял, пока он лежал в архиве; уход в архив меняет
+        // источник статуса зависимости. Граф проверяется по паре файлов, какой
+        // она станет, — тем же `checkNeeds`, что и у `list`/`pick` и правки.
+        const nextTasks = parseBacklogFile(tasksFile, toFile === tasksFile ? result.to : result.from);
+        if (declaresNeeds(nextTasks)) {
+          checkNeeds(nextTasks, parseBacklogFile(archiveFile, toFile === archiveFile ? result.to : result.from));
+        }
         // Оба файла пишутся по очереди, и атомарности на пару у записи нет:
         // отказ второй записи оставил бы пункт в обоих файлах. Источник поэтому
         // пишется вторым — пункт, задвоенный на мгновение, виден на доске
@@ -202,7 +212,7 @@ const handleMove: ApiHandler = async (req, res, env) => {
  *   ссылаются.
  */
 const REQUIRED_FIELDS = ['title', 'why', 'done_when'] as const;
-const OPTIONAL_FIELDS = ['group', 'track', 'repos'] as const;
+const OPTIONAL_FIELDS = ['group', 'track', 'repos', 'needs'] as const;
 
 const EditBodySchema = z
   .object({
@@ -216,6 +226,7 @@ const EditBodySchema = z
         group: z.string().optional(),
         track: z.string().optional(),
         repos: z.string().optional(),
+        needs: z.string().optional(),
       })
       .strict(),
   })
@@ -299,7 +310,13 @@ const handleEdit: ApiHandler = async (req, res, env) => {
       const edited = withoutFields(withFields(text, slug, set), slug, remove);
       // Разбор всего файла заново — проверка перед записью: схема ловит и
       // негодный `track`, и `repos`, который она разбирает в перечень.
-      parseBacklogFile(file, edited);
+      const entries = parseBacklogFile(file, edited);
+      // Связи `needs` проверяются тем же `checkNeeds`, что и `list`/`pick`:
+      // опечатка в слаге либо цикл, записанные доской, остановили бы потом весь
+      // отбор. Архивные пункты своих зависимостей не проверяют и в обход не идут.
+      if (file === tasksFile && declaresNeeds(entries)) {
+        checkNeeds(entries, parseBacklogFile(archiveFile, readOrEmpty(archiveFile)));
+      }
       writeBacklogFile(file, edited);
       return true;
     }, boardLockWait.current);

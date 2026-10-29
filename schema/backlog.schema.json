@@ -36,6 +36,9 @@
     },
     "repos": {
       "type": "string"
+    },
+    "needs": {
+      "type": "string"
     }
   },
   "required": [

@@ -11,6 +11,18 @@ export {
 export { withFields, withoutFields } from './write.js';
 export { moveWithin, moveBetween, withStatus, type MoveBetweenResult } from './move.js';
 export {
+  statusResolver,
+  checkNeeds,
+  needsMet,
+  unmetNeeds,
+  needsOf,
+  declaresNeeds,
+  MISSING_STATUS,
+  type StatusOf,
+} from './needs.js';
+export {
+  archivedPathFor,
+  readArchivedEntries,
   readBacklogFile,
   parseBacklogFile,
   writeBacklogFile,

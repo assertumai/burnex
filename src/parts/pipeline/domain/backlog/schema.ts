@@ -77,32 +77,53 @@ const RepoNameSchema = z
  * проекта, это проверяет тот, кто разрешает имя в объявление
  * (`stepcast project repos`, `src/parts/pipeline/domain/project/repos.ts`).
  */
-const RepoListSchema = z.string().transform((value, ctx) => {
-  if (value.trim() === '') {
-    ctx.addIssue({ code: 'custom', message: 'пустое значение поля repos' });
-    return z.NEVER;
-  }
-  const names = value.split(',').map((item) => item.trim());
-  const seen = new Set<string>();
-  for (const name of names) {
-    if (name === '') {
-      ctx.addIssue({ code: 'custom', message: 'пустой элемент перечня repos' });
+const RepoListSchema = commaList('repos', { nominative: 'имя', genitive: 'имени' }, RepoNameSchema);
+
+/**
+ * Перечень через запятую для полей `repos` и `needs`: обрезка пробелов,
+ * отказ на пустое значение, пустой элемент и повтор, каждый элемент проверяет
+ * `item`. Имя поля уходит в сообщения — по ним человек находит строку, а
+ * разбор файла показывает только первую ошибку.
+ */
+function commaList(
+  field: string,
+  noun: { readonly nominative: string; readonly genitive: string },
+  item: z.ZodType<string>,
+) {
+  return z.string().transform((value, ctx) => {
+    if (value.trim() === '') {
+      ctx.addIssue({ code: 'custom', message: `пустое значение поля ${field}` });
       return z.NEVER;
     }
-    if (seen.has(name)) {
-      ctx.addIssue({ code: 'custom', message: `повтор имени «${name}» в repos` });
-      return z.NEVER;
+    const names = value.split(',').map((part) => part.trim());
+    const seen = new Set<string>();
+    for (const name of names) {
+      if (name === '') {
+        ctx.addIssue({ code: 'custom', message: `пустой элемент перечня ${field}` });
+        return z.NEVER;
+      }
+      if (seen.has(name)) {
+        ctx.addIssue({ code: 'custom', message: `повтор ${noun.genitive} «${name}» в ${field}` });
+        return z.NEVER;
+      }
+      seen.add(name);
+      const check = item.safeParse(name);
+      if (!check.success) {
+        const reason = check.error.issues[0]?.message ?? 'некорректный формат';
+        ctx.addIssue({ code: 'custom', message: `недопустимое ${noun.nominative} «${name}» в ${field}: ${reason}` });
+        return z.NEVER;
+      }
     }
-    seen.add(name);
-    const check = RepoNameSchema.safeParse(name);
-    if (!check.success) {
-      const reason = check.error.issues[0]?.message ?? 'некорректный формат';
-      ctx.addIssue({ code: 'custom', message: `недопустимое имя «${name}» в repos: ${reason}` });
-      return z.NEVER;
-    }
-  }
-  return names;
-});
+    return names;
+  });
+}
+
+/**
+ * Слаги пунктов, которые должны быть `done` до того, как пункт станет
+ * свободным. Форма — дело разбора; существование пункта и отсутствие цикла
+ * проверяет `checkNeeds` (`needs.ts`), которого зовут не все писатели очереди.
+ */
+const NeedsListSchema = commaList('needs', { nominative: 'слаг', genitive: 'слага' }, BacklogSlugSchema);
 
 /**
  * Пункт очереди целиком, как он получается из текста файла: слаг из
@@ -121,6 +142,7 @@ export const BacklogItemSchema = z.looseObject({
   started_at: z.string().optional(),
   reason: z.string().optional(),
   repos: RepoListSchema.optional(),
+  needs: NeedsListSchema.optional(),
 });
 
 export type BacklogItem = z.infer<typeof BacklogItemSchema>;
@@ -137,6 +159,8 @@ export const BacklogRecordSchema = z
     track: z.string(),
     /** Названные репозитории в объявленном порядке; пусто, когда пункт поле не заполнил. */
     repos: z.array(z.string()),
+    /** Слаги пунктов, которые должны быть `done` до взятия; пусто, когда пункт поле не заполнил. */
+    needs: z.array(z.string()),
   })
   .strict();
 

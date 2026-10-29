@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { describe, it } from 'node:test';
 
 import { StepcastError } from '../src/kernel/errors.js';
-import { parse, effectiveGroup, toRecord, isFree, selectItems, withFields } from '../src/parts/pipeline/domain/backlog/index.js';
+import { parse, effectiveGroup, toRecord, isFree, selectItems, statusResolver, withFields } from '../src/parts/pipeline/domain/backlog/index.js';
 import { BacklogSlotsResponseSchema } from '../src/parts/pipeline/domain/backlog/schema.js';
 import type { BacklogEntry } from '../src/parts/pipeline/domain/backlog/index.js';
 
@@ -169,7 +169,47 @@ describe('backlog: разбор', () => {
       group: 'queue',
       track: '',
       repos: [],
+      needs: [],
     });
+  });
+});
+
+describe('backlog: поле needs', () => {
+  it('поля нет — публикуемая запись несёт пустой перечень', () => {
+    const entries = parse(backlogText(item('an-item', COMPLETE)));
+    assert.deepEqual(toRecord(entryOf(entries, 'an-item')).needs, []);
+  });
+
+  it('перечень через запятую сохраняет порядок объявления', () => {
+    const entries = parse(backlogText(item('an-item', { ...COMPLETE, needs: 'alpha, beta' })));
+    assert.deepEqual(toRecord(entryOf(entries, 'an-item')).needs, ['alpha', 'beta']);
+  });
+
+  for (const [name, value, fragment] of [
+    ['не слаг', 'Alpha', /Alpha/],
+    ['пустой элемент', 'alpha, , beta', /пустой элемент/],
+    ['пустое значение', '', /пустое значение/],
+    ['повтор', 'alpha, alpha', /повтор/],
+  ] as const) {
+    it(`отказывает: ${name}, называя пункт и поле`, () => {
+      const text = backlogText(item('broken-item', { ...COMPLETE, needs: value }));
+      assert.throws(() => parse(text), (error: unknown) => {
+        assert.ok(error instanceof StepcastError);
+        assert.match(error.message, /broken-item/);
+        assert.match(error.message, /needs/);
+        assert.match(error.message, fragment);
+        assert.match(error.message, /строка/);
+        return true;
+      });
+    });
+  }
+
+  it('неизвестное поле по-прежнему переживает разбор и правку', () => {
+    const text = backlogText(item('an-item', { ...COMPLETE, needs: 'alpha', mystery: 'x' }));
+    const edited = withFields(text, 'an-item', { status: 'done' });
+    const entry = entryOf(parse(edited), 'an-item');
+    assert.equal(entry.data['mystery'], 'x');
+    assert.deepEqual(entry.data.needs, ['alpha']);
   });
 });
 
@@ -286,7 +326,7 @@ describe('backlog: поле repos', () => {
 });
 
 describe('backlog: блок repo у дорожки в ответе pick --lanes', () => {
-  const RECORD = { slug: 's', title: 'т', why: 'з', done_when: 'к', group: 'g', track: 'express', repos: [] };
+  const RECORD = { slug: 's', title: 'т', why: 'з', done_when: 'к', group: 'g', track: 'express', repos: [], needs: [] };
 
   it('ответ pick без блока repo принимается схемой', () => {
     const response = { lanes: { a: { filled: true, slug: 's', title: 'т', group: 'g', track: 'express', item: RECORD } } };
@@ -466,6 +506,56 @@ describe('backlog: отбор по действующим группам', () =>
   it('порядок в файле — единственный приоритет: свободных пунктов нет', () => {
     const text = backlogText(item('done-item', { ...COMPLETE, status: 'done' }));
     assert.deepEqual(select(text, 3), []);
+  });
+});
+
+describe('backlog: отбор с зависимостями', () => {
+  const NOW = Date.parse('2026-08-23T12:00:00.000Z');
+  const STALE_MS = 6 * 3600_000;
+
+  function select(text: string, slots = 1): readonly string[] {
+    const entries = parse(text);
+    return selectItems(entries, slots, NOW, STALE_MS, undefined, statusResolver(entries, [])).map((entry) => entry.slug);
+  }
+
+  for (const status of ['todo', 'postponed']) {
+    it(`зависимость в статусе ${status} пункт не освобождает`, () => {
+      const text = backlogText(
+        item('a', { ...COMPLETE, status }),
+        item('b', { ...COMPLETE, needs: 'a' }),
+      );
+      assert.deepEqual(select(text, 2), status === 'todo' ? ['a'] : []);
+    });
+  }
+
+  it('зависимость в статусе done освобождает пункт', () => {
+    const text = backlogText(item('a', { ...COMPLETE, status: 'done' }), item('b', { ...COMPLETE, needs: 'a' }));
+    assert.deepEqual(select(text), ['b']);
+  });
+
+  it('ждущий пункт группу не занимает: берётся следующий той же группы', () => {
+    const text = backlogText(
+      item('a', { ...COMPLETE, status: 'in_progress', started_at: '2026-08-23T11:50:00.000Z', group: 'other' }),
+      item('b', { ...COMPLETE, needs: 'a', group: 'queue' }),
+      item('c', { ...COMPLETE, group: 'queue' }),
+    );
+    assert.deepEqual(select(text), ['c']);
+  });
+
+  it('postponed пункт группу не занимает', () => {
+    const text = backlogText(
+      item('b', { ...COMPLETE, status: 'postponed', group: 'queue' }),
+      item('c', { ...COMPLETE, group: 'queue' }),
+    );
+    assert.deepEqual(select(text), ['c']);
+  });
+
+  it('зависший in_progress с невыполненной зависимостью тоже не берётся', () => {
+    const text = backlogText(
+      item('a', COMPLETE),
+      item('b', { ...COMPLETE, status: 'in_progress', started_at: '2026-08-23T01:00:00.000Z', needs: 'a' }),
+    );
+    assert.deepEqual(select(text, 2), ['a']);
   });
 });
 

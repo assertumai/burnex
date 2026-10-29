@@ -1,4 +1,5 @@
 import { chmodSync, readFileSync, statSync } from 'node:fs';
+import { dirname, join } from 'node:path';
 
 import { StepcastError, isStepcastError } from '../../../../kernel/errors.js';
 import { atomicWrite } from '../../run/journal/writer.js';
@@ -53,6 +54,34 @@ export function parseBacklogFile(path: string, text: string): readonly BacklogEn
       cause: error,
     });
   }
+}
+
+/** Имя файла решённых пунктов рядом с очередью: переносят туда руками или доской. */
+const ARCHIVE_NAME = 'archived.md';
+
+export function archivedPathFor(file: string): string {
+  return join(dirname(file), ARCHIVE_NAME);
+}
+
+/**
+ * Пункты соседнего `archived.md` — без lock'а: архив читается только ради
+ * статусов зависимостей и никем из писателей очереди не правится. Нет файла —
+ * пустой архив; неразбираемый — отказ с путём архива, а не пустота: иначе
+ * архивная зависимость выглядела бы опечаткой в слаге.
+ */
+export function readArchivedEntries(file: string): readonly BacklogEntry[] {
+  const path = archivedPathFor(file);
+  let text: string;
+  try {
+    text = readFileSync(path, 'utf8');
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return [];
+    throw new StepcastError(`Не удалось прочитать архив очереди: ${(error as Error).message}`, {
+      file: path,
+      cause: error,
+    });
+  }
+  return parseBacklogFile(path, text);
 }
 
 /**

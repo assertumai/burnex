@@ -1,3 +1,4 @@
+import { needsMet, type StatusOf } from './needs.js';
 import { effectiveGroup, type BacklogEntry } from './parse.js';
 
 /**
@@ -64,6 +65,9 @@ function pickRank(entry: BacklogEntry): number {
  * названный пункт не свободен либо его группа занята; что с этим делать,
  * решает вызывающий.
  *
+ * `statusOf` включает зависимости (`needs`): пункт с невыполненной зависимостью
+ * не свободен. Без него зависимости не учитываются.
+ *
  * Занятые группы собираются заранее по всей очереди (занятый пункт держит
  * свою группу, даже если сам он ниже места отбора), а затем пополняются по
  * ходу отбора — так пункт одной группы с уже выбранным не берётся в том же
@@ -75,6 +79,7 @@ export function selectItems(
   nowMs: number,
   staleMs: number,
   only?: string,
+  statusOf?: StatusOf,
 ): readonly BacklogEntry[] {
   const busyGroups = new Set(
     entries.filter((entry) => isBusy(entry, nowMs, staleMs)).map(effectiveGroup),
@@ -94,6 +99,9 @@ export function selectItems(
   for (const entry of candidates) {
     if (chosen.length >= slots) break;
     if (!isFree(entry, nowMs, staleMs)) continue;
+    // Ждущий пункт пропускается до проверки группы и в `chosen` не попадает,
+    // так что группу он не берёт: пункт той же группы ниже идёт вместо него.
+    if (statusOf !== undefined && !needsMet(entry, statusOf)) continue;
     const group = effectiveGroup(entry);
     if (busyGroups.has(group)) continue;
     chosen.push(entry);

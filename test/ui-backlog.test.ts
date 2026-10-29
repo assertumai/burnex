@@ -142,6 +142,18 @@ describe('ui-dashboard: сборка вида очереди (src/parts/ui/backl
     assert.equal(view?.doneWhen, 'к');
   });
 
+  it('вид пункта несёт needs; без поля — пустой перечень', () => {
+    const { runsRoot, projectRoot } = makeJournalBed();
+    seedRun(runsRoot, projectRoot, { runId: 'a' });
+    writeFileSync(
+      join(projectRoot, 'backlog.md'),
+      backlogText(item('plain', BASE), item('waiting', { ...BASE, needs: 'plain, other' })),
+    );
+
+    const items = buildBacklog(buildOverview(runsRoot)).projects[0]?.items;
+    assert.deepEqual(items?.map((view) => view.needs), [[], ['plain', 'other']]);
+  });
+
   it('in_progress несёт момент взятия, failed несёт причину', () => {
     const { runsRoot, projectRoot } = makeJournalBed();
     seedRun(runsRoot, projectRoot, { runId: 'a' });

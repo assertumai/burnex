@@ -48,6 +48,8 @@ export interface BacklogItemView {
   readonly group: string;
   /** Объявленный вес пункта; пусто, когда поле не заполнено — без слова по умолчанию. */
   readonly track: string;
+  /** Слаги зависимостей в объявленном порядке; пусто, когда поле не заполнено. */
+  readonly needs: readonly string[];
   readonly startedAt?: string;
   readonly reason?: string;
   /** Файл, из которого пришёл пункт — `backlog.md` либо `archived.md`. */
@@ -118,6 +120,7 @@ function toItemView(entry: BacklogEntry, sourceFile: BacklogSourceFile): Backlog
     doneWhen: entry.data.done_when,
     group: effectiveGroup(entry),
     track: entry.data.track ?? '',
+    needs: entry.data.needs ?? [],
     ...(entry.data.started_at === undefined ? {} : { startedAt: entry.data.started_at }),
     ...(entry.data.reason === undefined ? {} : { reason: entry.data.reason }),
     sourceFile,

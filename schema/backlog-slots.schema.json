@@ -54,6 +54,12 @@
                     "items": {
                       "type": "string"
                     }
+                  },
+                  "needs": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
                   }
                 },
                 "required": [
@@ -63,7 +69,8 @@
                   "done_when",
                   "group",
                   "track",
-                  "repos"
+                  "repos",
+                  "needs"
                 ],
                 "additionalProperties": false
               },

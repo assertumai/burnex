@@ -467,6 +467,7 @@ interface ItemFields {
   group: string;
   track: string;
   repos: string;
+  needs: string;
 }
 
 /**
@@ -490,6 +491,7 @@ function fieldsOf(item: BacklogItemView): ItemFields {
     group: item.group === item.slug ? '' : item.group,
     track: item.track,
     repos: '',
+    needs: item.needs.join(', '),
   };
 }
 
@@ -507,10 +509,13 @@ function fieldsOf(item: BacklogItemView): ItemFields {
 function ItemDetails({
   item,
   projectKey,
+  statusBySlug,
   onClose,
 }: {
   readonly item: BacklogItemView;
   readonly projectKey: string;
+  /** Статусы пунктов проекта из обоих файлов, очередь приоритетнее архива — как у `statusResolver` движка. */
+  readonly statusBySlug: ReadonlyMap<string, string>;
   readonly onClose: () => void;
 }): JSX.Element {
   const [fields, setFields] = useState<ItemFields>(() => fieldsOf(item));
@@ -544,6 +549,10 @@ function ItemDetails({
           group: oneLine(fields.group),
           track: oneLine(fields.track),
           ...(fields.repos === '' ? {} : { repos: oneLine(fields.repos) }),
+          // В отличие от `repos`, форма `needs` стартует с текущего перечня:
+          // очищенное поле должно дойти до сервера пустой строкой — она и
+          // убирает поле. Пункт без зависимостей пустое поле не шлёт вовсе.
+          ...(fields.needs === '' && item.needs.length === 0 ? {} : { needs: oneLine(fields.needs) }),
         },
       });
       setSaved(true);
@@ -611,6 +620,26 @@ function ItemDetails({
         <span>Repositories (comma-separated)</span>
         <Input value={fields.repos} onChange={(event) => set('repos', event.target.value)} />
       </Label>
+
+      <Label className="scrum-field">
+        <span>Needs (comma-separated slugs)</span>
+        <Input value={fields.needs} onChange={(event) => set('needs', event.target.value)} />
+      </Label>
+
+      {item.needs.length === 0 ? null : (
+        <ul className="scrum-pipelines small">
+          {item.needs.map((slug) => {
+            const status = statusBySlug.get(slug);
+            return (
+              <li key={slug}>
+                <span className="mono">{slug}</span>
+                {status === undefined ? null : <Badge variant={statusBadgeVariant(status)}>{status}</Badge>}
+                <span className="dim">{status === undefined ? 'not in the queue' : status === 'done' ? 'met' : 'waiting'}</span>
+              </li>
+            );
+          })}
+        </ul>
+      )}
 
       {error === undefined ? null : (
         <Alert variant="destructive">
@@ -696,9 +725,17 @@ export function Scrum({ backlog }: { readonly backlog: BacklogOverview | undefin
     );
   }
 
-  const itemBySlug = new Map(
-    [...view.columns, ...view.unplaced].flatMap((group) => group.items.map((item) => [item.slug, item] as const)),
-  );
+  const allItems = [...view.columns, ...view.unplaced].flatMap((group) => group.items);
+  const itemBySlug = new Map(allItems.map((item) => [item.slug, item] as const));
+  // Архив кладётся первым, очередь поверх него: слаг в обоих файлах — пункт,
+  // вернувшийся в работу, и рабочим считается файл очереди. Обходится полный
+  // перечень, а не `itemBySlug`: в нём дубль слага уже схлопнут.
+  const statusBySlug = new Map<string, string>();
+  for (const file of ['archived.md', 'backlog.md'] as const) {
+    for (const item of allItems) {
+      if (item.sourceFile === file) statusBySlug.set(item.slug, item.status);
+    }
+  }
   const columnIds = view.columns.map((column) => column.id);
   const draggedItem = dragging === undefined ? undefined : itemBySlug.get(dragging);
   // Выбранный пункт мог уехать из кадра — например, его убрали из файла
@@ -832,7 +869,12 @@ export function Scrum({ backlog }: { readonly backlog: BacklogOverview | undefin
             вместе с взглядом на колонки, и модальное окно закрывало бы ровно
             то, ради чего пункт открыли. */}
         {detailed === undefined ? null : (
-          <ItemDetails item={detailed} projectKey={view.projectKey} onClose={() => setOpenItem(undefined)} />
+          <ItemDetails
+            item={detailed}
+            projectKey={view.projectKey}
+            statusBySlug={statusBySlug}
+            onClose={() => setOpenItem(undefined)}
+          />
         )}
       </div>
 

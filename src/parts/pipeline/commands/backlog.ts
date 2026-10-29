@@ -3,17 +3,24 @@ import { basename, join, relative, resolve as resolvePath } from 'node:path';
 
 import {
   DEFAULT_STALE_HOURS,
+  checkNeeds,
+  declaresNeeds,
   isFree,
   finishItem,
+  needsMet,
   parseBacklogFile,
+  readArchivedEntries,
   readBacklogFile,
   selectItems,
+  statusResolver,
   toRecord,
+  unmetNeeds,
   withBacklogLock,
   withFields,
   writeBacklogFile,
   type BacklogEntry,
   type BacklogRecord,
+  type StatusOf,
 } from '../domain/backlog/index.js';
 import { resolveConfig } from '../config/resolve.js';
 import { mergeJobData } from '../run/journal/data.js';
@@ -110,8 +117,30 @@ export function runBacklogCommand(
   }
 }
 
+/**
+ * Проверить связи `needs` и вернуть источник статусов зависимостей; `undefined`,
+ * когда ни один пункт зависимостей не объявил, — тогда архив не читается и
+ * очередь без поля ведёт себя как прежде.
+ *
+ * Зовут только `list` и `pick`. `finish`, `settle` и сведение дорожек
+ * проставляют исход по слагу, и битая зависимость постороннего пункта не
+ * должна стоить отметки `done` влитой работы.
+ */
+function checkedStatusOf(file: string, entries: readonly BacklogEntry[]): StatusOf | undefined {
+  if (!declaresNeeds(entries)) return undefined;
+  const archived = readArchivedEntries(file);
+  try {
+    checkNeeds(entries, archived);
+  } catch (error) {
+    if (!(error instanceof StepcastError)) throw error;
+    throw new StepcastError(error.message, { file, ...(error.at === undefined ? {} : { at: error.at }), cause: error });
+  }
+  return statusResolver(entries, archived);
+}
+
 function runList(file: string, write: (line: string) => void): ExitCodeValue {
   const entries = parseBacklogFile(file, readBacklogFile(file));
+  checkedStatusOf(file, entries);
   write(JSON.stringify(entries.map(toRecord), null, 2));
   return ExitCode.ok;
 }
@@ -175,6 +204,7 @@ function claimItems(
   return withBacklogLock(file, 'backlog pick', () => {
     const text = readBacklogFile(file);
     const entries = parseBacklogFile(file, text);
+    const statusOf = checkedStatusOf(file, entries);
 
     // Названный пункт проверяется до отбора: «пункта нет» и «пункт занят» —
     // разные беды, и обе обязаны прозвучать словами. Молчаливая пустая выдача
@@ -190,9 +220,19 @@ function claimItems(
           { file, at: only, hint: 'свободны todo и зависший in_progress' },
         );
       }
+      if (statusOf !== undefined && !needsMet(named, statusOf)) {
+        const unmet = unmetNeeds(named, statusOf)
+          .map((need) => `${need.slug} (${need.status})`)
+          .join(', ');
+        throw new StepcastError(`пункт «${only}» ждёт зависимостей: ${unmet}`, {
+          file,
+          at: only,
+          hint: 'зависимость выполняет только статус done',
+        });
+      }
     }
 
-    const chosen = selectItems(entries, count, nowMs, staleMs, only);
+    const chosen = selectItems(entries, count, nowMs, staleMs, only, statusOf);
     if (chosen.length > 0) writeBacklogFile(file, applyPick(text, chosen, now));
     return chosen;
   });

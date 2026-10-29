@@ -534,6 +534,8 @@ export interface BacklogItemView {
   readonly group: string;
   /** Объявленный вес пункта; пусто, когда поле не заполнено — без слова по умолчанию. */
   readonly track: string;
+  /** Слаги зависимостей в объявленном порядке; пусто, когда поле не заполнено. */
+  readonly needs: readonly string[];
   readonly startedAt?: string;
   readonly reason?: string;
   readonly sourceFile: BacklogSourceFile;
@@ -907,7 +909,7 @@ export async function addBoardColumn(payload: {
 /**
  * Правка полей пункта очереди — то, что сохраняет панель деталей доски.
  *
- * Пустая строка у необязательного поля (`group`, `track`, `repos`) убирает
+ * Пустая строка у необязательного поля (`group`, `track`, `repos`, `needs`) убирает
  * само поле; у обязательного — отказ. Статус здесь не правится: его задаёт
  * колонка доски.
  */
@@ -921,6 +923,7 @@ export async function editBacklogItem(payload: {
     readonly group?: string;
     readonly track?: string;
     readonly repos?: string;
+    readonly needs?: string;
   };
 }): Promise<{ readonly ok: true }> {
   return json(
