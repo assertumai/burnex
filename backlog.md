@@ -562,13 +562,15 @@ claimed_by: run:2026-10-29T23-13-40Z-efc18f
 
 ## launchd-autostart
 
-status: todo
+status: done
 title: `up --install` / `down --uninstall` — автозапуск демона через launchd
 why: Расписания бесполезны, если демон не поднят после перезагрузки; сейчас `stepcast up` надо звать руками.
 done_when: `stepcast up --install` пишет `~/Library/LaunchAgents/ai.stepcast.daemon.plist` с `RunAtLoad`, `KeepAlive`, `PATH` и `SSH_AUTH_SOCK` текущей оболочки; `down` выгружает агента, `down --uninstall` удаляет plist; не на macOS — отказ с причиной; `docs/config.md` описывает; тест генерации plist.
 group: daemon-ops
 track: express
 source: docs/burnex-after-stepcast.md, раздел 4 «Автозапуск через launchd»
+started_at: 2026-10-29T23:33:37.342Z
+claimed_by: run:2026-10-29T23-33-35Z-b626b7
 
 ## install-script-and-update
 

@@ -86,7 +86,9 @@ const HELP_TEXT = `ошибка: Не указана команда
       --input — значение входа пайплайна: --input имя=значение
   stepcast up — поднять витрину: наблюдение за всеми прогонами в браузере
       --foreground — держать сервер в текущем терминале, не отсоединяя его
+      --install — поставить демон на автозапуск через launchd (только macOS)
   stepcast down — остановить витрину
+      --uninstall — заодно убрать автозапуск через launchd (только macOS)
   stepcast usage <run> — показать расход прогона по работам, шагам и попыткам
   stepcast backlog <action> <slug> — вести очередь улучшений backlog.md: list|pick|finish|settle|add|show, см. docs/backlog.md
       --file — путь к файлу очереди, по умолчанию backlog.md в рабочем каталоге
@@ -173,7 +175,8 @@ describe('cli-help-baseline: эталон справки и кодов возв�
     assert.equal(
       outcome.stderr,
       'ошибка: Команда down принимает не больше 0 позиционных аргументов, получено 1\n' +
-        '    stepcast down — остановить витрину',
+        '    stepcast down — остановить витрину\n' +
+        '      --uninstall — заодно убрать автозапуск через launchd (только macOS)',
     );
   });
 

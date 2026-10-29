@@ -9,8 +9,10 @@ import {
   portBusyError,
   runningDaemon,
   startDetached,
+  stopDaemon,
   writeRecord,
 } from '../daemon/daemon.js';
+import { installAgent, requireMacos, systemHost, type LaunchdHost } from '../daemon/launchd.js';
 import { createUiServer } from '../daemon/server.js';
 import { commandRow } from '../../../kernel/cli/commandRow.js';
 import type { ParsedArgs } from '../../../kernel/cli/args.js';
@@ -31,9 +33,13 @@ export async function runUpCommand(
   args: ParsedArgs,
   write: (line: string) => void,
   cwd: string,
+  host: LaunchdHost = systemHost(),
 ): Promise<ExitCodeValue> {
+  // Отказ вне macOS раньше чтения конфигурации: причина не зависит от неё.
+  if (args.flags.install === true) requireMacos(host, '--install');
+
   const { config } = resolveConfig({ cwd });
-  const paths = daemonPaths();
+  const paths = daemonPaths(host.home);
   const port = config.ui.port;
 
   if (args.flags.foreground === true) {
@@ -52,6 +58,22 @@ export async function runUpCommand(
     write(`витрина: http://127.0.0.1:${server.port}`);
     write(`наблюдение за ${config.runs.root}`);
     // Процесс держится сервером и живёт до сигнала прерывания.
+    return ExitCode.ok;
+  }
+
+  if (args.flags.install === true) {
+    // Агент займёт порт сам: отсоединённый демон, поднятый обычным `up`, ему мешал бы.
+    stopDaemon(paths);
+    const plist = installAgent(host, {
+      execPath: process.execPath,
+      binPath: binPath(),
+      workingDirectory: cwd,
+      logFile: paths.logFile,
+      env: process.env,
+    });
+    write(`автозапуск установлен: ${plist}`);
+    write(`витрина: http://127.0.0.1:${port}`);
+    write('убрать автозапуск: stepcast down --uninstall');
     return ExitCode.ok;
   }
 
@@ -81,6 +103,10 @@ export const row = commandRow({
       foreground: {
         kind: 'boolean',
         description: 'держать сервер в текущем терминале, не отсоединяя его',
+      },
+      install: {
+        kind: 'boolean',
+        description: 'поставить демон на автозапуск через launchd (только macOS)',
       },
     },
   },
