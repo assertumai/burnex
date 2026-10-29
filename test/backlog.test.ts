@@ -170,8 +170,74 @@ describe('backlog: разбор', () => {
       track: '',
       repos: [],
       needs: [],
+      goal: '',
+      details: [],
     });
   });
+});
+
+describe('backlog: поля goal и details', () => {
+  it('полей нет — пустая строка и пустой перечень', () => {
+    const record = toRecord(entryOf(parse(backlogText(item('an-item', COMPLETE))), 'an-item'));
+    assert.equal(record.goal, '');
+    assert.deepEqual(record.details, []);
+  });
+
+  it('оба объявлены — пути как написаны, порядок details сохранён', () => {
+    const text = backlogText(
+      item('an-item', { ...COMPLETE, goal: 'backlog/an-item/goal.md', details: 'backlog/an-item/b.md, backlog/an-item/a.md' }),
+    );
+    const record = toRecord(entryOf(parse(text), 'an-item'));
+    assert.equal(record.goal, 'backlog/an-item/goal.md');
+    assert.deepEqual(record.details, ['backlog/an-item/b.md', 'backlog/an-item/a.md']);
+  });
+
+  for (const field of ['goal', 'details'] as const) {
+    for (const [name, value, fragment] of [
+      ['абсолютный путь', '/etc/passwd', /абсолютным/],
+      ['сегмент ..', 'a/../b.md', /\.\./],
+      ['глоб', 'docs/*.md', /глоба/],
+    ] as const) {
+      it(`${field} отказывает: ${name}, называя пункт и поле`, () => {
+        const text = backlogText(item('broken-item', { ...COMPLETE, [field]: value }));
+        assert.throws(() => parse(text), (error: unknown) => {
+          assert.ok(error instanceof StepcastError);
+          assert.match(error.message, /broken-item/);
+          assert.match(error.message, new RegExp(field));
+          assert.match(error.message, fragment);
+          return true;
+        });
+      });
+    }
+  }
+
+  it('goal отказывает: пустое значение, называя пункт и поле', () => {
+    const text = backlogText(item('broken-item', { ...COMPLETE, goal: '' }));
+    assert.throws(() => parse(text), (error: unknown) => {
+      assert.ok(error instanceof StepcastError);
+      assert.match(error.message, /broken-item/);
+      assert.match(error.message, /goal/);
+      assert.match(error.message, /пустое значение/);
+      return true;
+    });
+  });
+
+  for (const [name, value, fragment] of [
+    ['пустой элемент', 'a.md, , b.md', /пустой элемент/],
+    ['повтор', 'a.md, a.md', /повтор/],
+    ['пустое значение', '', /пустое значение/],
+  ] as const) {
+    it(`details отказывает: ${name}`, () => {
+      const text = backlogText(item('broken-item', { ...COMPLETE, details: value }));
+      assert.throws(() => parse(text), (error: unknown) => {
+        assert.ok(error instanceof StepcastError);
+        assert.match(error.message, /broken-item/);
+        assert.match(error.message, /details/);
+        assert.match(error.message, fragment);
+        return true;
+      });
+    });
+  }
 });
 
 describe('backlog: поле needs', () => {
@@ -326,7 +392,7 @@ describe('backlog: поле repos', () => {
 });
 
 describe('backlog: блок repo у дорожки в ответе pick --lanes', () => {
-  const RECORD = { slug: 's', title: 'т', why: 'з', done_when: 'к', group: 'g', track: 'express', repos: [], needs: [] };
+  const RECORD = { slug: 's', title: 'т', why: 'з', done_when: 'к', group: 'g', track: 'express', repos: [], needs: [], goal: '', details: [] };
 
   it('ответ pick без блока repo принимается схемой', () => {
     const response = { lanes: { a: { filled: true, slug: 's', title: 'т', group: 'g', track: 'express', item: RECORD } } };
@@ -548,6 +614,30 @@ describe('backlog: отбор с зависимостями', () => {
       item('c', { ...COMPLETE, group: 'queue' }),
     );
     assert.deepEqual(select(text), ['c']);
+  });
+
+  it('пункт с отсутствующим материалом пропущен и группу не занимает', () => {
+    const text = backlogText(
+      item('b', { ...COMPLETE, goal: 'missing.md', group: 'queue' }),
+      item('c', { ...COMPLETE, group: 'queue' }),
+    );
+    const entries = parse(text);
+    const skipped: string[] = [];
+    const chosen = selectItems(
+      entries,
+      2,
+      NOW,
+      STALE_MS,
+      undefined,
+      undefined,
+      (entry) => (entry.data.goal === undefined ? [] : [entry.data.goal]),
+      (entry, missing) => skipped.push(`${entry.slug}:${missing.join(',')}`),
+    );
+    assert.deepEqual(
+      chosen.map((entry) => entry.slug),
+      ['c'],
+    );
+    assert.deepEqual(skipped, ['b:missing.md']);
   });
 
   it('зависший in_progress с невыполненной зависимостью тоже не берётся', () => {

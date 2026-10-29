@@ -2660,6 +2660,43 @@ jobs:
   });
 });
 
+describe('lint: запись контекста item_refs', () => {
+  const pipeline = (entry: string): string => `
+kind: pipeline
+name: refs
+jobs:
+  work:
+    lane: a
+    context:
+      - ${entry}
+    steps: [{ id: c, run: [echo, ok], expect: [{ exit_code: 0 }] }]
+`;
+
+  it('принимает форму с подстановками и разворачивает её в вид item_refs', () => {
+    const project = makeProject({
+      'stepcast.yml': pipeline('{ item_refs: "${run.dir}/item-${job.lane}.json", mode: reference }'),
+    });
+    const expanded = expandPipeline({ pipelinePath: project.path('stepcast.yml'), config: project.config });
+    // `${job.lane}` раскрывается при разборе, `${run.dir}` — только в прогоне.
+    assert.deepEqual(
+      expanded.pipeline.jobs[0]?.context,
+      [{ kind: 'item_refs', path: '${run.dir}/item-a.json', mode: 'reference' }],
+    );
+    assert.deepEqual(errors(lint(project)), []);
+  });
+
+  it('режим по умолчанию — auto', () => {
+    const project = makeProject({ 'stepcast.yml': pipeline('{ item_refs: item.json }') });
+    const expanded = expandPipeline({ pipelinePath: project.path('stepcast.yml'), config: project.config });
+    assert.deepEqual(expanded.pipeline.jobs[0]?.context, [{ kind: 'item_refs', path: 'item.json', mode: 'auto' }]);
+  });
+
+  it('лишний ключ рядом с item_refs отклоняется', () => {
+    const project = makeProject({ 'stepcast.yml': pipeline('{ item_refs: item.json, required: true }') });
+    assert.throws(() => lint(project), StepcastError);
+  });
+});
+
 describe('lint: практика памяти', () => {
   const WITH_KNOWLEDGE = `
 kind: pipeline

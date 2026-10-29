@@ -1,11 +1,12 @@
 import { existsSync, mkdirSync } from 'node:fs';
-import { basename, join, relative, resolve as resolvePath } from 'node:path';
+import { basename, dirname, join, relative, resolve as resolvePath } from 'node:path';
 
 import {
   DEFAULT_STALE_HOURS,
   checkNeeds,
   declaresNeeds,
   isFree,
+  missingRefs,
   finishItem,
   needsMet,
   parseBacklogFile,
@@ -180,7 +181,7 @@ function runPick(
     throw new StepcastError('ключ --slots требует целого положительного числа');
   }
 
-  const chosen = claimItems(file, slots, only, now, nowMs, staleMs);
+  const chosen = claimItems(file, slots, only, now, nowMs, staleMs, writeErr);
 
   write(JSON.stringify(chosen.map(toRecord), null, 2));
   return ExitCode.ok;
@@ -200,6 +201,7 @@ function claimItems(
   now: string,
   nowMs: number,
   staleMs: number,
+  writeErr: (line: string) => void,
 ): readonly BacklogEntry[] {
   return withBacklogLock(file, 'backlog pick', () => {
     const text = readBacklogFile(file);
@@ -232,7 +234,32 @@ function claimItems(
       }
     }
 
-    const chosen = selectItems(entries, count, nowMs, staleMs, only, statusOf);
+    // Материалы пункта отсчитываются от каталога файла очереди. Проверка идёт
+    // только здесь, под тем же lock'ом, что и отбор: `list`, `finish` и `settle`
+    // файлов не трогают — исход и показ очереди не должны зависеть от диска.
+    const queueDir = dirname(file);
+    if (only !== undefined) {
+      const named = entries.find((entry) => entry.slug === only);
+      const missing = named === undefined ? [] : missingRefs(named, queueDir);
+      if (missing.length > 0) {
+        throw new StepcastError(
+          `пункт «${only}» назвал материалы, которых нет: ${missing.join(', ')}`,
+          { file, at: only, hint: `пути отсчитываются от каталога очереди ${queueDir}` },
+        );
+      }
+    }
+
+    const chosen = selectItems(
+      entries,
+      count,
+      nowMs,
+      staleMs,
+      only,
+      statusOf,
+      (entry) => missingRefs(entry, queueDir),
+      (entry, missing) =>
+        writeErr(`backlog pick: пункт «${entry.slug}» пропущен: нет файла ${missing[0]} (goal/details)`),
+    );
     if (chosen.length > 0) writeBacklogFile(file, applyPick(text, chosen, now));
     return chosen;
   });
@@ -261,7 +288,7 @@ function runPickLanes(
   // файловых операциях, которые очереди не касаются.
   if (runDir !== undefined) prepareRunDir(runDir);
 
-  const chosen = claimItems(file, lanes.length, only, now, nowMs, staleMs);
+  const chosen = claimItems(file, lanes.length, only, now, nowMs, staleMs, writeErr);
 
   const result: Record<string, unknown> = {};
 

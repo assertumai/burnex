@@ -65,6 +65,12 @@ export type ContextEntry =
     }
   | { readonly kind: 'text'; readonly text: string }
   /**
+   * Материалы пункта очереди: `path` называет JSON-файл записи пункта, из
+   * которого сборка берёт `goal` и `details`. Каждый названный там файл
+   * дальше идёт как запись `path` с этим `mode`.
+   */
+  | { readonly kind: 'item_refs'; readonly path: string; readonly mode: ContextMode }
+  /**
    * Запись, разрешаемая объявленным источником знания. Селектор трёх форм:
    * `index` — оглавление без тел, `scope` — тела по пересечению областей,
    * `id` — тела поимённо.

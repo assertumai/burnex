@@ -461,6 +461,7 @@ function toContext(raw: readonly RawContextEntry[] | undefined, at = 'context'):
     if (typeof entry === 'string') return { kind: 'path', path: entry, mode: 'auto' };
     if ('text' in entry) return { kind: 'text', text: entry.text };
     if ('knowledge' in entry) return toKnowledgeSelector(entry, `${at}[${index}]`);
+    if ('item_refs' in entry) return { kind: 'item_refs', path: entry.item_refs, mode: entry.mode ?? 'auto' };
     return {
       kind: 'path',
       path: entry.path,

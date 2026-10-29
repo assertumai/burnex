@@ -25,6 +25,7 @@ session: shared
 # бы планировать по пустому контексту. Частичный набор документов требование
 # пропускает: хотя бы один файл в каталоге изменения есть всегда.
 context:
+  - item_refs: ${run.dir}/item-${job.lane}.json
   - path: "${params.spec_dir}/${params.change}/**/*.md"
     required: true
 

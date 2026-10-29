@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { execFileSync, spawn } from 'node:child_process';
-import { existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { hostname } from 'node:os';
 import { join, basename } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -441,6 +441,59 @@ describe('CLI: зависимости needs', () => {
     const lanes = await backlog(dir, ['pick', '--lanes', 'x']);
     const parsed = JSON.parse(lanes.stdout) as { lanes: Record<string, { item: { needs: string[] } }> };
     assert.deepEqual(parsed.lanes.x?.item.needs, ['a']);
+  });
+});
+
+describe('CLI: материалы пункта goal и details', () => {
+  function materials(dir: string, ...files: readonly string[]): void {
+    mkdirSync(join(dir, 'backlog', 'b'), { recursive: true });
+    for (const name of files) writeFileSync(join(dir, name), 'материал\n');
+  }
+
+  it('пункт с отсутствующим файлом пропущен, группа не занята, ниже взят, строка в stderr', async () => {
+    const dir = bed(
+      item('b', { ...COMPLETE, group: 'queue', goal: 'backlog/b/goal.md', details: 'backlog/b/d.md' }),
+      item('c', { ...COMPLETE, group: 'queue' }),
+    );
+    const before = readFileSync(join(dir, 'backlog.md'), 'utf8');
+    const result = await backlog(dir, ['pick']);
+    assert.equal(result.code, ExitCode.ok);
+    const picked = JSON.parse(result.stdout) as { slug: string }[];
+    assert.deepEqual(picked.map((entry) => entry.slug), ['c']);
+    assert.match(result.stderr, /«b».*backlog\/b\/goal\.md/);
+    const after = readFileSync(join(dir, 'backlog.md'), 'utf8');
+    assert.equal(fieldOf(after, 'b', 'status'), 'todo');
+    assert.equal(fieldOf(after, 'c', 'status'), 'in_progress');
+    assert.notEqual(after, before);
+  });
+
+  it('все файлы на месте — пункт взят, запись несёт goal и details', async () => {
+    const dir = bed(item('b', { ...COMPLETE, goal: 'backlog/b/goal.md', details: 'backlog/b/d.md' }));
+    materials(dir, 'backlog/b/goal.md', 'backlog/b/d.md');
+    const runDir = join(dir, 'lanes');
+    const result = await backlog(dir, ['pick', '--lanes', 'a', '--run-dir', runDir]);
+    assert.equal(result.code, ExitCode.ok);
+    assert.doesNotMatch(result.stderr, /пропущен/);
+    const written = JSON.parse(readFileSync(join(runDir, 'item-a.json'), 'utf8')) as { goal: string; details: string[] };
+    assert.equal(written.goal, 'backlog/b/goal.md');
+    assert.deepEqual(written.details, ['backlog/b/d.md']);
+  });
+
+  it('--only на пункт с отсутствующими путями: код 2, все пути в сообщении, очередь прежняя', async () => {
+    const dir = bed(item('b', { ...COMPLETE, goal: 'backlog/b/goal.md', details: 'backlog/b/d.md' }));
+    const before = readFileSync(join(dir, 'backlog.md'));
+    const result = await backlog(dir, ['pick', '--only', 'b']);
+    assert.equal(result.code, 2);
+    assert.match(result.stderr, /backlog\/b\/goal\.md/);
+    assert.match(result.stderr, /backlog\/b\/d\.md/);
+    assert.deepEqual(readFileSync(join(dir, 'backlog.md')), before);
+  });
+
+  it('list с отсутствующим файлом ничего не проверяет', async () => {
+    const dir = bed(item('b', { ...COMPLETE, goal: 'backlog/b/goal.md' }));
+    const result = await backlog(dir, ['list']);
+    assert.equal(result.code, ExitCode.ok);
+    assert.equal((JSON.parse(result.stdout) as { goal: string }[])[0]?.goal, 'backlog/b/goal.md');
   });
 });
 

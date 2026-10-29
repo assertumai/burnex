@@ -1,11 +1,11 @@
 import { existsSync, readFileSync } from 'node:fs';
-import { join, resolve as resolvePath } from 'node:path';
+import { join, relative, resolve as resolvePath } from 'node:path';
 
 import { resolveConfig } from '../config/resolve.js';
 import type { Registry } from '../../../kernel/registry.js';
 import { expandPipeline } from '../document/expand.js';
 import type { Job } from '../document/model.js';
-import { assembleContext, type Origin, type UpstreamOutput } from '../domain/context/assemble.js';
+import { assembleContext, itemRefPaths, type Origin, type UpstreamOutput } from '../domain/context/assemble.js';
 import { createKnowledgeSource } from '../domain/knowledge/source.js';
 import { findProjectRoot } from '../run/journal/paths.js';
 import { resolveRun } from '../run/journal/reader.js';
@@ -121,6 +121,21 @@ export function runContextCommand(
   // поэтому уровень повторного объявления выглядит тоньше, чем объявлено.
   // Без этого перечня разница между «не объявлено» и «объявлено, но склеено»
   // из вывода не читается.
+  // Файлы записи `item_refs` в общем отчёте неотличимы от файлов записи
+  // `path`, а откуда в контексте материал пункта, предпросмотр и должен
+  // сказать. Негодный файл записи сюда не дойдёт: сборка выше отказала раньше.
+  const itemFiles = (step.contextInherit
+    ? [...pipeline.context, ...job.context, ...step.context]
+    : step.context
+  )
+    .filter((entry) => entry.kind === 'item_refs')
+    .flatMap((entry) => itemRefPaths(entry.path, cwd).map((path) => relative(cwd, path)));
+  if (itemFiles.length > 0) {
+    write('');
+    write('материалы пункта (item_refs):');
+    for (const path of itemFiles) write(`  ${path}`);
+  }
+
   const merged = assembled.report.entries.filter((entry) => entry.declared_in !== undefined);
   if (merged.length > 0) {
     write('');

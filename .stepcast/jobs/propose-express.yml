@@ -35,6 +35,7 @@ steps:
     context:
       - path: ${run.dir}/item-${job.lane}.json
         mode: inline
+      - item_refs: ${run.dir}/item-${job.lane}.json
       - path: ${params.spec_rules}
         mode: inline
     output_schema: ../schemas/propose.json

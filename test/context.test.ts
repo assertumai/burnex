@@ -608,6 +608,144 @@ describe('assembleContext: отсев путей до склейки', () => {
   });
 });
 
+describe('assembleContext: запись item_refs', () => {
+  const record = (goal: unknown, details: unknown): string => JSON.stringify({ goal, details });
+
+  function assembleRefs(files: Record<string, string>, extra: Partial<AssembleOptions> = {}, mode: 'auto' | 'reference' = 'auto') {
+    const project = makeProject(files);
+    return assembleContext({
+      ...assembleBase(),
+      workspace: project.root,
+      step: [],
+      job: [{ kind: 'item_refs', path: 'item.json', mode }],
+      ...extra,
+    });
+  }
+
+  const MATERIALS = { 'g.md': 'цель', 'a.md': 'первый', 'b.md': 'второй' };
+
+  it('порядок goal → details как объявлено, по записи path на файл уровня объявления', () => {
+    const assembled = assembleRefs({ ...MATERIALS, 'item.json': record('g.md', ['b.md', 'a.md']) });
+    assert.deepEqual(
+      assembled.report.entries.map((entry) => [entry.origin, entry.kind, entry.path]),
+      [['job', 'path', 'g.md'], ['job', 'path', 'b.md'], ['job', 'path', 'a.md']],
+    );
+  });
+
+  it('пустые goal и details не добавляют ничего', () => {
+    assert.deepEqual(assembleRefs({ 'item.json': record('', []) }).report.entries, []);
+  });
+
+  it('отсутствующий ключ — пусто', () => {
+    assert.deepEqual(assembleRefs({ 'item.json': '{}' }).report.entries, []);
+  });
+
+  for (const [name, files, fragment] of [
+    ['нет файла записи', {}, /item\.json/],
+    ['неразбираемый файл записи', { 'item.json': '{' }, /item\.json/],
+    ['goal не строка', { 'item.json': record(1, []) }, /goal/],
+    ['details не перечень строк', { 'item.json': record('', 'a.md') }, /details/],
+    ['абсолютный путь', { 'item.json': record('/etc/passwd', []) }, /\/etc\/passwd/],
+    ['сегмент ..', { 'item.json': record('', ['../x.md']) }, /\.\.\/x\.md/],
+    ['названного файла нет', { 'item.json': record('nope.md', []) }, /nope\.md/],
+  ] as const) {
+    it(`отказ до бэкенда: ${name}`, () => {
+      assert.throws(
+        () => assembleRefs(files),
+        (error: unknown) => {
+          assert.ok(error instanceof StepcastError);
+          assert.match(`${error.message} ${error.hint ?? ''}`, fragment);
+          return true;
+        },
+      );
+    });
+  }
+
+  it('путь под context.deny не попадает в контекст и даёт событие', () => {
+    const events: Array<[string, string]> = [];
+    const assembled = assembleRefs(
+      { ...MATERIALS, 'item.json': record('g.md', ['a.md']) },
+      { deny: ['a.md'], onDenied: (path, pattern) => events.push([path, pattern]) },
+    );
+    assert.deepEqual(assembled.report.entries.map((entry) => entry.path), ['g.md']);
+    assert.deepEqual(events, [['a.md', 'a.md']]);
+  });
+
+  it('context_exclude отсеивает файл записи', () => {
+    const assembled = assembleRefs(
+      { ...MATERIALS, 'item.json': record('g.md', ['a.md']) },
+      { exclude: ['g.md'] },
+    );
+    assert.deepEqual(assembled.report.entries.map((entry) => entry.path), ['a.md']);
+  });
+
+  it('склеивается с тем же файлом из записи path', () => {
+    const assembled = assembleRefs(
+      { ...MATERIALS, 'item.json': record('g.md', []) },
+      { pipeline: [{ kind: 'path', path: 'g.md', mode: 'auto' }] },
+    );
+    const entries = assembled.report.entries.filter((entry) => entry.path === 'g.md');
+    assert.equal(entries.length, 1);
+    assert.deepEqual(entries[0]?.declared_in, ['pipeline', 'job']);
+  });
+
+  it('понижается бюджетом до reference, не валя шаг', () => {
+    const assembled = assembleRefs(
+      { 'g.md': 'слово '.repeat(400), 'item.json': record('g.md', []) },
+      { maxTokens: 100 },
+    );
+    assert.equal(assembled.report.entries[0]?.mode, 'reference');
+  });
+
+  it('mode записи передаётся файлам', () => {
+    const assembled = assembleRefs({ ...MATERIALS, 'item.json': record('g.md', []) }, {}, 'reference');
+    assert.equal(assembled.report.entries[0]?.mode, 'reference');
+  });
+});
+
+describe('CLI: stepcast context — item_refs', () => {
+  const PIPELINE_REFS = `
+version: 1
+kind: pipeline
+name: refs-preview
+defaults:
+  agent: claude
+jobs:
+  work:
+    context:
+      - item_refs: item.json
+    steps:
+      - id: write
+        agent: claude
+        prompt: пиши
+`;
+
+  function refsBed(files: Record<string, string>): Bed {
+    const project = makeProject({ 'stepcast.yml': PIPELINE_REFS, ...files });
+    const runsRoot = join(project.home, '..', 'runs');
+    mkdirSync(runsRoot, { recursive: true });
+    writeFileSync(join(project.home, '.stepcast', 'config.yml'), `runs:\n  root: ${runsRoot}\n`);
+    return { project, runsRoot, home: project.home };
+  }
+
+  it('перечисляет файлы, добавленные записью', () => {
+    const b = refsBed({ 'g.md': 'цель', 'a.md': 'а', 'item.json': JSON.stringify({ goal: 'g.md', details: ['a.md'] }) });
+    const { code, lines } = call(b, { job: 'work', step: 'write' });
+    assert.equal(code, ExitCode.ok);
+    const at = lines.indexOf('материалы пункта (item_refs):');
+    assert.ok(at >= 0, lines.join('\n'));
+    assert.deepEqual(lines.slice(at + 1, at + 3), ['  g.md', '  a.md']);
+  });
+
+  it('негодный файл записи — отказ с той же причиной, что у шага', () => {
+    const b = refsBed({ 'item.json': '{' });
+    assert.throws(
+      () => call(b, { job: 'work', step: 'write' }),
+      (error: unknown) => error instanceof StepcastError && /item\.json/.test(error.message),
+    );
+  });
+});
+
 describe('assembleContext: отчёт о составе после склейки', () => {
   it('повтор на двух уровнях даёт одну запись с declared_in из двух уровней', () => {
     const project = makeProject({ 'CLAUDE.md': 'текст' });

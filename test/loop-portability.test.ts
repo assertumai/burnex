@@ -353,6 +353,40 @@ describe('self-improvement-loop: работа дорожки не адресуе
 });
 
 /**
+ * backlog-item-goal-details: материалы пункта доезжают до работ, которые
+ * принимают решения по замыслу пункта, и не доезжают до работ, которые чинят
+ * замечания ревью и гоняют проверку.
+ */
+describe('self-improvement-loop: запись item_refs в работах дорожки', () => {
+  const RECORD = '${run.dir}/item-${job.lane}.json';
+  const WITH = ['propose', 'plan', 'implement', 'review', 'propose-express', 'implement-express'];
+  const WITHOUT = ['fix-review', 'verify'];
+
+  function declaresItemRefs(name: string): boolean {
+    const document = parseYaml(readFileSync(join(JOBS_DIR, `${name}.yml`), 'utf8')) as {
+      context?: unknown[];
+      steps?: Array<{ context?: unknown[] }>;
+    };
+    const entries = [...(document.context ?? []), ...(document.steps ?? []).flatMap((step) => step.context ?? [])];
+    return entries.some(
+      (entry) => typeof entry === 'object' && entry !== null && (entry as { item_refs?: unknown }).item_refs === RECORD,
+    );
+  }
+
+  for (const name of WITH) {
+    it(`${name}: запись объявлена`, () => {
+      assert.equal(declaresItemRefs(name), true);
+    });
+  }
+
+  for (const name of WITHOUT) {
+    it(`${name}: записи нет`, () => {
+      assert.equal(declaresItemRefs(name), false);
+    });
+  }
+});
+
+/**
  * job-tools-declaration: настоящий пайплайн петли, раскрытый целиком, обязан
  * давать `implement` и `fix-review` тот же набор прав, что они несли
  * литералами до изменения, — в том же порядке и с теми же соседями.
@@ -523,6 +557,7 @@ jobs:
       spec_tool: "\${project.spec.tool}"
   plan-a:
     uses: ${JOBS_DIR}/plan.yml
+    lane: a
     with: { change: demo-change, spec_dir: "\${project.spec.dir}" }
     needs: [propose-a]
   implement-a:
@@ -538,6 +573,7 @@ jobs:
     needs: [plan-a]
   review-a:
     uses: ${JOBS_DIR}/review.yml
+    lane: a
     with: { change: demo-change, spec_dir: "\${project.spec.dir}" }
     needs: [implement-a]
   fix-review-a:
@@ -556,6 +592,7 @@ jobs:
   # проверять ветку, которой в петле не бывает.
   implement-express-a:
     uses: ${JOBS_DIR}/implement-express.yml
+    lane: a
     with:
       change: demo-change
       repo_dir: "."
@@ -587,11 +624,15 @@ jobs:
     );
   });
 
+  /** Запись материалов пункта: дорожка раскрыта при разборе, каталог прогона — только в прогоне. */
+  const ITEM_REFS_A = { kind: 'item_refs', path: '${run.dir}/item-a.json', mode: 'auto' } as const;
+
   it('plan-a: путь контекста ведёт в чужой каталог документов', () => {
     const pipeline = expandForeign(makeProject());
     const job = pipeline.jobs.find((item) => item.id === 'plan-a')!;
 
     assert.deepEqual(job.context, [
+      ITEM_REFS_A,
       { kind: 'path', path: 'docs/changes/demo-change/**/*.md', mode: 'auto', required: true },
     ]);
   });
@@ -601,6 +642,7 @@ jobs:
     const job = pipeline.jobs.find((item) => item.id === 'implement-a')!;
 
     assert.deepEqual(job.context, [
+      ITEM_REFS_A,
       {
         kind: 'path',
         path: 'docs/changes/demo-change/**/*.md',
@@ -643,6 +685,7 @@ jobs:
     const job = pipeline.jobs.find((item) => item.id === 'review-a')!;
 
     assert.deepEqual(job.context, [
+      ITEM_REFS_A,
       { kind: 'path', path: 'docs/changes/demo-change/**/*.md', mode: 'auto', required: true },
     ]);
   });
@@ -798,9 +841,18 @@ project:
     check: 'test "$SPEC_CHANGE" = demo-change'
   edit_paths: [cmd/**, internal/**, go.mod]
 jobs:
+  # В настоящей петле запись пункта пишет slots; здесь её заводит первая
+  # работа, потому что item_refs читает её до бэкенда.
+  seed:
+    steps:
+      - id: write
+        run: [sh, -c, 'printf "{}" > "$STEPCAST_RUN_DIR/item-a.json"']
+        expect: [{ exit_code: 0 }]
   plan-a:
     uses: ${JOBS_DIR}/plan.yml
+    lane: a
     with: { change: demo-change, spec_dir: "\${project.spec.dir}" }
+    needs: [seed]
   implement-a:
     uses: ${JOBS_DIR}/implement.yml
     lane: a
@@ -814,6 +866,7 @@ jobs:
     needs: [plan-a]
   review-a:
     uses: ${JOBS_DIR}/review.yml
+    lane: a
     with: { change: demo-change, spec_dir: "\${project.spec.dir}" }
     needs: [implement-a]
   fix-review-a:
@@ -945,8 +998,17 @@ project:
     check: 'test "$SPEC_CHANGE" = demo-change'
   edit_paths: [cmd/**, internal/**, go.mod]
 jobs:
+  # В настоящей петле запись пункта пишет slots; здесь её заводит первая
+  # работа, потому что item_refs читает её до бэкенда.
+  seed:
+    steps:
+      - id: write
+        run: [sh, -c, 'printf "{}" > "$STEPCAST_RUN_DIR/item-a.json"']
+        expect: [{ exit_code: 0 }]
   implement-express-a:
     uses: ${JOBS_DIR}/implement-express.yml
+    lane: a
+    needs: [seed]
     with:
       change: demo-change
       repo_dir: "."

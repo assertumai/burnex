@@ -337,12 +337,13 @@ started_at: 2026-10-29T05:52:44.654Z
 
 ## backlog-item-goal-details
 
-status: todo
+status: done
 title: Поля `goal` и `details` пункта попадают в контекст работ петли
 why: Пункт умещает замысел в три строки `title`/`why`/`done_when`; материалы к нему (черновик, разбор отказа, ссылки) лежат отдельно, и агент их не видит. Burnex ввёл один целевой документ и список файлов, которые петля читает как контекст.
 done_when: `goal` — один путь, `details` — список путей (принято `backlog/<slug>/`); `pick` пропускает пункт с отсутствующим путём, `pick --only` отказывает; `item-<lane>.json` несёт пути, а работы propose/plan/implement/review self-improve получают их записью контекста `item_refs`; тест на отбор с отсутствующим файлом.
 group: backlog-queue
 source: docs/burnex-after-stepcast.md, раздел 5 «Новые поля пункта и статус postponed»
+started_at: 2026-10-29T06:25:50.757Z
 
 ## backlog-claimed-by-owner
 

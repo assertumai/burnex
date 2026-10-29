@@ -36,6 +36,9 @@ steps:
     context:
       - path: ${run.dir}/item-${job.lane}.json
         mode: inline
+      # Материалы, названные пунктом (`goal`/`details`): запись пункта выше
+      # несёт только пути, а решения по замыслу принимаются по их содержимому.
+      - item_refs: ${run.dir}/item-${job.lane}.json
       - path: ${params.spec_rules}
         mode: inline
     output_schema: ../schemas/propose.json

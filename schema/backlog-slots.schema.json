@@ -60,6 +60,15 @@
                     "items": {
                       "type": "string"
                     }
+                  },
+                  "goal": {
+                    "type": "string"
+                  },
+                  "details": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
                   }
                 },
                 "required": [
@@ -70,7 +79,9 @@
                   "group",
                   "track",
                   "repos",
-                  "needs"
+                  "needs",
+                  "goal",
+                  "details"
                 ],
                 "additionalProperties": false
               },

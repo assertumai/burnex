@@ -253,6 +253,15 @@ function resolveEntry(
     return;
   }
 
+  if (entry.kind === 'item_refs') {
+    // Каждый путь дальше идёт тем же путём, что файл записи `path`: запрет,
+    // исключение, склейка и бюджет не знают, откуда путь взялся.
+    for (const path of itemRefPaths(entry.path, options.workspace)) {
+      includeFile(path, entry.mode, origin, options, resolved, registry, denied);
+    }
+    return;
+  }
+
   const paths = expandPaths(entry.path, options.workspace);
 
   // Требование совпадений проверяется до отсева: `deny` и `context_exclude` —
@@ -265,51 +274,119 @@ function resolveEntry(
   }
 
   for (const path of paths) {
-    const relativePath = toRelative(path, options.workspace);
-    const key = registryKey(path, options.workspace);
-
-    const denialPattern = matchesAnyGlob(relativePath, options.deny);
-    if (denialPattern !== undefined) {
-      if (!denied.has(key)) {
-        denied.add(key);
-        options.onDenied?.(relativePath, denialPattern);
-      }
-      continue;
-    }
-
-    if (matchesAnyGlob(relativePath, options.exclude) !== undefined) continue;
-
-    const existing = registry.get(key);
-    if (existing !== undefined) {
-      mergeDeclaration(existing, origin, entry.mode, options.inlineThreshold);
-      continue;
-    }
-
-    let content: string;
-    try {
-      content = readFileSync(path, 'utf8');
-    } catch (error) {
-      throw new StepcastError(`Не удалось прочитать файл контекста: ${relativePath}`, {
-        file: path,
-        cause: error,
-      });
-    }
-
-    const tokens = estimateTokens(content);
-    const strength = declarationStrength(entry.mode, tokens, options.inlineThreshold);
-    const item: Resolved = {
-      origin,
-      origins: [origin],
-      kind: 'path',
-      path: relativePath,
-      content,
-      tokens,
-      pinned: strength === 2,
-      mode: strength === 0 ? 'reference' : 'inline',
-    };
-    resolved.push(item);
-    registry.set(key, item);
+    includeFile(path, entry.mode, origin, options, resolved, registry, denied);
   }
+}
+
+function includeFile(
+  path: string,
+  mode: ContextMode,
+  origin: Origin,
+  options: AssembleOptions,
+  resolved: Resolved[],
+  registry: Map<string, Resolved>,
+  denied: Set<string>,
+): void {
+  const relativePath = toRelative(path, options.workspace);
+  const key = registryKey(path, options.workspace);
+
+  const denialPattern = matchesAnyGlob(relativePath, options.deny);
+  if (denialPattern !== undefined) {
+    if (!denied.has(key)) {
+      denied.add(key);
+      options.onDenied?.(relativePath, denialPattern);
+    }
+    return;
+  }
+
+  if (matchesAnyGlob(relativePath, options.exclude) !== undefined) return;
+
+  const existing = registry.get(key);
+  if (existing !== undefined) {
+    mergeDeclaration(existing, origin, mode, options.inlineThreshold);
+    return;
+  }
+
+  let content: string;
+  try {
+    content = readFileSync(path, 'utf8');
+  } catch (error) {
+    throw new StepcastError(`Не удалось прочитать файл контекста: ${relativePath}`, {
+      file: path,
+      cause: error,
+    });
+  }
+
+  const tokens = estimateTokens(content);
+  const strength = declarationStrength(mode, tokens, options.inlineThreshold);
+  const item: Resolved = {
+    origin,
+    origins: [origin],
+    kind: 'path',
+    path: relativePath,
+    content,
+    tokens,
+    pinned: strength === 2,
+    mode: strength === 0 ? 'reference' : 'inline',
+  };
+  resolved.push(item);
+  registry.set(key, item);
+}
+
+/**
+ * Пути материалов из файла записи пункта: `goal`, затем `details`. Читается
+ * только это — остальная форма пункта сборке контекста ни к чему, и любой
+ * файл с этими двумя ключами годится. Отказы до бэкенда: продолжать шаг без
+ * материалов, ради которых поле заведено, хуже, чем остановить.
+ *
+ * Форму пути проверяем и здесь: файл записи — вход извне документа, и
+ * проверку разбора очереди движок на него не перекладывает.
+ */
+export function itemRefPaths(recordPath: string, workspace: string): readonly string[] {
+  const file = isAbsolute(recordPath) ? recordPath : resolvePath(workspace, recordPath);
+
+  let value: unknown;
+  try {
+    value = JSON.parse(readFileSync(file, 'utf8'));
+  } catch (error) {
+    throw new StepcastError(`Запись item_refs не прочитана или не разобрана: ${recordPath}`, {
+      file,
+      cause: error,
+    });
+  }
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    throw new StepcastError(`Запись item_refs не является JSON-объектом: ${recordPath}`, { file });
+  }
+  const { goal, details } = value as { goal?: unknown; details?: unknown };
+
+  if (goal !== undefined && typeof goal !== 'string') {
+    throw new StepcastError(`Запись item_refs ${recordPath}: goal должен быть строкой`, { file });
+  }
+  if (details !== undefined && (!Array.isArray(details) || details.some((item) => typeof item !== 'string'))) {
+    throw new StepcastError(`Запись item_refs ${recordPath}: details должен быть перечнем строк`, { file });
+  }
+
+  const named = [...(goal === undefined || goal === '' ? [] : [goal]), ...((details as string[] | undefined) ?? [])];
+  return named
+    .filter((path) => path !== '')
+    .map((path) => {
+      if (isAbsolute(path) || path.split('/').includes('..')) {
+        throw new StepcastError(
+          `Запись item_refs ${recordPath}: путь «${path}» абсолютный или выходит за корень сегментом ..`,
+          { file },
+        );
+      }
+      const absolute = resolvePath(workspace, path);
+      try {
+        if (statSync(absolute).isFile()) return absolute;
+      } catch {
+        // отсутствие и каталог — один отказ ниже
+      }
+      throw new StepcastError(`Файл, названный записью item_refs, не найден: ${path}`, {
+        file: absolute,
+        hint: `Запись ${recordPath}; пути отсчитываются от рабочей директории шага`,
+      });
+    });
 }
 
 /**

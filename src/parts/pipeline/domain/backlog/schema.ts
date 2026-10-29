@@ -59,12 +59,13 @@ export type BacklogStatus = z.infer<typeof BacklogStatusSchema>;
 export const BacklogTrackSchema = BacklogSlugSchema;
 
 /**
- * Имя каталога в перечне `repos`: относительный путь без сегмента `..`, без
- * абсолютной формы и без символов шаблона глоба — тот же смысл, что у
- * `RelativeRepoPathSchema` конфигурации, но отдельная модель: очередь не
- * знает устройства проекта и не имеет права зависеть от `parts/pipeline/config`.
+ * Относительный путь без сегмента `..`, без абсолютной формы и без символов
+ * шаблона глоба — тот же смысл, что у `RelativeRepoPathSchema` конфигурации,
+ * но отдельная модель: очередь не знает устройства проекта и не имеет права
+ * зависеть от `parts/pipeline/config`. Её делят имя каталога в `repos` и пути
+ * материалов `goal`/`details`.
  */
-const RepoNameSchema = z
+const RelativePathSchema = z
   .string()
   .refine((value) => !isAbsolute(value), 'путь не может быть абсолютным')
   .refine((value) => !value.split('/').includes('..'), 'путь не может выходить за корень сегментом ..')
@@ -77,7 +78,7 @@ const RepoNameSchema = z
  * проекта, это проверяет тот, кто разрешает имя в объявление
  * (`stepcast project repos`, `src/parts/pipeline/domain/project/repos.ts`).
  */
-const RepoListSchema = commaList('repos', { nominative: 'имя', genitive: 'имени' }, RepoNameSchema);
+const RepoListSchema = commaList('repos', { nominative: 'имя', genitive: 'имени' }, RelativePathSchema);
 
 /**
  * Перечень через запятую для полей `repos` и `needs`: обрезка пробелов,
@@ -126,6 +127,22 @@ function commaList(
 const NeedsListSchema = commaList('needs', { nominative: 'слаг', genitive: 'слага' }, BacklogSlugSchema);
 
 /**
+ * Материалы пункта: `goal` — один файл с целью, `details` — перечень файлов
+ * с подробностями. Пути отсчитываются от каталога файла очереди; разбор
+ * проверяет только форму, существование файла проверяет отбор (`refs.ts`) —
+ * очередь читают и те, кому файлов на диске видеть незачем.
+ */
+const DetailsListSchema = commaList('details', { nominative: 'путь', genitive: 'пути' }, RelativePathSchema);
+
+/**
+ * Пустой `goal` отклоняется так же, как пустой `details`: иначе строка
+ * `goal:` без значения разбиралась бы в путь к самому каталогу очереди, и
+ * отбор молча пропускал бы пункт навсегда, а запись выдавала бы его за пункт
+ * без материала.
+ */
+const GoalSchema = RelativePathSchema.refine((value) => value.trim() !== '', 'пустое значение поля goal');
+
+/**
  * Пункт очереди целиком, как он получается из текста файла: слаг из
  * заголовка плюс плоские поля под ним. Схема нестрогая (`looseObject`) —
  * поле, не входящее в перечень известных, MUST пережить правку файла, а не
@@ -143,6 +160,8 @@ export const BacklogItemSchema = z.looseObject({
   reason: z.string().optional(),
   repos: RepoListSchema.optional(),
   needs: NeedsListSchema.optional(),
+  goal: GoalSchema.optional(),
+  details: DetailsListSchema.optional(),
 });
 
 export type BacklogItem = z.infer<typeof BacklogItemSchema>;
@@ -161,6 +180,10 @@ export const BacklogRecordSchema = z
     repos: z.array(z.string()),
     /** Слаги пунктов, которые должны быть `done` до взятия; пусто, когда пункт поле не заполнил. */
     needs: z.array(z.string()),
+    /** Путь файла с целью от каталога очереди; пусто, когда пункт поле не заполнил. */
+    goal: z.string(),
+    /** Пути файлов с подробностями в объявленном порядке; пусто, когда пункт поле не заполнил. */
+    details: z.array(z.string()),
   })
   .strict();
 

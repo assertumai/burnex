@@ -1,5 +1,6 @@
 export { parse, effectiveGroup, toRecord, type BacklogEntry, type BacklogFieldPosition } from './parse.js';
-export { isFree, selectItems, DEFAULT_STALE_HOURS } from './select.js';
+export { isFree, selectItems, DEFAULT_STALE_HOURS, type MissingRefsOf } from './select.js';
+export { missingRefs, refsOf } from './refs.js';
 export {
   withBacklogLock,
   withBacklogLockAsync,

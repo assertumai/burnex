@@ -21,6 +21,7 @@ session: shared
 # required: true — по той же причине, что в plan.yml: глоб без совпадений
 # оставил бы ревьюера без документов изменения, не сказав об этом.
 context:
+  - item_refs: ${run.dir}/item-${job.lane}.json
   - path: "${params.spec_dir}/${params.change}/**/*.md"
     required: true
 

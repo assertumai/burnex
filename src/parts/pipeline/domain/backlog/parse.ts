@@ -161,6 +161,13 @@ function describeFailure(
     );
   }
 
+  if (field === 'goal' || field === 'details') {
+    return new StepcastError(
+      `пункт «${raw.slug}»: ${field} «${String(candidate[field])}» некорректно: ${issue.message}${suffix}`,
+      { at: raw.slug },
+    );
+  }
+
   if (field === 'group') {
     return new StepcastError(
       `пункт «${raw.slug}»: группа «${String(candidate.group)}» не является слагом в kebab-case${suffix}`,
@@ -193,5 +200,7 @@ export function toRecord(entry: BacklogEntry): BacklogRecord {
     // отсутствие поля — пустой перечень, то есть корень дерева.
     repos: entry.data.repos ?? [],
     needs: entry.data.needs ?? [],
+    goal: entry.data.goal ?? '',
+    details: entry.data.details ?? [],
   };
 }

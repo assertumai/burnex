@@ -192,6 +192,26 @@
           {
             "type": "object",
             "properties": {
+              "item_refs": {
+                "type": "string"
+              },
+              "mode": {
+                "type": "string",
+                "enum": [
+                  "inline",
+                  "reference",
+                  "auto"
+                ]
+              }
+            },
+            "required": [
+              "item_refs"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
               "knowledge": {
                 "anyOf": [
                   {
@@ -781,6 +801,26 @@
                     {
                       "type": "object",
                       "properties": {
+                        "item_refs": {
+                          "type": "string"
+                        },
+                        "mode": {
+                          "type": "string",
+                          "enum": [
+                            "inline",
+                            "reference",
+                            "auto"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "item_refs"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
                         "knowledge": {
                           "anyOf": [
                             {
@@ -1067,6 +1107,26 @@
                       },
                       "required": [
                         "text"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "item_refs": {
+                          "type": "string"
+                        },
+                        "mode": {
+                          "type": "string",
+                          "enum": [
+                            "inline",
+                            "reference",
+                            "auto"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "item_refs"
                       ],
                       "additionalProperties": false
                     },
@@ -1539,6 +1599,26 @@
                                 },
                                 "required": [
                                   "text"
+                                ],
+                                "additionalProperties": false
+                              },
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "item_refs": {
+                                    "type": "string"
+                                  },
+                                  "mode": {
+                                    "type": "string",
+                                    "enum": [
+                                      "inline",
+                                      "reference",
+                                      "auto"
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "item_refs"
                                 ],
                                 "additionalProperties": false
                               },
@@ -2053,6 +2133,26 @@
                               {
                                 "type": "object",
                                 "properties": {
+                                  "item_refs": {
+                                    "type": "string"
+                                  },
+                                  "mode": {
+                                    "type": "string",
+                                    "enum": [
+                                      "inline",
+                                      "reference",
+                                      "auto"
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "item_refs"
+                                ],
+                                "additionalProperties": false
+                              },
+                              {
+                                "type": "object",
+                                "properties": {
                                   "knowledge": {
                                     "anyOf": [
                                       {
@@ -2470,6 +2570,26 @@
                                 },
                                 "required": [
                                   "text"
+                                ],
+                                "additionalProperties": false
+                              },
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "item_refs": {
+                                    "type": "string"
+                                  },
+                                  "mode": {
+                                    "type": "string",
+                                    "enum": [
+                                      "inline",
+                                      "reference",
+                                      "auto"
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "item_refs"
                                 ],
                                 "additionalProperties": false
                               },
@@ -2907,6 +3027,26 @@
                               {
                                 "type": "object",
                                 "properties": {
+                                  "item_refs": {
+                                    "type": "string"
+                                  },
+                                  "mode": {
+                                    "type": "string",
+                                    "enum": [
+                                      "inline",
+                                      "reference",
+                                      "auto"
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "item_refs"
+                                ],
+                                "additionalProperties": false
+                              },
+                              {
+                                "type": "object",
+                                "properties": {
                                   "knowledge": {
                                     "anyOf": [
                                       {
@@ -3338,6 +3478,26 @@
                                 },
                                 "required": [
                                   "text"
+                                ],
+                                "additionalProperties": false
+                              },
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "item_refs": {
+                                    "type": "string"
+                                  },
+                                  "mode": {
+                                    "type": "string",
+                                    "enum": [
+                                      "inline",
+                                      "reference",
+                                      "auto"
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "item_refs"
                                 ],
                                 "additionalProperties": false
                               },

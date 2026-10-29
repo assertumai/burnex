@@ -11,6 +11,9 @@ import { effectiveGroup, type BacklogEntry } from './parse.js';
 
 export const DEFAULT_STALE_HOURS = 6;
 
+/** Проверка материалов пункта: пути, не называющие существующий файл (`refs.ts`). */
+export type MissingRefsOf = (entry: BacklogEntry) => readonly string[];
+
 /**
  * Свободен ли пункт для взятия в работу.
  *
@@ -68,6 +71,9 @@ function pickRank(entry: BacklogEntry): number {
  * `statusOf` включает зависимости (`needs`): пункт с невыполненной зависимостью
  * не свободен. Без него зависимости не учитываются.
  *
+ * `missingRefsOf` включает проверку материалов `goal`/`details`; пропущенный
+ * из-за неё пункт сообщается через `onSkippedRefs`.
+ *
  * Занятые группы собираются заранее по всей очереди (занятый пункт держит
  * свою группу, даже если сам он ниже места отбора), а затем пополняются по
  * ходу отбора — так пункт одной группы с уже выбранным не берётся в том же
@@ -80,6 +86,8 @@ export function selectItems(
   staleMs: number,
   only?: string,
   statusOf?: StatusOf,
+  missingRefsOf?: MissingRefsOf,
+  onSkippedRefs?: (entry: BacklogEntry, missing: readonly string[]) => void,
 ): readonly BacklogEntry[] {
   const busyGroups = new Set(
     entries.filter((entry) => isBusy(entry, nowMs, staleMs)).map(effectiveGroup),
@@ -102,6 +110,16 @@ export function selectItems(
     // Ждущий пункт пропускается до проверки группы и в `chosen` не попадает,
     // так что группу он не берёт: пункт той же группы ниже идёт вместо него.
     if (statusOf !== undefined && !needsMet(entry, statusOf)) continue;
+    // Пункт с отсутствующим материалом пропускается в той же ветке: взять его
+    // значило бы запустить работу без файла, который пункт назвал. Пропуск
+    // виден вызывающему, а не молчалив.
+    if (missingRefsOf !== undefined) {
+      const missing = missingRefsOf(entry);
+      if (missing.length > 0) {
+        onSkippedRefs?.(entry, missing);
+        continue;
+      }
+    }
     const group = effectiveGroup(entry);
     if (busyGroups.has(group)) continue;
     chosen.push(entry);
