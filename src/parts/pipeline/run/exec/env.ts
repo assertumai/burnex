@@ -160,6 +160,12 @@ export interface InjectedContext {
    */
   readonly jobAttempt: number;
   readonly jobAttemptMax: number;
+  /**
+   * Цикл по группе работ, в котором исполняется работа. Есть только у
+   * участника: отсутствие переменных отвечает на вопрос «я в цикле?» так же,
+   * как отсутствие `STEPCAST_ITERATION` — на вопрос «я в until?».
+   */
+  readonly loop?: { readonly id: string; readonly iteration: number; readonly maxIterations: number };
   readonly workspace: string;
   readonly artifacts: string;
   /** Каталог черновиков работы — общий на все её шаги и итерации. */
@@ -197,6 +203,13 @@ export function injectedVariables(context: InjectedContext): Record<string, stri
     STEPCAST_ARTIFACTS: context.artifacts,
     STEPCAST_SCRATCH: context.scratch,
     ...(context.iteration === undefined ? {} : { STEPCAST_ITERATION: String(context.iteration) }),
+    ...(context.loop === undefined
+      ? {}
+      : {
+          STEPCAST_LOOP: context.loop.id,
+          STEPCAST_LOOP_ITERATION: String(context.loop.iteration),
+          STEPCAST_LOOP_ITERATION_MAX: String(context.loop.maxIterations),
+        }),
     ...(context.previousFailurePath === undefined
       ? {}
       : { STEPCAST_PREV_FAILURE: context.previousFailurePath }),

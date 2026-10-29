@@ -259,7 +259,7 @@ jobs:
 describe('pipeline-execution: перечень причин остановки', () => {
   // Перечень закрыт: изменение требует такого же обоснования, как изменение
   // кодов возврата, поэтому сверяется дословно.
-  it('содержит прежние причины и добавляет ровно три новые', () => {
+  it('содержит прежние причины и добавляет ровно четыре новые', () => {
     const before = [
       'expect_failed',
       'timeout',
@@ -267,7 +267,7 @@ describe('pipeline-execution: перечень причин остановки',
       'budget_exceeded',
       'canceled',
     ];
-    const added = ['until_not_met', 'backend_rate_limited', 'backend_unauthenticated'];
+    const added = ['until_not_met', 'loop_exhausted', 'backend_rate_limited', 'backend_unauthenticated'];
 
     assert.deepEqual([...HALT_CAUSES].sort(), [...before, ...added].sort());
   });

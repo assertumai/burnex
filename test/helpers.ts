@@ -175,6 +175,8 @@ export interface SeedRunOptions {
   readonly budget?: RunStatus['budget'];
   /** Ожидания решения (`user-decision-steps`) — по умолчанию прогон ничего не ждёт. */
   readonly awaiting?: RunStatus['awaiting'];
+  /** Циклы по группам работ (`job-group-loops`) — по умолчанию ключа `loops` нет. */
+  readonly loops?: RunStatus['loops'];
 }
 
 /**
@@ -217,6 +219,7 @@ export function seedRun(
     workspace: { mode: 'cwd' },
     inputs: {},
     jobs: options.jobs ?? [],
+    ...(options.loops === undefined ? {} : { loops: options.loops }),
     budget: options.budget ?? { tokens_used: 0, wallclock_ms: 0 },
     ...(options.wakeAt === undefined ? {} : { wake_at: options.wakeAt }),
     ...(options.awaiting === undefined ? {} : { awaiting: options.awaiting }),

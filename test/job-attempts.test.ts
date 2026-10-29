@@ -504,6 +504,7 @@ describe('job-attempts: повторяемость исхода', () => {
     assert.equal(isRetryableJobOutcome(failed(HaltCause.backendRateLimited)), false);
     assert.equal(isRetryableJobOutcome(failed(HaltCause.backendUnauthenticated)), false);
     assert.equal(isRetryableJobOutcome(failed(HaltCause.budgetExceeded)), false);
+    assert.equal(isRetryableJobOutcome(failed(HaltCause.loopExhausted)), false);
     assert.equal(isRetryableJobOutcome(failed(undefined)), false);
   });
 

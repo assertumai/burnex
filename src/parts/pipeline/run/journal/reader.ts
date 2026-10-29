@@ -9,6 +9,8 @@ import { JOURNAL_FORMAT, probeJournalFormat } from './format.js';
 import {
   attemptDirName,
   iterationDirName,
+  parsePassDirName,
+  passDirName,
   parseAttemptDirName,
   parseIterationDirName,
   parseStepDirName,
@@ -626,9 +628,10 @@ export function readExpectReports(
 }
 
 /**
- * Каталог шага. Попытку работы и итерацию можно не указывать — тогда берутся
- * последние выполненные: чаще всего спрашивают именно про них. Раскладка без
- * уровня попытки (работа без `attempts`) читается как прежде.
+ * Каталог шага. Проход цикла, попытку работы и итерацию можно не указывать —
+ * тогда берутся последние выполненные: чаще всего спрашивают именно про них.
+ * Раскладка без уровня прохода или попытки (работа вне цикла, работа без
+ * `attempts`) читается как прежде.
  */
 export function findStepDir(
   paths: RunPaths,
@@ -636,9 +639,22 @@ export function findStepDir(
   stepId: string,
   iteration?: number,
   jobAttempt?: number,
+  loopPass?: number,
 ): string | undefined {
-  const root = join(paths.jobs, jobId, 'steps');
-  if (!existsSync(root)) return undefined;
+  const jobSteps = join(paths.jobs, jobId, 'steps');
+  if (!existsSync(jobSteps)) return undefined;
+
+  const passes = readdirSync(jobSteps)
+    .map(parsePassDirName)
+    .filter((value): value is number => value !== undefined)
+    .sort((a, b) => a - b);
+  let root = jobSteps;
+  let pass: number | undefined;
+  if (passes.length > 0) {
+    pass = loopPass ?? passes.at(-1);
+    if (pass === undefined || !passes.includes(pass)) return undefined;
+    root = join(jobSteps, passDirName(pass));
+  }
 
   const attempts = readdirSync(root)
     .map(parseAttemptDirName)
@@ -661,10 +677,10 @@ export function findStepDir(
   if (iterations.length > 0) {
     const target = iteration ?? iterations.at(-1);
     if (target === undefined || !iterations.includes(target)) return undefined;
-    return within(paths, jobId, stepId, join(stepsDir, iterationDirName(target)), target, attempt);
+    return within(paths, jobId, stepId, join(stepsDir, iterationDirName(target)), target, attempt, pass);
   }
 
-  return within(paths, jobId, stepId, stepsDir, undefined, attempt);
+  return within(paths, jobId, stepId, stepsDir, undefined, attempt, pass);
 }
 
 function within(
@@ -674,12 +690,13 @@ function within(
   dir: string,
   iteration: number | undefined,
   jobAttempt: number | undefined,
+  loopPass: number | undefined,
 ): string | undefined {
   if (!existsSync(dir)) return undefined;
   for (const name of readdirSync(dir)) {
     const parsed = parseStepDirName(name);
     if (parsed?.stepId === stepId) {
-      return stepDir(paths, jobId, parsed.index, parsed.stepId, iteration, jobAttempt);
+      return stepDir(paths, jobId, parsed.index, parsed.stepId, iteration, jobAttempt, loopPass);
     }
   }
   return undefined;

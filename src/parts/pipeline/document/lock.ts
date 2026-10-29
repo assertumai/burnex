@@ -3,7 +3,7 @@ import { writeFileSync } from 'node:fs';
 import { stringify } from 'yaml';
 
 import { formatDuration, formatTokens } from '../../../kernel/units.js';
-import type { Budget, Job, Pipeline, PipelinePublication, Step, Triggers, Workspace } from './model.js';
+import type { Budget, Job, Loop, Pipeline, PipelinePublication, Step, Triggers, Workspace } from './model.js';
 import { normalizePackagePaths, portableForm, type PackagePathForm } from './packagePaths.js';
 
 /**
@@ -224,6 +224,18 @@ export function pipelineToPlain(pipeline: Pipeline): Record<string, unknown> {
     fail_fast: pipeline.failFast,
     ...(pipeline.triggers === undefined ? {} : { triggers: triggersToPlain(pipeline.triggers) }),
     jobs: pipeline.jobs.map(jobToPlain),
+    ...(pipeline.loops.length === 0 ? {} : { loops: pipeline.loops.map(loopToPlain) }),
+  };
+}
+
+function loopToPlain(loop: Loop): Record<string, unknown> {
+  return {
+    id: loop.id,
+    jobs: loop.jobs,
+    ...(loop.while === undefined ? {} : { while: loop.while }),
+    max_iterations: loop.maxIterations,
+    ...(loop.costMicroUsd === undefined ? {} : { cost_micro_usd: loop.costMicroUsd }),
+    ...(loop.wallclockMs === undefined ? {} : { wallclock_ms: loop.wallclockMs }),
   };
 }
 
@@ -243,9 +255,19 @@ export function serializeLock(pipeline: Pipeline): string {
  * выпуск движка менял бы хеш каждой работы, ссылающейся на поставку.
  */
 export function jobLockHash(pipeline: Pipeline, job: Job, form: PackagePathForm = portableForm()): string {
-  const { jobs: _jobs, ...shared } = pipelineToPlain(pipeline);
+  // Циклы не входят в общее: объявление цикла меняет ключи только его
+  // участников, а работы вне цикла сохраняют записи шагов.
+  const { jobs: _jobs, loops: _loops, ...shared } = pipelineToPlain(pipeline);
+  const loop = pipeline.loops.find((candidate) => candidate.jobs.includes(job.id));
   return createHash('sha256')
-    .update(JSON.stringify(normalizePackagePaths({ shared, job: jobToPlain(job) }, form)))
+    .update(
+      JSON.stringify(
+        normalizePackagePaths(
+          { shared, job: jobToPlain(job), ...(loop === undefined ? {} : { loop: loopToPlain(loop) }) },
+          form,
+        ),
+      ),
+    )
     .digest('hex')
     .slice(0, 16);
 }

@@ -692,6 +692,7 @@ export function lintPipeline(expanded: ExpandedPipeline, given: LintOptions): Di
   checkContext(pipeline.context, base, pipeline.file, 'context', substitutions, push, knowledgeDeclared);
   checkPipelineSubstitutions(substitutions, graph.byId, pipeline.file, push);
   checkSessionGroups(pipeline, graph, push);
+  checkLoops(pipeline, graph, push);
 
   // Считается один раз: обе стороны правила «работа дорожки не адресует
   // чужую» (needs, context_upstream, подстановки, условие if) смотрят в один
@@ -2129,6 +2130,222 @@ function checkEnv(
   }
 }
 
+/**
+ * Пространства, доступные в `while` цикла: исходы участников прохода и
+ * сведения о самом цикле. `inputs`, `env` и `run` за проход не меняются, и
+ * условие продолжения на них давало бы цикл, который выходит сразу или не
+ * выходит никогда (design.md, решение 3).
+ */
+const LOOP_WHILE_NAMESPACES = new Set(['jobs', 'loop']);
+const LOOP_WHILE_FIELDS = new Set(['id', 'iteration', 'max_iterations']);
+
+/**
+ * Проверить объявленные циклы: состав, топологию и условие продолжения.
+ *
+ * Правила заранее отказывают в том, что планировщик не смог бы исполнить
+ * однозначно: работа в двух циклах, внешняя работа между участниками, несколько
+ * точек входа. Молча исполнить такой цикл «как получится» значило бы получить
+ * разные исходы на одном и том же документе.
+ */
+function checkLoops(
+  pipeline: ExpandedPipeline['pipeline'],
+  graph: ReturnType<typeof buildGraph>['graph'],
+  push: (diagnostic: Diagnostic) => void,
+): void {
+  const file = pipeline.file;
+  const loopsOf = new Map<string, string[]>();
+
+  for (const loop of pipeline.loops) {
+    const seen = new Set<string>();
+    for (const [index, id] of loop.jobs.entries()) {
+      const at = `loops.${loop.id}.jobs.${index}`;
+      if (!graph.byId.has(id)) {
+        push({
+          severity: 'error',
+          message: `Цикл ${loop.id} называет участника ${id}, которого нет в jobs`,
+          file,
+          at,
+          hint: similarJobsHint(id, graph.byId.keys()),
+        });
+        continue;
+      }
+      if (seen.has(id)) {
+        push({
+          severity: 'error',
+          message: `Работа ${id} повторена в цикле ${loop.id}`,
+          file,
+          at,
+          hint: 'Участник входит в цикл один раз',
+        });
+        continue;
+      }
+      seen.add(id);
+      loopsOf.set(id, [...(loopsOf.get(id) ?? []), loop.id]);
+    }
+  }
+
+  for (const [id, loops] of loopsOf) {
+    if (loops.length < 2) continue;
+    push({
+      severity: 'error',
+      message: `Работа ${id} состоит в двух циклах: ${loops.join(' и ')}`,
+      file,
+      at: `loops.${loops[1]}.jobs`,
+      hint: 'Циклы не пересекаются и не вкладываются: работа состоит не больше чем в одном',
+    });
+  }
+
+  for (const loop of pipeline.loops) {
+    const members = [...new Set(loop.jobs)].filter((id) => graph.byId.has(id));
+    const memberSet = new Set(members);
+
+    let hasTerminalMember = false;
+    for (const id of members) {
+      const job = graph.byId.get(id) as Job;
+      if (job.needs === 'all') {
+        hasTerminalMember = true;
+        push({
+          severity: 'error',
+          message: `Участник ${id} цикла ${loop.id} объявляет needs: all`,
+          file: job.source,
+          at: `jobs.${id}.needs`,
+          hint: 'Вторая фаза ждёт весь основной граф, а цикл — часть основного графа',
+        });
+      }
+      if (job.sessionGroup !== undefined) {
+        push({
+          severity: 'error',
+          message: `Участник ${id} цикла ${loop.id} состоит в session_group ${job.sessionGroup}`,
+          file: job.source,
+          at: `jobs.${id}.session_group`,
+          hint: 'Каждый проход начинает сессии заново, а сессия группы живёт дольше одной работы',
+        });
+      }
+    }
+
+    // Внешняя работа на пути между участниками: она исполнялась бы один раз
+    // между проходами — её пришлось бы либо ждать до вердикта (тупик), либо
+    // исполнять до конца цикла (видимость промежуточного исхода).
+    for (const job of graph.main) {
+      if (memberSet.has(job.id)) continue;
+      const above = graph.upstream.get(job.id) ?? new Set<string>();
+      const from = members.find((id) => above.has(id));
+      if (from === undefined) continue;
+      const to = members.find((id) => graph.upstream.get(id)?.has(job.id) ?? false);
+      if (to === undefined) continue;
+      push({
+        severity: 'error',
+        message: `Работа ${job.id} стоит на пути между участниками ${from} и ${to} цикла ${loop.id}`,
+        file,
+        at: `loops.${loop.id}.jobs`,
+        hint: 'Внешняя работа исполнялась бы один раз между проходами: включите её в цикл или перенесите выше или ниже цикла',
+      });
+    }
+
+    if (!hasTerminalMember) {
+      const entries = members.filter(
+        (id) => !(graph.dependencies.get(id) ?? []).some((dependency) => memberSet.has(dependency)),
+      );
+      if (entries.length > 1) {
+        push({
+          severity: 'error',
+          message: `У цикла ${loop.id} больше одной точки входа: ${entries.join(', ')}`,
+          file,
+          at: `loops.${loop.id}.jobs`,
+          hint: 'Точка входа — участник без участников среди needs; цикл с двумя началами выражается работой-развилкой перед циклом или двумя циклами',
+        });
+      }
+    }
+
+    if (loop.costMicroUsd === undefined) {
+      push({
+        severity: 'warning',
+        message: `У цикла ${loop.id} нет cost`,
+        file,
+        at: `loops.${loop.id}`,
+        hint: `Расход всех участников умножается на max_iterations (${loop.maxIterations}); потолок ловит это только на уровне прогона`,
+      });
+    }
+
+    if (loop.while !== undefined) checkLoopWhile(loop, memberSet, graph, file, push);
+  }
+}
+
+function checkLoopWhile(
+  loop: ExpandedPipeline['pipeline']['loops'][number],
+  members: ReadonlySet<string>,
+  graph: ReturnType<typeof buildGraph>['graph'],
+  file: string,
+  push: (diagnostic: Diagnostic) => void,
+): void {
+  const at = `loops.${loop.id}.while`;
+  let expression;
+  try {
+    expression = parseExpression(loop.while as string, at);
+  } catch (error) {
+    push({
+      severity: 'error',
+      message: isStepcastError(error) ? error.message : String(error),
+      file,
+      at,
+      ...(isStepcastError(error) && error.hint !== undefined ? { hint: error.hint } : {}),
+    });
+    return;
+  }
+
+  for (const path of references(expression)) {
+    const namespace = path[0] as string;
+    if (!LOOP_WHILE_NAMESPACES.has(namespace)) {
+      push({
+        severity: 'error',
+        message: `Условие while цикла ${loop.id} обращается к пространству ${namespace}`,
+        file,
+        at,
+        hint: 'Доступны jobs (участники цикла) и loop: внешняя величина за проход не меняется',
+      });
+      continue;
+    }
+
+    if (namespace === 'loop') {
+      const field = path[1];
+      if (field === undefined || !LOOP_WHILE_FIELDS.has(field)) {
+        push({
+          severity: 'error',
+          message: `Условие while цикла ${loop.id} обращается к неизвестному полю loop.${field ?? ''}`,
+          file,
+          at,
+          hint: `Доступны: ${[...LOOP_WHILE_FIELDS].map((name) => `loop.${name}`).join(', ')}`,
+        });
+      }
+      continue;
+    }
+
+    const other = path[1];
+    if (other === undefined || !members.has(other)) {
+      push({
+        severity: 'error',
+        message: `Условие while цикла ${loop.id} обращается к работе ${other ?? ''}, не входящей в цикл`,
+        file,
+        at,
+        hint: `Участники: ${[...members].sort().join(', ')}`,
+      });
+      continue;
+    }
+
+    const field = path[2];
+    const job = graph.byId.get(other);
+    if (job !== undefined && (field === 'output' || field === 'data') && (job.if !== undefined || job.on !== 'success')) {
+      push({
+        severity: 'warning',
+        message: `Условие while цикла ${loop.id} читает ${field} участника ${other}, который может быть пропущен`,
+        file,
+        at,
+        hint: `В проходе, где ${other} пропущен, значения нет, выражение ложно, и цикл тихо выходит с done: проверяйте jobs.${other}.status или условие, учитывающее пропуск`,
+      });
+    }
+  }
+}
+
 function checkLimits(
   pipeline: ExpandedPipeline['pipeline'],
   config: Config,
@@ -2167,6 +2384,26 @@ function checkLimits(
         message: `budget.wallclock ${formatDuration(budget.wallclockMs)} превышает потолок limits.wallclock ${formatDuration(limits.wallclockMs)}`,
         file: pipeline.file,
         at: `${at}.wallclock`,
+      });
+    }
+  }
+
+  for (const loop of pipeline.loops) {
+    if (loop.costMicroUsd !== undefined && loop.costMicroUsd > limits.costMicroUsd) {
+      push({
+        severity: 'error',
+        message: `loops.${loop.id}.cost ${formatMoney(loop.costMicroUsd)} превышает потолок limits.cost ${formatMoney(limits.costMicroUsd)}`,
+        file: pipeline.file,
+        at: `loops.${loop.id}.cost`,
+        hint: 'Потолок снизу можно ужесточить, но не поднять',
+      });
+    }
+    if (loop.wallclockMs !== undefined && loop.wallclockMs > limits.wallclockMs) {
+      push({
+        severity: 'error',
+        message: `loops.${loop.id}.wallclock ${formatDuration(loop.wallclockMs)} превышает потолок limits.wallclock ${formatDuration(limits.wallclockMs)}`,
+        file: pipeline.file,
+        at: `loops.${loop.id}.wallclock`,
       });
     }
   }

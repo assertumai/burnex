@@ -79,11 +79,16 @@ function budgetSuffix(usage: UsageSnapshot): string {
  * `elapsedMs` — время от `run.started` до этого события, посчитанное
  * вызывающим по меткам времени самих событий: `usage.elapsedMs` для этого не
  * годится, он вычитает сон и после `budget.waiting` пошёл бы назад.
+ *
+ * `loopLimits` — предел проходов цикла по его имени. Событие начала прохода
+ * предела не несёт (он есть в `loop.started`), а строка «проход N из M»
+ * его называет: запомнить его — дело вызывающего, как и время.
  */
 export function renderProgressLine(
   event: Event,
   usage: UsageSnapshot,
   elapsedMs: number,
+  loopLimits: ReadonlyMap<string, number> = new Map(),
 ): string | undefined {
   const prefix = formatElapsed(elapsedMs);
   const line = (address: string, text: string): string => `${prefix}  ${address}: ${text}`;
@@ -120,6 +125,17 @@ export function renderProgressLine(
       return line(
         event.job,
         `итерация ${event.iteration} ${event.passed ? 'пройдена' : 'не пройдена'}${detailSuffix(event.reason)}`,
+      );
+    case 'loop.pass.started': {
+      const limit = loopLimits.get(event.loop);
+      return line(event.loop, `проход ${event.iteration}${limit === undefined ? '' : ` из ${limit}`} начат`);
+    }
+    case 'loop.pass.finished':
+      return line(event.loop, `проход ${event.iteration}: ${event.continue ? 'продолжение' : 'выход'}`);
+    case 'loop.finished':
+      return line(
+        event.loop,
+        `цикл ${event.verdict} → ${event.status} (проходов: ${event.iterations})${detailSuffix(event.reason)}`,
       );
     case 'expect.failed':
       return line(

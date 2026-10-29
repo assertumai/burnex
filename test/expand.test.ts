@@ -17,6 +17,7 @@ import { asAgent, asRun, asScript, makeProject, MINIMAL_PIPELINE, type Project }
 import { tempDir } from './tmp.js';
 import type { ScriptRoots } from '../src/parts/pipeline/document/expand.js';
 import type { Predicate } from '../src/parts/pipeline/document/model.js';
+import { PipelineDocumentSchema } from '../src/parts/pipeline/document/schema.js';
 import { createKernelShell } from '../src/parts/builtin.js';
 import { BUILTIN_ROWS } from '../src/parts/rows.js';
 import { registryFromKernel, type Registry } from '../src/kernel/registry.js';
@@ -6148,5 +6149,119 @@ jobs:
 `,
     });
     assert.match(thrown(() => expand(project)).message, /отложенное пространство/);
+  });
+});
+
+describe('pipeline-definition: циклы по группе работ (loops)', () => {
+  const JOBS = `
+jobs:
+  check:
+    steps: [{ id: c, run: [echo, check] }]
+  fix:
+    needs: [check]
+    on: failure
+    steps: [{ id: f, run: [echo, fix] }]
+`;
+  const pipelineWith = (loop: string, head = ''): string => `
+kind: pipeline
+${head}
+loops:
+  fix-loop:
+${loop}
+${JOBS}`;
+
+  it('раскрывает цикл: участники, предел, бюджет', () => {
+    const project = makeProject({
+      'stepcast.yml': pipelineWith(`    jobs: [check, fix]
+    while: "jobs.check.status != 'success'"
+    max_iterations: 3
+    cost: 5
+    wallclock: 1h`),
+    });
+
+    const { loops } = expand(project).pipeline;
+    assert.equal(loops.length, 1);
+    assert.deepEqual(loops[0], {
+      id: 'fix-loop',
+      jobs: ['check', 'fix'],
+      while: "jobs.check.status != 'success'",
+      maxIterations: 3,
+      costMicroUsd: 5_000_000,
+      wallclockMs: 3_600_000,
+    });
+  });
+
+  it('без объявления loops список пустой, а замок не меняется', () => {
+    const project = makeProject({ 'stepcast.yml': `kind: pipeline${JOBS}` });
+    const { pipeline } = expand(project);
+    assert.deepEqual(pipeline.loops, []);
+    assert.doesNotMatch(serializeLock(pipeline), /loops:/);
+  });
+
+  it('пишет loops в замок только при наличии и не трогает хеш работ вне цикла', () => {
+    const plain = expand(makeProject({ 'stepcast.yml': `kind: pipeline${JOBS}` })).pipeline;
+    const looped = expand(
+      makeProject({ 'stepcast.yml': pipelineWith('    jobs: [check, fix]\n    max_iterations: 2') }),
+    ).pipeline;
+    assert.match(serializeLock(looped), /loops:\n {2}- id: fix-loop/);
+    assert.notEqual(
+      jobLockHash(plain, plain.jobs[0]!),
+      jobLockHash(looped, looped.jobs[0]!),
+      'участник цикла получает другой хеш определения',
+    );
+    const after = `
+  after:
+    needs: [fix]
+    steps: [{ id: a, run: [echo, a] }]
+`;
+    const withLoop = expand(
+      makeProject({
+        'stepcast.yml': `kind: pipeline\nloops:\n  l:\n    jobs: [check, fix]\n    max_iterations: 2\n${JOBS}${after}`,
+      }),
+    ).pipeline;
+    const outside = withLoop.jobs.find((job) => job.id === 'after')!;
+    assert.equal(jobLockHash(withLoop, outside), jobLockHash({ ...withLoop, loops: [] }, outside));
+
+    // Объявление цикла входит в определение участников: от предела проходов
+    // зависит, на каком дереве цикл остановится.
+    const loop = withLoop.loops[0]!;
+    const widened = { ...withLoop, loops: [{ ...loop, maxIterations: loop.maxIterations + 1 }] };
+    const member = withLoop.jobs.find((job) => job.id === 'check')!;
+    assert.notEqual(jobLockHash(withLoop, member), jobLockHash(widened, member));
+    assert.equal(jobLockHash(withLoop, outside), jobLockHash(widened, outside));
+  });
+
+  it('отказывает без max_iterations с путём поля', () => {
+    const project = makeProject({ 'stepcast.yml': pipelineWith('    jobs: [check, fix]') });
+    const error = thrown(() => expand(project));
+    assert.equal(error.at, 'loops.fix-loop.max_iterations');
+    assert.match(error.message, /max_iterations/);
+  });
+
+  it('отказывает, когда подстановка выше потолка limits.iterations', () => {
+    const project = makeProject({
+      'stepcast.yml': pipelineWith(
+        '    jobs: [check, fix]\n    max_iterations: "${inputs.n}"',
+        'inputs:\n  n: { type: string, required: true }',
+      ),
+    });
+    const error = thrown(() => expand(project, 'stepcast.yml', { n: '500' }));
+    assert.equal(error.at, 'loops.fix-loop.max_iterations');
+    assert.match(error.message, /limits\.iterations/);
+    assert.equal(expand(project, 'stepcast.yml', { n: '4' }).pipeline.loops[0]!.maxIterations, 4);
+  });
+
+  it('отклоняет неизвестный ключ, в том числе on_exceed и tokens', () => {
+    for (const key of ['on_exceed: stop', 'tokens: 1000', 'bogus: 1']) {
+      const project = makeProject({
+        'stepcast.yml': pipelineWith(`    jobs: [check, fix]\n    max_iterations: 2\n    ${key}`),
+      });
+      assert.throws(() => expand(project), StepcastError, key);
+    }
+    const parsed = PipelineDocumentSchema.safeParse({
+      jobs: {},
+      loops: { l: { jobs: ['a'], max_iterations: 2, on_exceed: 'stop' } },
+    });
+    assert.equal(parsed.success, false);
   });
 });

@@ -940,3 +940,352 @@ jobs:
     assert.deepEqual(graph.dependents.get('b'), []);
   });
 });
+
+describe('планировщик: циклы по группе работ', () => {
+  const OK: JobOutcome = { status: 'success' };
+  const FAIL: JobOutcome = { status: 'failed', cause: 'expect_failed' };
+
+  const CHECK_FIX = (loop: string, tail = '', head = ''): string => `
+kind: pipeline
+${head}
+loops:
+  fix-loop:
+    jobs: [check, fix]
+    max_iterations: 3
+${loop}
+jobs:
+  check:
+    steps: [${STEP}]
+  fix:
+    needs: [check]
+    on: failure
+    steps: [${STEP}]
+${tail}`;
+
+  interface LoopRun {
+    readonly calls: string[];
+    readonly events: string[];
+    readonly settledCalls: string[];
+    readonly result: Awaited<ReturnType<typeof schedule>>;
+  }
+
+  /** Исход участника задаётся функцией от работы и номера прохода. */
+  async function driveLoop(
+    pipeline: Pipeline,
+    script: (job: string, iteration: number) => JobOutcome,
+    signal?: AbortSignal,
+  ): Promise<LoopRun> {
+    const calls: string[] = [];
+    const events: string[] = [];
+    const settledCalls: string[] = [];
+    const iterationOf = new Map<string, number>();
+    const result = await schedule({
+      pipeline,
+      ...(signal === undefined ? {} : { signal }),
+      execute: async (job, _scope, pass) => {
+        const iteration = pass?.iteration ?? 1;
+        iterationOf.set(job.id, iteration);
+        calls.push(pass === undefined ? job.id : `${job.id}#${iteration}`);
+        return script(job.id, iteration);
+      },
+      onSettled: (job) => {
+        settledCalls.push(job.id);
+      },
+      loopHooks: {
+        onLoopStarted: (loop) => void events.push(`started ${loop.id}`),
+        onPassStarted: (loop, iteration) => void events.push(`pass ${iteration} started`),
+        onPassFinished: (loop, iteration, goesOn) => void events.push(`pass ${iteration} ${goesOn ? 'continue' : 'exit'}`),
+        onLoopFinished: (outcome) => void events.push(`finished ${outcome.verdict} ${outcome.status}`),
+      },
+    });
+    return { calls, events, settledCalls, result };
+  }
+
+  it('сходится на втором проходе: починка не нужна, когда проверка прошла', async () => {
+    const run = await driveLoop(pipelineOf(CHECK_FIX('')), (job, iteration) =>
+      job === 'check' && iteration === 1 ? FAIL : OK,
+    );
+
+    assert.deepEqual(run.calls, ['check#1', 'fix#1', 'check#2']);
+    assert.deepEqual(run.events, [
+      'started fix-loop',
+      'pass 1 started',
+      'pass 1 continue',
+      'pass 2 started',
+      'pass 2 exit',
+      'finished done success',
+    ]);
+    const [loop] = run.result.loops;
+    assert.equal(loop?.iterations, 2);
+    assert.equal(loop?.verdict, 'done');
+    assert.equal(run.result.status, 'success');
+    // Снаружи виден последний проход: check — успех, fix — пропуск (on: failure).
+    const byId = new Map(run.result.settled.map((job) => [job.id, job]));
+    assert.equal(byId.get('check')?.status, 'success');
+    assert.equal(byId.get('fix')?.status, 'skipped');
+    assert.equal(run.result.settled.length, 2, 'каждая работа в итоге один раз');
+    assert.equal(run.settledCalls.length, 4, 'onSettled вызывается на каждый проход');
+  });
+
+  it('исчерпание по max_iterations: loop_exhausted и отказ прогона', async () => {
+    const run = await driveLoop(pipelineOf(CHECK_FIX('')), (job) => (job === 'check' ? FAIL : OK));
+
+    assert.deepEqual(run.calls, ['check#1', 'fix#1', 'check#2', 'fix#2', 'check#3', 'fix#3']);
+    const [loop] = run.result.loops;
+    assert.equal(loop?.iterations, 3);
+    assert.equal(loop?.verdict, 'exhausted');
+    assert.equal(loop?.status, 'failed');
+    assert.equal(loop?.cause, 'loop_exhausted');
+    assert.equal(run.result.status, 'failed');
+  });
+
+  it('явный while заменяет умолчание: продолжение по output участника', async () => {
+    const pipeline = pipelineOf(`
+kind: pipeline
+loops:
+  l:
+    jobs: [work]
+    while: "jobs.work.output.verdict == 'again'"
+    max_iterations: 5
+jobs:
+  work:
+    steps: [${STEP}]
+`);
+    const run = await driveLoop(pipeline, (_job, iteration) => ({
+      status: 'success',
+      output: { verdict: iteration < 3 ? 'again' : 'stop' },
+    }));
+
+    assert.deepEqual(run.calls, ['work#1', 'work#2', 'work#3']);
+    assert.equal(run.result.loops[0]?.verdict, 'done');
+    assert.equal(run.result.status, 'success');
+  });
+
+  it('while видит loop.iteration', async () => {
+    const pipeline = pipelineOf(CHECK_FIX('').replace('    max_iterations: 3', '    while: "loop.iteration < 2"\n    max_iterations: 5'));
+    const run = await driveLoop(pipeline, () => OK);
+    assert.equal(run.result.loops[0]?.iterations, 2);
+  });
+
+  it('отмена в первом проходе: вердикт canceled, итог canceled', async () => {
+    const controller = new AbortController();
+    controller.abort();
+    const run = await driveLoop(pipelineOf(CHECK_FIX('')), () => OK, controller.signal);
+
+    assert.deepEqual(run.calls, []);
+    const [loop] = run.result.loops;
+    assert.equal(loop?.verdict, 'canceled');
+    assert.equal(loop?.status, 'canceled');
+    assert.equal(loop?.iterations, 1);
+    assert.equal(run.result.status, 'canceled');
+  });
+
+  it('внешняя работа ниже цикла ждёт вердикта и исполняется ровно один раз', async () => {
+    const run = await driveLoop(
+      pipelineOf(
+        CHECK_FIX(
+          '',
+          `  merge:
+    needs: [fix]
+    on: always
+    steps: [${STEP}]
+`,
+        ),
+      ),
+      (job) => (job === 'check' ? FAIL : OK),
+    );
+
+    assert.equal(run.calls.filter((call) => call === 'merge').length, 1);
+    assert.equal(run.calls.at(-1), 'merge', 'после третьего прохода, а не между проходами');
+    assert.deepEqual(run.calls.slice(0, 6), ['check#1', 'fix#1', 'check#2', 'fix#2', 'check#3', 'fix#3']);
+  });
+
+  it('on: failure после exhausted запускается, on: success пропускается — даже при одних успехах последнего прохода', async () => {
+    const pipeline = pipelineOf(`
+kind: pipeline
+loops:
+  l:
+    jobs: [work]
+    while: "loop.iteration < 10"
+    max_iterations: 2
+jobs:
+  work:
+    steps: [${STEP}]
+  triage:
+    needs: [work]
+    on: failure
+    steps: [${STEP}]
+  ship:
+    needs: [work]
+    steps: [${STEP}]
+`);
+    const run = await driveLoop(pipeline, () => OK);
+
+    assert.deepEqual(run.calls, ['work#1', 'work#2', 'triage']);
+    const byId = new Map(run.result.settled.map((job) => [job.id, job]));
+    assert.equal(byId.get('ship')?.status, 'skipped');
+    assert.equal(run.result.loops[0]?.cause, 'loop_exhausted');
+    assert.equal(run.result.status, 'failed');
+  });
+
+  it('on: failure после exhausted запускается, даже когда её зависимость пропущена в последнем проходе', async () => {
+    // В последнем проходе check прошёл, fix пропущен своим on: failure, а
+    // while по номеру прохода не сошёлся: «все зависимости пропущены» не
+    // должно заслонять отказ цикла.
+    const pipeline = pipelineOf(
+      CHECK_FIX(
+        '',
+        `  triage:
+    needs: [fix]
+    on: failure
+    steps: [${STEP}]
+`,
+      ).replace('    max_iterations: 3', '    while: "loop.iteration < 10"\n    max_iterations: 2'),
+    );
+    const run = await driveLoop(pipeline, () => OK);
+
+    assert.deepEqual(run.calls, ['check#1', 'check#2', 'triage']);
+    assert.equal(run.result.loops[0]?.cause, 'loop_exhausted');
+    assert.equal(new Map(run.result.settled.map((job) => [job.id, job])).get('triage')?.status, 'success');
+  });
+
+  it('остановка fail_fast вне цикла заканчивает цикл, не выдавая её за loop_exhausted или done', async () => {
+    for (const loopHead of ['    while: "loop.iteration < 10"\n    max_iterations: 3', '    max_iterations: 3']) {
+      const pipeline = pipelineOf(`
+kind: pipeline
+fail_fast: true
+loops:
+  l:
+    jobs: [check, fix]
+${loopHead}
+jobs:
+  side:
+    steps: [${STEP}]
+  check:
+    steps: [${STEP}]
+  fix:
+    needs: [check]
+    on: always
+    steps: [${STEP}]
+`);
+      const run = await driveLoop(pipeline, (job) => (job === 'side' ? FAIL : OK));
+
+      // check погашен остановкой, fix (on: always) исполняется для разбора —
+      // но новых проходов нет.
+      assert.deepEqual(run.calls, ['side', 'fix#1'], loopHead);
+      const [loop] = run.result.loops;
+      assert.equal(loop?.iterations, 1);
+      assert.equal(loop?.verdict, 'exhausted');
+      assert.equal(loop?.status, 'failed');
+      assert.equal(loop?.cause, undefined);
+      assert.equal(loop?.reason, 'прогон остановлен после отказа (fail_fast)');
+      assert.equal(run.result.status, 'failed');
+    }
+  });
+
+  it('переиспользованный цикл выходит done с числом проходов исходного прогона, не вычисляя while', async () => {
+    const pipeline = pipelineOf(CHECK_FIX(''));
+    const result = await schedule({
+      pipeline,
+      execute: async (job) => (job.id === 'check' ? FAIL : OK),
+      loopHooks: { reused: () => 3 },
+    });
+    assert.equal(result.loops[0]?.verdict, 'done');
+    assert.equal(result.loops[0]?.iterations, 3);
+
+    // Шаг участника всё же исполнился — переиспользования нет, судит while.
+    const rerun = await schedule({
+      pipeline,
+      execute: async (job) => (job.id === 'check' ? FAIL : OK),
+      loopHooks: { reused: () => undefined },
+    });
+    assert.equal(rerun.loops[0]?.verdict, 'exhausted');
+    assert.equal(rerun.loops[0]?.iterations, 3);
+  });
+
+  it('fail_fast не срабатывает на отказ первого прохода', async () => {
+    const run = await driveLoop(
+      pipelineOf(
+        CHECK_FIX(
+          '',
+          `  side:
+    steps: [${STEP}]
+`,
+          'fail_fast: true',
+        ),
+      ),
+      (job, iteration) => (job === 'check' && iteration === 1 ? FAIL : OK),
+    );
+
+    assert.deepEqual(run.calls, ['check#1', 'fix#1', 'check#2', 'side']);
+    assert.equal(run.result.status, 'success');
+  });
+
+  it('fail_fast срабатывает на отказ цикла', async () => {
+    const run = await driveLoop(
+      pipelineOf(
+        CHECK_FIX(
+          '',
+          `  side:
+    steps: [${STEP}]
+`,
+          'fail_fast: true',
+        ),
+      ),
+      (job) => (job === 'check' ? FAIL : OK),
+    );
+
+    assert.equal(run.calls.includes('side'), false, 'остановлено после отказа цикла');
+    assert.equal(run.result.status, 'failed');
+  });
+
+  it('done с упавшим участником последнего прохода даёт итог failed', async () => {
+    const pipeline = pipelineOf(CHECK_FIX('').replace('    max_iterations: 3', '    while: "loop.iteration < 1"\n    max_iterations: 3'));
+    const run = await driveLoop(pipeline, (job) => (job === 'check' ? FAIL : OK));
+
+    assert.equal(run.result.loops[0]?.verdict, 'done');
+    assert.equal(run.result.loops[0]?.status, 'success');
+    assert.equal(run.result.status, 'failed');
+  });
+
+  it('отказ бэкенда в проходе не повторяется: exhausted с этой причиной', async () => {
+    const run = await driveLoop(pipelineOf(CHECK_FIX('')), (job) =>
+      job === 'check' ? { status: 'failed', cause: 'backend_rate_limited' } : OK,
+    );
+
+    assert.deepEqual(run.calls, ['check#1', 'fix#1']);
+    assert.equal(run.result.loops[0]?.verdict, 'exhausted');
+    assert.equal(run.result.loops[0]?.cause, 'backend_rate_limited');
+  });
+
+  it('бюджет цикла, исчерпанный к границе прохода, даёт exhausted со статусом budget_exceeded', async () => {
+    const result = await schedule({
+      pipeline: pipelineOf(CHECK_FIX('')),
+      execute: async (job) => (job.id === 'check' ? FAIL : OK),
+      loopHooks: { budgetExhausted: () => true },
+    });
+
+    assert.equal(result.loops[0]?.verdict, 'exhausted');
+    assert.equal(result.loops[0]?.status, 'budget_exceeded');
+    assert.equal(result.loops[0]?.iterations, 1);
+    assert.equal(result.status, 'budget_exceeded');
+  });
+
+  it('пайплайн без циклов: список циклов пуст, onSettled один на работу', async () => {
+    const run = await driveLoop(
+      pipelineOf(`
+kind: pipeline
+jobs:
+  a:
+    steps: [${STEP}]
+  b:
+    needs: [a]
+    steps: [${STEP}]
+`),
+      () => OK,
+    );
+    assert.deepEqual(run.result.loops, []);
+    assert.deepEqual(run.calls, ['a', 'b']);
+    assert.deepEqual(run.settledCalls, ['a', 'b']);
+  });
+});

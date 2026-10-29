@@ -3733,3 +3733,215 @@ jobs:
     assert.equal(warning.at, 'jobs.build.steps.0.timeout');
   });
 });
+
+describe('lint: циклы по группе работ (loops)', () => {
+  const STEP = '{ id: c, run: [echo, ok] }';
+  /** Пайплайн с циклом из check и fix и дополнительными работами. */
+  const pipelineOf = (loop: string, extraJobs = '', checkExtra = ''): string => `
+kind: pipeline
+budget: { cost: 100 }
+loops:
+  fix-loop:
+${loop}
+jobs:
+  check:
+${checkExtra}    steps: [${STEP}]
+  fix:
+    needs: [check]
+    on: failure
+    steps: [${STEP}]
+${extraJobs}`;
+  const GOOD = '    jobs: [check, fix]\n    max_iterations: 3\n    cost: 5';
+
+  const diagnostics = (yaml: string, config?: (project: Project) => Config): Diagnostic[] => {
+    const project = makeProject({ 'stepcast.yml': yaml });
+    return lintWithConfig(project, config === undefined ? project.config : config(project));
+  };
+  const errors = (list: readonly Diagnostic[]): Diagnostic[] => list.filter((item) => item.severity === 'error');
+
+  it('корректный цикл не даёт ни ошибок, ни предупреждений о цикле', () => {
+    const list = diagnostics(pipelineOf(GOOD));
+    assert.deepEqual(errors(list), []);
+    assert.equal(list.filter((item) => /loops\./.test(item.at ?? '')).length, 0);
+  });
+
+  it('неизвестный участник называет похожий идентификатор', () => {
+    const [error] = errors(diagnostics(pipelineOf('    jobs: [chek, fix]\n    max_iterations: 3\n    cost: 5')));
+    assert.match(error!.message, /chek/);
+    assert.equal(error!.at, 'loops.fix-loop.jobs.0');
+    assert.match(error!.hint ?? '', /check/);
+  });
+
+  it('повтор участника в одном цикле', () => {
+    const list = errors(diagnostics(pipelineOf('    jobs: [check, fix, fix]\n    max_iterations: 3\n    cost: 5')));
+    assert.ok(list.some((item) => /повторена в цикле fix-loop/.test(item.message)));
+  });
+
+  it('работа в двух циклах: в сообщении работа и оба цикла', () => {
+    const list = errors(
+      diagnostics(`
+kind: pipeline
+loops:
+  one: { jobs: [check, fix], max_iterations: 2, cost: 1 }
+  two: { jobs: [fix], max_iterations: 2, cost: 1 }
+jobs:
+  check:
+    steps: [${STEP}]
+  fix:
+    needs: [check]
+    on: failure
+    steps: [${STEP}]
+`),
+    );
+    const found = list.find((item) => /состоит в двух циклах/.test(item.message));
+    assert.ok(found);
+    assert.match(found.message, /fix/);
+    assert.match(found.message, /one/);
+    assert.match(found.message, /two/);
+  });
+
+  it('участник с needs: all', () => {
+    const list = errors(
+      diagnostics(`
+kind: pipeline
+loops:
+  l: { jobs: [check, last], max_iterations: 2, cost: 1 }
+jobs:
+  check:
+    steps: [${STEP}]
+  last:
+    needs: all
+    steps: [${STEP}]
+`),
+    );
+    const found = list.find((item) => /needs: all/.test(item.message));
+    assert.ok(found);
+    assert.equal(found.at, 'jobs.last.needs');
+  });
+
+  it('внешняя работа на пути между участниками', () => {
+    const list = errors(
+      diagnostics(`
+kind: pipeline
+loops:
+  l: { jobs: [check, fix], max_iterations: 2, cost: 1 }
+jobs:
+  check:
+    steps: [${STEP}]
+  report:
+    needs: [check]
+    steps: [${STEP}]
+  fix:
+    needs: [report]
+    steps: [${STEP}]
+`),
+    );
+    const found = list.find((item) => /на пути между/.test(item.message));
+    assert.ok(found);
+    assert.match(found.message, /report/);
+    assert.match(found.message, /\bl\b/);
+    assert.match(found.message, /check/);
+    assert.match(found.message, /fix/);
+  });
+
+  it('внешняя работа ниже цикла и выше цикла ошибки не даёт', () => {
+    const list = diagnostics(
+      pipelineOf(
+        GOOD,
+        `  merge:
+    needs: [fix]
+    steps: [${STEP}]
+`,
+      ).replace('  check:\n', '  prepare:\n    steps: [{ id: p, run: [echo, p] }]\n  check:\n    needs: [prepare]\n'),
+    );
+    assert.deepEqual(errors(list), []);
+  });
+
+  it('больше одной точки входа', () => {
+    const list = errors(
+      diagnostics(`
+kind: pipeline
+loops:
+  l: { jobs: [a, b, join], max_iterations: 2, cost: 1 }
+jobs:
+  a:
+    steps: [${STEP}]
+  b:
+    steps: [${STEP}]
+  join:
+    needs: [a, b]
+    steps: [${STEP}]
+`),
+    );
+    const found = list.find((item) => /больше одной точки входа/.test(item.message));
+    assert.ok(found);
+    assert.match(found.message, /a, b/);
+  });
+
+  it('участник в session_group', () => {
+    const list = errors(
+      diagnostics(
+        pipelineOf(GOOD, '', '    session_group: shared\n').replace(
+          '  fix:\n    needs: [check]\n',
+          '  fix:\n    session_group: shared\n    needs: [check]\n',
+        ),
+      ),
+    );
+    const found = list.find((item) => item.at === 'jobs.check.session_group' && /цикла fix-loop/.test(item.message));
+    assert.ok(found);
+  });
+
+  it('while: не разбирается, чужое пространство, работа вне цикла', () => {
+    const parse = errors(diagnostics(pipelineOf(`${GOOD}\n    while: "jobs.check.status !="`)));
+    assert.ok(parse.some((item) => item.at === 'loops.fix-loop.while'));
+
+    const space = errors(diagnostics(pipelineOf(`${GOOD}\n    while: "inputs.go == 'yes'"`)));
+    assert.ok(space.some((item) => /пространству inputs/.test(item.message)));
+
+    const outside = errors(
+      diagnostics(
+        pipelineOf(
+          `${GOOD}\n    while: "jobs.merge.status == 'failed'"`,
+          `  merge:
+    needs: [fix]
+    steps: [${STEP}]
+`,
+        ),
+      ),
+    );
+    assert.ok(outside.some((item) => /merge, не входящей в цикл/.test(item.message)));
+
+    const loopField = errors(diagnostics(pipelineOf(`${GOOD}\n    while: "loop.nope == 1"`)));
+    assert.ok(loopField.some((item) => /loop\.nope/.test(item.message)));
+
+    assert.deepEqual(errors(diagnostics(pipelineOf(`${GOOD}\n    while: "loop.iteration < 2 and jobs.check.status != 'success'"`))), []);
+  });
+
+  it('предупреждение: нет cost', () => {
+    const list = diagnostics(pipelineOf('    jobs: [check, fix]\n    max_iterations: 3'));
+    const found = list.find((item) => item.severity === 'warning' && item.at === 'loops.fix-loop');
+    assert.ok(found);
+    assert.match(found.message, /нет cost/);
+  });
+
+  it('предупреждение: while читает output участника с if или on не success', () => {
+    const list = diagnostics(pipelineOf(`${GOOD}\n    while: "jobs.fix.output.done != true"`));
+    const found = list.find((item) => item.severity === 'warning' && item.at === 'loops.fix-loop.while');
+    assert.ok(found);
+    assert.match(found.message, /fix/);
+
+    const quiet = diagnostics(pipelineOf(`${GOOD}\n    while: "jobs.fix.status == 'failed'"`));
+    assert.equal(quiet.filter((item) => item.at === 'loops.fix-loop.while').length, 0);
+  });
+
+  it('cost и wallclock цикла выше потолков: ошибка с путём поля', () => {
+    const list = errors(
+      diagnostics(pipelineOf('    jobs: [check, fix]\n    max_iterations: 3\n    cost: 50\n    wallclock: 100h'), (project) => ({
+        ...project.config,
+        limits: { ...project.config.limits, costMicroUsd: 10_000_000, wallclockMs: 3_600_000 },
+      })),
+    );
+    assert.ok(list.some((item) => item.at === 'loops.fix-loop.cost' && /limits\.cost/.test(item.message)));
+    assert.ok(list.some((item) => item.at === 'loops.fix-loop.wallclock' && /limits\.wallclock/.test(item.message)));
+  });
+});

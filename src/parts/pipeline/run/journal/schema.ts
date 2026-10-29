@@ -244,6 +244,7 @@ export const HaltCauseSchema = z.enum([
   'timeout',
   'spawn_failed',
   'until_not_met',
+  'loop_exhausted',
   'budget_exceeded',
   'canceled',
   'backend_rate_limited',
@@ -521,6 +522,29 @@ export const BudgetStateSchema = z
   })
   .strict();
 
+/** Вердикт цикла по группе работ (`run/scheduler.ts`, `LoopVerdict`). */
+export const LoopVerdictSchema = z.enum(['done', 'exhausted', 'canceled']);
+
+/**
+ * Состояние цикла в `status.json`: пишется на границе прохода. Проход виден
+ * здесь, а не в записях работ — запись участника описывает его последний
+ * проход.
+ */
+export const LoopRecordSchema = z
+  .object({
+    id: z.string(),
+    jobs: z.array(z.string()),
+    /** Проходов начато к этому моменту. */
+    iterations: z.number().int().nonnegative(),
+    max_iterations: z.number().int().positive(),
+    /** Есть только у законченного цикла. */
+    verdict: LoopVerdictSchema.optional(),
+    status: StatusValueSchema,
+    reason: z.string().optional(),
+    cause: HaltCauseSchema.optional(),
+  })
+  .strict();
+
 export const RunStatusSchema = z
   .object({
     run_id: z.string(),
@@ -532,6 +556,8 @@ export const RunStatusSchema = z
     resumed_from: z.string().optional(),
     inputs: z.record(z.string(), z.union([z.string(), z.number(), z.boolean()])),
     jobs: z.array(JobRecordSchema),
+    /** Циклы по группам работ. Без объявленных циклов ключа нет. */
+    loops: z.array(LoopRecordSchema).optional(),
     budget: BudgetStateSchema,
     /** Команда возобновления: состояние должно объяснять, как продолжить. */
     resume: z.object({ command: z.string(), blocked_by: z.string().optional() }).strict().optional(),
@@ -833,6 +859,11 @@ export const EventSchema = z.discriminatedUnion('kind', [
   // Неудача внутреннего учёта. Статусов не меняет: см. parts/pipeline/run/bookkeeping.ts.
   z.object({ ...eventBase, kind: z.literal('iteration.started'), job: z.string(), iteration: z.number().int().positive() }).strict(),
   z.object({ ...eventBase, kind: z.literal('iteration.finished'), job: z.string(), iteration: z.number().int().positive(), passed: z.boolean(), reason: z.string().optional() }).strict(),
+  // Цикл по группе работ: проходы и вердикт. iteration — номер прохода с единицы.
+  z.object({ ...eventBase, kind: z.literal('loop.started'), loop: z.string(), jobs: z.array(z.string()), max_iterations: z.number().int().positive() }).strict(),
+  z.object({ ...eventBase, kind: z.literal('loop.pass.started'), loop: z.string(), iteration: z.number().int().positive() }).strict(),
+  z.object({ ...eventBase, kind: z.literal('loop.pass.finished'), loop: z.string(), iteration: z.number().int().positive(), continue: z.boolean() }).strict(),
+  z.object({ ...eventBase, kind: z.literal('loop.finished'), loop: z.string(), iterations: z.number().int().positive(), verdict: LoopVerdictSchema, status: StatusValueSchema, reason: z.string().optional() }).strict(),
   z.object({ ...eventBase, kind: z.literal('job.attempt.started'), job: z.string(), attempt: z.number().int().positive() }).strict(),
   z.object({ ...eventBase, kind: z.literal('job.attempt.finished'), job: z.string(), attempt: z.number().int().positive(), status: StatusValueSchema, reason: z.string().optional() }).strict(),
   z.object({ ...eventBase, kind: z.literal('step.reused'), job: z.string(), step: z.string(), source: z.string() }).strict(),
@@ -955,6 +986,7 @@ export type RunStatus = z.infer<typeof RunStatusSchema>;
 export type BudgetState = z.infer<typeof BudgetStateSchema>;
 export type BudgetExceededState = NonNullable<BudgetState['exceeded']>;
 export type JobRecord = z.infer<typeof JobRecordSchema>;
+export type LoopRecord = z.infer<typeof LoopRecordSchema>;
 export type StepRecord = z.infer<typeof StepRecordSchema>;
 export type AttemptRecord = z.infer<typeof AttemptRecordSchema>;
 export type UsageReport = z.infer<typeof UsageReportSchema>;

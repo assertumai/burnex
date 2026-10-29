@@ -523,6 +523,7 @@ const FIXED_PIPELINE: Pipeline = {
   concurrency: 1,
   failFast: true,
   jobs: [FIXED_JOB],
+  loops: [],
 };
 
 const FIXED_SERIALIZED =

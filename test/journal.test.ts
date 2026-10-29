@@ -35,13 +35,15 @@ import {
   findProjectRoot,
   makeRunId,
   parseAttemptDirName,
+  parsePassDirName,
   parseStepDirName,
+  passDirName,
   projectKey,
   shortRunId,
   stepDirName,
 } from '../src/parts/pipeline/run/journal/paths.js';
 import { isRunOrAncestor, runOwnerJudge } from '../src/parts/pipeline/run/journal/owner.js';
-import { AttemptRecordSchema, RunStatusSchema, type RunStatus } from '../src/parts/pipeline/run/journal/schema.js';
+import { AttemptRecordSchema, EventSchema, RunStatusSchema, type RunStatus } from '../src/parts/pipeline/run/journal/schema.js';
 import { StepcastError } from '../src/kernel/errors.js';
 import { expandPipeline } from '../src/parts/pipeline/document/expand.js';
 import { runPipeline } from '../src/parts/pipeline/run/runner.js';
@@ -232,6 +234,37 @@ describe('run-journal: раскладка и состояние', () => {
     // Работа без попыток: прежняя раскладка.
     journal.prepareStep('old', 1, 'write');
     assert.ok(findStepDir(journal.paths, 'old', 'write')?.endsWith(sep('old', 'steps', '01-write')));
+  });
+
+  it('участник цикла: уровень pass-<n> над попыткой и итерацией, по умолчанию последний проход', () => {
+    const { runsRoot, projectRoot } = bed();
+    const journal = RunJournal.create({ runsRoot, projectRoot });
+    const sep = (...parts: string[]) => join(...parts);
+    journal.prepareStep('check', 1, 'run', undefined, undefined, 1);
+    journal.prepareStep('check', 1, 'run', undefined, undefined, 2);
+    assert.ok(findStepDir(journal.paths, 'check', 'run')?.endsWith(sep('steps', 'pass-2', '01-run')));
+    assert.ok(findStepDir(journal.paths, 'check', 'run', undefined, undefined, 1)?.endsWith(sep('steps', 'pass-1', '01-run')));
+    assert.equal(findStepDir(journal.paths, 'check', 'run', undefined, undefined, 3), undefined);
+
+    journal.prepareStep('fix', 2, 'apply', 1, 1, 1);
+    journal.prepareStep('fix', 2, 'apply', 2, 1, 1);
+    journal.prepareStep('fix', 2, 'apply', 1, 2, 2);
+    assert.ok(findStepDir(journal.paths, 'fix', 'apply')?.endsWith(sep('pass-2', 'attempt-2', 'iter-1', '02-apply')));
+    assert.ok(
+      findStepDir(journal.paths, 'fix', 'apply', undefined, undefined, 1)?.endsWith(
+        sep('pass-1', 'attempt-1', 'iter-2', '02-apply'),
+      ),
+    );
+
+    // Работа вне цикла: прежняя раскладка без уровня прохода.
+    journal.prepareStep('merge', 1, 'run');
+    assert.ok(findStepDir(journal.paths, 'merge', 'run')?.endsWith(sep('merge', 'steps', '01-run')));
+  });
+
+  it('преобразует имя каталога прохода цикла туда и обратно', () => {
+    assert.equal(passDirName(2), 'pass-2');
+    assert.equal(parsePassDirName('pass-2'), 2);
+    assert.equal(parsePassDirName('attempt-2'), undefined);
   });
 
   it('преобразует имя каталога попытки работы туда и обратно', () => {
@@ -1888,5 +1921,59 @@ describe('run-journal: судья владельца пункта очереди
     assert.equal(isRunOrAncestor(b.runsRoot, key, 'child', 'child'), true);
     assert.equal(isRunOrAncestor(b.runsRoot, key, 'parent', 'child'), true);
     assert.equal(isRunOrAncestor(b.runsRoot, key, 'child', 'parent'), false);
+  });
+});
+
+describe('job-group-loops: события и состояние цикла', () => {
+  const base = { seq: 1, ts: '2026-01-01T00:00:00.000Z' };
+
+  it('разбирает события цикла закрытого объединения', () => {
+    const events = [
+      { ...base, kind: 'loop.started', loop: 'fix-loop', jobs: ['check', 'fix'], max_iterations: 3 },
+      { ...base, kind: 'loop.pass.started', loop: 'fix-loop', iteration: 1 },
+      { ...base, kind: 'loop.pass.finished', loop: 'fix-loop', iteration: 1, continue: true },
+      { ...base, kind: 'loop.finished', loop: 'fix-loop', iterations: 2, verdict: 'done', status: 'success' },
+      { ...base, kind: 'loop.finished', loop: 'fix-loop', iterations: 3, verdict: 'exhausted', status: 'failed', reason: 'предел' },
+    ];
+    for (const event of events) assert.equal(EventSchema.safeParse(event).success, true, event.kind);
+    assert.equal(
+      EventSchema.safeParse({ ...base, kind: 'loop.finished', loop: 'l', iterations: 1, verdict: 'bogus', status: 'success' }).success,
+      false,
+    );
+    assert.equal(EventSchema.safeParse({ ...base, kind: 'loop.pass.started', loop: 'l', iteration: 0 }).success, false);
+  });
+
+  const status = (extra: Record<string, unknown>): Record<string, unknown> => ({
+    run_id: 'r',
+    pipeline: 'p',
+    lock_hash: 'h',
+    status: 'running',
+    workspace: { mode: 'cwd' },
+    inputs: {},
+    jobs: [],
+    budget: { tokens_used: 0, wallclock_ms: 0 },
+    updated_at: '2026-01-01T00:00:00.000Z',
+    ...extra,
+  });
+
+  it('status.json без циклов читается как прежде, а с циклами несёт массив loops', () => {
+    assert.equal(RunStatusSchema.safeParse(status({})).success, true);
+    const loops = [
+      { id: 'fix-loop', jobs: ['check', 'fix'], iterations: 2, max_iterations: 3, status: 'running' },
+      {
+        id: 'done-loop',
+        jobs: ['a'],
+        iterations: 3,
+        max_iterations: 3,
+        verdict: 'exhausted',
+        status: 'failed',
+        reason: 'предел',
+        cause: 'loop_exhausted',
+      },
+    ];
+    const parsed = RunStatusSchema.safeParse(status({ loops }));
+    assert.equal(parsed.success, true);
+    assert.equal(parsed.success && parsed.data.loops?.[1]?.cause, 'loop_exhausted');
+    assert.equal(RunStatusSchema.safeParse(status({ loops: [{ id: 'x', jobs: [], iterations: 1, max_iterations: 1, status: 'running', extra: 1 }] })).success, false);
   });
 });

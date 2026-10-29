@@ -3,7 +3,7 @@ import { cpSync, mkdirSync, readdirSync, realpathSync, rmSync, statSync } from '
 import { dirname, join, relative } from 'node:path';
 
 import { createAnchorer, detectAnchorKind } from '../domain/anchor/index.js';
-import type { AnchorKind, TreeAnchorer } from '../domain/anchor/index.js';
+import type { Anchor, AnchorKind, TreeAnchorer } from '../domain/anchor/index.js';
 import { loadIgnoreRules } from '../domain/anchor/ignore.js';
 import { isGitWorktree } from '../domain/anchor/git.js';
 import { StepcastError } from '../../../kernel/errors.js';
@@ -201,6 +201,18 @@ export interface PrepareOptions {
      */
     readonly nested?: readonly { readonly dir: string; readonly repo: string }[];
   };
+  /**
+   * Каталог, который эта же работа завела в прошлом проходе цикла. Заново его
+   * не заводят: `worktree add` в существующий путь отказал бы, а дерево
+   * прошлого прохода и есть то, что цикл продолжает. Засев из источника
+   * (`source.kind === 'seed'`) повторяется поверх него: источник — участник
+   * этого же прохода, и его дерево за проход изменилось. Действует, только
+   * когда работа не продолжает чужой каталог (`source.kind === 'continue'`).
+   */
+  readonly reuse?: {
+    readonly dir: string;
+    readonly nested?: readonly { readonly dir: string; readonly repo: string }[];
+  };
   /** Подмена якоря: тесты подставляют поддельный, как и в `runner.ts`. */
   readonly anchorerFor?: (options: {
     readonly dir: string;
@@ -242,6 +254,16 @@ export async function prepareWorkspace(options: PrepareOptions): Promise<Prepare
   // сборки, зависимости) переходит дальше само.
   if (source?.kind === 'continue') {
     return { mode: workspace.mode, dir: source.dir, inheritedFrom: source.job, continued: true };
+  }
+
+  if (options.reuse !== undefined) {
+    const reused = options.reuse;
+    const reusedNested = reused.nested === undefined ? {} : { nested: reused.nested.map((part) => ({ ...part })) };
+    if (source?.kind !== 'seed') return { mode: workspace.mode, dir: reused.dir, ...reusedNested };
+    // Каталог принадлежит прошлому проходу и при отказе засева не снимается:
+    // отказ уходит наверх отказом подготовки, как и у свежезаведённого.
+    await seedWorkspace(options, reused.dir, (reused.nested ?? []).map((part) => part.dir), source.anchor);
+    return { mode: workspace.mode, dir: reused.dir, inheritedFrom: source.job, ...reusedNested };
   }
 
   const base = workspace.path ?? join(runDir, 'workspace');
@@ -324,31 +346,8 @@ export async function prepareWorkspace(options: PrepareOptions): Promise<Prepare
   // оставляет за собой ни наполовину приведённого дерева (гарантия
   // `restore`), ни заведённого под него каталога: он убирается здесь же.
   if (source?.kind === 'seed') {
-    if (options.anchorKind === undefined || options.anchorsDir === undefined) {
-      throw new StepcastError('Внутренняя ошибка: для засева развилки не передан способ фиксации якорей');
-    }
     try {
-      const anchorer = (options.anchorerFor ?? createAnchorer)({
-        dir,
-        stateDir: options.anchorsDir,
-        kind: options.anchorKind,
-        scope: job.id,
-        repoDir: cwd,
-        ...(nestedRepos.length === 0 ? {} : { nested: nestedRepos }),
-      });
-      // Своя область, а не область подготовки: служебные файлы якоря живут
-      // ровно на время засева и снимаются при любом его исходе, а область
-      // подготовки при успехе отпускается — регистрация в ней означала бы
-      // индексный файл, переживший засев.
-      const seeding = createScope(options.bookkeeping);
-      seeding.defer('снятие служебных файлов якоря засева', () => {
-        anchorer.dispose();
-      });
-      try {
-        anchorer.restore(source.anchor);
-      } finally {
-        await seeding.dispose();
-      }
+      await seedWorkspace(options, dir, nestedRepos, source.anchor);
     } catch (error) {
       await preparation.dispose();
       throw error;
@@ -359,6 +358,39 @@ export async function prepareWorkspace(options: PrepareOptions): Promise<Prepare
 
   preparation.release();
   return { mode: workspace.mode, dir, ...nestedField };
+}
+
+/** Привести каталог работы к якорю источника засева. */
+async function seedWorkspace(
+  options: PrepareOptions,
+  dir: string,
+  nestedRepos: readonly string[],
+  anchor: Anchor,
+): Promise<void> {
+  if (options.anchorKind === undefined || options.anchorsDir === undefined) {
+    throw new StepcastError('Внутренняя ошибка: для засева развилки не передан способ фиксации якорей');
+  }
+  const anchorer = (options.anchorerFor ?? createAnchorer)({
+    dir,
+    stateDir: options.anchorsDir,
+    kind: options.anchorKind,
+    scope: options.job.id,
+    repoDir: options.cwd,
+    ...(nestedRepos.length === 0 ? {} : { nested: nestedRepos }),
+  });
+  // Своя область, а не область подготовки: служебные файлы якоря живут
+  // ровно на время засева и снимаются при любом его исходе, а область
+  // подготовки при успехе отпускается — регистрация в ней означала бы
+  // индексный файл, переживший засев.
+  const seeding = createScope(options.bookkeeping);
+  seeding.defer('снятие служебных файлов якоря засева', () => {
+    anchorer.dispose();
+  });
+  try {
+    anchorer.restore(anchor);
+  } finally {
+    await seeding.dispose();
+  }
 }
 
 /**

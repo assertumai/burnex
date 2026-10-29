@@ -14,6 +14,7 @@ import {
   changedSince,
   describePlan,
   finalAnchorOf,
+  loopTreeBefore,
   parseFrom,
   planResume,
   producedBy,
@@ -3558,5 +3559,218 @@ jobs:
 
     const second = await resume(b, first, 'после');
     assert.equal(second.status, 'success');
+  });
+});
+
+describe('run-resume: цикл по группе работ — единица повтора', () => {
+  const loopPipeline = (options: { readonly check: string; readonly bump?: string }): string => `
+kind: pipeline
+loops:
+  fix-loop:
+    jobs: [check, fix]
+    max_iterations: 2
+    cost: 5
+jobs:
+  check:
+    steps:
+      - id: verify
+        run: [sh, -c, '${options.check}']
+        expect: [{ exit_code: 0 }]
+  fix:
+    needs: [check]
+    on: failure
+    steps:
+      - id: bump
+        run: [sh, -c, '${options.bump ?? 'echo $(( $(cat counter.txt) + 1 )) > counter.txt'}']
+        expect: [{ exit_code: 0 }]
+  after:
+    needs: [fix]
+    on: always
+    steps:
+      - id: publish
+        run: [sh, -c, 'test -f marker.txt']
+        expect: [{ exit_code: 0 }]
+`;
+  /** Проверка проходит, когда счётчик дорос до порога. */
+  const CONVERGES = 'test "$(cat counter.txt)" -ge 1';
+  /** Проверка не проходит, пока человек не положит ok.txt. */
+  const NEVER = 'test -f ok.txt';
+
+  it('цикл, исчерпавший проходы, переигрывается с первого: единицей повтора служит цикл', async () => {
+    const b = bed({ 'counter.txt': '0\n', 'stepcast.yml': loopPipeline({ check: NEVER }) }, { git: true });
+    const first = await firstRun(b);
+    assert.equal(first.status, 'failed');
+    assert.equal(readStatus(first.journal.paths).loops?.[0]?.verdict, 'exhausted');
+
+    // Шаг fix сам по себе годен (успех последнего прохода), но цикл целиком — нет.
+    const plan = planFor(b, first, 'after');
+    assert.equal(decisions(plan)['check/verify'], 'rerun');
+    assert.equal(decisions(plan)['fix/bump'], 'rerun');
+    assert.equal(plan.reusedLoops, undefined);
+
+    b.project.write('ok.txt', 'готово');
+    b.project.write('marker.txt', 'есть');
+    const second = await resume(b, first, 'check');
+    assert.equal(second.status, 'success');
+    const loop = readStatus(second.journal.paths).loops?.[0];
+    assert.equal(loop?.verdict, 'done');
+    assert.equal(loop?.iterations, 1, 'цикл начался с первого прохода и сошёлся на нём');
+  });
+
+  it('дерево перед циклом берётся из первого шага точки входа в pass-1', async () => {
+    const b = bed({ 'counter.txt': '0\n', 'stepcast.yml': loopPipeline({ check: NEVER }) }, { git: true });
+    const first = await firstRun(b);
+    const source = readSourceRun(first.journal.paths);
+    const expanded = expandPipeline({ pipelinePath: b.project.path('stepcast.yml'), config: b.project.config });
+
+    const bases = loopTreeBefore(source, expanded.pipeline);
+    const firstStep = JSON.parse(
+      readFileSync(join(first.journal.paths.jobs, 'check', 'steps', 'pass-1', '01-verify', 'step.json'), 'utf8'),
+    ) as { tree_before: string };
+    const fixRecord = source.status.jobs.find((job) => job.id === 'fix')?.steps[0] as StepRecord;
+    assert.equal(bases.get(fixRecord), firstStep.tree_before, 'каждому шагу участника — дерево начала цикла');
+    assert.notEqual(fixRecord.tree_before, firstStep.tree_before, 'а не дерево перед его собственным шагом');
+  });
+
+  it('сошедшийся цикл переиспользуется, когда --from стоит ниже него', async () => {
+    const b = bed({ 'counter.txt': '0\n', 'stepcast.yml': loopPipeline({ check: CONVERGES }) }, { git: true });
+    const first = await firstRun(b);
+    assert.equal(first.status, 'failed', 'ниже цикла нет маркера');
+    assert.equal(readStatus(first.journal.paths).loops?.[0]?.verdict, 'done');
+    const counterBefore = readFileSync(b.project.path('counter.txt'), 'utf8');
+
+    b.project.write('marker.txt', 'есть');
+    const plan = planFor(b, first, 'after');
+    assert.deepEqual(decisions(plan), {
+      'check/verify': 'reuse',
+      'fix/bump': 'skip',
+      'after/publish': 'rerun',
+    });
+    assert.deepEqual(plan.reusedLoops, ['fix-loop']);
+
+    const second = await resume(b, first, 'after');
+    assert.equal(second.status, 'success');
+    const loop = readStatus(second.journal.paths).loops?.[0];
+    assert.equal(loop?.verdict, 'done');
+    assert.equal(loop?.iterations, 2, 'цикл получает исход исходного прогона — и его число проходов');
+    assert.equal(readFileSync(b.project.path('counter.txt'), 'utf8'), counterBefore, 'починка не исполнялась заново');
+    assert.ok(steps(second).some((step) => step.id === 'verify' && step.reused_from !== undefined));
+  });
+
+  it('прогон, прерванный во втором проходе, переигрывает цикл с первого, хотя шаги второго прохода годны', async () => {
+    const b = bed({ 'counter.txt': '0\n', 'stepcast.yml': loopPipeline({ check: CONVERGES }) }, { git: true });
+    const first = await firstRun(b);
+
+    // Обрыв процесса посреди второго прохода: записи вердикта нет, цикл и
+    // прогон остались `running`, а шаг `check` второго прохода успел пройти.
+    const statusPath = join(first.journal.paths.dir, 'status.json');
+    const status = JSON.parse(readFileSync(statusPath, 'utf8')) as {
+      status: string;
+      loops: { iterations: number; status: string; verdict?: string; reason?: string; cause?: string }[];
+    };
+    const [record] = status.loops;
+    assert.ok(record !== undefined);
+    assert.equal(record.iterations, 2);
+    delete record.verdict;
+    delete record.reason;
+    delete record.cause;
+    record.status = 'running';
+    status.status = 'running';
+    writeFileSync(statusPath, JSON.stringify(status));
+
+    b.project.write('marker.txt', 'есть');
+    const plan = planFor(b, first, 'after');
+    const check = plan.steps.find((item) => item.job === 'check');
+    assert.equal(check?.decision.kind, 'rerun');
+    assert.match((check?.decision as { reason: string }).reason, /fix-loop/);
+    assert.equal(plan.reusedLoops, undefined);
+
+    const second = await resume(b, first, 'after');
+    assert.equal(second.status, 'success');
+    const members = steps(second).filter((step) => step.id === 'verify' || step.id === 'bump');
+    assert.ok(members.length > 0);
+    assert.ok(members.every((step) => step.reused_from === undefined), 'ни один шаг участника не переиспользован');
+  });
+
+  it('основание until у участника цикла из одного прохода — первая итерация в pass-1', async () => {
+    const b = bed(
+      {
+        'stepcast.yml': `
+kind: pipeline
+loops:
+  l:
+    jobs: [work]
+    max_iterations: 2
+    cost: 1
+jobs:
+  work:
+    until:
+      max_iterations: 3
+      check:
+        - cmd: test -f iter-3.txt
+    steps:
+      - id: write
+        run: [sh, -c, 'n=$(ls iter-*.txt 2>/dev/null | wc -l | tr -d " "); echo "$n" > "iter-$((n + 1)).txt"']
+        expect: [{ exit_code: 0 }]
+`,
+      },
+      { git: true },
+    );
+    const first = await firstRun(b);
+    assert.equal(first.status, 'success');
+    assert.equal(readStatus(first.journal.paths).loops?.[0]?.iterations, 1);
+
+    const source = readSourceRun(first.journal.paths);
+    const expanded = expandPipeline({ pipelinePath: b.project.path('stepcast.yml'), config: b.project.config });
+    const firstIteration = JSON.parse(
+      readFileSync(join(first.journal.paths.jobs, 'work', 'steps', 'pass-1', 'iter-1', '01-write', 'step.json'), 'utf8'),
+    ) as { tree_before: string };
+    const record = source.status.jobs.find((job) => job.id === 'work')?.steps[0] as StepRecord;
+    assert.notEqual(record.tree_before, firstIteration.tree_before, 'запись состояния — последней итерации');
+    assert.equal(loopTreeBefore(source, expanded.pipeline).get(record), firstIteration.tree_before);
+  });
+
+  it('изменённое определение участника переисполняет весь цикл, причина называет цикл', async () => {
+    const b = bed({ 'counter.txt': '0\n', 'stepcast.yml': loopPipeline({ check: CONVERGES }) }, { git: true });
+    const first = await firstRun(b);
+    assert.equal(readStatus(first.journal.paths).loops?.[0]?.verdict, 'done');
+
+    // `fix` в последнем проходе пропущен, но ранние проходы он исполнял: его правка меняет дерево цикла.
+    b.project.write(
+      'stepcast.yml',
+      loopPipeline({ check: CONVERGES, bump: 'echo $(( $(cat counter.txt) + 1 )) > counter.txt; true' }),
+    );
+    const plan = planFor(b, first, 'after');
+    const check = plan.steps.find((item) => item.job === 'check');
+    assert.equal(check?.decision.kind, 'rerun');
+    assert.match((check?.decision as { reason: string }).reason, /fix-loop/);
+    assert.equal(plan.reusedLoops, undefined);
+  });
+
+  it('--from принимает точку входа и отклоняет другого участника и шаг участника', async () => {
+    const b = bed({ 'counter.txt': '0\n', 'stepcast.yml': loopPipeline({ check: CONVERGES }) }, { git: true });
+    const first = await firstRun(b);
+    const request = (from: string) => ({
+      cwd: b.project.root,
+      config: configOf(b),
+      source: readSourceRun(first.journal.paths),
+      from,
+    });
+
+    const accepted = planResume(request('check'));
+    assert.equal(accepted.plan.steps.filter((item) => item.job !== 'after').every((item) => item.decision.kind === 'rerun'), true);
+
+    for (const from of ['fix', 'fix/bump', 'check/verify']) {
+      assert.throws(
+        () => planResume(request(from)),
+        (error: unknown) => {
+          assert.ok(error instanceof Error);
+          assert.match(error.message, /цикле fix-loop/);
+          assert.match((error as { hint?: string }).hint ?? '', /--from check$/);
+          return true;
+        },
+        from,
+      );
+    }
   });
 });

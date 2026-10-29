@@ -459,12 +459,14 @@ claimed_by: run:2026-10-29T17-43-34Z-c53d39
 
 ## job-group-loops
 
-status: todo
+status: done
 title: `loops` — повтор группы работ проходами с условием и бюджетом
 why: `until` повторяет одну работу; цикл «реализация → проверка → починка» из нескольких работ сегодня разворачивается руками в линейный граф с фиксированным числом копий.
 done_when: Верхний ключ `loops` с `jobs`, `while` (видны участники и `loop.*`), обязательным `max_iterations`, `cost`, `wallclock`; вердикт на границе прохода `done`/`exhausted`/`canceled`, `exhausted` → `failed`, исчерпание `cost` → `budget_exceeded`; переменные `STEPCAST_LOOP*`; `lint` отклоняет неизвестного или повторного участника, работу в двух циклах, `needs: all` и работу вне цикла на пути между участниками, предупреждает без `cost`; `resume --from` только на точке входа цикла; проходы видны в ленте прогона; тесты.
 group: engine-outcomes
 source: docs/burnex-after-stepcast.md, раздел 1 «Циклы по группам работ»
+started_at: 2026-10-29T18:33:46.680Z
+claimed_by: run:2026-10-29T18-33-45Z-7c8cf2
 
 ## run-env-override
 

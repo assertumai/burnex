@@ -13,14 +13,16 @@ import type { Config } from '../config/resolve.js';
 import { StepcastError } from '../../../kernel/errors.js';
 import { withTempDir } from '../../../kernel/fs/tempDir.js';
 import { stepDir, type RunPaths } from './journal/paths.js';
-import { readManifest, readStatus } from './journal/reader.js';
+import { findStepDir, readManifest, readStatus } from './journal/reader.js';
 import type { JobRecord, RunManifest, RunStatus, StepRecord } from './journal/schema.js';
 import { expandPipeline } from '../document/expand.js';
 import { readLockJobs } from '../document/lockRead.js';
-import { jobLockHash } from '../document/lock.js';
+import { parse as parseYaml } from 'yaml';
+import { jobLockHash, jobToPlain } from '../document/lock.js';
+import { normalizePackagePaths, portableForm } from '../document/packagePaths.js';
 import { definitionFiles, type ExpandedPipeline, type Job, type Pipeline, type Step } from '../document/model.js';
 import type { Registry } from '../../../kernel/registry.js';
-import { buildGraph, executionOrder, upstreamOutputs, type Graph } from '../domain/graph.js';
+import { buildGraph, executionOrder, loopEntryPoints, loopOf, upstreamOutputs, type Graph } from '../domain/graph.js';
 import { declaredInheritance } from './inherit.js';
 import { computeStepKey, upstreamForKey } from './stepKey.js';
 import { legacyPackageRoots, legacyStepKeys } from './legacyKey.js';
@@ -123,6 +125,14 @@ export interface ResumePlan {
    * worktree или copy. Пусто, если план не назначил ни одного продолжения.
    */
   readonly adoptWorkspace: readonly AdoptedWorkspace[];
+  /**
+   * Циклы по группам работ, переиспользуемые целиком: вердикт исходного
+   * прогона `done` и все шаги последнего прохода переиспользуемы. Такой цикл
+   * проходит одним проходом на переиспользованных шагах и выходит с вердиктом
+   * `done` без вычисления `while`: условие продолжения говорило о проходах
+   * исходного прогона, а их здесь нет.
+   */
+  readonly reusedLoops?: readonly string[];
 }
 
 /** Восстановление дерева отдельной работы — для изолированных режимов. */
@@ -330,15 +340,27 @@ export function buildResumePlan(requested: BuildPlanOptions): ResumePlan {
       record.steps.length === 0 &&
       poisoned === undefined &&
       sameInputs &&
-      job.if !== undefined &&
-      sourceConditions.get(job.id) === job.if &&
+      // Участник цикла в последнем проходе пропущен правилом `on` его
+      // зависимостей, а не только собственным `if`: те же выходы и статусы
+      // выше по порядку исполнения повторяют то же решение. Но ранние проходы
+      // он мог исполнять, и от его определения зависит дерево, на котором
+      // кончился цикл, — поэтому определение сверяется с замком исходного прогона.
+      (loopOf(pipeline.loops, job.id) !== undefined
+        ? definitionUnchanged(source, job)
+        : job.if !== undefined && sourceConditions.get(job.id) === job.if) &&
       from?.job !== job.id
     ) {
       for (const step of job.steps) {
         steps.push({
           job: job.id,
           step: step.id,
-          decision: { kind: 'skip', reason: `пропущена условием, как в прошлом прогоне (${job.if})` },
+          decision: {
+            kind: 'skip',
+            reason:
+              job.if === undefined
+                ? 'пропущена в последнем проходе цикла, как в прошлом прогоне'
+                : `пропущена условием, как в прошлом прогоне (${job.if})`,
+          },
         });
       }
       continue;
@@ -471,7 +493,8 @@ export function buildResumePlan(requested: BuildPlanOptions): ResumePlan {
     }
   }
 
-  const coarsenedResult = coarsenSharedSessions(pipeline.jobs, steps, adoptWorkspace);
+  const sharedResult = coarsenSharedSessions(pipeline.jobs, steps, adoptWorkspace);
+  const coarsenedResult = coarsenLoops(pipeline, source, sharedResult.steps, sharedResult.adoptWorkspace);
   const coarsened = coarsenedResult.steps;
   const anyReuse = coarsened.some(
     (plan) => plan.decision.kind === 'reuse' || plan.decision.kind === 'continue',
@@ -555,6 +578,7 @@ export function buildResumePlan(requested: BuildPlanOptions): ResumePlan {
     fromScratch: !anyReuse,
     ...(failureNoteJob === undefined ? {} : { failureNoteJob }),
     adoptWorkspace: coarsenedResult.adoptWorkspace,
+    ...(coarsenedResult.reusedLoops.length === 0 ? {} : { reusedLoops: coarsenedResult.reusedLoops }),
   };
 }
 
@@ -995,6 +1019,88 @@ function coarsenSharedSessions(
   return { steps: result, adoptWorkspace: adopt };
 }
 
+/**
+ * Совпадает ли определение работы с записанным в замке исходного прогона.
+ * Нечитаемый замок или работа, которой в нём нет, — несовпадение: переисполнить
+ * лишнее дешевле, чем переиспользовать устаревшее.
+ */
+function definitionUnchanged(source: SourceRun, job: Job): boolean {
+  let document: unknown;
+  try {
+    document = parseYaml(readFileSync(source.paths.lock, 'utf8'));
+  } catch {
+    return false;
+  }
+  const jobs = (document as { jobs?: unknown } | null)?.jobs;
+  if (!Array.isArray(jobs)) return false;
+  const recorded = jobs.find((item) => (item as { id?: unknown } | null)?.id === job.id);
+  if (recorded === undefined) return false;
+  const form = portableForm();
+  // Через JSON обе стороны приводятся к одному виду: YAML не помнит
+  // неопределённых полей, которые объект работы может нести.
+  const normalize = (value: unknown): string =>
+    JSON.stringify(normalizePackagePaths(JSON.parse(JSON.stringify(value)), form));
+  return normalize(recorded) === normalize(jobToPlain(job));
+}
+
+/**
+ * Огрубление до цикла по группе работ: единица повтора — цикл целиком.
+ *
+ * Шаги прохода опираются на дерево, построенное предыдущими проходами, и
+ * записи шагов в состоянии — только последнего. Переиспользовать часть
+ * участников последнего прохода и переисполнить остальных значит собрать
+ * проход, которого не было. Поэтому цикл переиспользуется, только если его
+ * вердикт в исходном прогоне `done` и каждый шаг каждого участника
+ * переиспользуем (или пропущен, как в исходном прогоне); иначе переисполняются
+ * все участники, и цикл начинается с первого прохода. Причина названа в
+ * объяснении, как у общей сессии.
+ */
+function coarsenLoops(
+  pipeline: Pipeline,
+  source: SourceRun,
+  steps: readonly StepPlan[],
+  adoptWorkspace: readonly AdoptedWorkspace[],
+): {
+  readonly steps: StepPlan[];
+  readonly adoptWorkspace: readonly AdoptedWorkspace[];
+  readonly reusedLoops: readonly string[];
+} {
+  const result = [...steps];
+  let adopt = adoptWorkspace;
+  const reusedLoops: string[] = [];
+
+  for (const loop of pipeline.loops) {
+    const members = new Set(loop.jobs);
+    const indices = result
+      .map((plan, index) => ({ plan, index }))
+      .filter(({ plan }) => members.has(plan.job));
+    if (indices.length === 0) continue;
+
+    const record = source.status.loops?.find((item) => item.id === loop.id);
+    const everyReusable = indices.every(
+      ({ plan }) => plan.decision.kind === 'reuse' || plan.decision.kind === 'skip',
+    );
+    if (record?.verdict === 'done' && everyReusable) {
+      reusedLoops.push(loop.id);
+      continue;
+    }
+
+    const cause =
+      record === undefined
+        ? `в исходном прогоне цикла ${loop.id} не было`
+        : record.verdict !== 'done'
+          ? `цикл ${loop.id} в исходном прогоне завершился: ${record.verdict ?? record.status}`
+          : `в цикле ${loop.id} есть шаг, который переисполняется`;
+    const reason = `${cause} — единицей повтора является цикл целиком, он начинается с первого прохода`;
+    adopt = adopt.filter((item) => !members.has(item.job));
+    for (const { plan, index } of indices.filter(({ plan }) => plan.decision.kind !== 'rerun')) {
+      result[index] = { ...plan, decision: { kind: 'rerun', reason } };
+    }
+  }
+
+  return { steps: result, adoptWorkspace: adopt, reusedLoops };
+}
+
 /** Человекочитаемый отчёт: он же вывод `--dry-run`, он же основание решения. */
 export function describePlan(plan: ResumePlan): string[] {
   const width = Math.max(...plan.steps.map((step) => `${step.job}/${step.step}`.length), 0);
@@ -1118,14 +1224,26 @@ function jobVerdict(job: string, steps: readonly StepPlan[], sourceRunId: string
  *
  * У работы с попытками записи шагов в состоянии — записи последней попытки, и
  * первая итерация ищется в её каталоге (`attempt-<n>/iter-1`): `attempts` в
- * записи работы есть ровно у тех работ, чей журнал разложен по попыткам.
+ * записи работы есть ровно у тех работ, чей журнал разложен по попыткам. У
+ * участника цикла по группе работ — в последнем проходе (`pass-<n>/…`), если
+ * проходов был один; при нескольких основание даёт первый проход.
  */
-export function loopTreeBefore(source: SourceRun): ReadonlyMap<StepRecord, string> {
+export function loopTreeBefore(source: SourceRun, pipeline?: Pipeline): ReadonlyMap<StepRecord, string> {
   const bases = new Map<StepRecord, string>();
+  if (pipeline !== undefined) addLoopPassBases(bases, source, pipeline);
+  const members = new Set(pipeline?.loops.flatMap((loop) => loop.jobs) ?? []);
   for (const job of source.status.jobs) {
     if ((job.iterations ?? 1) <= 1) continue;
     for (const step of job.steps) {
-      const file = join(stepDir(source.paths, job.id, step.index, step.id, 1, job.attempts), 'step.json');
+      // Основание первого прохода цикла раньше первой итерации любого прохода.
+      if (bases.has(step)) continue;
+      // Записи участника — последнего прохода, где он исполнялся: это и есть
+      // последний каталог `pass-<n>`, который `findStepDir` берёт по умолчанию.
+      const dir = members.has(job.id)
+        ? findStepDir(source.paths, job.id, step.id, 1, job.attempts)
+        : stepDir(source.paths, job.id, step.index, step.id, 1, job.attempts);
+      if (dir === undefined) continue;
+      const file = join(dir, 'step.json');
       if (!existsSync(file)) continue;
       try {
         const first = JSON.parse(readFileSync(file, 'utf8')) as { tree_before?: unknown };
@@ -1139,13 +1257,44 @@ export function loopTreeBefore(source: SourceRun): ReadonlyMap<StepRecord, strin
 }
 
 /**
+ * Дерево перед первым проходом цикла по группе работ: `tree_before` первого
+ * шага точки входа в `pass-1/`. Записи участников в состоянии — последнего
+ * прохода, и без этого основания возобновление восстанавливало бы лишь
+ * правки последнего прохода, как раньше терялись правки итераций `until`.
+ */
+function addLoopPassBases(bases: Map<StepRecord, string>, source: SourceRun, pipeline: Pipeline): void {
+  const graph = buildGraph(pipeline).graph;
+  for (const loop of pipeline.loops) {
+    const record = source.status.loops?.find((item) => item.id === loop.id);
+    if (record === undefined || record.iterations <= 1) continue;
+    const entry = loopEntryPoints(graph, loop)[0];
+    const first = entry?.steps[0];
+    if (entry === undefined || first === undefined) continue;
+    const dir = findStepDir(source.paths, entry.id, first.id, 1, 1, 1);
+    if (dir === undefined) continue;
+    let base: unknown;
+    try {
+      base = (JSON.parse(readFileSync(join(dir, 'step.json'), 'utf8')) as { tree_before?: unknown }).tree_before;
+    } catch {
+      // Испорченная запись первого прохода — не повод отказать возобновлению.
+      continue;
+    }
+    if (typeof base !== 'string') continue;
+    for (const job of source.status.jobs) {
+      if (!loop.jobs.includes(job.id)) continue;
+      for (const step of job.steps) bases.set(step, base);
+    }
+  }
+}
+
+/**
  * Изменённые пути шага работы с циклом — от дерева перед первой итерацией
  * (см. [loopTreeBefore]); для остальных шагов функция та же.
  */
 function withLoopBases(options: BuildPlanOptions): BuildPlanOptions {
   const produced = options.producedPaths;
   if (produced === undefined) return options;
-  const bases = loopTreeBefore(options.source);
+  const bases = loopTreeBefore(options.source, options.expanded.pipeline);
   if (bases.size === 0) return options;
   return {
     ...options,
@@ -1246,6 +1395,20 @@ export function planResume(request: ResumeRequest): ResumePlanResult {
       throw new StepcastError(`Работа ${from.job} не объявляет шаг ${from.step}`, {
         hint: `Шаги работы: ${target.steps.map((item) => item.id).join(', ')}`,
       });
+    }
+  }
+  if (from !== undefined) {
+    // Цикл — единица повтора: возобновление начинает его с первого прохода,
+    // а точка внутри цикла описывала бы проход, которого в новом прогоне нет.
+    const loop = loopOf(expanded.pipeline.loops, from.job);
+    if (loop !== undefined) {
+      const entry = loopEntryPoints(buildGraph(expanded.pipeline).graph, loop)[0];
+      if (entry !== undefined && (entry.id !== from.job || from.step !== undefined)) {
+        throw new StepcastError(
+          `Работа ${from.job} состоит в цикле ${loop.id} — возобновление с участника цикла или его шага невозможно`,
+          { hint: `Цикл переисполняется с первого прохода. Укажите --from ${entry.id}` },
+        );
+      }
     }
   }
   if (from?.step !== undefined) {

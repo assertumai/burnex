@@ -714,3 +714,69 @@ jobs:
     assert.ok(lines.some((line) => /^наложить результат на текущее дерево: stepcast apply /.test(line)));
   });
 });
+
+describe('run-progress: проходы цикла в ленте', () => {
+  const COUNTER_LOOP = `
+kind: pipeline
+loops:
+  fix-loop:
+    jobs: [check, fix]
+    max_iterations: 3
+    cost: 5
+jobs:
+  check:
+    steps:
+      - id: verify
+        run: [sh, -c, 'test "\$(cat counter.txt)" -ge 1']
+        expect: [{ exit_code: 0 }]
+  fix:
+    needs: [check]
+    on: failure
+    steps:
+      - id: bump
+        run: [sh, -c, 'echo 1 > counter.txt']
+        expect: [{ exit_code: 0 }]
+`;
+
+  it('строки начала, итога и вердикта называют проход, предел и статус', () => {
+    const limits = new Map([['fix-loop', 3]]);
+    const render = (event: Event): string | undefined => renderProgressLine(event, ZERO_USAGE, 0, limits);
+
+    assert.match(render({ ...BASE, kind: 'loop.pass.started', loop: 'fix-loop', iteration: 1 }) ?? '', /fix-loop: проход 1 из 3 начат/);
+    assert.match(
+      render({ ...BASE, kind: 'loop.pass.finished', loop: 'fix-loop', iteration: 1, continue: true }) ?? '',
+      /fix-loop: проход 1: продолжение/,
+    );
+    assert.match(
+      render({ ...BASE, kind: 'loop.pass.finished', loop: 'fix-loop', iteration: 2, continue: false }) ?? '',
+      /fix-loop: проход 2: выход/,
+    );
+    assert.match(
+      render({ ...BASE, kind: 'loop.finished', loop: 'fix-loop', iterations: 2, verdict: 'done', status: 'success' }) ?? '',
+      /fix-loop: цикл done → success/,
+    );
+    assert.equal(render({ ...BASE, kind: 'loop.started', loop: 'fix-loop', jobs: ['check'], max_iterations: 3 }), undefined);
+  });
+
+  it('команда run печатает цикл из двух проходов с пределом 3 и строки участников как прежде', async () => {
+    const project = makeProject({ 'counter.txt': '0\n', 'stepcast.yml': COUNTER_LOOP });
+    const { lines, write } = capture();
+
+    const exitCode = await withHome(project.home, () => runRunCommand(args(['stepcast.yml']), write, project.root));
+
+    assert.equal(exitCode, ExitCode.ok);
+    const loopLines = lines.filter((line) => line.includes('fix-loop:'));
+    assert.deepEqual(
+      loopLines.map((line) => line.replace(/^\+\d+:\d\d:\d\d {2}/, '')),
+      [
+        'fix-loop: проход 1 из 3 начат',
+        'fix-loop: проход 1: продолжение',
+        'fix-loop: проход 2 из 3 начат',
+        'fix-loop: проход 2: выход',
+        'fix-loop: цикл done → success (проходов: 2) — условие продолжения ложно',
+      ],
+    );
+    assert.ok(lines.some((line) => line.includes('check/verify:')));
+    assert.ok(lines.some((line) => line.includes('fix/bump:')));
+  });
+});

@@ -1,4 +1,4 @@
-import type { Job, Pipeline } from '../document/model.js';
+import type { Job, Loop, Pipeline } from '../document/model.js';
 
 /**
  * Граф работ. Планировщик берёт работы из множества готовых и исполняет их
@@ -165,6 +165,47 @@ export function executionOrder(graph: Graph): readonly Job[] {
   }
 
   return order;
+}
+
+/**
+ * Цикл, в котором состоит работа. Работа состоит не больше чем в одном цикле
+ * (линт отказывает иначе), поэтому при нарушении берётся первый по порядку
+ * объявления: планировщик не должен падать на документе, который линт
+ * всё равно отклонит.
+ */
+export function loopOf(loops: readonly Loop[], jobId: string): Loop | undefined {
+  return loops.find((loop) => loop.jobs.includes(jobId));
+}
+
+/**
+ * Участники цикла в порядке исполнения (`executionOrder`), а не записи в
+ * `jobs:` цикла: порядок записи — вопрос вкуса автора, порядок исполнения —
+ * вопрос графа. Работы, которых нет в графе, пропускаются.
+ */
+export function loopMembersInOrder(graph: Graph, loop: Loop): readonly Job[] {
+  const members = new Set(loop.jobs);
+  return executionOrder(graph).filter((job) => members.has(job.id));
+}
+
+/**
+ * Точки входа цикла: участники, у которых среди `needs` нет участников этого
+ * же цикла. Линт требует ровно одну; здесь возвращается список, чтобы
+ * нарушение можно было назвать, а не угадывать.
+ */
+export function loopEntryPoints(graph: Graph, loop: Loop): readonly Job[] {
+  const members = new Set(loop.jobs);
+  return loopMembersInOrder(graph, loop).filter(
+    (job) => !(graph.dependencies.get(job.id) ?? []).some((id) => members.has(id)),
+  );
+}
+
+/**
+ * Выход прохода: последний в порядке исполнения участник, у которого есть
+ * дерево. Пропущенный участник дерева не оставил — его место занимает
+ * предыдущий, как в `resolveInheritSource`.
+ */
+export function loopExit(graph: Graph, loop: Loop, hasTree: (jobId: string) => boolean): Job | undefined {
+  return [...loopMembersInOrder(graph, loop)].reverse().find((job) => hasTree(job.id));
 }
 
 function findCycles(

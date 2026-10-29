@@ -257,9 +257,18 @@ function toJob(value: unknown): LockJob | undefined {
  * за замок, ничего не объявивший. Пустой список работ при `readable: true` —
  * утверждение файла, а не следствие сбоя чтения.
  */
+/** Цикл из замка: участники и предел проходов. */
+export interface LockLoop {
+  readonly id: string;
+  readonly jobs: readonly string[];
+  readonly maxIterations: number;
+}
+
 export interface LockRead {
   readonly readable: boolean;
   readonly jobs: LockJob[];
+  /** Присутствует только если пайплайн объявлял циклы. */
+  readonly loops?: readonly LockLoop[];
   readonly workspace?: {
     readonly source: 'commit';
     readonly preserveLocalChanges: boolean;
@@ -302,9 +311,20 @@ export function readLock(path: string): LockRead {
           liveFiles,
         }
       : undefined;
+  const loops = Array.isArray(root?.loops)
+    ? root.loops.flatMap((value) => {
+        const entry = asRecord(value);
+        const id = asString(entry?.id);
+        const members = Array.isArray(entry?.jobs) ? entry.jobs.filter((job): job is string => typeof job === 'string') : [];
+        const max = entry?.max_iterations;
+        if (id === undefined || typeof max !== 'number') return [];
+        return [{ id, jobs: members, maxIterations: max }];
+      })
+    : [];
   return {
     readable: true,
     jobs: jobs.map(toJob).filter((job): job is LockJob => job !== undefined),
+    ...(loops.length === 0 ? {} : { loops }),
     ...(publication === undefined ? {} : { workspace: publication }),
   };
 }

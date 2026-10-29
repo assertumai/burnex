@@ -175,6 +175,10 @@ export function stepDirName(index: number, stepId: string): string {
  * попытки работы — только у работ с `attempts.max > 1`: добавлять их всем
  * единообразнее, но раскладку читает человек, и её краткость стоит дороже
  * единообразия. Точка порождения пути при этом одна — здесь.
+ *
+ * Уровень прохода цикла (`pass-<n>`) — самый внешний и есть у каждого прохода
+ * участника, включая первый: иначе читателю пришлось бы угадывать, где первый.
+ * У работ вне цикла раскладка не меняется.
  */
 export function stepDir(
   paths: RunPaths,
@@ -183,8 +187,10 @@ export function stepDir(
   stepId: string,
   iteration?: number,
   jobAttempt?: number,
+  loopPass?: number,
 ): string {
-  const steps = join(jobDir(paths, jobId), 'steps');
+  const root = join(jobDir(paths, jobId), 'steps');
+  const steps = loopPass === undefined ? root : join(root, passDirName(loopPass));
   const base = jobAttempt === undefined ? steps : join(steps, attemptDirName(jobAttempt));
   return iteration === undefined
     ? join(base, stepDirName(index, stepId))
@@ -215,6 +221,16 @@ export function iterationDirName(iteration: number): string {
 
 export function parseIterationDirName(name: string): number | undefined {
   const match = /^iter-(\d+)$/.exec(name);
+  return match === null ? undefined : Number(match[1]);
+}
+
+/** Имя каталога прохода цикла: `pass-1`, `pass-2`, … */
+export function passDirName(pass: number): string {
+  return `pass-${pass}`;
+}
+
+export function parsePassDirName(name: string): number | undefined {
+  const match = /^pass-(\d+)$/.exec(name);
   return match === null ? undefined : Number(match[1]);
 }
 

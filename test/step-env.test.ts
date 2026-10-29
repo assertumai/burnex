@@ -91,6 +91,35 @@ describe('injectedVariables: STEPCAST_SKIP_EXIT_CODE', () => {
     }
   });
 
+  it('шаг второго прохода fix-loop из трёх и его проверки видят fix-loop, 2 и 3', () => {
+    const step = { ...common, kind: 'run' } as unknown as Parameters<typeof stepEnv>[0];
+    const looped = {
+      ...context,
+      loopPass: { loop: { id: 'fix-loop', maxIterations: 3 }, iteration: 2 },
+    } as unknown as Parameters<typeof stepEnv>[3];
+    for (const grant of ['step', 'check'] as const) {
+      const env = stepEnv(step, job, 1, looped, '/r/j/s', grant);
+      assert.equal(env.STEPCAST_LOOP, 'fix-loop');
+      assert.equal(env.STEPCAST_LOOP_ITERATION, '2');
+      assert.equal(env.STEPCAST_LOOP_ITERATION_MAX, '3');
+    }
+  });
+
+  it('у работы вне цикла переменных цикла нет', () => {
+    const step = { ...common, kind: 'run' } as unknown as Parameters<typeof stepEnv>[0];
+    for (const grant of ['step', 'check'] as const) {
+      const env = stepEnv(step, job, 1, context, '/r/j/s', grant);
+      assert.equal('STEPCAST_LOOP' in env, false);
+      assert.equal('STEPCAST_LOOP_ITERATION' in env, false);
+      assert.equal('STEPCAST_LOOP_ITERATION_MAX' in env, false);
+    }
+    assert.equal('STEPCAST_LOOP' in injectedVariables(base), false);
+    assert.equal(
+      injectedVariables({ ...base, loop: { id: 'l', iteration: 1, maxIterations: 1 } }).STEPCAST_LOOP_ITERATION,
+      '1',
+    );
+  });
+
   it('stepEnv не выставляет переменную без кода и агентскому шагу', () => {
     const run = { ...common, kind: 'run' } as unknown as Parameters<typeof stepEnv>[0];
     const agent = { ...common, kind: 'agent' } as unknown as Parameters<typeof stepEnv>[0];

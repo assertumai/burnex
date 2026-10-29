@@ -153,7 +153,9 @@ function buildProgressObserver(
   write: (line: string) => void,
 ): (event: Event, usage: UsageSnapshot) => void {
   let startedAtMs: number | undefined;
+  const loopLimits = new Map<string, number>();
   return (event, usage) => {
+    if (event.kind === 'loop.started') loopLimits.set(event.loop, event.max_iterations);
     if (event.kind === 'run.started') {
       startedAtMs = Date.parse(event.ts);
       const paths = runPaths(config.runs.root, projectKey(projectRoot), event.run_id);
@@ -161,7 +163,7 @@ function buildProgressObserver(
       write(`журнал: ${paths.dir}`);
     }
     const elapsedMs = startedAtMs === undefined ? 0 : Date.parse(event.ts) - startedAtMs;
-    const rendered = renderProgressLine(event, usage, elapsedMs);
+    const rendered = renderProgressLine(event, usage, elapsedMs, loopLimits);
     if (rendered !== undefined) write(rendered);
   };
 }

@@ -326,6 +326,27 @@ params:
     assert.equal(output.stdout?.content, 'вторая попытка');
   });
 
+  // Участник цикла кладёт шаги в `steps/pass-<n>/`: витрина показывает
+  // последний проход, а работа вне цикла читается по прежнему пути.
+  it('читает контекст и вывод шага участника цикла из каталога последнего прохода', () => {
+    const { journal, key } = seed();
+    const first = journal.prepareStep('producer', 1, 'think', undefined, undefined, 1);
+    journal.writeStepFile(first, 'stdout.log', 'первый проход');
+    const second = journal.prepareStep('producer', 1, 'think', undefined, undefined, 2);
+    journal.writeStepFile(second, 'stdout.log', 'второй проход');
+    journal.writeContextReport(second, {
+      entries: [{ origin: 'job', kind: 'text', mode: 'inline', tokens: 9 }],
+      total_tokens: 9,
+    });
+    const plain = journal.prepareStep('consumer', 1, 'check');
+    journal.writeStepFile(plain, 'stdout.log', 'вне цикла');
+
+    const jobs = buildSnapshot(journal.paths, key).jobs;
+    assert.equal(jobs.find((j) => j.id === 'producer')?.steps[0]?.contextBreakdown?.total, 9);
+    assert.equal(readStepOutput(journal.paths, 'producer', 'think', { stdoutOffset: 0 }).stdout?.content, 'второй проход');
+    assert.equal(readStepOutput(journal.paths, 'consumer', 'check', { stdoutOffset: 0 }).stdout?.content, 'вне цикла');
+  });
+
   it('модели попыток берутся из последней попытки работы', () => {
     const { journal, key } = seed();
     const entry = (jobAttempt: number, model: string) => ({

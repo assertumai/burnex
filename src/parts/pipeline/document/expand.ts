@@ -69,6 +69,7 @@ import {
   type PipelineDocument,
   type RawBudget,
   type RawContextEntry,
+  type RawLoop,
   type RawAgentStep,
   type RawBuiltinPredicate,
   type RawMcp,
@@ -87,6 +88,7 @@ import type {
   EffortOrigin,
   Job,
   KnowledgeDeclaration,
+  Loop,
   McpServers,
   ModelOrigin,
   Pipeline,
@@ -385,6 +387,46 @@ function toDataDeclaration(
     }
   }
   return names;
+}
+
+function toLoops(
+  raw: Readonly<Record<string, RawLoop>> | undefined,
+  limits: Config['limits'],
+  substitutions: SubstitutionMap,
+): readonly Loop[] {
+  return Object.entries(raw ?? {}).map(([id, loop]) => {
+    const at = `loops.${id}`;
+    if (loop.max_iterations === undefined) {
+      throw new StepcastError('Цикл loops объявлен без max_iterations', {
+        at: `${at}.max_iterations`,
+        hint: 'Цикл без предела проходов неограничен по расходу — укажите число проходов',
+      });
+    }
+    const maxIterations = toCount(
+      loop.max_iterations,
+      `${at}.max_iterations`,
+      substitutions,
+      parseCount,
+      `${at}.max_iterations`,
+    );
+    if (maxIterations > limits.iterations) {
+      throw new StepcastError(
+        `max_iterations = ${maxIterations} превышает потолок limits.iterations = ${limits.iterations}`,
+        { at: `${at}.max_iterations`, hint: 'Поднимите потолок в конфигурации или уменьшите число проходов' },
+      );
+    }
+    // Те же разбор и единицы, что у полей budget: кроме собственного бюджета
+    // у цикла нет ничего, что стоило бы разбирать иначе.
+    const budget = toBudget({ cost: loop.cost, wallclock: loop.wallclock }, substitutions, at);
+    return {
+      id,
+      jobs: loop.jobs,
+      ...(loop.while === undefined ? {} : { while: loop.while }),
+      maxIterations,
+      ...(budget.costMicroUsd === undefined ? {} : { costMicroUsd: budget.costMicroUsd }),
+      ...(budget.wallclockMs === undefined ? {} : { wallclockMs: budget.wallclockMs }),
+    };
+  });
 }
 
 function toBudget(raw: RawBudget, substitutions: SubstitutionMap, at: string): Budget {
@@ -2592,6 +2634,7 @@ export function expandPipeline(options: ExpandOptions): ExpandedPipeline {
     failFast: doc.fail_fast ?? config.defaults.failFast,
     ...(triggers === undefined ? {} : { triggers }),
     jobs,
+    loops: toLoops(doc.loops, config.limits, substitutions),
   };
 
   const unusedAgentEntries =

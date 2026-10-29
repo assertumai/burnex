@@ -239,8 +239,9 @@ export class RunJournal {
     stepId: string,
     iteration?: number,
     jobAttempt?: number,
+    loopPass?: number,
   ): string {
-    const dir = stepDir(this.paths, jobId, index, stepId, iteration, jobAttempt);
+    const dir = stepDir(this.paths, jobId, index, stepId, iteration, jobAttempt, loopPass);
     mkdirSync(dir, { recursive: true, mode: DIR_MODE });
     return dir;
   }

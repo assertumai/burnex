@@ -48,12 +48,12 @@ import { runPluginStep } from './exec/pluginStep.js';
 import { evaluatePredicates, validateAgainstSchema, validateAgainstSchemaFile } from '../expect/evaluate.js';
 import { createKnowledgeSource } from '../domain/knowledge/source.js';
 import type { KnowledgeSource } from '../domain/knowledge/types.js';
-import { buildGraph, upstreamOutputs, type Graph } from '../domain/graph.js';
+import { buildGraph, loopEntryPoints, loopExit, upstreamOutputs, type Graph } from '../domain/graph.js';
 import { bookkeep } from './bookkeeping.js';
 import { buildIterationNote, type IterationNoteTruncation } from './iterationNote.js';
 import { locateEngine, isEditableEngine, pinEngine, type EngineInfo, type EngineLocation } from './engine.js';
 import { HaltCause, type HaltCauseValue } from './halt.js';
-import { resolveInheritSource, type CompletedJob } from './inherit.js';
+import { resolveInheritSource, type CompletedJob, type InheritSource } from './inherit.js';
 import { builtinRegistry } from '../../builtin.js';
 import { DecisionHalt, hasStepExecutor, type StepKindDecisionRequest, type StepKindDecisionResult } from '../contract.js';
 import { contributionOwner, formerStepKindOwner, stepKindNames, type Registry } from '../../../kernel/registry.js';
@@ -81,6 +81,7 @@ import type {
   ContextEntry,
   ExpandedPipeline,
   Job,
+  Loop,
   Pipeline,
   ScriptUnresolved,
   Step,
@@ -91,6 +92,7 @@ import type {
   DecisionRecord,
   Event,
   JobRecord,
+  LoopRecord,
   PredicateResult,
   RunManifest,
   RunStatus,
@@ -98,7 +100,7 @@ import type {
   StepRecord,
   Usage,
 } from './journal/schema.js';
-import { isRetryableJobOutcome, schedule, type JobOutcome } from './scheduler.js';
+import { isRetryableJobOutcome, schedule, type JobOutcome, type LoopOutcome, type LoopPass } from './scheduler.js';
 
 /** Адрес запущенного в решении шага — с идентичностью попытки и итерации цикла. */
 export interface DecisionIdentity {
@@ -402,6 +404,14 @@ export async function runPipeline(options: RunOptions): Promise<RunResult> {
   // Читается по зависимостям работы, а они к её началу уже отдали исход, —
   // одновременность соседей записи в карте не касается.
   const completedWorkspaces = new Map<string, CompletedJob>();
+  // Цикл в ходе прогона: то, что планировщик не хранит, а исполнению и
+  // состоянию нужно — начало первого прохода, дерево прошлого прохода, исход.
+  const loops = new Map<string, LoopRuntime>(
+    pipeline.loops.map((loop) => [
+      loop.id,
+      { loop, startedAt: undefined, iterations: 0, previous: new Map(), outcome: undefined, executed: false },
+    ]),
+  );
 
   // Момент пробуждения: дописывается на диск до начала сна и снимается после
   // продолжения — состояние спящего прогона доступно снаружи, пока он спит.
@@ -457,6 +467,7 @@ export async function runPipeline(options: RunOptions): Promise<RunResult> {
     runCwd: options.cwd,
     graph,
     completedWorkspaces,
+    loops,
     failureNote: { pending: options.resume === undefined ? undefined : previousFailureText(options.resume) },
     budgetExceededLatch: { value: undefined },
     decisionLatch,
@@ -632,9 +643,16 @@ export async function runPipeline(options: RunOptions): Promise<RunResult> {
     // возобновления нужна ровно так же: без неё прогон, упёршийся в потолок,
     // остался бы единственным законченным исходом без подсказки, как его
     // продолжить.
-    const blocked = [...records.values()].find(
-      (record) => record.status === 'failed' || record.status === 'budget_exceeded',
-    );
+    const isBlocking = (status: StatusValue | undefined): boolean =>
+      status === 'failed' || status === 'budget_exceeded';
+    // Цикл, исчерпавший проходы, — отказ и тогда, когда все участники его
+    // последнего прохода успешны: точка возобновления — его точка входа.
+    const blockedLoop = [...loops.values()].find((runtime) => isBlocking(runtime.outcome?.status));
+    const blocked =
+      [...records.values()].find((record) => isBlocking(record.status)) ??
+      (blockedLoop === undefined
+        ? undefined
+        : { id: resumeTarget(pipeline, graph, blockedLoop.loop.jobs[0] as string) });
     // Сводка пишется раньше состояния: витрина замечает изменение прогона по
     // mtime status.json, и к этому моменту лежащая рядом сводка не должна
     // быть старше него (design.md, Решение 2).
@@ -651,6 +669,7 @@ export async function runPipeline(options: RunOptions): Promise<RunResult> {
         : { resumed_from: options.resume.source.manifest.run_id }),
       inputs: pipeline.inputs,
       jobs: [...records.values()],
+      ...(loops.size === 0 ? {} : { loops: [...loops.values()].map(loopRecord) }),
       budget: {
         tokens_used: usage.runTokens(),
         ...(pipeline.budget?.tokens === undefined ? {} : { tokens_limit: pipeline.budget.tokens }),
@@ -684,7 +703,7 @@ export async function runPipeline(options: RunOptions): Promise<RunResult> {
           : {}
         : {
             resume: {
-              command: `stepcast resume ${shortRunId(journal.paths.runId)} --from ${blocked.id}`,
+              command: `stepcast resume ${shortRunId(journal.paths.runId)} --from ${resumeTarget(pipeline, graph, blocked.id)}`,
               blocked_by: blocked.id,
             },
           }),
@@ -762,7 +781,48 @@ export async function runPipeline(options: RunOptions): Promise<RunResult> {
       // складывает их туда после каждого шага, и второй путь к тому же
       // значению разошёлся бы с первым при первой же уборке прогона.
       jobData: (jobId) => records.get(jobId)?.data,
-      execute: async (job, scope) => executeJob(job, scope, context),
+      execute: async (job, scope, pass) => executeJob(job, scope, context, pass),
+      loopHooks: {
+        onLoopStarted: (loop) => {
+          const runtime = loops.get(loop.id) as LoopRuntime;
+          runtime.startedAt = Date.now();
+          journal.event({ kind: 'loop.started', loop: loop.id, jobs: [...loop.jobs], max_iterations: loop.maxIterations });
+        },
+        onPassStarted: (loop, iteration) => {
+          const runtime = loops.get(loop.id) as LoopRuntime;
+          runtime.iterations = iteration;
+          if (iteration > 1) resetLoopParticipants(context, runtime);
+          journal.event({ kind: 'loop.pass.started', loop: loop.id, iteration });
+          writeStatus('running', true);
+        },
+        onPassFinished: (loop, iteration, goesOn) => {
+          journal.event({ kind: 'loop.pass.finished', loop: loop.id, iteration, continue: goesOn });
+          writeStatus('running', true);
+        },
+        onLoopFinished: (outcome) => {
+          (loops.get(outcome.id) as LoopRuntime).outcome = outcome;
+          journal.event({
+            kind: 'loop.finished',
+            loop: outcome.id,
+            iterations: outcome.iterations,
+            verdict: outcome.verdict,
+            status: outcome.status,
+            ...(outcome.reason === undefined ? {} : { reason: outcome.reason }),
+          });
+          writeStatus('running', true);
+        },
+        reused: (loop) => {
+          if (options.resume?.plan.reusedLoops?.includes(loop.id) !== true) return undefined;
+          if ((loops.get(loop.id) as LoopRuntime).executed) return undefined;
+          return options.resume.source.status.loops?.find((item) => item.id === loop.id)?.iterations;
+        },
+        // Бюджет цикла проверяется и на границе прохода: шаг его останавливает
+        // посреди прохода, но последний проход мог закончиться ровно на пределе.
+        budgetExhausted: (loop) => {
+          const scope = loopScope(context, loop);
+          return scope !== undefined && usage.check([scope]) !== undefined;
+        },
+      },
       onSettled: async (job, outcome) => {
         const record = records.get(job.id) as JobRecord;
         records.set(job.id, {
@@ -836,6 +896,24 @@ export async function runPipeline(options: RunOptions): Promise<RunResult> {
 // оба места используют друг друга только внутри тел функций, вызываемых уже
 // после того, как загрузчик модулей ES связал оба файла (см. комментарий у
 // `registerBuiltinStepKinds` в `src/parts/builtin.ts` — тот же приём).
+/** Цикл по группе работ в ходе прогона. */
+interface LoopRuntime {
+  readonly loop: Loop;
+  /** Начало первого прохода: от него отсчитывается `wallclock` цикла. */
+  startedAt: number | undefined;
+  /** Проходов начато. */
+  iterations: number;
+  /** Каталоги и якоря участников, исполнявшихся в прошлом проходе: из них берётся дерево точки входа. */
+  previous: ReadonlyMap<string, CompletedJob>;
+  outcome: LoopOutcome | undefined;
+  /**
+   * В проходе исполнился хотя бы один шаг участника, а не переиспользовался:
+   * тогда цикл, переиспользованный по плану, на деле прошёл заново и о
+   * сходимости судит `while`, а не исход исходного прогона.
+   */
+  executed: boolean;
+}
+
 export interface RunContext extends RunOptions {
   /**
    * Реестр вкладов прогона — в отличие от `RunOptions.registry`, здесь он есть
@@ -916,6 +994,13 @@ export interface RunContext extends RunOptions {
   readonly graph: Graph;
   /** Каталог и последний якорь уже завершившихся работ — источник наследования. */
   readonly completedWorkspaces: Map<string, CompletedJob>;
+  /** Циклы прогона по идентификатору; без объявленных циклов пусто. */
+  readonly loops: ReadonlyMap<string, LoopRuntime>;
+  /**
+   * Проход цикла, в котором исполняется работа. Заполнен на контексте
+   * участника; у работ вне цикла отсутствует, и читатели берут «не в цикле».
+   */
+  readonly loopPass?: LoopPass;
   /** Наблюдённые входы шагов прошлого прогона: `<работа>/<шаг>` → пути. */
   readonly observedInputs?: ReadonlyMap<string, readonly string[]>;
   /**
@@ -1163,8 +1248,10 @@ export function adapterOf(name: string, context: RunContext): BackendAdapter {
 async function executeJob(
   declared: Job,
   scope: Record<string, unknown>,
-  context: RunContext,
+  runContext: RunContext,
+  pass?: LoopPass,
 ): Promise<JobOutcome> {
+  const context: RunContext = pass === undefined ? runContext : { ...runContext, loopPass: pass };
   const { journal } = context;
 
   /**
@@ -1233,7 +1320,15 @@ async function runJob(
   // Рабочая директория готовится до первого шага. Её отказ означает, что шаги
   // запустить негде, — это `spawn_failed` из закрытого перечня, а не новая
   // причина остановки.
-  const source = resolveInheritSource(context.graph, job, context.completedWorkspaces);
+  const loopPass = context.loopPass;
+  // Перенос данных и дерева по плану возобновления относится к первому проходу:
+  // проход N > 1 строится на дереве прошлого, а не на сохранённом исходным прогоном.
+  const firstPass = (loopPass?.iteration ?? 1) === 1;
+  const inherited = resolveInheritSource(context.graph, job, context.completedWorkspaces);
+  const source = loopPass === undefined || firstPass ? inherited : loopPassSource(context, job, loopPass, inherited);
+  // Участник цикла в проходе N > 1 заново каталог не заводит: его каталог
+  // с прошлого прохода есть, и `worktree add` в него отказал бы.
+  const previousWorkspace = firstPass ? undefined : context.records.get(job.id)?.workspace;
   const adoptWorkspace = context.resume?.plan.adoptWorkspace.find((item) => item.job === job.id);
   let prepared: PreparedWorkspace;
   try {
@@ -1250,6 +1345,9 @@ async function runJob(
         : { nestedRepos: context.config.project.nestedRepos }),
       sourceCommits: context.sourceCommits,
       ...(context.anchorerFor === undefined ? {} : { anchorerFor: context.anchorerFor }),
+      ...(previousWorkspace === undefined
+        ? {}
+        : { reuse: { dir: previousWorkspace.path, ...(previousWorkspace.nested === undefined ? {} : { nested: previousWorkspace.nested }) } }),
       ...(adoptWorkspace === undefined || context.resume === undefined
         ? {}
         : {
@@ -1301,7 +1399,7 @@ async function runJob(
   // Дерево работы приводится к состоянию переиспользованных шагов сразу после
   // подготовки: раньше каталога нет, позже его уже читают шаги и предикаты
   // `until`.
-  restoreJobWorkspace(context, job, prepared);
+  if (firstPass) restoreJobWorkspace(context, job, prepared);
 
   try {
     const lateEnv = substitutableEnv(declared.env, context);
@@ -1353,7 +1451,7 @@ async function runJob(
   // Данные переиспользованных шагов переносятся до первого шага: работа ниже
   // по графу читает их подстановкой, и пустота здесь ломала бы её ровно при
   // возобновлении.
-  transferJobData(context, job);
+  if (firstPass) transferJobData(context, job);
 
   // Ниже по коду `context` — контекст работы: у него своя рабочая директория.
   //
@@ -1562,6 +1660,107 @@ async function runJob(
   return outcome;
 }
 
+/** Цикл участника для переменных окружения шага и его проверок; у работы вне цикла пусто. */
+function loopEnv(context: RunContext): { loop?: { id: string; iteration: number; maxIterations: number } } {
+  const pass = context.loopPass;
+  return pass === undefined
+    ? {}
+    : { loop: { id: pass.loop.id, iteration: pass.iteration, maxIterations: pass.loop.maxIterations } };
+}
+
+/** Запись цикла для `status.json`. */
+function loopRecord(runtime: LoopRuntime): LoopRecord {
+  const { loop, outcome } = runtime;
+  return {
+    id: loop.id,
+    jobs: [...loop.jobs],
+    iterations: outcome?.iterations ?? runtime.iterations,
+    max_iterations: loop.maxIterations,
+    ...(outcome === undefined ? {} : { verdict: outcome.verdict }),
+    status: outcome?.status ?? (runtime.iterations === 0 ? 'pending' : 'running'),
+    ...(outcome?.reason === undefined ? {} : { reason: outcome.reason }),
+    ...(outcome?.cause === undefined ? {} : { cause: outcome.cause }),
+  };
+}
+
+/**
+ * Работа, с которой предлагается возобновить прогон, остановившийся на этой.
+ * Участник цикла возобновляется с точки входа: цикл — единица повтора, и
+ * `--from` на другом участнике отклоняется (design.md, решение 9).
+ */
+function resumeTarget(pipeline: Pipeline, graph: Graph, jobId: string): string {
+  const loop = pipeline.loops.find((candidate) => candidate.jobs.includes(jobId));
+  return loop === undefined ? jobId : (loopEntryPoints(graph, loop)[0]?.id ?? jobId);
+}
+
+/**
+ * Источник дерева участника в проходе N > 1. Точка входа наследует дерево
+ * выхода прошлого прохода — последнего участника, у которого оно есть, —
+ * а не своего внешнего источника: починка правит то, что проверка найдёт в
+ * следующем проходе. Прочие участники наследуют как обычно, внутри прохода.
+ */
+function loopPassSource(context: RunContext, job: Job, pass: LoopPass, resolved: InheritSource): InheritSource {
+  const runtime = context.loops.get(pass.loop.id);
+  if (runtime === undefined || job.workspace.mode === 'cwd') return resolved;
+  if (!loopEntryPoints(context.graph, pass.loop).some((entry) => entry.id === job.id)) return resolved;
+  const exit = loopExit(context.graph, pass.loop, (id) => runtime.previous.has(id));
+  const tree = exit === undefined ? undefined : runtime.previous.get(exit.id);
+  return exit === undefined || tree === undefined ? resolved : { kind: 'continue', job: exit.id, dir: tree.dir };
+}
+
+/**
+ * Начало прохода N > 1: у каждого участника сбрасывается то, что иначе
+ * просочилось бы из прошлого прохода, — записи шагов, данные, опубликованный
+ * выход, — и расход шагов запечатывается. Дерево остаётся: в этом смысл цикла.
+ * Сброс — по образцу `prepareJobRetry`.
+ */
+function resetLoopParticipants(context: RunContext, runtime: LoopRuntime): void {
+  const { journal } = context;
+  const members = runtime.loop.jobs.filter((id) => context.graph.byId.has(id));
+
+  // Дерево прошлого прохода запоминается и снимается из общих завершённых:
+  // иначе участник, пропущенный в этом проходе, отдавал бы дерево позапрошлого.
+  const previous = new Map<string, CompletedJob>();
+  for (const id of members) {
+    const completed = context.completedWorkspaces.get(id);
+    if (completed === undefined) continue;
+    previous.set(id, completed);
+    context.completedWorkspaces.delete(id);
+  }
+  runtime.previous = previous;
+
+  for (const id of members) {
+    const scope = { journal, job: id };
+    bookkeep(scope, 'сброс данных участника перед проходом', () => {
+      resetJobData(jobDir(journal.paths, id));
+      rmSync(join(journal.paths.artifacts, `${id}.json`), { force: true });
+    });
+    const index = context.outputs.findIndex((output) => output.job === id);
+    if (index !== -1) context.outputs.splice(index, 1);
+
+    const record = context.records.get(id);
+    if (record !== undefined) {
+      // Исход прошлого прохода уходит целиком: onSettled дописывает только
+      // заданные поля, и оставшиеся от него причина или пропуск описывали бы чужой проход.
+      const {
+        data: _data,
+        iterations: _iterations,
+        output: _output,
+        reason: _reason,
+        cause: _cause,
+        skip: _skip,
+        last_check: _lastCheck,
+        finished_at: _finishedAt,
+        attempts: _attempts,
+        ...fresh
+      } = record;
+      context.records.set(id, { ...fresh, steps: [] });
+    }
+    context.usage.beginLoopPass(id);
+  }
+  context.refreshStatus();
+}
+
 /**
  * Подготовка новой попытки работы: бюджет, откат дерева, сброс данных, учёт
  * расхода. Возвращает исход, которым работа заканчивается без новой попытки,
@@ -1687,6 +1886,7 @@ function jobEnv(job: Job, context: RunContext): Record<string, string> {
       attempt: 1,
       jobAttempt: context.jobAttempt ?? 1,
       jobAttemptMax: job.attempts.max,
+      ...loopEnv(context),
       workspace: context.cwd,
       artifacts: context.journal.paths.artifacts,
       scratch: jobScratchDir(context.journal.paths, job.id),
@@ -1729,9 +1929,31 @@ function jobScopes(job: Job, context: RunContext): BudgetScope[] {
   const scopes: BudgetScope[] = [
     { kind: 'job', name: `работа ${job.id}`, jobId: job.id, budget: job.budget },
   ];
+  const loop = context.loopPass === undefined ? undefined : loopScope(context, context.loopPass.loop);
+  if (loop !== undefined) scopes.push(loop);
   const run = runScopeOf(job, context);
   if (run !== undefined) scopes.push(run);
   return scopes;
+}
+
+/**
+ * Область бюджета цикла: расход всех его участников за все проходы, время —
+ * от начала первого. `undefined`, если цикл бюджета не объявил.
+ */
+function loopScope(context: RunContext, loop: Loop): BudgetScope | undefined {
+  if (loop.costMicroUsd === undefined && loop.wallclockMs === undefined) return undefined;
+  const runtime = context.loops.get(loop.id);
+  return {
+    kind: 'loop',
+    name: `цикл ${loop.id}`,
+    jobs: loop.jobs,
+    ...(runtime?.startedAt === undefined ? {} : { startedAt: runtime.startedAt }),
+    budget: {
+      ...(loop.costMicroUsd === undefined ? {} : { costMicroUsd: loop.costMicroUsd }),
+      ...(loop.wallclockMs === undefined ? {} : { wallclockMs: loop.wallclockMs }),
+      onExceed: 'stop',
+    },
+  };
 }
 
 /**
@@ -2021,6 +2243,8 @@ async function runJobSteps(
   const { journal } = context;
   const iteration = iterationOptions.iteration;
   const jobAttempt = iterationOptions.jobAttempt;
+  const loopPass = context.loopPass;
+  const firstPass = (loopPass?.iteration ?? 1) === 1;
   const jobStartedAt = iterationOptions.jobStartedAt;
   context =
     iterationOptions.previousCheck === undefined
@@ -2083,8 +2307,11 @@ async function runJobSteps(
   const sessionKey = (agent: string, alias: string): string => {
     // Номер попытки работы входит в ключ только у работы с `attempts`: у прочих
     // ключ прежний. Новая попытка начинает сессии заново, как новая итерация.
+    // Проход цикла входит в ключ только у участника: новый проход начинает
+    // сессии заново, а у работы вне цикла ключ прежний.
+    const passPart = loopPass === undefined ? '' : `p${loopPass.iteration}.`;
     const scope = job.sessionGroup === undefined
-      ? `${job.id}#${jobAttempt === undefined ? '' : `${jobAttempt}.`}${iteration ?? 1}`
+      ? `${job.id}#${passPart}${jobAttempt === undefined ? '' : `${jobAttempt}.`}${iteration ?? 1}`
       : job.sessionGroup;
     return `${scope}/${agent}/${alias}`;
   };
@@ -2117,12 +2344,13 @@ async function runJobSteps(
       );
     }
 
-    const stepDirPath = journal.prepareStep(job.id, step.index, step.id, iteration, jobAttempt);
+    const stepDirPath = journal.prepareStep(job.id, step.index, step.id, iteration, jobAttempt, loopPass?.iteration);
 
     // План возобновления описывает исполнение исходного прогона. Повтор работы
     // его не продолжает: переиспользовать шаг во второй попытке значило бы
     // собрать дерево, которого не было ни в одной попытке.
-    const planned = jobAttempt !== undefined && jobAttempt > 1 ? undefined : planFor(context, job.id, step.id);
+    const planned =
+      (jobAttempt !== undefined && jobAttempt > 1) || !firstPass ? undefined : planFor(context, job.id, step.id);
     if (planned?.decision.kind === 'skip') {
       // План перенёс пропуск из исходного прогона и на этом основании
       // переиспользует работы ниже. Раз работа всё же исполняется, её условие
@@ -2209,6 +2437,7 @@ async function runJobSteps(
       if (carriedUsage !== undefined) context.usage.carry(job.id, step.id, carriedUsage);
     }
 
+    if (loopPass !== undefined) (context.loops.get(loopPass.loop.id) as LoopRuntime).executed = true;
     journal.event({ kind: 'step.started', job: job.id, step: step.id, attempt: 1 });
 
     const treeBefore = treeAnchor;
@@ -2248,6 +2477,8 @@ async function runJobSteps(
           budget: job.budget,
         },
       ];
+      const loop = context.loopPass === undefined ? undefined : loopScope(context, context.loopPass.loop);
+      if (loop !== undefined) scopes.push(loop);
       const run = runScopeOf(job, context);
       if (run !== undefined) scopes.push(run);
       return scopes;
@@ -3620,6 +3851,7 @@ export function stepEnv(
       attempt,
       jobAttempt: context.jobAttempt ?? 1,
       jobAttemptMax: job.attempts.max,
+      ...loopEnv(context),
       workspace: context.cwd,
       artifacts: context.journal.paths.artifacts,
       scratch: jobScratchDir(context.journal.paths, job.id),

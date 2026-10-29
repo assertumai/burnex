@@ -2418,3 +2418,87 @@ jobs:
     assert.equal(accumulator.runCostMicroUsd(), 500_000);
   });
 });
+
+describe('job-group-loops: бюджет участника на проход и бюджет цикла', () => {
+  const spend = (cost: number): Usage =>
+    usageWith({ tokens_in: 1, tokens_out: 1, cache_read: 0, cache_write: 0, reported_cost_usd: cost });
+  const participant = {
+    kind: 'job',
+    name: 'работа fix',
+    jobId: 'fix',
+    budget: { costMicroUsd: 1_000_000, onExceed: 'stop' },
+  } as const;
+  const loop = {
+    kind: 'loop',
+    name: 'цикл fix-loop',
+    jobs: ['check', 'fix'],
+    budget: { costMicroUsd: 5_000_000, onExceed: 'stop' },
+  } as const;
+
+  it('участник с budget.cost 1 тратит по 0.8 в двух проходах при cost цикла 5 и не останавливается', () => {
+    const usage = new UsageAccumulator(() => 1);
+    usage.record('fix', 'apply', 1, spend(0.8));
+    assert.equal(usage.check([participant, loop]), undefined);
+
+    usage.beginLoopPass('fix');
+    usage.record('fix', 'apply', 1, spend(0.8));
+    assert.equal(usage.check([participant, loop]), undefined, 'область работы отсчитывается с начала прохода');
+    assert.equal(usage.runCostMicroUsd(), 1_600_000, 'счётчик прогона нарастающий');
+  });
+
+  it('без границы прохода тот же расход переходит потолок работы', () => {
+    const usage = new UsageAccumulator(() => 1);
+    usage.record('fix', 'apply', 1, spend(0.8));
+    usage.sealJob('fix');
+    usage.record('fix', 'apply', 1, spend(0.8));
+    assert.equal(usage.check([participant])?.scopeKind, 'job');
+  });
+
+  it('область цикла складывает участников за все проходы и останавливает на втором проходе', () => {
+    const usage = new UsageAccumulator(() => 1);
+    usage.record('check', 'run', 1, spend(1.5));
+    usage.record('fix', 'apply', 1, spend(0.9));
+    usage.beginLoopPass('check');
+    usage.beginLoopPass('fix');
+    assert.equal(usage.check([loop]), undefined);
+
+    usage.record('check', 'run', 1, spend(1.5));
+    usage.record('fix', 'apply', 1, spend(0.9));
+    usage.record('check', 'recheck', 1, spend(1));
+    const exceeded = usage.check([loop]);
+    assert.equal(exceeded?.scopeKind, 'loop');
+    assert.equal(exceeded?.dimension, 'cost');
+    assert.equal(exceeded?.limit, 5_000_000);
+    assert.equal(exceeded?.used, 5_800_000);
+  });
+
+  it('область шага отсчитывается заново на каждом проходе', () => {
+    const usage = new UsageAccumulator(() => 1);
+    const step = {
+      kind: 'step',
+      name: 'fix/apply',
+      jobId: 'fix',
+      stepId: 'apply',
+      budget: { costMicroUsd: 1_000_000, onExceed: 'stop' },
+    } as const;
+    usage.record('fix', 'apply', 1, spend(0.8));
+    usage.beginLoopPass('fix');
+    usage.record('fix', 'apply', 1, spend(0.8));
+    assert.equal(usage.check([step]), undefined);
+  });
+
+  it('wallclock цикла считается от начала первого прохода', () => {
+    const usage = new UsageAccumulator(() => 1);
+    const exceeded = usage.check([
+      {
+        kind: 'loop',
+        name: 'цикл l',
+        jobs: ['a'],
+        startedAt: Date.now() - 5_000,
+        budget: { wallclockMs: 1_000, onExceed: 'stop' },
+      },
+    ]);
+    assert.equal(exceeded?.dimension, 'wallclock');
+    assert.equal(exceeded?.scopeKind, 'loop');
+  });
+});

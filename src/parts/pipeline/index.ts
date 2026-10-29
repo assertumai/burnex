@@ -62,7 +62,9 @@ export {
   stepDirName,
   attemptDirName,
   parseAttemptDirName,
+  parsePassDirName,
   parseStepDirName,
+  passDirName,
   type RunPaths,
 } from './run/journal/paths.js';
 export {

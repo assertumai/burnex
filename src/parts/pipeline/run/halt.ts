@@ -21,6 +21,8 @@ export const HaltCause = {
   spawnFailed: 'spawn_failed',
   /** Предел итераций цикла исчерпан, а его проверки не прошли. */
   untilNotMet: 'until_not_met',
+  /** Предел проходов цикла по группе работ исчерпан, а условие продолжения всё ещё истинно. */
+  loopExhausted: 'loop_exhausted',
   /** Превышен объявленный потолок расхода. */
   budgetExceeded: 'budget_exceeded',
   /** Прогон отменён пользователем или сигналом. */
@@ -37,7 +39,8 @@ export type HaltCauseValue = (typeof HaltCause)[keyof typeof HaltCause];
  * Причины, при которых упавшую работу с `attempts.max > 1` исполняют заново.
  * Белый список, а не чёрный: новая причина в `HaltCause` по умолчанию не
  * повторяется, пока её не внесут сюда явно, — лишний повтор стоит денег и
- * времени. Бюджет и окно лимита не восстановятся от повтора, отмена — воля
+ * времени. Исчерпание цикла по группе работ — исход цикла, а не работы: его повтор
+ * не лечит. Бюджет и окно лимита не восстановятся от повтора, отмена — воля
  * пользователя, отказ аутентификации повтор воспроизведёт.
  */
 export const RETRYABLE_JOB_CAUSES: readonly HaltCauseValue[] = [
@@ -65,6 +68,8 @@ export function describeHaltCause(cause: HaltCauseValue): string {
       return 'процесс шага не удалось запустить';
     case HaltCause.untilNotMet:
       return 'предел итераций цикла исчерпан';
+    case HaltCause.loopExhausted:
+      return 'предел проходов цикла исчерпан';
     case HaltCause.budgetExceeded:
       return 'превышен объявленный бюджет';
     case HaltCause.canceled:

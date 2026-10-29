@@ -547,6 +547,24 @@ export interface Pipeline {
   readonly triggers?: Triggers;
   /** Порядок объявления сохраняется: он задаёт детерминированный порядок работ. */
   readonly jobs: readonly Job[];
+  /** Циклы по группам работ; без объявления `loops` — пустой список. */
+  readonly loops: readonly Loop[];
+}
+
+/**
+ * Цикл по группе работ: участники исполняются проходами, пока `while` истинно
+ * и не исчерпан предел. Предел обязателен — цикл без него неограничен по
+ * расходу.
+ */
+export interface Loop {
+  readonly id: string;
+  /** Участники в порядке записи в документе. */
+  readonly jobs: readonly string[];
+  /** Выражение продолжения; без него — «в проходе есть участник со статусом failed». */
+  readonly while?: string;
+  readonly maxIterations: number;
+  readonly costMicroUsd?: number;
+  readonly wallclockMs?: number;
 }
 
 /** Ссылка на подстановку, оставшуюся в значении до времени исполнения. */

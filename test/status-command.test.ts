@@ -338,3 +338,34 @@ describe('CLI: stepcast status — источник цены', () => {
     assert.equal(render({ cost_used_usd: 2.5 }).includes('≈'), false);
   });
 });
+
+describe('CLI: stepcast status — циклы по группам работ', () => {
+  it('называет проход, вердикт и причину цикла; без циклов строк цикла нет', () => {
+    const { runsRoot, projectRoot, home } = makeJournalBed();
+    const journal = seedRun(runsRoot, projectRoot, {
+      status: 'failed',
+      jobs: [{ id: 'check', status: 'failed', steps: [] }],
+      loops: [
+        {
+          id: 'fix-loop',
+          jobs: ['check', 'fix'],
+          iterations: 3,
+          max_iterations: 3,
+          verdict: 'exhausted',
+          status: 'failed',
+          reason: 'предел проходов исчерпан (3)',
+          cause: 'loop_exhausted',
+        },
+      ],
+    });
+
+    const { lines, write } = capture();
+    withHome(home, () => runStatusCommand(args({ run: journal.paths.runId }), write, projectRoot));
+    assert.match(lines.join('\n'), /цикл fix-loop: exhausted, проход 3 из 3, .*\[loop_exhausted\] — предел проходов исчерпан/);
+
+    const plain = seedRun(runsRoot, projectRoot, { runId: 'plain-run' });
+    const other = capture();
+    withHome(home, () => runStatusCommand(args({ run: plain.paths.runId }), other.write, projectRoot));
+    assert.doesNotMatch(other.lines.join('\n'), /цикл /);
+  });
+});

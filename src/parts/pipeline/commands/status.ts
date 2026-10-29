@@ -78,6 +78,16 @@ export function runStatusCommand(
   }
   for (const line of formatColumns(rows)) write(line);
 
+  // Запись работы-участника описывает её последний проход; сколько проходов
+  // прошёл цикл и чем кончил, видно только здесь.
+  for (const loop of status.loops ?? []) {
+    const verdict = loop.verdict === undefined ? '' : `${loop.verdict}, `;
+    const cause = loop.cause === undefined ? '' : ` [${loop.cause}]`;
+    write(
+      `цикл ${loop.id}: ${verdict}проход ${loop.iterations} из ${loop.max_iterations}, ${label(loop.status)}${cause}${loop.reason === undefined ? '' : ` — ${loop.reason}`}`,
+    );
+  }
+
   const budget = status.budget;
   const used = formatTokens(budget.tokens_used);
   const limit = budget.tokens_limit === undefined ? '—' : formatTokens(budget.tokens_limit);

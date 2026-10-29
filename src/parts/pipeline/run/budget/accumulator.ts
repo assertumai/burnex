@@ -39,6 +39,17 @@ export type BudgetScope =
       readonly stepId: string;
       readonly startedAt?: number;
       readonly budget: Budget | undefined;
+    }
+  | {
+      /**
+       * Цикл по группе работ: расход всех его участников за все проходы,
+       * время — от начала первого прохода.
+       */
+      readonly kind: 'loop';
+      readonly name: string;
+      readonly jobs: readonly string[];
+      readonly startedAt?: number;
+      readonly budget: Budget | undefined;
     };
 
 export interface Exceeded {
@@ -170,6 +181,9 @@ export const ZERO_USAGE_SNAPSHOT: UsageSnapshot = {
   costUnreportedAttempts: 0,
 };
 
+/** Метка записи шага, запечатанной границей прохода цикла. */
+const PASS_MARK = '@pass';
+
 export class UsageAccumulator {
   private readonly run = emptyCounters();
   private readonly jobs = new Map<string, Counters>();
@@ -189,6 +203,11 @@ export class UsageAccumulator {
   private readonly waits: WaitInterval[] = [];
   /** Отличает переисполнения одной и той же попытки в ключах расхода. */
   private sealCounter = 0;
+  /**
+   * Расход работы к началу её текущего прохода в цикле: область работы
+   * считает от него, а счётчики работы, прогона и цикла остаются нарастающими.
+   */
+  private readonly passBase = new Map<string, { billable: number; costMicroUsd: number }>();
   /**
    * Действующая попытка работы — только у работ с `attempts.max > 1`. Расход
    * попыток шагов в сводке различается по ней, иначе шаг с тем же ключом во
@@ -395,17 +414,32 @@ export class UsageAccumulator {
    * сводка разводит записи по ней, а итог работы по-прежнему ведут её
    * собственные счётчики.
    */
-  sealJob(jobId: string): void {
+  sealJob(jobId: string, marker = ''): void {
     const attempt = this.jobAttempts.get(jobId);
     const prefix = `${jobId}/`;
     for (const [key, counters] of [...this.steps]) {
       if (!key.startsWith(prefix)) continue;
       this.sealCounter += 1;
-      const sealedKey = `${key}@seal${this.sealCounter}${attempt === undefined ? '' : `@job${attempt}`}`;
+      const sealedKey = `${key}@seal${this.sealCounter}${attempt === undefined ? '' : `@job${attempt}`}${marker}`;
       this.steps.delete(key);
       this.steps.set(sealedKey, counters);
       if (this.costUnreportedAttempts.delete(key)) this.costUnreportedAttempts.add(sealedKey);
     }
+  }
+
+  /**
+   * Начать новый проход участника цикла. Расход шагов прошлого прохода
+   * запечатывается, как перед новой попыткой работы, а область работы
+   * отсчитывается заново: проход — запланированное новое исполнение, и автор
+   * пишет бюджет работы на одно исполнение. Общий предел проходов — область
+   * цикла; счётчики прогона и цикла не трогаются. Область шага тоже
+   * отсчитывается заново, поэтому запечатанные записи помечаются
+   * `@pass` и в итог шага не входят.
+   */
+  beginLoopPass(jobId: string): void {
+    this.sealJob(jobId, PASS_MARK);
+    const counters = this.jobs.get(jobId);
+    this.passBase.set(jobId, { billable: counters?.billable ?? 0, costMicroUsd: counters?.costMicroUsd ?? 0 });
   }
 
   /**
@@ -539,7 +573,9 @@ export class UsageAccumulator {
       case 'run':
         return this.run.billable;
       case 'job':
-        return this.jobs.get(scope.jobId)?.billable ?? 0;
+        return (this.jobs.get(scope.jobId)?.billable ?? 0) - (this.passBase.get(scope.jobId)?.billable ?? 0);
+      case 'loop':
+        return scope.jobs.reduce((sum, jobId) => sum + (this.jobs.get(jobId)?.billable ?? 0), 0);
       case 'step':
         // Область шага — все его попытки: иначе повторы обходили бы потолок.
         return this.stepTotal(scope.jobId, scope.stepId);
@@ -549,7 +585,7 @@ export class UsageAccumulator {
   private stepTotal(jobId: string, stepId: string): number {
     let total = 0;
     for (const [key, counters] of this.steps) {
-      if (key.startsWith(`${jobId}/${stepId}#`)) total += counters.billable;
+      if (key.startsWith(`${jobId}/${stepId}#`) && !key.includes(PASS_MARK)) total += counters.billable;
     }
     return total;
   }
@@ -559,7 +595,9 @@ export class UsageAccumulator {
       case 'run':
         return this.run.costMicroUsd;
       case 'job':
-        return this.jobs.get(scope.jobId)?.costMicroUsd ?? 0;
+        return (this.jobs.get(scope.jobId)?.costMicroUsd ?? 0) - (this.passBase.get(scope.jobId)?.costMicroUsd ?? 0);
+      case 'loop':
+        return scope.jobs.reduce((sum, jobId) => sum + (this.jobs.get(jobId)?.costMicroUsd ?? 0), 0);
       case 'step':
         return this.stepCostTotal(scope.jobId, scope.stepId);
     }
@@ -568,7 +606,7 @@ export class UsageAccumulator {
   private stepCostTotal(jobId: string, stepId: string): number {
     let total = 0;
     for (const [key, counters] of this.steps) {
-      if (key.startsWith(`${jobId}/${stepId}#`)) total += counters.costMicroUsd;
+      if (key.startsWith(`${jobId}/${stepId}#`) && !key.includes(PASS_MARK)) total += counters.costMicroUsd;
     }
     return total;
   }

@@ -230,6 +230,8 @@ const StepSecretsShape = {
  * отдельными сообщениями, а не общим «недопустимый символ»: обе формы
  * напрашиваются, и отказ должен сказать, что делать, а не просто что не так.
  */
+/** Имя цикла — слаг, как идентификатор работы. */
+const LOOP_NAME_PATTERN = /^[a-z0-9]+(-[a-z0-9]+)*$/;
 const STEP_NAME_PATTERN = /^[a-z0-9]+(-[a-z0-9]+)*$/;
 
 function describeUsesNameIssue(value: string): string | undefined {
@@ -904,6 +906,24 @@ export function buildDocumentSchemas(
     })
     .strict();
 
+  /**
+   * Цикл по группе работ. Ни `on_exceed`, ни `tokens`, ни `rate_limit_pct`
+   * тут нет: бюджет цикла — деньги и время, окно лимита сторожится на уровне
+   * прогона, а `.strict()` отклоняет лишнее ключом, а не молчанием.
+   * `max_iterations` обязателен, но его отсутствие отклоняет раскрытие, а не
+   * схема: путь `loops.<id>.max_iterations` и текст отказа тогда такие же,
+   * как у `until`.
+   */
+  const LoopSchema = z
+    .object({
+      jobs: z.array(z.string()).min(1),
+      while: z.string().optional(),
+      max_iterations: count.optional(),
+      cost: amount.optional(),
+      wallclock: amount.optional(),
+    })
+    .strict();
+
   const PipelineDocumentSchema = z
     .object({
       version: z.literal(1).optional(),
@@ -934,6 +954,9 @@ export function buildDocumentSchemas(
       concurrency: count.optional(),
       fail_fast: z.boolean().optional(),
       jobs: z.record(z.string(), JobEntrySchema),
+      loops: z
+        .record(z.string().regex(LOOP_NAME_PATTERN, 'имя цикла — слаг: строчные буквы, цифры и дефисы'), LoopSchema)
+        .optional(),
     })
     .strict();
   return {
@@ -949,6 +972,7 @@ export function buildDocumentSchemas(
     ProjectSchema,
     JobDocumentSchema,
     JobEntrySchema,
+    LoopSchema,
     PipelineDocumentSchema,
   };
 }
@@ -983,6 +1007,7 @@ export type RawMcp = z.infer<BuiltinSchemas['McpSchema']>;
 export type RawParam = z.infer<BuiltinSchemas['ParamSchema']>;
 export type RawScheduleTrigger = z.infer<BuiltinSchemas['ScheduleTriggerEntrySchema']>;
 export type RawTriggers = z.infer<BuiltinSchemas['TriggersSchema']>;
+export type RawLoop = z.infer<BuiltinSchemas['LoopSchema']>;
 export type RawProject = z.infer<BuiltinSchemas['ProjectSchema']>;
 
 /** Ключи обвязки, недопустимые внутри документа работы. */
