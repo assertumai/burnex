@@ -34,10 +34,11 @@ import type { Config } from '../config/resolve.js';
 import { inline } from '../domain/text.js';
 import { formatDuration } from '../../../kernel/units.js';
 import { assembleContext, type UpstreamOutput } from '../domain/context/assemble.js';
-import { resolveLate, type JobScopeEntry } from '../document/late.js';
+import { resolveLate, type JobScopeEntry, type LateWithheld } from '../document/late.js';
 import { ExitCode, StepcastError, isStepcastError, type ExitCodeValue } from '../../../kernel/errors.js';
 import { createSessionRegistry, executeAgentStep } from './exec/agentStep.js';
-import { buildStepEnv, injectedVariables } from './exec/env.js';
+import { buildStepEnv, injectedVariables, type EnvLayers } from './exec/env.js';
+import { namedSecrets, resolveSecrets } from './secrets.js';
 import { executeRunStep } from './exec/runStep.js';
 import { runJudgePass } from './exec/judgePass.js';
 import { runPluginStep } from './exec/pluginStep.js';
@@ -227,6 +228,30 @@ export async function runPipeline(options: RunOptions): Promise<RunResult> {
     ...(config.project.nestedRepos === undefined ? {} : { nestedRepos: config.project.nestedRepos }),
   });
 
+  // Умолчание реестра раскрывается один раз на прогон: каждый вызов
+  // `builtinRegistry()` поднимает корневой контекст, а спрашивают его и
+  // разрешение секретов, и адаптер бэкенда, и вычисление предикатов каждого
+  // шага (design.md изменения `cordis-kernel-daemon`, Решение 13).
+  const registry = options.registry ?? builtinRegistry();
+
+  // Секреты разрешаются до `RunJournal.create`, как и предстартовая проверка:
+  // прогон без секрета не начинается и не оставляет за собой каталога. Путь
+  // возобновления — этот же: `stepcast resume` приходит сюда с планом, а
+  // значения берутся заново, поэтому ротация токена ключ шага не меняет.
+  //
+  // Без названных секретов ожидания нет вовсе: журнал по-прежнему создаётся
+  // в том же синхронном отрезке, что и до этого изменения — вызывающие
+  // (тесты, демон) читают каталог прогона сразу после вызова `runPipeline`.
+  const secretValues: ReadonlyMap<string, string> =
+    namedSecrets(pipeline).length === 0
+      ? new Map<string, string>()
+      : await resolveSecrets({
+          pipeline,
+          registry,
+          projectRoot: options.projectRoot,
+          ...(options.signal === undefined ? {} : { signal: options.signal }),
+        });
+
   // Способ фиксации выбирается один раз на прогон: якоря разных способов
   // несравнимы, и смешивать их в пределах прогона нельзя.
   const anchorKind = detectAnchorKind(options.cwd, config.project.nestedRepos);
@@ -262,6 +287,7 @@ export async function runPipeline(options: RunOptions): Promise<RunResult> {
   const journal = RunJournal.create({
     runsRoot: config.runs.root,
     projectRoot: options.projectRoot,
+    secrets: secretValues.values(),
     ...(options.onEvent === undefined
       ? {}
       : {
@@ -382,11 +408,8 @@ export async function runPipeline(options: RunOptions): Promise<RunResult> {
 
   const context: RunContext = {
     ...options,
-    // Умолчание реестра раскрывается один раз на прогон: каждый вызов
-    // `builtinRegistry()` поднимает корневой контекст, а спрашивают его и
-    // разрешение адаптера, и вычисление предикатов каждого шага (design.md
-    // изменения `cordis-kernel-daemon`, Решение 13).
-    registry: options.registry ?? builtinRegistry(),
+    registry,
+    secretValues,
     journal,
     records,
     usage,
@@ -394,6 +417,7 @@ export async function runPipeline(options: RunOptions): Promise<RunResult> {
     adapters,
     backendSlots,
     reportedDenials,
+    reportedWithheld: new Set<string>(),
     sessions: createSessionRegistry(),
     pipelineContextSent: new Set<string>(),
     lockHash,
@@ -784,6 +808,11 @@ export interface RunContext extends RunOptions {
    * `startRun`), и ни одно место исполнения не поднимает его себе само.
    */
   readonly registry: Registry;
+  /**
+   * Значения секретов, названных шагами: имя секрета → значение. Только в
+   * памяти прогона — ни замок, ни манифест, ни ключ шага их не несут.
+   */
+  readonly secretValues: ReadonlyMap<string, string>;
   readonly journal: RunJournal;
   readonly records: Map<string, JobRecord>;
   readonly usage: UsageAccumulator;
@@ -793,6 +822,8 @@ export interface RunContext extends RunOptions {
   readonly backendSlots: BackendSlots;
   /** Одна и та же переменная вычёркивается на каждом шаге — сообщаем однажды. */
   readonly reportedDenials: Set<string>;
+  /** То же для `env.withheld`: пара «переменная|адрес шага» сообщается однажды. */
+  readonly reportedWithheld: Set<string>;
   /**
    * Реестр сессий прогона. Здесь, а не в исполнении работы, ровно ради
    * `session_group`: работы одной группы обязаны продолжать один диалог, а
@@ -1181,6 +1212,7 @@ async function runJob(
   restoreJobWorkspace(context, job, prepared);
 
   try {
+    const lateEnv = substitutableEnv(declared.env, context);
     job = resolveLate(declared, {
       jobs: (scope.jobs ?? {}) as Readonly<Record<string, JobScopeEntry>>,
       run: {
@@ -1189,10 +1221,18 @@ async function runJob(
         workspace: prepared.dir,
         scratch: jobScratchDir(journal.paths, job.id),
       },
-      env: declared.env,
+      env: lateEnv.env,
+      withheld: lateEnv.withheld,
     }, context.registry);
   } catch (error) {
-    const detail = error instanceof Error ? error.message : String(error);
+    // Подсказка входит в причину: именно в ней отказ секретной подстановки
+    // называет секрет и говорит, что делать.
+    const detail =
+      error instanceof StepcastError && error.hint !== undefined
+        ? `${error.message} (${error.hint})`
+        : error instanceof Error
+          ? error.message
+          : String(error);
     return {
       status: 'failed',
       reason: `подстановку раскрыть не удалось: ${detail}`,
@@ -1416,6 +1456,9 @@ async function evaluateCheck(
 function jobEnv(job: Job, context: RunContext): Record<string, string> {
   const { pipeline } = context.expanded;
   const { env } = buildStepEnv({
+    // Проверка цикла не шаг и секретов не называет: переменные всех
+    // объявленных секретов вычеркнуты и из неё (design.md, открытый вопрос).
+    ...secretLayers(pipeline, context.secretValues, []),
     base: context.baseEnv ?? process.env,
     envFiles: pipeline.envFiles,
     pipeline: pipeline.env,
@@ -2583,6 +2626,7 @@ async function runCommandStep(
     try {
       result = await executeRunStep({
         step,
+        masker: journal.masker,
         cwd: context.cwd,
         stepDir: stepDirPath,
         stallTimeoutMs: config.defaults.stallTimeoutMs,
@@ -2644,7 +2688,7 @@ async function runCommandStep(
               text: process_.stdout,
               structured,
               cwd: context.cwd,
-              env: stepEnv(step, job, 1, context, stepDirPath),
+              env: stepEnv(step, job, 1, context, stepDirPath, 'check'),
               changedPaths: changedPaths(),
               knowledge: context.knowledgeSource,
               script: {
@@ -2683,7 +2727,7 @@ async function runCommandStep(
             stallTimeoutMs: config.defaults.stallTimeoutMs,
             signal: abort.controller.signal,
             onStall,
-            env: stepEnv(step, job, plan.attempt, context, stepDirPath),
+            env: stepEnv(step, job, plan.attempt, context, stepDirPath, 'check'),
             adapterFor: (name) => adapterOf(name, context),
             defaultAgent: config.defaults.agent,
             backendSlots: context.backendSlots,
@@ -2841,6 +2885,7 @@ async function runAgentStep(
   try {
     result = await executeAgentStep({
       step,
+      masker: journal.masker,
       adapter,
       cwd: context.cwd,
       stepDir: stepDirPath,
@@ -2981,7 +3026,7 @@ async function runAgentStep(
             text: outcome.text ?? '',
             structured: outcome.structured,
             cwd: context.cwd,
-            env: stepEnv(step, job, 1, context, stepDirPath),
+            env: stepEnv(step, job, 1, context, stepDirPath, 'check'),
             changedPaths: changedPaths(),
             knowledge: context.knowledgeSource,
             script: {
@@ -3018,7 +3063,7 @@ async function runAgentStep(
           stallTimeoutMs: config.defaults.stallTimeoutMs,
           signal: abort.controller.signal,
           onStall,
-          env: stepEnv(step, job, plan.attempt, context, stepDirPath),
+          env: stepEnv(step, job, plan.attempt, context, stepDirPath, 'check'),
           adapterFor: (name) => adapterOf(name, context),
           defaultAgent: config.defaults.agent,
           backendSlots: context.backendSlots,
@@ -3217,15 +3262,77 @@ function failureBlock(previousFailure: string | undefined): string {
   return `## Прошлая попытка не прошла проверку\n\n${previousFailure}\n\nПочини причину, а не симптом.`;
 }
 
+/**
+ * Пространство `${env.*}` для позднего раскрытия: объявленный `env` работы без
+ * переменных секретов и без переменных, чьё значение содержит значение
+ * разрешённого секрета (`DATABASE_URL=postgres://u:<токен>@…`). Подстановка
+ * такой переменной вписала бы токен в промпт или argv обходным путём.
+ * Окружение процессов при этом не меняется — меняется только подстановка.
+ *
+ * Вычеркнутое возвращается и отдельно, с причиной: отказ раскрытия называет по
+ * нему секрет, а не говорит «не определена».
+ */
+function substitutableEnv(
+  declared: Readonly<Record<string, string>>,
+  context: RunContext,
+): { env: Record<string, string>; withheld: Record<string, LateWithheld> } {
+  const { pipeline } = context.expanded;
+  const env: Record<string, string> = {};
+  const withheld: Record<string, LateWithheld> = {};
+
+  // Имена `env` секретов называются всегда, и когда работа их не объявляла:
+  // обращение к ним — та же ошибка автора, и объяснение нужно то же.
+  for (const secret of pipeline.secrets) withheld[secret.env] = { secret: secret.name, reason: 'name' };
+
+  for (const [name, value] of Object.entries(declared)) {
+    if (name in withheld) continue;
+    const holder = [...context.secretValues].find(([, secretValue]) => value.includes(secretValue));
+    if (holder === undefined) env[name] = value;
+    else withheld[name] = { secret: holder[0], reason: 'value' };
+  }
+  return { env, withheld };
+}
+
+/**
+ * Секреты в слоях окружения (`secrets-named-providers`, design.md, решение 3):
+ * значения названных секретов — наложением последними, переменные всех
+ * остальных объявленных — вычёркиванием. Агентский шаг названных не имеет
+ * никогда (ключа `secrets` у него нет), поэтому у него вычёркнуты все.
+ *
+ * `named` пуст там, где секрет не положен: проверки `expect` и судья идут с
+ * окружением шага, но процессом шага не являются, и значение им не нужно.
+ */
+function secretLayers(
+  pipeline: Pipeline,
+  values: ReadonlyMap<string, string>,
+  named: readonly string[],
+): Pick<EnvLayers, 'secrets' | 'withheld'> {
+  const granted = new Set(named);
+  const secrets: Record<string, string> = {};
+  const withheld: Record<string, string> = {};
+  for (const secret of pipeline.secrets) {
+    const value = values.get(secret.name);
+    if (granted.has(secret.name) && value !== undefined) secrets[secret.env] = value;
+    else withheld[secret.env] = secret.name;
+  }
+  return { secrets, withheld };
+}
+
+/**
+ * Окружение процесса шага. `grant: 'check'` — для проверок шага (`expect`,
+ * судья): окружение то же, но без значений секретов, названных шагом.
+ */
 export function stepEnv(
   step: Step,
   job: Job,
   attempt: number,
   context: RunContext,
   stepDirPath: string,
+  grant: 'step' | 'check' = 'step',
 ): Record<string, string> {
   const { pipeline } = context.expanded;
-  const { env, denied } = buildStepEnv({
+  const { env, denied, withheld } = buildStepEnv({
+    ...secretLayers(pipeline, context.secretValues, grant === 'step' ? (step.secrets ?? []) : []),
     base: context.baseEnv ?? process.env,
     envFiles: pipeline.envFiles,
     pipeline: pipeline.env,
@@ -3264,6 +3371,20 @@ export function stepEnv(
       pattern: item.pattern,
       scope: `jobs.${job.id}.steps.${step.id}`,
     });
+  }
+
+  // Пара «переменная|адрес шага» — тем же приёмом, что `reportedDenials`: шаг
+  // собирает окружение на каждой попытке и в каждой проверке, а сообщать о
+  // вычеркнутом достаточно однажды.
+  for (const item of withheld) {
+    // Окружение проверок шага (`grant: 'check'`) вычёркивает и секрет, который
+    // шаг назвал: событие же говорит о секретах, которых шаг не объявлял.
+    if (step.secrets?.includes(item.secret) === true) continue;
+    const scope = `jobs.${job.id}.steps.${step.id}`;
+    const seen = `${item.name}|${scope}`;
+    if (context.reportedWithheld.has(seen)) continue;
+    context.reportedWithheld.add(seen);
+    context.journal.event({ kind: 'env.withheld', name: item.name, secret: item.secret, scope });
   }
 
   return env;

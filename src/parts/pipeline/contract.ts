@@ -96,6 +96,43 @@ export interface PredicateContribution {
   lint?(value: unknown, site: LintSite): readonly PluginDiagnostic[];
 }
 
+/** Вход `SecretProviderContribution.resolve`. */
+export interface SecretProviderInput {
+  /** Параметры объявления без `provider` и `env`, уже проверенные схемой вклада. */
+  readonly params: Readonly<Record<string, unknown>>;
+  /** Имя секрета в документе — для сообщений. */
+  readonly secret: string;
+  /**
+   * Переменная окружения секрета (`env` объявления с учётом умолчания):
+   * провайдер с ключом по умолчанию берёт его отсюда.
+   */
+  readonly env: string;
+  readonly projectRoot: string;
+  readonly signal: AbortSignal;
+}
+
+/**
+ * Вклад провайдера секретов (`secrets-named-providers`, design.md, решение 7):
+ * как по параметрам объявления получить значение секрета. Вызывается до
+ * каталога прогона, поэтому у него нет ни шага, ни журнала — только корень
+ * проекта и сигнал отмены.
+ */
+export interface SecretProviderContribution {
+  /** Имя провайдера — значение `provider` в объявлении секрета. Слаг. */
+  readonly name: string;
+  /**
+   * JSON Schema параметров объявления — ключей, соседних с `provider` и
+   * `env`. Схема, а не zod-модель, той же причиной, что у предиката.
+   */
+  readonly schema: Readonly<Record<string, unknown>>;
+  /**
+   * Получить значение. Отказ — исключение: движок превратит его в отказ
+   * запуска с именем секрета. Пустое значение, короткое и с переводом строки
+   * отклоняет сам движок, провайдеру их проверять не нужно.
+   */
+  resolve(input: SecretProviderInput): Promise<string>;
+}
+
 /**
  * Эффект решения — закрытый набор движка (design.md изменения
  * `user-decision-steps`, решение 1): судьбу прогона решает движок, а не
@@ -413,6 +450,7 @@ export interface PipelinePlugin extends StepcastPlugin {
   readonly backends?: Readonly<Record<string, BackendContribution>>;
   readonly predicates?: readonly PredicateContribution[];
   readonly steps?: readonly StepKindContribution[];
+  readonly secretProviders?: readonly SecretProviderContribution[];
 }
 
 const ModelDiscoverySchema = z
@@ -458,6 +496,16 @@ const PredicateContributionSchema = z
     native: z
       .undefined('поле native принадлежит внутренней форме встроенного предиката и вкладу недоступно')
       .optional(),
+  })
+  .loose();
+
+const SecretProviderContributionSchema = z
+  .object({
+    name: z.string().regex(SLUG, 'имя провайдера секретов — слаг в kebab-case или snake_case'),
+    schema: z.record(z.string(), z.unknown()),
+    resolve: z.custom<SecretProviderContribution['resolve']>((value) => typeof value === 'function', {
+      message: 'должна быть функцией',
+    }),
   })
   .loose();
 
@@ -533,6 +581,7 @@ export const StepcastPluginSchema = z
     predicates: z.array(PredicateContributionSchema).optional(),
     commands: z.array(CommandContributionSchema).optional(),
     steps: z.array(StepKindContributionSchema).optional(),
+    secretProviders: z.array(SecretProviderContributionSchema).optional(),
   })
   .loose();
 
@@ -553,7 +602,7 @@ export interface DeclarativeContributionEntry {
  * подаётся составом дефолта, `src/parts/load.ts`) — этим типом.
  */
 export type DeclarativeContributionFields = {
-  readonly [K in 'backends' | 'predicates' | 'commands' | 'steps']?: {
+  readonly [K in 'backends' | 'predicates' | 'commands' | 'steps' | 'secretProviders']?: {
     /** Имя сервиса, в который идёт этот ключ формы. */
     readonly service: string;
     /** Вклады ключа, приведённые к паре «имя, значение» — пусто, если плагин ключ не объявил или объявил его пустым. */
@@ -591,6 +640,11 @@ export const DECLARATIVE_CONTRIBUTION_FIELDS: DeclarativeContributionFields = {
     service: 'steps',
     entries: (plugin) => (plugin.steps ?? []).map((contribution) => ({ name: contribution.name, contribution })),
   },
+  secretProviders: {
+    service: 'secretProviders',
+    entries: (plugin) =>
+      (plugin.secretProviders ?? []).map((contribution) => ({ name: contribution.name, contribution })),
+  },
 };
 
 /**
@@ -622,6 +676,12 @@ export interface PredicateRegistrar {
   register(name: string, contribution: PredicateContribution): () => void;
 }
 
+/** Регистратор провайдеров секретов — по образцу `PredicateRegistrar`. */
+export interface SecretProviderRegistrar {
+  /** Внести провайдер. Отказывает на занятом имени; возвращает disposer. */
+  register(name: string, contribution: SecretProviderContribution): () => void;
+}
+
 /**
  * Контекст глазами доменного плагина — публикуемая поверхность подпути
  * `stepcast/pipeline`, расширение ядерного `Context` (`plugin-surface-split`,
@@ -633,6 +693,7 @@ export interface PipelineContext extends Context {
   readonly backends: ContributionRegistrar<BackendContribution>;
   readonly predicates: PredicateRegistrar;
   readonly steps: StepKindRegistrar;
+  readonly secretProviders: SecretProviderRegistrar;
 }
 
 /**

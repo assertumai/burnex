@@ -6,6 +6,7 @@ import { row as stepUses } from './pipeline/steps/uses/row.js';
 import { row as stepScript } from './pipeline/steps/script/row.js';
 import { row as stepAgent } from './pipeline/steps/agent/row.js';
 import { row as stepDecision } from './pipeline/steps/decision/row.js';
+import { row as secretProviders } from './pipeline/secrets/row.js';
 import type { PartRow } from './pipeline/services.js';
 
 /**
@@ -47,6 +48,7 @@ export const BUILTIN_ROWS: readonly PartRow[] = [
   stepScript,
   stepAgent,
   stepDecision,
+  secretProviders,
 ];
 
 /** Id встроенных строк — то, чем `config/resolve.ts` заводит семя дерева (design.md, Решение 3). */

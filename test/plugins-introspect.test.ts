@@ -254,7 +254,7 @@ describe('introspect: встроенное вне строк дерева', () =
     const pipelineRow = model.rows.find((candidate) => candidate.id === 'pipeline');
     assert.deepEqual(
       pipelineRow?.declaredServices.map((service) => service.name).sort(),
-      ['backends', 'predicates', 'steps'],
+      ['backends', 'predicates', 'secretProviders', 'steps'],
     );
     assert.deepEqual(pipelineRow?.contributions, {});
 

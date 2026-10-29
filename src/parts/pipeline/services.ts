@@ -1,6 +1,12 @@
 import type { Context } from 'cordis';
 
-import type { BackendContribution, PipelineContext, PredicateKind, StepKind } from './contract.js';
+import type {
+  BackendContribution,
+  PipelineContext,
+  PredicateKind,
+  SecretProviderContribution,
+  StepKind,
+} from './contract.js';
 import type { ContributionService, Kernel } from '../../kernel/kernel.js';
 import { rowScope, type BuiltinRow } from '../../kernel/load.js';
 
@@ -21,6 +27,7 @@ declare module 'cordis' {
     backends: ContributionService<BackendContribution>;
     predicates: ContributionService<PredicateKind>;
     steps: ContributionService<StepKind>;
+    secretProviders: ContributionService<SecretProviderContribution>;
   }
 }
 

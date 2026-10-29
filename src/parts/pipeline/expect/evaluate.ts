@@ -264,6 +264,7 @@ async function evaluateScript(
     ...(call.signal === undefined ? {} : { signal: call.signal }),
     stdoutPath: join(dir, 'stdout.log'),
     stderrPath: join(dir, 'stderr.log'),
+    masker: call.journal.masker,
   });
 
   const passed = result.outcome === 'exited' && result.exitCode === 0;

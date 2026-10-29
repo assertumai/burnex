@@ -36,11 +36,26 @@ export interface JobScopeEntry {
   readonly data?: Readonly<Record<string, string>>;
 }
 
+/**
+ * Переменная, убранная из пространства `env` потому, что подстановка раскрыла
+ * бы секрет: сама она — `env` секрета (`name`) либо её значение содержит
+ * значение секрета (`value`).
+ */
+export interface LateWithheld {
+  readonly secret: string;
+  readonly reason: 'name' | 'value';
+}
+
 export interface LateScope {
   /** Исходы и выходы завершившихся работ. Незавершённых здесь нет. */
   readonly jobs: Readonly<Record<string, JobScopeEntry>>;
   readonly run: RunScope;
   readonly env: Readonly<Record<string, string>>;
+  /**
+   * Имена, которых в `env` нет намеренно, и причина. Нужны одному — объяснению
+   * отказа: без них вычеркнутая переменная выглядела бы просто необъявленной.
+   */
+  readonly withheld?: Readonly<Record<string, LateWithheld>>;
 }
 
 const RUN_NAMES = ['id', 'dir', 'workspace', 'scratch'];
@@ -54,6 +69,14 @@ function explain(scope: LateScope) {
   return (expression: string, namespace: string, path: string): string | undefined => {
     if (namespace === 'run') {
       return `Пространство run содержит только ${RUN_NAMES.join(', ')}; величины уровня шага приходят переменными STEPCAST_JOB_DIR и STEPCAST_STEP_DIR`;
+    }
+
+    if (namespace === 'env') {
+      const hit = scope.withheld?.[path];
+      if (hit === undefined) return undefined;
+      return hit.reason === 'name'
+        ? `переменная ${path} — секрет ${hit.secret}; подстановкой он не раскрывается, назовите его в secrets: командного шага`
+        : `значение переменной ${path} содержит секрет ${hit.secret}; подстановкой оно не раскрывается`;
     }
 
     if (namespace !== 'jobs') return undefined;

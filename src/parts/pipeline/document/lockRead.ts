@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { parse as parseYaml } from 'yaml';
 
+
 /**
  * Разбор `pipeline.lock.yml`.
  *
@@ -47,6 +48,8 @@ export interface LockStep {
   readonly pluginKindName?: string;
   /** Поля под ключом вида, как записаны, — с нераскрытыми отложенными подстановками. */
   readonly pluginFields?: unknown;
+  /** Имена секретов, названных шагом. Значений в замке нет. */
+  readonly secrets?: readonly string[];
   readonly context: readonly string[];
 }
 
@@ -140,6 +143,7 @@ const LOCK_COMMON_KEYS = new Set([
   'budget',
   'expect',
   'attempts',
+  'secrets',
 ]);
 
 /** Единственный ключ, оставшийся сверх общей части, — имя вида плагинного шага. */
@@ -154,6 +158,9 @@ function toStep(value: unknown): LockStep | undefined {
   if (id === undefined) return undefined;
 
   const prompt = asString(record.prompt);
+  const secretNames = Array.isArray(record.secrets)
+    ? record.secrets.filter((name): name is string => typeof name === 'string')
+    : undefined;
   const command = commandLabel(record.run);
   const agent = asString(record.agent);
   const model = asString(record.model);
@@ -194,6 +201,7 @@ function toStep(value: unknown): LockStep | undefined {
     ...(usesManifestPath === undefined ? {} : { usesManifestPath }),
     ...(usesParams === undefined ? {} : { usesParams }),
     ...(pluginKindName === undefined ? {} : { pluginKindName, pluginFields: record[pluginKindName] }),
+    ...(secretNames === undefined ? {} : { secrets: secretNames }),
     context: contextLabels(record.context),
   };
 }

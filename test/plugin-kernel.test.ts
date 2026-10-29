@@ -843,7 +843,7 @@ describe('plugin-kernel: каскад снятия строки-поставщи
     assert.equal(kernel.ctx.get('predicates'), undefined);
     assert.equal(registry.backends.size, 0);
     assert.equal(registry.predicates.size, 0);
-    assert.deepEqual([...registry.missingServices].sort(), ['backends', 'predicates', 'steps']);
+    assert.deepEqual([...registry.missingServices].sort(), ['backends', 'predicates', 'secretProviders', 'steps']);
   });
 });
 

@@ -164,6 +164,7 @@ const PRINTABLE_EVENTS: readonly Event[] = PRINTABLE.map((item) => item.event);
 /** Всё, что лента не печатает: разбор постфактум, а не ход прогона. */
 const SILENT_EVENTS: readonly Event[] = [
   { ...BASE, kind: 'env.denied', name: 'GH_TOKEN', pattern: '*_TOKEN', scope: 'jobs.build' },
+  { ...BASE, kind: 'env.withheld', name: 'GH_TOKEN', secret: 'gh-token', scope: 'jobs.build.steps.plan' },
   { ...BASE, kind: 'context.denied', path: 'секрет.txt', pattern: '*.secret' },
   { ...BASE, kind: 'context.downgraded', job: 'build', step: 'plan', path: 'a.ts', tokens: 10 },
   { ...BASE, kind: 'context.note_truncated', job: 'build', step: 'plan', original_tokens: 900, final_tokens: 400 },

@@ -15,6 +15,7 @@ import {
   type McpServerStatus,
 } from '../../backend/types.js';
 import type { AgentStep, McpServers } from '../../document/model.js';
+import type { Masker } from '../journal/mask.js';
 import type { AttemptRecord, PredicateResult, StatusValue, Usage } from '../journal/schema.js';
 import { runAttempts, type AttemptPlan } from './attempts.js';
 import { runProcess, type ProcessResult } from './process.js';
@@ -107,6 +108,8 @@ export interface AgentStepOptions {
   readonly graceMs?: number;
   readonly signal?: AbortSignal;
   readonly onStall?: (silentMs: number) => void;
+  /** Маскировщик значений секретов журнала прогона: проходит поток агента и его логи. */
+  readonly masker?: Masker;
   readonly onAttemptStart?: (plan: AttemptPlan) => void;
   /**
    * Нарастающий итог попытки и её номер. Номер обязателен: без него расход
@@ -238,7 +241,7 @@ export async function executeAgentStep(options: AgentStepOptions): Promise<Agent
       });
 
       const suffix = plan.attempt === 1 ? '' : `.${plan.attempt}`;
-      writePrompt(options.stepDir, suffix, prompt);
+      writePrompt(options.stepDir, suffix, prompt, options.masker);
 
       let usage = emptyUsage(adapter.name, resolvedModel, 0);
       const seenUsageMessageIds = new Set<string>();
@@ -338,6 +341,7 @@ export async function executeAgentStep(options: AgentStepOptions): Promise<Agent
           stdoutPath: join(options.stepDir, `stdout${suffix}.log`),
           stderrPath: join(options.stepDir, `stderr${suffix}.log`),
           onStdout: consume,
+          ...(options.masker === undefined ? {} : { masker: options.masker }),
         });
       };
       const process_ = options.backendSlots === undefined
@@ -457,11 +461,15 @@ export async function executeAgentStep(options: AgentStepOptions): Promise<Agent
   } satisfies AgentStepResult;
 }
 
-function writePrompt(stepDir: string, suffix: string, prompt: string): void {
+function writePrompt(stepDir: string, suffix: string, prompt: string, masker?: Masker): void {
   // Промпт хранится целиком: без него нельзя понять, почему шаг повёл себя
   // так, а не иначе. Это часть запроса, сформированная stepcast, — бэкенд
-  // добавит к ней свой системный промпт и проектный контекст.
-  writeFileSync(join(stepDir, `prompt${suffix}.txt`), prompt, { mode: 0o600 });
+  // добавит к ней свой системный промпт и проектный контекст. Уходит агенту
+  // промпт как есть, на диск — с замаскированными значениями секретов: выход
+  // прошлой работы, вставленный в него, мог их нести.
+  writeFileSync(join(stepDir, `prompt${suffix}.txt`), masker === undefined ? prompt : masker.mask(prompt), {
+    mode: 0o600,
+  });
 }
 
 function readPathFromInput(input: unknown): string | undefined {

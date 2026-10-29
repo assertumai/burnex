@@ -78,6 +78,8 @@ function stepToPlain(step: Step): Record<string, unknown> {
       max: step.attempts.max,
       ...(step.attempts.escalation.length === 0 ? {} : { escalation: step.attempts.escalation }),
     },
+    // Имена, не значения: замок читают глазами и сверяют при возобновлении.
+    ...(step.secrets === undefined ? {} : { secrets: step.secrets }),
   };
 
   if (step.kind === 'run') {
@@ -200,6 +202,18 @@ export function pipelineToPlain(pipeline: Pipeline): Record<string, unknown> {
     ...(Object.keys(pipeline.env).length === 0 ? {} : { env: pipeline.env }),
     ...(pipeline.envFiles.length === 0 ? {} : { env_files: pipeline.envFiles }),
     env_deny: pipeline.envDeny,
+    // Объявление без значения: провайдер, параметры и переменная. Значение
+    // живёт только в памяти прогона (`secrets-named-providers`, решение 4).
+    ...(pipeline.secrets.length === 0
+      ? {}
+      : {
+          secrets: Object.fromEntries(
+            pipeline.secrets.map((secret) => [
+              secret.name,
+              { provider: secret.provider, env: secret.env, ...secret.params },
+            ]),
+          ),
+        }),
     ...(pipeline.context.length === 0 ? {} : { context: pipeline.context }),
     context_upstream: pipeline.contextUpstream,
     ...(pipeline.budget === undefined ? {} : { budget: budgetToPlain(pipeline.budget) }),

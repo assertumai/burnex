@@ -107,13 +107,14 @@ describe('plugin-tree: свёртка трёх слоёв', () => {
         ['step-script', 'stepcast:step-script', true],
         ['step-agent', 'stepcast:step-agent', true],
         ['step-decision', 'stepcast:step-decision', true],
+        ['secret-providers', 'stepcast:secret-providers', true],
         ['home-extra', './home-extra.mjs', true],
         ['project-extra', './project-extra.mjs', true],
       ],
     );
     assert.deepEqual(config.pluginTree[0]?.source, { kind: 'builtin' });
-    assert.deepEqual(config.pluginTree[8]?.source, { kind: 'file', path: place.homePatchPath });
-    assert.deepEqual(config.pluginTree[9]?.source, { kind: 'file', path: place.projectPatchPath });
+    assert.deepEqual(config.pluginTree[9]?.source, { kind: 'file', path: place.homePatchPath });
+    assert.deepEqual(config.pluginTree[10]?.source, { kind: 'file', path: place.projectPatchPath });
   });
 
   it('конфигурация без единого plugins.patch.yml сворачивается в прежний состав и порядок', () => {
@@ -127,7 +128,7 @@ describe('plugin-tree: свёртка трёх слоёв', () => {
 
     assert.deepEqual(
       config.pluginTree.map((row) => row.id),
-      ['pipeline', 'backend-claude', 'predicates', 'step-run', 'step-uses', 'step-script', 'step-agent', 'step-decision', './g.mjs', './p.mjs'],
+      ['pipeline', 'backend-claude', 'predicates', 'step-run', 'step-uses', 'step-script', 'step-agent', 'step-decision', 'secret-providers', './g.mjs', './p.mjs'],
     );
     // `Config.plugins` — модули, и только они: `stepcast:backend-claude`
     // модулем не является и `resolveModulePath` не разрешается, поэтому в
@@ -145,7 +146,7 @@ describe('plugin-tree: свёртка трёх слоёв', () => {
 
     assert.deepEqual(
       config.pluginTree.map((row) => row.id),
-      ['pipeline', 'backend-claude', 'predicates', 'step-run', 'step-uses', 'step-script', 'step-agent', 'step-decision', 'home-only'],
+      ['pipeline', 'backend-claude', 'predicates', 'step-run', 'step-uses', 'step-script', 'step-agent', 'step-decision', 'secret-providers', 'home-only'],
     );
   });
 });
@@ -206,6 +207,7 @@ describe('plugin-tree: строки поставки вызывающего', ()
       ['step-script', 'stepcast:step-script', true],
       ['step-agent', 'stepcast:step-agent', true],
       ['step-decision', 'stepcast:step-decision', true],
+      ['secret-providers', 'stepcast:secret-providers', true],
       ['ui-shell', 'stepcast:ui-shell', true],
       ['screen-usage', './my-usage.mjs', true],
       ['screen-widgets', 'irrelevant', false],
@@ -220,7 +222,7 @@ describe('plugin-tree: строки поставки вызывающего', ()
     assert.deepEqual(config.pluginTree, withoutRows.pluginTree);
     assert.deepEqual(
       config.pluginTree.map((row) => row.id),
-      ['pipeline', 'backend-claude', 'predicates', 'step-run', 'step-uses', 'step-script', 'step-agent', 'step-decision'],
+      ['pipeline', 'backend-claude', 'predicates', 'step-run', 'step-uses', 'step-script', 'step-agent', 'step-decision', 'secret-providers'],
     );
   });
 });
@@ -245,7 +247,7 @@ describe('plugin-tree: замена строки патчем', () => {
     // Порядок остался прежним — b стоит на своём месте, между a и c.
     assert.deepEqual(
       config.pluginTree.map((row) => row.id),
-      ['pipeline', 'backend-claude', 'predicates', 'step-run', 'step-uses', 'step-script', 'step-agent', 'step-decision', 'a', 'b', 'c'],
+      ['pipeline', 'backend-claude', 'predicates', 'step-run', 'step-uses', 'step-script', 'step-agent', 'step-decision', 'secret-providers', 'a', 'b', 'c'],
     );
     const b = config.pluginTree.find((row) => row.id === 'b');
     assert.equal(b?.use, './b2.mjs');
@@ -285,7 +287,7 @@ describe('plugin-tree: вставка строки по позиции', () => {
     });
     assert.deepEqual(
       config.pluginTree.map((row) => row.id),
-      ['pipeline', 'backend-claude', 'a', 'predicates', 'step-run', 'step-uses', 'step-script', 'step-agent', 'step-decision'],
+      ['pipeline', 'backend-claude', 'a', 'predicates', 'step-run', 'step-uses', 'step-script', 'step-agent', 'step-decision', 'secret-providers'],
     );
   });
 
@@ -297,7 +299,7 @@ describe('plugin-tree: вставка строки по позиции', () => {
     });
     assert.deepEqual(
       config.pluginTree.map((row) => row.id),
-      ['pipeline', 'my-backends', 'backend-claude', 'predicates', 'step-run', 'step-uses', 'step-script', 'step-agent', 'step-decision'],
+      ['pipeline', 'my-backends', 'backend-claude', 'predicates', 'step-run', 'step-uses', 'step-script', 'step-agent', 'step-decision', 'secret-providers'],
     );
   });
 
@@ -561,7 +563,7 @@ describe('plugin-tree: фабрики строк поставки при заг�
         // `src/parts/load.ts`.
         assert.equal(
           hint,
-          'Пакет поставляет: stepcast:pipeline, stepcast:backend-claude, stepcast:predicates, stepcast:step-run, stepcast:step-uses, stepcast:step-script, stepcast:step-agent, stepcast:step-decision, stepcast:ui-shell',
+          'Пакет поставляет: stepcast:pipeline, stepcast:backend-claude, stepcast:predicates, stepcast:step-run, stepcast:step-uses, stepcast:step-script, stepcast:step-agent, stepcast:step-decision, stepcast:secret-providers, stepcast:ui-shell',
         );
         return true;
       },
@@ -708,9 +710,9 @@ describe('plugin-tree: ключ plugins как сокращённая форма
 
     assert.deepEqual(
       config.pluginTree.map((row) => row.id),
-      ['pipeline', 'backend-claude', 'predicates', 'step-run', 'step-uses', 'step-script', 'step-agent', 'step-decision', './shared.mjs'],
+      ['pipeline', 'backend-claude', 'predicates', 'step-run', 'step-uses', 'step-script', 'step-agent', 'step-decision', 'secret-providers', './shared.mjs'],
     );
-    assert.deepEqual(config.pluginTree[8]?.source, { kind: 'file', path: place.globalPath });
+    assert.deepEqual(config.pluginTree[9]?.source, { kind: 'file', path: place.globalPath });
 
     const { registry } = await loadPlugins(config, { projectRoot: place.root });
     assert.equal(registry.plugins.length, 1);

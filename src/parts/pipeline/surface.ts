@@ -35,6 +35,9 @@ export type {
   PipelinePlugin,
   PredicateContribution,
   PredicateRegistrar,
+  SecretProviderContribution,
+  SecretProviderInput,
+  SecretProviderRegistrar,
   StepKindContribution,
   StepKindDecisionRequest,
   StepKindDecisionResult,
@@ -93,9 +96,9 @@ export type { PredicateResult, Usage } from './run/journal/schema.js';
 export type { Registry } from '../../kernel/registry.js';
 
 /** Имена служебных сервисов пайплайна — те, что заводит строка `pipeline`. */
-export type PipelineService = 'backends' | 'predicates' | 'steps';
+export type PipelineService = 'backends' | 'predicates' | 'steps' | 'secretProviders';
 
-const PIPELINE_SERVICES: readonly PipelineService[] = ['backends', 'predicates', 'steps'];
+const PIPELINE_SERVICES: readonly PipelineService[] = ['backends', 'predicates', 'steps', 'secretProviders'];
 
 /**
  * Сужение контекста ядра к доменному — проверка, а не приведение

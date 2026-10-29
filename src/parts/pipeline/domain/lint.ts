@@ -12,6 +12,7 @@ import { buildPublishedSchemas, pluginPredicateEntries, pluginStepKindEntries } 
 import { builtinRegistry } from '../../builtin.js';
 import { hasPredicateEvaluator, hasStepExecutor } from '../contract.js';
 import { availableNames, nativePredicateNames, nativeStepKindNames, type Registry } from '../../../kernel/registry.js';
+import { describeSecretParamsIssue } from '../secrets/declaration.js';
 import { isGitWorktree } from './anchor/git.js';
 import { workspaceInheritanceDiagnostics } from '../run/inherit.js';
 import {
@@ -667,6 +668,7 @@ export function lintPipeline(expanded: ExpandedPipeline, given: LintOptions): Di
   const base = options.cwd ?? dirname(pipeline.file);
 
   checkPublishedSchema(base, options.registry, push);
+  checkSecrets(pipeline, substitutions, options.registry, push);
 
   // Практика памяти объявлена — значит записи `knowledge:` и предикат
   // `knowledge_valid` имеют кем разрешаться. Значение уже слито (пайплайн
@@ -1926,6 +1928,110 @@ function mcpOrigin(
     return { at: 'mcp', ...(pipelineFile === undefined ? {} : { file: pipelineFile }) };
   }
   return { at: `${at}.mcp`, file: job.source };
+}
+
+/**
+ * Статические правила секретов (`secrets-named-providers`, design.md, решения
+ * 3, 6 и 7). Необъявленный секрет на шаге и `secrets` на агентском шаге сюда не
+ * доходят: их отклоняет уже разбор документа тем же текстом, а линт зовёт
+ * разбор первым (`commands/lint.ts`).
+ */
+function checkSecrets(
+  pipeline: ExpandedPipeline['pipeline'],
+  substitutions: ExpandedPipeline['substitutions'],
+  registry: Registry,
+  push: (diagnostic: Diagnostic) => void,
+): void {
+  if (pipeline.secrets.length === 0) return;
+  const file = pipeline.file;
+
+  const named = new Set(pipeline.jobs.flatMap((job) => job.steps.flatMap((step) => step.secrets ?? [])));
+  const byEnv = new Map<string, string[]>();
+
+  for (const secret of pipeline.secrets) {
+    const at = `secrets.${secret.name}`;
+    byEnv.set(secret.env, [...(byEnv.get(secret.env) ?? []), secret.name]);
+
+    const provider = registry.secretProviders.get(secret.provider);
+    if (provider === undefined) {
+      const known = availableNames(registry, 'secretProviders');
+      push({
+        severity: 'error',
+        message: `Секрет ${secret.name} объявляет провайдера ${secret.provider}, которого нет в реестре`,
+        file,
+        at: `${at}.provider`,
+        hint: known.length === 0 ? 'Провайдеров не заведено вовсе' : `Доступны: ${known.join(', ')}`,
+      });
+    } else {
+      const issue = describeSecretParamsIssue(provider, secret.params);
+      if (issue !== undefined) {
+        push({
+          severity: 'error',
+          message: `Параметры секрета ${secret.name} не соответствуют схеме провайдера ${secret.provider}: ${issue}`,
+          file,
+          at,
+        });
+      }
+    }
+
+    if (!named.has(secret.name)) {
+      push({
+        severity: 'warning',
+        message: `Секрет ${secret.name} объявлен, но ни один шаг его не называет`,
+        file,
+        at,
+        hint: 'Неиспользуемый секрет не разрешается при запуске; назовите его в secrets: шага или удалите объявление',
+      });
+    }
+  }
+
+  for (const [env, names] of byEnv) {
+    if (names.length < 2) continue;
+    push({
+      severity: 'error',
+      message: `Секреты ${names.join(' и ')} объявляют одну переменную окружения ${env}`,
+      file,
+      at: `secrets.${names[1]}.env`,
+      hint: 'Шагу достаётся одно значение на имя переменной — разведите env',
+    });
+  }
+
+  const owner = new Map(pipeline.secrets.map((secret) => [secret.env, secret.name]));
+  const clash = (names: Readonly<Record<string, string>>, where: string, declaredIn: string, at: string): void => {
+    for (const name of Object.keys(names)) {
+      const secret = owner.get(name);
+      if (secret === undefined) continue;
+      push({
+        severity: 'error',
+        message: `Переменная ${name} в ${where} совпадает с env секрета ${secret}`,
+        file: declaredIn,
+        at: `${at}.${name}`,
+        hint: 'Две разные величины под одним именем: значение секрета накладывается последним и затёрло бы явное — переименуйте одну из них',
+      });
+    }
+  };
+  clash(pipeline.env, 'env пайплайна', file, 'env');
+  for (const job of pipeline.jobs) {
+    clash(job.env, `env работы ${job.id}`, job.source, `jobs.${job.id}.env`);
+    for (const step of job.steps) {
+      clash(step.env, `env шага ${job.id}/${step.id}`, job.source, `jobs.${job.id}.steps.${step.index - 1}.env`);
+    }
+  }
+
+  for (const [at, list] of substitutions) {
+    for (const substitution of list) {
+      if (substitution.namespace !== 'env') continue;
+      const secret = owner.get(substitution.path);
+      if (secret === undefined) continue;
+      push({
+        severity: 'error',
+        message: `Подстановка ${'${'}${substitution.expression}} раскрыла бы значение секрета ${secret}`,
+        file: substitution.file ?? file,
+        at,
+        hint: `Переменная ${substitution.path} — env секрета ${secret}: подстановкой он не раскрывается, назовите его в secrets: командного шага`,
+      });
+    }
+  }
 }
 
 function checkEnv(

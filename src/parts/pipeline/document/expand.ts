@@ -38,7 +38,14 @@ import {
 } from '../../../kernel/registry.js';
 import { parseCount, parseDuration, parseExitCode, parseMoney, parsePercent, parseTokens } from '../../../kernel/units.js';
 import { interpolateTree, interpolateTypedTree, placeholderNamespaces, type Scope } from './interpolate.js';
-import { readYamlDocument, rejectProposalsKeyInPipeline, rejectWiringKeys, validateDocument } from './load.js';
+import {
+  readYamlDocument,
+  rejectProposalsKeyInPipeline,
+  rejectSecretMisuse,
+  rejectWiringKeys,
+  validateDocument,
+} from './load.js';
+import { toSecretDeclarations } from '../secrets/declaration.js';
 import { resolveParams, type ParamValue } from './params.js';
 import { resolveUsesStep } from './steps.js';
 import {
@@ -1242,6 +1249,11 @@ function buildStepCommon(
       toPredicate(entry, declaringFile, substitutions, `${at}.expect.${i}`, registry, config, scriptRoots),
     ),
     attempts: toAttempts(raw.attempts, config.limits, substitutions, at),
+    // Ключа нет у агентского шага и у шага без секретов; отсортированный
+    // уникальный список — чтобы порядок записи не менял ключ шага.
+    ...('secrets' in raw && raw.secrets !== undefined && raw.secrets.length > 0
+      ? { secrets: [...new Set(raw.secrets)].sort() }
+      : {}),
   };
 }
 
@@ -1925,6 +1937,7 @@ export function expandPipeline(options: ExpandOptions): ExpandedPipeline {
   rejectUnknownStepKinds(rawPipeline, pipelinePath, registry);
   rejectUnknownPredicates(rawPipeline, pipelinePath, registry);
   rejectProposalsKeyInPipeline(rawPipeline, pipelinePath);
+  rejectSecretMisuse(rawPipeline, pipelinePath, 'pipeline');
   const document = validateDocument(
     schemas.PipelineDocumentSchema,
     rawPipeline,
@@ -1964,6 +1977,10 @@ export function expandPipeline(options: ExpandOptions): ExpandedPipeline {
     inputs: _inputsDecl,
     jobs: _jobsField,
     project: _projectField,
+    // Объявления секретов остаются буквальными: параметры провайдера идут в
+    // замок как написаны, а подстановка в них разрешала бы значение раньше,
+    // чем провайдер его получит.
+    secrets: rawSecrets,
     ...pipelineRest
   } = document;
   const interpolatedPipeline = interpolateTree(pipelineRest as Record<string, unknown>, pipelineScope, '');
@@ -2077,6 +2094,7 @@ export function expandPipeline(options: ExpandOptions): ExpandedPipeline {
       );
       const rawDocument = readYamlDocument(usesPath);
       rejectWiringKeys(rawDocument, usesPath);
+      rejectSecretMisuse(rawDocument, usesPath, 'job');
       rejectUnknownStepKinds(rawDocument, usesPath, registry);
       rejectUnknownPredicates(rawDocument, usesPath, registry);
       const jobDocument = validateDocument(schemas.JobDocumentSchema, rawDocument, usesPath);
@@ -2378,6 +2396,23 @@ export function expandPipeline(options: ExpandOptions): ExpandedPipeline {
 
   const triggers = toTriggers(doc.triggers);
 
+  const secrets = toSecretDeclarations(rawSecrets);
+  const declaredSecrets = new Set(secrets.map((secret) => secret.name));
+  for (const job of jobs) {
+    for (const [index, step] of job.steps.entries()) {
+      const undeclared = (step.secrets ?? []).find((name) => !declaredSecrets.has(name));
+      if (undeclared === undefined) continue;
+      throw new StepcastError(`Шаг ${step.id} называет секрет ${undeclared}, которого пайплайн не объявляет`, {
+        file: job.source,
+        at: `jobs.${job.id}.steps.${index}.secrets`,
+        hint:
+          declaredSecrets.size === 0
+            ? 'Секреты объявляются верхним ключом secrets: документа пайплайна'
+            : `Объявлены: ${[...declaredSecrets].join(', ')}`,
+      });
+    }
+  }
+
   const pipeline: Pipeline = {
     name: doc.name ?? 'pipeline',
     file: pipelinePath,
@@ -2388,6 +2423,7 @@ export function expandPipeline(options: ExpandOptions): ExpandedPipeline {
     env: doc.env ?? {},
     envFiles: doc.env_files ?? [],
     envDeny: [...config.envDeny, ...(doc.env_deny ?? [])],
+    secrets,
     context: toContext(doc.context),
     contextUpstream: doc.context_upstream ?? 'all',
     ...(doc.budget === undefined ? {} : { budget: toBudget(doc.budget, substitutions, 'budget') }),

@@ -1,7 +1,7 @@
 import type { Fiber } from 'cordis';
 
 import { assertStepKindNameAvailable } from './document/schema.js';
-import type { BackendContribution, PredicateKind, StepKind } from './contract.js';
+import type { BackendContribution, PredicateKind, SecretProviderContribution, StepKind } from './contract.js';
 import { ContributionService } from '../../kernel/kernel.js';
 import { isBuiltinRowFiber } from '../../kernel/load.js';
 import { partRow } from './services.js';
@@ -29,4 +29,5 @@ export const row = partRow('pipeline', [], (ctx) => {
   new ContributionService<BackendContribution>(ctx, 'backends', 'бэкенда', isPipelineFiber);
   new ContributionService<PredicateKind>(ctx, 'predicates', 'предиката', isPipelineFiber);
   new ContributionService<StepKind>(ctx, 'steps', 'вида шага', isPipelineFiber, assertStepKindNameAvailable);
+  new ContributionService<SecretProviderContribution>(ctx, 'secretProviders', 'провайдера секретов', isPipelineFiber);
 });

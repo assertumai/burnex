@@ -477,6 +477,7 @@ const FIXED_PIPELINE: Pipeline = {
   env: {},
   envFiles: [],
   envDeny: [],
+  secrets: [],
   context: [],
   contextUpstream: 'all',
   concurrency: 1,

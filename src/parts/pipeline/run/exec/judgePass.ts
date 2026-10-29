@@ -232,6 +232,7 @@ async function callJudge(options: CallJudgeOptions): Promise<CallJudgeResult> {
       stdoutPath: join(dir, 'stdout.log'),
       stderrPath: join(dir, 'stderr.log'),
       onStdout: consume,
+      masker: options.journal.masker,
     });
   const process_ = options.backendSlots === undefined
     ? await runBackendProcess()

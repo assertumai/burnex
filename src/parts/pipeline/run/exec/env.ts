@@ -24,6 +24,19 @@ export interface EnvLayers {
   /** Переменные stepcast: добавляются последними и не переопределяются. */
   readonly injected: Readonly<Record<string, string>>;
   readonly deny: readonly string[];
+  /**
+   * Секреты, которые шаг назвал: имя переменной → значение. Накладываются
+   * последними и мимо `deny` — объявление секрета явное намерение, а
+   * встроенные шаблоны (`*_TOKEN`) вычеркнули бы именно то, ради чего его
+   * писали (`secrets-named-providers`, design.md, решение 3).
+   */
+  readonly secrets?: Readonly<Record<string, string>>;
+  /**
+   * Переменные остальных объявленных секретов: имя переменной → имя секрета.
+   * Вычёркиваются после `deny`, откуда бы ни пришли (процесс, `env_files`),
+   * — так один механизм закрывает и агента, и соседний командный шаг.
+   */
+  readonly withheld?: Readonly<Record<string, string>>;
   /** Каталог, от которого разрешаются относительные пути env_files. */
   readonly cwd: string;
 }
@@ -33,9 +46,17 @@ export interface DeniedVariable {
   readonly pattern: string;
 }
 
+export interface WithheldVariable {
+  readonly name: string;
+  /** Имя секрета, чья это переменная. */
+  readonly secret: string;
+}
+
 export interface BuiltEnv {
   readonly env: Record<string, string>;
   readonly denied: readonly DeniedVariable[];
+  /** Вычеркнутые переменные необъявленных секретов — только те, что реально стояли в окружении. */
+  readonly withheld: readonly WithheldVariable[];
 }
 
 export function buildStepEnv(layers: EnvLayers): BuiltEnv {
@@ -68,7 +89,25 @@ export function buildStepEnv(layers: EnvLayers): BuiltEnv {
     denied.push({ name, pattern: hit.pattern });
   }
 
-  return { env, denied };
+  // Событие сообщает о том, что вычеркнуто, а не о том, что могло бы быть:
+  // переменная, которой в собранном окружении не было, в перечень не входит.
+  // Имя сравнивается тем же правилом, что и `env_deny`: на Windows регистр
+  // не различается, и `Gh_Token` из окружения процесса — та же переменная.
+  const withheldMatchers = Object.entries(layers.withheld ?? {}).map(([name, secret]) => ({
+    secret,
+    matcher: compileNameGlob(name),
+  }));
+  const withheld: WithheldVariable[] = [];
+  for (const name of Object.keys(env)) {
+    const hit = withheldMatchers.find(({ matcher }) => matcher.test(name));
+    if (hit === undefined) continue;
+    delete env[name];
+    withheld.push({ name, secret: hit.secret });
+  }
+
+  Object.assign(env, layers.secrets ?? {});
+
+  return { env, denied, withheld };
 }
 
 /** Минимальный разбор файла окружения: `KEY=value`, комментарии, кавычки. */

@@ -7,6 +7,7 @@ import {
   type BackendContribution,
   type PredicateContribution,
   type PredicateKind,
+  type SecretProviderContribution,
   type StepKind,
   type StepKindContribution,
 } from '../parts/pipeline/contract.js';
@@ -37,6 +38,8 @@ export interface Registry {
    */
   readonly predicates: ReadonlyMap<string, PredicateKind>;
   readonly commands: ReadonlyMap<string, CommandContribution>;
+  /** Провайдеры секретов — встроенный `env-file` и плагинные (`secrets-named-providers`). */
+  readonly secretProviders: ReadonlyMap<string, SecretProviderContribution>;
   /**
    * Виды шага — встроенные (`agent`, `run`, `script`, `uses`) и плагинные
    * вместе, тем же вкладом в сервис `steps` (design.md, решение 1, решение 2).
@@ -63,9 +66,9 @@ export interface Registry {
   readonly missingServices: readonly string[];
 }
 
-type ContributionKind = 'backends' | 'predicates' | 'commands' | 'steps';
+type ContributionKind = 'backends' | 'predicates' | 'commands' | 'steps' | 'secretProviders';
 
-const KINDS: readonly ContributionKind[] = ['backends', 'predicates', 'commands', 'steps'];
+const KINDS: readonly ContributionKind[] = ['backends', 'predicates', 'commands', 'steps', 'secretProviders'];
 
 /** Пустая карта, разделяемая всеми отсутствующими сервисами — читать пустоту незачем заводить заново на каждое обращение. */
 const EMPTY_CONTRIBUTIONS: ReadonlyMap<string, never> = new Map<string, never>();
@@ -98,6 +101,11 @@ export function registryFromKernel(kernel: Kernel): Registry {
     },
     get commands() {
       return contributionService<CommandContribution>(kernel, 'commands')?.contributions ?? EMPTY_CONTRIBUTIONS;
+    },
+    get secretProviders() {
+      return (
+        contributionService<SecretProviderContribution>(kernel, 'secretProviders')?.contributions ?? EMPTY_CONTRIBUTIONS
+      );
     },
     get steps() {
       return contributionService<StepKind>(kernel, 'steps')?.contributions ?? EMPTY_CONTRIBUTIONS;

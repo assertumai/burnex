@@ -753,3 +753,52 @@ describe('published-schema: состав предикатов', () => {
     expectBoth(schemas, { exit_code: 0 }, false);
   });
 });
+
+describe('published-schema: секреты', () => {
+  const published = JSON.parse(readSchemaFile('schema/pipeline.schema.json')) as Record<string, unknown>;
+  const job = JSON.parse(readSchemaFile('schema/job.schema.json')) as Record<string, unknown>;
+  const manifest = JSON.parse(readSchemaFile('schema/step-manifest.schema.json')) as Record<string, unknown>;
+
+  const pipelineWith = (steps: unknown[], secrets?: unknown) => ({
+    kind: 'pipeline',
+    ...(secrets === undefined ? {} : { secrets }),
+    jobs: { build: { steps } },
+  });
+  const declared = { 'gh-token': { provider: 'env-file', file: '.env' } };
+
+  it('пайплайн принимает верхний secrets и ключ secrets у командных шагов', () => {
+    const validate = compileAny(published);
+    assert.equal(validate(pipelineWith([{ id: 'a', run: ['echo'], secrets: ['gh-token'] }], declared)), true);
+    assert.equal(validate(pipelineWith([{ id: 'a', script: './x.sh', secrets: ['gh-token'] }], declared)), true);
+    assert.equal(validate(pipelineWith([{ id: 'a', uses: 'echo', secrets: ['gh-token'] }], declared)), true);
+  });
+
+  it('пайплайн отклоняет имя секрета не по шаблону и секрет без провайдера', () => {
+    const validate = compileAny(published);
+    assert.equal(validate(pipelineWith([{ id: 'a', run: ['echo'] }], { GH_Token: { provider: 'env-file' } })), false);
+    assert.equal(validate(pipelineWith([{ id: 'a', run: ['echo'] }], { tok: { file: '.env' } })), false);
+    assert.equal(validate(pipelineWith([{ id: 'a', run: ['echo'], secrets: ['GH_TOKEN'] }], declared)), false);
+  });
+
+  it('агентскому шагу ключ secrets не дан', () => {
+    const validate = compileAny(published);
+    assert.equal(validate(pipelineWith([{ id: 'a', prompt: 'сделай', secrets: ['gh-token'] }], declared)), false);
+    assert.equal(validate(pipelineWith([{ id: 'a', prompt: 'сделай' }], declared)), true);
+  });
+
+  it('файл работы верхнего secrets не принимает, но шаги его называют', () => {
+    const validate = compileAny(job);
+    const body = (extra: Record<string, unknown>, step: Record<string, unknown>) => ({
+      kind: 'job',
+      steps: [step],
+      ...extra,
+    });
+    assert.equal(validate(body({ secrets: declared }, { id: 'a', run: ['echo'] })), false);
+    assert.equal(validate(body({}, { id: 'a', run: ['echo'], secrets: ['gh-token'] })), true);
+    assert.equal(validate(body({}, { id: 'a', prompt: 'сделай', secrets: ['gh-token'] })), false);
+  });
+
+  it('манифест шага ключа secrets не несёт', () => {
+    assert.equal(JSON.stringify(manifest).includes('secrets'), false);
+  });
+});

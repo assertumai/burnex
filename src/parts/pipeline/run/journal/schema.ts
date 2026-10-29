@@ -718,6 +718,10 @@ export const EventSchema = z.discriminatedUnion('kind', [
   z.object({ ...eventBase, kind: z.literal('step.stalled'), job: z.string(), step: z.string(), silent_ms: z.number() }).strict(),
   z.object({ ...eventBase, kind: z.literal('expect.failed'), job: z.string(), step: z.string(), attempt: z.number().int().positive(), predicate: z.string(), detail: z.string().optional() }).strict(),
   z.object({ ...eventBase, kind: z.literal('env.denied'), name: z.string(), pattern: z.string(), scope: z.string() }).strict(),
+  // Переменная объявленного секрета вычеркнута из окружения шага, который
+  // этот секрет не назвал (`secrets-named-providers`). `secret` — имя секрета, а
+  // не его значение; значение в журнале не появляется нигде.
+  z.object({ ...eventBase, kind: z.literal('env.withheld'), name: z.string(), secret: z.string(), scope: z.string() }).strict(),
   z.object({ ...eventBase, kind: z.literal('context.denied'), job: z.string().optional(), step: z.string().optional(), path: z.string(), pattern: z.string() }).strict(),
   z.object({ ...eventBase, kind: z.literal('context.downgraded'), job: z.string(), step: z.string(), path: z.string(), tokens: z.number() }).strict(),
   z.object({ ...eventBase, kind: z.literal('context.note_truncated'), job: z.string(), step: z.string(), original_tokens: z.number(), final_tokens: z.number() }).strict(),

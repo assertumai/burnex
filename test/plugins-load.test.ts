@@ -227,6 +227,7 @@ describe('plugins-load: адаптер декларативной формы о�
         predicates: [{ name: 'own_p', schema: {}, evaluate: () => ({ predicate: 'own_p', passed: true, hard: true }) }],
         commands: [{ name: 'own-cmd', spec: { description: 'своя' }, run: () => ExitCode.ok }],
         steps: [{ name: 'own', title: 'Свой', fields: {}, execute: () => ({}) as never }],
+        secretProviders: [{ name: 'own-secrets', schema: {}, resolve: async () => 'значение-секрета' }],
       }, DECLARATIVE_CONTRIBUTION_FIELDS).inject,
       services,
     );

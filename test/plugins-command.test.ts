@@ -115,7 +115,7 @@ describe('plugin-tree: stepcast plugins печатает дерево со сл�
     // строки. Раздел витрины — двумя строками в конце, демон в этом тесте не
     // поднят.
     assert.match(lines[0] ?? '', /^1\s+pipeline\s+встроенный\s+stepcast:pipeline\s+действует$/);
-    assert.equal(lines[1], '    сервисы объявлены: backends, predicates, steps');
+    assert.equal(lines[1], '    сервисы объявлены: backends, predicates, steps, secretProviders');
     assert.match(lines[2] ?? '', /^2\s+backend-claude\s+встроенный\s+stepcast:backend-claude\s+действует$/);
     assert.equal(lines[3], '    сервисы запрошены: backends (разрешён)');
     assert.equal(lines[4], '    вклады: backends: claude');
@@ -140,9 +140,12 @@ describe('plugin-tree: stepcast plugins печатает дерево со сл�
     assert.match(lines[20] ?? '', /^8\s+step-decision\s+встроенный\s+stepcast:step-decision\s+действует$/);
     assert.equal(lines[21], '    сервисы запрошены: steps (разрешён)');
     assert.equal(lines[22], '    вклады: steps: decision');
+    assert.match(lines[23] ?? '', /^9\s+secret-providers\s+встроенный\s+stepcast:secret-providers\s+действует$/);
+    assert.equal(lines[24], '    сервисы запрошены: secretProviders (разрешён)');
+    assert.equal(lines[25], '    вклады: secretProviders: env-file');
 
-    let cursor = 23;
-    let place = 9;
+    let cursor = 26;
+    let place = 10;
     for (const row of COMMAND_ROWS) {
       cursor = assertCommandRowLines(lines, cursor, place, row.command.name);
       place += 1;
@@ -235,7 +238,7 @@ describe('plugin-tree: отказ загрузки не заслоняет де�
     // каталожная), а следом — вторая явная строка и все 25 строк команд:
     // применение до них не дошло, каждая напечатана «не загружалась».
     assert.match(lines[0] ?? '', /действует/); // pipeline применилась раньше отказавшей
-    assert.equal(lines[1], '    сервисы объявлены: backends, predicates, steps');
+    assert.equal(lines[1], '    сервисы объявлены: backends, predicates, steps, secretProviders');
     assert.match(lines[2] ?? '', /действует/); // backend-claude загрузилась раньше отказавшей
     assert.equal(lines[3], '    сервисы запрошены: backends (разрешён)');
     assert.equal(lines[4], '    вклады: backends: claude');
@@ -251,13 +254,15 @@ describe('plugin-tree: отказ загрузки не заслоняет де�
     assert.equal(lines[19], '    вклады: steps: agent');
     assert.match(lines[20] ?? '', /действует/);
     assert.equal(lines[22], '    вклады: steps: decision');
+    assert.match(lines[23] ?? '', /действует/); // secret-providers
+    assert.equal(lines[25], '    вклады: secretProviders: env-file');
 
     // Семя дерева называет строки команд наравне со строками движка
     // (`resolveConfig`, `reservedRowIds`) — они стоят в дереве раньше явных
     // строк ключа `plugins`, и применяются успешно: отказавшая явная строка
     // ещё не встретилась.
-    let cursor = 23;
-    let place = 9;
+    let cursor = 26;
+    let place = 10;
     for (const row of COMMAND_ROWS) {
       cursor = assertCommandRowLines(lines, cursor, place, row.command.name);
       place += 1;
@@ -750,7 +755,7 @@ describe('plugin-tree: команды в составе без единого с
 
     const config = await cli(project, ['config']);
     assert.equal(config.code, ExitCode.ok);
-    assert.match(config.stdout, /Сервисы пайплайна не заведены: backends, predicates, steps/);
+    assert.match(config.stdout, /Сервисы пайплайна не заведены: backends, predicates, steps, secretProviders/);
   });
 });
 

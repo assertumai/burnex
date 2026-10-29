@@ -156,6 +156,14 @@ export interface StepCommon {
   readonly budget?: Budget;
   readonly expect: readonly Predicate[];
   readonly attempts: Attempts;
+  /**
+   * Имена секретов, которые шаг получает (`secrets-named-providers`): уникальные
+   * и отсортированные — порядок записи в документе шаг не меняет. Поле
+   * отсутствует, а не пусто, у шага без секретов: `computeStepKey` хеширует
+   * шаг целиком, и пустой список сменил бы ключи всех прежних шагов.
+   * У агентского шага поля нет никогда.
+   */
+  readonly secrets?: readonly string[];
 }
 
 /**
@@ -482,6 +490,20 @@ export interface KnowledgeDeclaration {
   readonly timeoutMs: number;
 }
 
+/**
+ * Объявление секрета пайплайна: имя, провайдер, переменная окружения и
+ * параметры провайдера. Значения здесь нет и быть не может — модель
+ * сериализуется в замок прогона.
+ */
+export interface SecretDeclaration {
+  readonly name: string;
+  readonly provider: string;
+  /** Переменная окружения, под которой значение дойдёт до шага: `env` объявления либо имя в верхнем регистре. */
+  readonly env: string;
+  /** Параметры провайдера — соседние с `provider` и `env` ключи объявления. */
+  readonly params: Readonly<Record<string, unknown>>;
+}
+
 export interface Pipeline {
   readonly name: string;
   readonly file: string;
@@ -493,6 +515,8 @@ export interface Pipeline {
   readonly env: Readonly<Record<string, string>>;
   readonly envFiles: readonly string[];
   readonly envDeny: readonly string[];
+  /** Объявленные секреты в порядке записи в документе. Пусто — документ `secrets:` не объявляет. */
+  readonly secrets: readonly SecretDeclaration[];
   readonly context: readonly ContextEntry[];
   readonly contextUpstream: ContextUpstream;
   readonly budget?: Budget;

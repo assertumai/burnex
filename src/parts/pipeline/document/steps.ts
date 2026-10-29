@@ -123,6 +123,21 @@ function readManifest(
     };
   }
 
+  // Список получателей секрета решает автор пайплайна, а не автор
+  // переиспользуемого шага; строгая схема отклонила бы ключ и сама, но
+  // «неизвестный ключ» отправил бы искать опечатку (`secrets-named-providers`).
+  if (typeof raw === 'object' && raw !== null && 'secrets' in raw) {
+    return {
+      ok: false,
+      reason: {
+        reason: 'manifest_invalid',
+        name,
+        manifestPath,
+        detail: 'ключ secrets недопустим в манифесте: секреты называет шаг uses на месте подключения',
+      },
+    };
+  }
+
   const parsed = StepManifestSchema.safeParse(raw);
   if (!parsed.success) {
     const failure = describeSchemaFailure(parsed.error);

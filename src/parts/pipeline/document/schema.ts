@@ -184,6 +184,47 @@ export const BuiltinPredicateSchema = z.union([
 ]);
 
 /**
+ * Имя секрета (`secrets-named-providers`, design.md, решение 1): слаг с
+ * ограничением длины. Строчные буквы — чтобы имя секрета не путалось с именем
+ * переменной окружения, которое выводится из него в верхнем регистре.
+ */
+export const SECRET_NAME_PATTERN = /^[a-z][a-z0-9_-]{0,63}$/;
+
+/** Имя переменной окружения секрета: то, что процесс шага сможет прочесть. */
+export const SECRET_ENV_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*$/;
+
+const SecretNameSchema = z
+  .string()
+  .regex(SECRET_NAME_PATTERN, `имя секрета должно соответствовать ${SECRET_NAME_PATTERN.source}`);
+
+/**
+ * Объявление секрета. Параметры провайдера лежат соседними ключами, поэтому
+ * объект открытый: форму этих ключей знает схема вклада провайдера, а не эта
+ * (`secrets/declare.ts`), так же как поля плагинного вида шага.
+ */
+const SecretDeclarationSchema = z
+  .object({
+    provider: z.string().min(1),
+    env: z
+      .string()
+      .regex(SECRET_ENV_PATTERN, 'env секрета — имя переменной окружения')
+      .refine((value) => !value.startsWith('STEPCAST_'), {
+        message: 'env секрета не может начинаться с STEPCAST_: префикс принадлежит движку',
+      })
+      .optional(),
+  })
+  .loose();
+
+/**
+ * Секреты называют только командные шаги и шаги плагинных видов: агентскому
+ * шагу ключ не дан (design.md, решение 2), и строгий объект его ветви
+ * отклоняет `secrets` сам.
+ */
+const StepSecretsShape = {
+  secrets: z.array(SecretNameSchema).optional(),
+};
+
+/**
  * Форма имени переиспользуемого шага (design.md, решение 2): один сегмент из
  * строчных латинских букв, цифр и дефисов. Путь и форма `автор/имя` отклонены
  * отдельными сообщениями, а не общим «недопустимый символ»: обе формы
@@ -263,6 +304,7 @@ export const STEP_COMMON_KEYS: readonly string[] = [
   'budget',
   'expect',
   'attempts',
+  'secrets',
 ];
 
 /** Ключ встроенного вида шага → вид(ы) шага, которым он принадлежит (design.md, решение 3). */
@@ -569,6 +611,7 @@ export function buildDocumentSchemas(
   const RunStepSchema = z
     .object({
       ...StepCommonShape,
+      ...StepSecretsShape,
       run: z.union([z.string(), z.array(z.string())]),
       on_fail: z.object({ analyze: z.string(), prompt: z.string() }).strict().optional(),
       output_schema: z.string().optional(),
@@ -591,6 +634,7 @@ export function buildDocumentSchemas(
   const ScriptStepSchema = z
     .object({
       ...StepCommonShape,
+      ...StepSecretsShape,
       script: z.string().min(1).regex(/\S/),
       args: z.array(z.string()).optional(),
       runner: z.string().optional(),
@@ -614,6 +658,7 @@ export function buildDocumentSchemas(
   const UsesStepSchema = z
     .object({
       ...StepCommonShape,
+      ...StepSecretsShape,
       uses: UsesNameSchema,
       with: z.record(z.string(), z.unknown()).optional(),
       on_fail: z.object({ analyze: z.string(), prompt: z.string() }).strict().optional(),
@@ -649,13 +694,14 @@ export function buildDocumentSchemas(
       z
         .object({
           ...StepCommonShape,
+          ...StepSecretsShape,
           ...Object.fromEntries(
             keys.map((key) => [key, key === required ? z.unknown() : z.unknown().optional()]),
           ),
         })
         .strict();
     const [first, ...rest] = keys;
-    if (first === undefined) return z.object({ ...StepCommonShape }).strict();
+    if (first === undefined) return z.object({ ...StepCommonShape, ...StepSecretsShape }).strict();
     return rest.length === 0 ? branch(first) : z.union([branch(first), ...rest.map(branch)]);
   };
 
@@ -848,6 +894,7 @@ export function buildDocumentSchemas(
       env: z.record(z.string(), z.string()).optional(),
       env_files: z.array(z.string()).optional(),
       env_deny: z.array(z.string()).optional(),
+      secrets: z.record(SecretNameSchema, SecretDeclarationSchema).optional(),
       context: z.array(ContextEntrySchema).optional(),
       context_upstream: ContextUpstreamSchema.optional(),
       triggers: TriggersSchema.optional(),

@@ -1,6 +1,8 @@
 import { createWriteStream } from 'node:fs';
+import { StringDecoder } from 'node:string_decoder';
 import { execa, type Subprocess } from 'execa';
 
+import type { Masker } from '../journal/mask.js';
 import { createScope } from '../scope.js';
 
 /**
@@ -31,6 +33,13 @@ export interface ProcessOptions {
   readonly onStall?: (silentMs: number) => void;
   readonly maxCapturedBytes?: number;
   readonly signal?: AbortSignal;
+  /**
+   * Маскировщик значений секретов (`journal.masker`): строка вывода,
+   * попадающая в файл, в `onStdout`/`onStderr` и в накопленный текст,
+   * проходит через него. Без поля или с пустым множеством значений вывод
+   * идёт как есть.
+   */
+  readonly masker?: Masker;
 }
 
 export type ProcessOutcome = 'exited' | 'timeout' | 'canceled' | 'spawn_failed';
@@ -79,8 +88,8 @@ export async function runProcess(options: ProcessOptions): Promise<ProcessResult
     subprocess.stdin.end(options.stdin);
   }
 
-  const stdout = collect(subprocess.stdout, options.stdoutPath, capture, options.onStdout);
-  const stderr = collect(subprocess.stderr, options.stderrPath, capture, options.onStderr);
+  const stdout = collect(subprocess.stdout, options.stdoutPath, capture, options.onStdout, options.masker);
+  const stderr = collect(subprocess.stderr, options.stderrPath, capture, options.onStderr, options.masker);
 
   let outcome: ProcessOutcome = 'exited';
   let forceKilled = false;
@@ -214,6 +223,7 @@ function collect(
   path: string | undefined,
   limit: number,
   onChunk?: (chunk: string) => void,
+  masker?: Masker,
 ): Collector {
   const listeners: Array<() => void> = [];
   const chunks: string[] = [];
@@ -226,24 +236,77 @@ function collect(
       ? Promise.resolve()
       : new Promise<void>((resolve) => file.on('close', () => resolve()));
 
+  const accept = (text: string): void => {
+    file?.write(text);
+    onChunk?.(text);
+
+    if (size >= limit) {
+      truncated = true;
+      return;
+    }
+    const room = limit - size;
+    chunks.push(text.length > room ? text.slice(0, room) : text);
+    size += Math.min(text.length, room);
+    if (text.length > room) truncated = true;
+  };
+
+  // Маскирование применяется к собранной строке, а не к сырому куску: значение
+  // на стыке двух чанков иначе прошло бы невредимым. Хвост без перевода строки
+  // ждёт продолжения; без маскировщика вывод идёт кусок в кусок, как раньше.
+  const mask = masker?.active === true ? masker : undefined;
+  let pending = '';
+  // Предел хвоста без перевода строки: бесконечно длинная строка не должна
+  // копиться в памяти. Маскируется весь хвост целиком, и только потом
+  // сбрасывается всё, кроме последних `maxLength - 1` символов: полное
+  // значение, пересекающее точку среза, к этому моменту уже заменено, а
+  // начало значения, которому не хватает продолжения, целиком лежит в
+  // остатке и ждёт следующего куска.
+  const PENDING_LIMIT = 65_536;
+  // Байты многобайтового символа, разрезанного границей куска, ждут
+  // продолжения в декодере: раздельное декодирование превратило бы их в
+  // U+FFFD, и не-ASCII значение секрета перестало бы совпадать с маскируемым.
+  const decoder = new StringDecoder('utf8');
+
+  const take = (text: string): void => {
+    if (text === '') return;
+    if (mask === undefined) {
+      accept(text);
+      return;
+    }
+    pending += text;
+    const cut = pending.lastIndexOf('\n');
+    if (cut >= 0) {
+      accept(mask.mask(pending.slice(0, cut + 1)));
+      pending = pending.slice(cut + 1);
+    }
+    if (pending.length > PENDING_LIMIT) {
+      const masked = mask.mask(pending);
+      const keep = Math.min(Math.max(mask.maxLength - 1, 0), masked.length);
+      accept(masked.slice(0, masked.length - keep));
+      pending = masked.slice(masked.length - keep);
+    }
+  };
+
+  const flushPending = (): void => {
+    take(decoder.end());
+    if (mask === undefined || pending === '') return;
+    accept(mask.mask(pending));
+    pending = '';
+  };
+
   if (stream !== null) {
     stream.on('data', (chunk: Buffer | string) => {
-      const text = typeof chunk === 'string' ? chunk : chunk.toString('utf8');
-      file?.write(text);
-      onChunk?.(text);
+      take(typeof chunk === 'string' ? chunk : decoder.write(chunk));
       for (const listener of listeners) listener();
-
-      if (size >= limit) {
-        truncated = true;
-        return;
-      }
-      const room = limit - size;
-      chunks.push(text.length > room ? text.slice(0, room) : text);
-      size += Math.min(text.length, room);
-      if (text.length > room) truncated = true;
     });
-    stream.on('end', () => file?.end());
-    stream.on('error', () => file?.end());
+    stream.on('end', () => {
+      flushPending();
+      file?.end();
+    });
+    stream.on('error', () => {
+      flushPending();
+      file?.end();
+    });
   } else {
     file?.end();
   }

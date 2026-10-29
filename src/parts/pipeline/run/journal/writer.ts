@@ -12,6 +12,7 @@ import { join } from 'node:path';
 
 import { StepcastError } from '../../../../kernel/errors.js';
 import { JOURNAL_FORMAT } from './format.js';
+import { createMasker, type Masker } from './mask.js';
 import {
   decisionRecordPath,
   jobDir,
@@ -37,6 +38,12 @@ import type {
 
 const DIR_MODE = 0o700;
 const FILE_MODE = 0o600;
+
+/**
+ * Файлы шага, которые журнал пишет как данные, а не как журнал: их читает
+ * скрипт шага или работа ниже по графу, и маскирование изменило бы прочитанное.
+ */
+const UNMASKED_STEP_FILES: ReadonlySet<string> = new Set(['input.json', 'output.json', 'diff.patch']);
 
 /**
  * Сколько отказов наблюдателя подряд журнал терпит, прежде чем отключить его.
@@ -66,10 +73,23 @@ export class RunJournal {
   private deliveringEvent = false;
   private observerFailures = 0;
 
-  private constructor(paths: RunPaths, projectRoot: string, onEvent: ((event: Event) => void) | undefined) {
+  /**
+   * Маскировщик значений секретов прогона. Публичный: потоки шагов и агента
+   * пишутся не журналом, а процессом (`exec/process.ts`), и берут маскировщик
+   * отсюда — единственное место, где значения собраны.
+   */
+  readonly masker: Masker;
+
+  private constructor(
+    paths: RunPaths,
+    projectRoot: string,
+    onEvent: ((event: Event) => void) | undefined,
+    masker: Masker,
+  ) {
     this.paths = paths;
     this.projectRoot = projectRoot;
     this.onEvent = onEvent;
+    this.masker = masker;
   }
 
   static create(options: {
@@ -77,6 +97,12 @@ export class RunJournal {
     readonly projectRoot: string;
     readonly now?: Date;
     readonly runId?: string;
+    /**
+     * Значения разрешённых секретов прогона: журнал заменяет их на `***` во
+     * всём текстовом, что пишет (события, файлы шага), и отдаёт маскировщик
+     * тем, кто пишет потоки. Значения нигде не сохраняются.
+     */
+    readonly secrets?: Iterable<string>;
     /** Вызывается после того, как событие дописано в файл, — тем же составом и в том же порядке. */
     readonly onEvent?: (event: Event) => void;
   }): RunJournal {
@@ -90,7 +116,7 @@ export class RunJournal {
     mkdirSync(paths.jobs, { recursive: true, mode: DIR_MODE });
     mkdirSync(paths.anchors, { recursive: true, mode: DIR_MODE });
 
-    const journal = new RunJournal(paths, options.projectRoot, options.onEvent);
+    const journal = new RunJournal(paths, options.projectRoot, options.onEvent, createMasker(options.secrets ?? []));
     journal.updateProjectIndex(options.runsRoot, key);
     journal.linkLatest();
     return journal;
@@ -122,7 +148,10 @@ export class RunJournal {
   }
 
   event(input: EventInput): void {
-    const event = { ts: new Date().toISOString(), seq: this.sequence++, ...input } as Event;
+    // Маскируется до записи и до уведомления: наблюдатель (витрина, лента)
+    // получает то же, что лежит в файле, — ни одна копия события не выдаёт
+    // значение.
+    const event = this.masker.maskValue({ ts: new Date().toISOString(), seq: this.sequence++, ...input }) as Event;
     appendFileSync(this.paths.events, `${JSON.stringify(event)}\n`, { mode: FILE_MODE });
     this.notify(event);
   }
@@ -226,7 +255,12 @@ export class RunJournal {
 
   writeStepFile(dir: string, name: string, content: string): string {
     const path = join(dir, name);
-    atomicWrite(path, content);
+    // Сюда идёт и `prompt.txt` судьи, и логи шага плагинного вида: выход
+    // предыдущей работы, вставленный в промпт, мог нести значение секрета.
+    // Данные маскированию не подлежат — правка исказила бы то, что читают
+    // скрипт (`input.json`) и работы ниже по графу (`output.json`), а патч
+    // принадлежит дереву (`secrets-named-providers`, design.md, «Risks»).
+    atomicWrite(path, UNMASKED_STEP_FILES.has(name) ? content : this.masker.mask(content));
     return path;
   }
 

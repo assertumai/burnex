@@ -2,6 +2,7 @@ import { join } from 'node:path';
 
 import { extractRefusal } from '../../backend/types.js';
 import type { Predicate, RunStep, ScriptStep } from '../../document/model.js';
+import type { Masker } from '../journal/mask.js';
 import type { AttemptRecord, PredicateResult, StatusValue } from '../journal/schema.js';
 import { planAttempt, runAttempts, type AttemptPlan } from './attempts.js';
 import { runProcess, type ProcessResult } from './process.js';
@@ -46,6 +47,8 @@ export interface RunStepOptions {
   readonly onStall?: (silentMs: number) => void;
   readonly onAttemptStart?: (plan: AttemptPlan) => void;
   readonly onExpectFailed?: (plan: AttemptPlan, result: PredicateResult) => void;
+  /** Маскировщик значений секретов журнала прогона: проходит строки `stdout.log` и `stderr.log`. */
+  readonly masker?: Masker;
   /**
    * Оценка результата попытки. Умолчание проверяет только код возврата.
    * Может возвращать промис: судья внутри неё — асинхронный агентский вызов.
@@ -94,6 +97,7 @@ export async function executeRunStep(options: RunStepOptions): Promise<RunStepRe
         ...(options.onStall === undefined ? {} : { onStall: options.onStall }),
         stdoutPath: join(options.stepDir, `stdout${suffix}.log`),
         stderrPath: join(options.stepDir, `stderr${suffix}.log`),
+        ...(options.masker === undefined ? {} : { masker: options.masker }),
       });
 
       last = result;

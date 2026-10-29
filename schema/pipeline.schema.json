@@ -147,6 +147,30 @@
         "type": "string"
       }
     },
+    "secrets": {
+      "type": "object",
+      "propertyNames": {
+        "type": "string",
+        "pattern": "^[a-z][a-z0-9_-]{0,63}$"
+      },
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "provider": {
+            "type": "string",
+            "minLength": 1
+          },
+          "env": {
+            "type": "string",
+            "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+          }
+        },
+        "required": [
+          "provider"
+        ],
+        "additionalProperties": {}
+      }
+    },
     "context": {
       "type": "array",
       "items": {
@@ -2476,6 +2500,13 @@
                           ],
                           "additionalProperties": false
                         },
+                        "secrets": {
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "pattern": "^[a-z][a-z0-9_-]{0,63}$"
+                          }
+                        },
                         "run": {
                           "anyOf": [
                             {
@@ -2918,6 +2949,13 @@
                             "max"
                           ],
                           "additionalProperties": false
+                        },
+                        "secrets": {
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "pattern": "^[a-z][a-z0-9_-]{0,63}$"
+                          }
                         },
                         "script": {
                           "type": "string",
@@ -3369,6 +3407,13 @@
                             "max"
                           ],
                           "additionalProperties": false
+                        },
+                        "secrets": {
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "pattern": "^[a-z][a-z0-9_-]{0,63}$"
+                          }
                         },
                         "uses": {
                           "type": "string"
@@ -3826,6 +3871,13 @@
                             "max"
                           ],
                           "additionalProperties": false
+                        },
+                        "secrets": {
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "pattern": "^[a-z][a-z0-9_-]{0,63}$"
+                          }
                         },
                         "decision": {
                           "type": "object",
