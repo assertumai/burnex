@@ -482,13 +482,15 @@ claimed_by: run:2026-10-29T19-38-13Z-756586
 
 ## run-step-shell-key
 
-status: todo
+status: done
 title: Ключ `shell` — объявляемая оболочка для строкового `run`
 why: Строка `run` всегда идёт через `sh -c`; шаг, которому нужен `bash -lc`, `pwsh` или `zsh`, вынужден оборачивать команду вручную.
 done_when: `shell` задаёт префикс argv, команда запускается как `[...shell, command]`; ближайшее объявление шаг → работа → пайплайн; пустой список отклоняется `lint`; списочную форму `run` ключ не затрагивает; `docs/pipeline-format.md` описывает; тесты.
 group: engine-cli
 track: express
 source: docs/burnex-after-stepcast.md, раздел 1 «Объявляемая оболочка»
+started_at: 2026-10-29T20:03:30.233Z
+claimed_by: run:2026-10-29T20-03-28Z-99b7ce
 
 ## shadow-run-mode
 

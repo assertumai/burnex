@@ -583,6 +583,12 @@
         }
       ]
     },
+    "shell": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
     "mcp": {
       "type": "object",
       "propertyNames": {
@@ -994,6 +1000,12 @@
                     "type": "number"
                   }
                 ]
+              },
+              "shell": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
               }
             },
             "required": [
@@ -1340,6 +1352,12 @@
                     "type": "number"
                   }
                 ]
+              },
+              "shell": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
               },
               "until": {
                 "type": "object",
@@ -2565,6 +2583,12 @@
                               "type": "number"
                             }
                           ]
+                        },
+                        "shell": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
                         },
                         "run": {
                           "anyOf": [

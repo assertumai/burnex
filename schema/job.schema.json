@@ -344,6 +344,12 @@
         }
       ]
     },
+    "shell": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
     "until": {
       "type": "object",
       "properties": {
@@ -1568,6 +1574,12 @@
                     "type": "number"
                   }
                 ]
+              },
+              "shell": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
               },
               "run": {
                 "anyOf": [

@@ -69,6 +69,22 @@ export interface RunStepResult {
   readonly last: ProcessResult | undefined;
 }
 
+/**
+ * Что запускать. Строка `run` с объявленной `shell` идёт как
+ * `[...shell, command]`: оболочка получает команду последним аргументом, как
+ * `sh -c` получает её сама. Без `shell` строка остаётся строкой — `runProcess`
+ * запустит её прежним путём; списочная форма `shell` не затрагивает.
+ */
+function commandOf(step: CommandStep): readonly string[] | string {
+  // Неразрешённый script сюда не доходит: движок отказывает ему раньше
+  // (см. комментарий у CommandStep).
+  if (step.kind === 'script') return step.resolved!.argv;
+  if (typeof step.command === 'string' && step.shell !== undefined && step.shell.length > 0) {
+    return [...step.shell, step.command];
+  }
+  return step.command;
+}
+
 export async function executeRunStep(options: RunStepOptions): Promise<RunStepResult> {
   const { step } = options;
   const evaluate = options.evaluate ?? evaluateExitCode;
@@ -85,9 +101,7 @@ export async function executeRunStep(options: RunStepOptions): Promise<RunStepRe
 
       const suffix = plan.attempt === 1 ? '' : `.${plan.attempt}`;
       const result = await runProcess({
-        // Неразрешённый script сюда не доходит: движок отказывает ему раньше
-        // (см. комментарий у CommandStep).
-        command: step.kind === 'script' ? step.resolved!.argv : step.command,
+        command: commandOf(step),
         cwd: options.cwd,
         env: options.env(plan),
         timeoutMs: step.timeoutMs,

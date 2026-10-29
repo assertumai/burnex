@@ -1296,6 +1296,8 @@ interface StepDefaults {
    * вид его не читают — у них нет кода выхода, принадлежащего автору документа.
    */
   readonly skipExitCode: number | undefined;
+  /** Оболочка, унаследованная шагом `run`: место подключения ?? тело работы ?? пайплайн. */
+  readonly shell: readonly string[] | undefined;
 }
 
 /**
@@ -1408,12 +1410,16 @@ function parseRunStep(raw: RawStep, ctx: BuiltinStepParseContext): StepParseResu
     recordPromptSubstitutions(substitutions, onFailKey, onFailPrompt.substitutions);
     onFail = { analyze: raw.on_fail.analyze, prompt: onFailPrompt.text };
   }
+  const shell = raw.shell ?? ctx.defaults.shell;
   return {
     step: {
       ...common,
       kind: 'run',
       command: raw.run,
       ...stepSkipExitCode(raw.skip_exit_code, ctx),
+      // Оболочка нужна только строковой форме; списочная её игнорирует, но
+      // действующее значение в шаге остаётся — оно часть его раскрытого вида.
+      ...(shell === undefined ? {} : { shell }),
       ...(onFail === undefined ? {} : { onFail }),
       ...(raw.output_schema === undefined
         ? {}
@@ -2321,6 +2327,7 @@ export function expandPipeline(options: ExpandOptions): ExpandedPipeline {
           ...(entry.context_upstream === undefined ? {} : { context_upstream: entry.context_upstream }),
           ...(entry.budget === undefined ? {} : { budget: entry.budget }),
           ...(entry.skip_exit_code === undefined ? {} : { skip_exit_code: entry.skip_exit_code }),
+          ...(entry.shell === undefined ? {} : { shell: entry.shell }),
         },
         overrideScope,
         at,
@@ -2432,6 +2439,10 @@ export function expandPipeline(options: ExpandOptions): ExpandedPipeline {
         : doc.skip_exit_code !== undefined
           ? toSkipExitCode(doc.skip_exit_code, substitutions, 'skip_exit_code')
           : undefined;
+
+    // Список строк уже раскрыт подстановками вместе с остальным телом, так что
+    // уровни сводятся без разбора: место подключения лежит поверх тела.
+    const jobShell = (body.shell as readonly string[] | undefined) ?? doc.shell;
 
     const output = body.output as { from?: string; schema?: string } | undefined;
     if (output !== undefined && output.from === undefined) {
@@ -2545,6 +2556,7 @@ export function expandPipeline(options: ExpandOptions): ExpandedPipeline {
             permissions: jobPermissions,
             mcp: stepMcp,
             skipExitCode: jobSkipExitCode,
+            shell: jobShell,
           },
           config,
           substitutions,

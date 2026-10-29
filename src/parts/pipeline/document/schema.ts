@@ -613,6 +613,14 @@ export function buildDocumentSchemas(
    */
   const SkipExitCodeShape = { skip_exit_code: count.optional() };
 
+  /**
+   * Оболочка строкового `run`: префикс argv, за которым идёт сама команда.
+   * Пустой список схема пропускает намеренно — отказ ему даёт `lint` с путём
+   * ключа, а не безымянная ошибка разбора. Как и `skip_exit_code`, не в
+   * `StepCommonShape`: у `script`, `agent` и плагинных видов ключ неизвестен.
+   */
+  const ShellShape = { shell: z.array(z.string()).optional() };
+
   const AgentStepSchema = z
     .object({
       ...StepCommonShape,
@@ -630,6 +638,7 @@ export function buildDocumentSchemas(
       ...StepCommonShape,
       ...StepSecretsShape,
       ...SkipExitCodeShape,
+      ...ShellShape,
       run: z.union([z.string(), z.array(z.string())]),
       on_fail: z.object({ analyze: z.string(), prompt: z.string() }).strict().optional(),
       output_schema: z.string().optional(),
@@ -798,6 +807,7 @@ export function buildDocumentSchemas(
     data: z.array(z.string()).optional(),
     budget: BudgetSchema.optional(),
     ...SkipExitCodeShape,
+    ...ShellShape,
     until: UntilSchema.optional(),
     attempts: JobAttemptsSchema.optional(),
     permissions: PermissionsSchema.optional(),
@@ -864,6 +874,7 @@ export function buildDocumentSchemas(
       context_upstream: ContextUpstreamSchema.optional(),
       budget: BudgetSchema.optional(),
       ...SkipExitCodeShape,
+      ...ShellShape,
     })
     .strict();
 
@@ -950,6 +961,7 @@ export function buildDocumentSchemas(
         .optional(),
       budget: BudgetSchema.optional(),
       ...SkipExitCodeShape,
+      ...ShellShape,
       mcp: McpSchema.optional(),
       concurrency: count.optional(),
       fail_fast: z.boolean().optional(),
