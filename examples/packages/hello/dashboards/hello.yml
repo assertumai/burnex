@@ -1,0 +1,8 @@
+title: Привет из пакета
+grid:
+  columns: 12
+cells:
+  - id: clock
+    widget: clock
+    at: { column: 0, row: 0, width: 4, height: 2 }
+    title: Часы

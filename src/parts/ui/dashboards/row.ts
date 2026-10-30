@@ -25,6 +25,11 @@ const PostBodySchema = z
     id: z.string().min(1),
     document: DashboardDocumentSchema,
     baseFingerprint: FingerprintSchema.optional(),
+    /**
+     * Дашборд открыт из пакета (`DashboardEntry.package`): запись идёт копией в
+     * свободный слой проекта, `baseFingerprint` относится к файлу пакета.
+     */
+    package: z.string().min(1).optional(),
   })
   .strict();
 
@@ -52,10 +57,17 @@ const handlePost: ApiHandler = async (req, res, env) => {
   }
 
   try {
-    writeDashboard(parsed.data.layer, parsed.data.id, parsed.data.document, parsed.data.baseFingerprint, {
-      home: env.home ?? homedir(),
-      ...(env.projectRoot === undefined ? {} : { projectRoot: env.projectRoot }),
-    });
+    writeDashboard(
+      parsed.data.layer,
+      parsed.data.id,
+      parsed.data.document,
+      parsed.data.baseFingerprint,
+      {
+        home: env.home ?? homedir(),
+        ...(env.projectRoot === undefined ? {} : { projectRoot: env.projectRoot }),
+      },
+      parsed.data.package,
+    );
     // Наблюдатель опрашивает каталоги раз в секунду — достаточно для правки,
     // сделанной мимо демона, но не для записи, которую демон только что сделал
     // сам (`src/parts/ui/screens/routes/server.ts`, тот же приём).

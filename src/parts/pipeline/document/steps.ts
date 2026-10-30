@@ -15,6 +15,7 @@ import {
   selectRunner,
   type ScriptRoots,
 } from './expand.js';
+import { findInLayers } from './layers.js';
 import { placeholderNamespaces } from './interpolate.js';
 import { StepManifestSchema } from './schema.js';
 import type { ResolvedScript, ScriptUnresolved, StepLayer, UsesOrigin } from './model.js';
@@ -28,34 +29,36 @@ import type { ResolvedScript, ScriptUnresolved, StepLayer, UsesOrigin } from './
  * значением `ScriptUnresolved`, а не через throw.
  */
 
-const STEP_LAYERS: ReadonlyArray<readonly [StepLayer, (roots: ScriptRoots) => string]> = [
-  ['project', (roots) => join(roots.project, '.stepcast', 'steps')],
-  ['home', (roots) => join(roots.home, '.stepcast', 'steps')],
-  ['builtin', (roots) => roots.builtin],
-];
-
 /**
- * Найти каталог шага по имени, слоями (design.md, решение 3). Каталог без
- * `step.yml` не считается каталогом шага — слой просматривается дальше, как и
- * при отсутствующем каталоге: `isFile` на несуществующем пути тоже даёт
- * `false`, и разница между «каталога нет» и «каталог есть, манифеста нет» не
- * нужна на этом шаге.
+ * Найти каталог шага по имени, слоями (design.md, решение 3): свободный проект,
+ * пакеты проекта, свободный home, пакеты home, встроенное — порядок и конфликт
+ * внутри слоя пакетов решает указатель (`layers.ts`). Каталог без `step.yml` не
+ * считается каталогом шага — слой просматривается дальше, как и при
+ * отсутствующем каталоге: `isFile` на несуществующем пути тоже даёт `false`, и
+ * разница между «каталога нет» и «каталог есть, манифеста нет» не нужна на этом
+ * шаге.
  */
 function findStepDir(
   name: string,
   roots: ScriptRoots,
-): { readonly layer: StepLayer; readonly dir: string } | { readonly searched: readonly string[] } {
-  const searched: string[] = [];
-  for (const [layer, dirFor] of STEP_LAYERS) {
-    const dir = join(dirFor(roots), name);
-    searched.push(dir);
-    if (isFile(join(dir, 'step.yml'))) return { layer, dir };
+):
+  | { readonly layer: StepLayer; readonly dir: string; readonly package?: string }
+  | { readonly conflict: readonly [string, string] }
+  | { readonly searched: readonly string[]; readonly broken: readonly string[] } {
+  const found = findInLayers('steps', name, roots, (dir) => isFile(join(dir, 'step.yml')));
+  if ('hit' in found) {
+    return {
+      layer: found.hit.layer,
+      dir: found.hit.path,
+      ...(found.hit.package === undefined ? {} : { package: found.hit.package }),
+    };
   }
-  return { searched };
+  return found;
 }
 
 interface ReadManifest {
   readonly layer: StepLayer;
+  readonly package: string | undefined;
   readonly stepDir: string;
   readonly manifestPath: string;
   readonly manifestFingerprint: string;
@@ -90,6 +93,7 @@ function readManifest(
   name: string,
   layer: StepLayer,
   stepDir: string,
+  packageName: string | undefined,
 ): { readonly ok: true; readonly manifest: ReadManifest } | { readonly ok: false; readonly reason: ScriptUnresolved } {
   const manifestPath = join(stepDir, 'step.yml');
 
@@ -171,6 +175,7 @@ function readManifest(
     ok: true,
     manifest: {
       layer,
+      package: packageName,
       stepDir,
       manifestPath,
       manifestFingerprint: fingerprintContent(text),
@@ -266,6 +271,7 @@ function resolveManifestScript(
     resolved: {
       absolutePath: fileCheck.absolute,
       layer: manifest.layer,
+      ...(manifest.package === undefined ? {} : { package: manifest.package }),
       runner: runner.name,
       argv: [...runner.command, ...(wrapperPath === undefined ? [] : [wrapperPath]), fileCheck.absolute],
       fingerprint: fingerprintContent(content),
@@ -442,11 +448,25 @@ export function resolveUsesStep(
   config: Config,
 ): UsesStepBuild {
   const located = findStepDir(name, stepRoots);
+  if ('conflict' in located) {
+    return {
+      uses: { name },
+      unresolved: { reason: 'resource_conflict', resource: 'step', name, packages: located.conflict },
+    };
+  }
   if ('searched' in located) {
-    return { uses: { name }, unresolved: { reason: 'step_not_found', name, searched: located.searched } };
+    return {
+      uses: { name },
+      unresolved: {
+        reason: 'step_not_found',
+        name,
+        searched: located.searched,
+        ...(located.broken.length === 0 ? {} : { broken: located.broken }),
+      },
+    };
   }
 
-  const read = readManifest(name, located.layer, located.dir);
+  const read = readManifest(name, located.layer, located.dir, located.package);
   if (!read.ok) {
     return { uses: { name }, unresolved: read.reason };
   }
@@ -454,6 +474,7 @@ export function resolveUsesStep(
   const origin = (params?: Record<string, unknown>): UsesOrigin => ({
     name,
     layer: manifest.layer,
+    ...(manifest.package === undefined ? {} : { package: manifest.package }),
     manifestPath: manifest.manifestPath,
     manifestFingerprint: manifest.manifestFingerprint,
     ...(params === undefined ? {} : { params }),

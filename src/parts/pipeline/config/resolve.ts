@@ -8,6 +8,8 @@ import { packagedWrapperNames } from '../domain/package-schema.js';
 import { describeSchemaFailure } from '../document/load.js';
 import { BUILTIN_ROW_IDS } from '../../rows.js';
 import { discoverPluginDirectories, pluginsDirPath } from '../../../kernel/tree/discover.js';
+import { buildPackageIndex } from '../../packages/index.js';
+import { packagePluginOperations } from '../../packages/plugins.js';
 import {
   applyOperations,
   BUILTIN_USE_PREFIX,
@@ -791,9 +793,18 @@ function buildRunnersByExtension(
  * предыдущий; исключения — объединяемые списки запретов и потолки `limits`,
  * которые снизу можно только ужесточить.
  */
+/**
+ * Путь глобального конфига, который прочтёт `resolveConfig` с этими опциями.
+ * Рядом с ним лежат пакеты home: вызывающий, которому разрешение не удалось,
+ * берёт каталог пакетов отсюда, а не от своего умолчания.
+ */
+export function globalConfigPath(options: Pick<ResolveOptions, 'home' | 'globalPath'>): string {
+  return options.globalPath ?? join(options.home ?? homedir(), '.stepcast', 'config.yml');
+}
+
 export function resolveConfig(options: ResolveOptions): ResolvedConfig {
   const home = options.home ?? homedir();
-  const globalPath = options.globalPath ?? join(home, '.stepcast', 'config.yml');
+  const globalPath = globalConfigPath(options);
   const projectPath =
     options.projectPath === null
       ? undefined
@@ -847,8 +858,20 @@ export function resolveConfig(options: ResolveOptions): ResolvedConfig {
   // домашним каталогом машины: сборка с подставным путём конфигурации
   // (запасное встроенное ядро демона, `src/parts/ui/daemon/kernel.ts`) обязана остаться
   // встроенной и не подхватывать настоящие `~/.stepcast/plugins`.
+  //
+  // Пакеты (`packages-directory-layer`, Решение 6) встают в порядок слоёв, как в
+  // поиске прочих ресурсов: пакеты home ниже свободного каталога home, пакеты
+  // проекта ниже свободного каталога проекта; позднее объявление `id` заменяет
+  // раннее, и порядок поиска получается сам собой. Указатель строится от тех же
+  // корней, что и сами слои: пакеты home — рядом с глобальным конфигом.
+  const pluginsProjectRoot = options.pluginsProjectRoot ?? (options.projectPath === null ? undefined : options.cwd);
+  const packageIndex = buildPackageIndex({
+    ...(pluginsProjectRoot === undefined ? {} : { projectRoot: pluginsProjectRoot }),
+    globalPath,
+  });
   let pluginTree = applyOperations(builtinSeedRows(reservedRowIds), [
-    ...discoverPluginDirectories(join(dirname(globalPath), 'plugins'), 'home', reservedRowIds),
+    ...packagePluginOperations(packageIndex, 'home', reservedRowIds),
+    ...discoverPluginDirectories(join(dirname(globalPath), 'plugins'), { layer: 'home' }, reservedRowIds),
     ...keyOperations(globalConfig?.plugins ?? [], globalPath),
     ...patchOperations(homePatch?.plugins ?? [], homePatchPath),
   ]);
@@ -857,11 +880,11 @@ export function resolveConfig(options: ResolveOptions): ResolvedConfig {
   // читается ли проектный файл конфигурации: демон разрешает собственное ядро
   // с `projectPath: null`, но каталог, в котором он поднят, всё равно обязан
   // дать проектный слой плагинов (`ui-daemon`, Решение 13).
-  const pluginsProjectRoot = options.pluginsProjectRoot ?? (options.projectPath === null ? undefined : options.cwd);
   const projectOperations: TreeOperation[] = [];
   if (pluginsProjectRoot !== undefined) {
     projectOperations.push(
-      ...discoverPluginDirectories(pluginsDirPath(pluginsProjectRoot), 'project', reservedRowIds),
+      ...packagePluginOperations(packageIndex, 'project', reservedRowIds),
+      ...discoverPluginDirectories(pluginsDirPath(pluginsProjectRoot), { layer: 'project' }, reservedRowIds),
     );
   }
   if (projectPath !== undefined) {

@@ -33,8 +33,10 @@ export function runLintCommand(
   resolvedConfig?: Config,
 ): ExitCodeValue {
   const target = args.positional[0] ?? 'stepcast.yml';
-  const { pipelinePath, isSupplyPipeline } = resolvePipelineTarget(cwd, target);
   const config = resolvedConfig ?? resolveConfig({ cwd }).config;
+  const { pipelinePath, outsideProject } = resolvePipelineTarget(cwd, target, {
+    globalConfigDir: config.globalConfigDir,
+  });
 
   const inputs = (args.flags.input as Record<string, string> | undefined) ?? {};
 
@@ -45,7 +47,7 @@ export function runLintCommand(
       config,
       inputs,
       ...(registry === undefined ? {} : { registry }),
-      ...(isSupplyPipeline ? { projectRoot: cwd } : {}),
+      ...(outsideProject ? { projectRoot: cwd } : {}),
     });
   } catch (error) {
     // Без раскрытия проверять нечего, поэтому такая ошибка одна и фатальна.

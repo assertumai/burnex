@@ -4,9 +4,10 @@ import { fileURLToPath } from 'node:url';
 import { Document, parse as parseYaml, parseDocument } from 'yaml';
 import { z } from 'zod';
 
-import { StepcastError } from '../../kernel/errors.js';
+import { isStepcastError, StepcastError } from '../../kernel/errors.js';
 import { findPackageRoot } from '../pipeline/domain/package-schema.js';
 import { describeSchemaFailure } from '../../kernel/schema-failure.js';
+import { buildPackageIndex, resourceLayers, type PackageResourcePath } from '../packages/index.js';
 import {
   isReservedPath,
   normalizedTemplate,
@@ -116,18 +117,26 @@ export type RouteLayerName = 'builtin' | 'home' | 'project';
 
 interface LayerFile {
   readonly layer: RouteLayerName;
+  /** Пакет, чей `routes.yml` это слой; `layer` при этом — слой самого пакета. */
+  readonly package?: string;
   readonly path: string;
   readonly rows: readonly RouteRowDocument[];
 }
 
-function readLayer(layer: RouteLayerName, path: string, required: boolean): LayerFile | undefined {
+function readLayer(layer: RouteLayerName, path: string, required: boolean, packageName?: string): LayerFile | undefined {
   if (!required && !existsSync(path)) return undefined;
-  return { layer, path, rows: readRoutesDocument(path) };
+  return {
+    layer,
+    ...(packageName === undefined ? {} : { package: packageName }),
+    path,
+    rows: readRoutesDocument(path),
+  };
 }
 
-/** Откуда пришло поле строки маршрута — слой и файл (для перечня в витрине). */
+/** Откуда пришло поле строки маршрута — слой и файл (для перечня в витрине); у маршрута пакета — ещё и пакет. */
 export interface RouteFieldSource {
   readonly layer: RouteLayerName;
+  readonly package?: string;
   readonly file: string;
 }
 
@@ -170,7 +179,11 @@ function mergeRows(layers: readonly LayerFile[]): readonly MergedRow[] {
         order.push(raw.id);
       }
       entry.touchedFiles.push(layer.path);
-      const source: RouteFieldSource = { layer: layer.layer, file: layer.path };
+      const source: RouteFieldSource = {
+        layer: layer.layer,
+        ...(layer.package === undefined ? {} : { package: layer.package }),
+        file: layer.path,
+      };
       if (raw.path !== undefined) entry.fields.path = { value: raw.path, source };
       if (raw.target !== undefined) entry.fields.target = { value: raw.target, source };
       if (raw.params !== undefined) entry.fields.params = { value: raw.params, source };
@@ -226,10 +239,27 @@ export interface DisabledRouteEntry {
   readonly disabledBy: RouteFieldSource;
 }
 
+/**
+ * Отказ, ограниченный одним пакетом или одной строкой пакетов: битый
+ * `routes.yml` пакета исключает только этот файл, а `id`, объявленный двумя
+ * пакетами одного слоя, — только эту строку обоих пакетов. Остальная таблица
+ * собирается (`packages-directory-layer`, «Сломанный пакет падает отдельно»).
+ */
+export interface RoutePackageFailure {
+  readonly layer: 'home' | 'project';
+  /** Пакеты, к которым относится отказ: один — битый файл, два и больше — конфликт `id`. */
+  readonly packages: readonly string[];
+  /** `id` строки в конфликте; у битого файла его нет. */
+  readonly id?: string;
+  readonly file: string;
+  readonly message: string;
+}
+
 export interface RouteBuildResult {
   readonly table: RouteTable;
   readonly entries: readonly RouteEntry[];
   readonly disabled: readonly DisabledRouteEntry[];
+  readonly failures: readonly RoutePackageFailure[];
 }
 
 /** Строка действующей таблицы, обогащённая источником каждого поля — форма ответа `GET /api/routes` и события потока `routes`. */
@@ -292,7 +322,56 @@ function validateParamPlaceholders(id: string, path: string, params: FieldSlot<R
 }
 
 /**
- * Собрать действующую таблицу маршрутов трёх слоёв. Отказ — исключение
+ * `routes.yml` пакетов одного слоя. Битый файл пакета исключает только этот
+ * пакет; строка с одним `id` в двух пакетах слоя исключается из обоих —
+ * исход иначе зависел бы от имени каталога, а не от намерения автора
+ * (Решение 4). Оба отказа уходят в `failures` и называют пакеты, а прочие
+ * строки и слои собираются как обычно. Строку в конфликте может объявить
+ * слой выше — тогда действует она.
+ */
+function readPackageLayers(
+  layer: 'home' | 'project',
+  packages: readonly PackageResourcePath[],
+  failures: RoutePackageFailure[],
+): readonly LayerFile[] {
+  const files: LayerFile[] = [];
+  for (const entry of packages) {
+    try {
+      const file = readLayer(layer, entry.path, false, entry.package);
+      if (file !== undefined) files.push(file);
+    } catch (error) {
+      if (!isStepcastError(error)) throw error;
+      failures.push({ layer, packages: [entry.package], file: entry.path, message: error.message });
+    }
+  }
+
+  const owners = new Map<string, LayerFile[]>();
+  for (const file of files) {
+    for (const id of new Set(file.rows.map((row) => row.id))) {
+      const list = owners.get(id) ?? [];
+      list.push(file);
+      owners.set(id, list);
+    }
+  }
+  const conflicted = new Set<string>();
+  for (const [id, list] of owners) {
+    if (list.length < 2) continue;
+    conflicted.add(id);
+    const names = list.map((file) => file.package as string);
+    failures.push({
+      layer,
+      packages: names,
+      id,
+      file: (list[1] as LayerFile).path,
+      message: `Route ${id} is declared by two packages of one layer: ${names.join(' and ')} (${list.map((file) => file.path).join(', ')}); rename the route in one package, remove one package, or override it in .stepcast/routes.yml`,
+    });
+  }
+  if (conflicted.size === 0) return files;
+  return files.map((file) => ({ ...file, rows: file.rows.filter((row) => !conflicted.has(row.id)) }));
+}
+
+/**
+ * Собрать действующую таблицу маршрутов пяти слоёв. Отказ — исключение
  * `StepcastError`: вызывающий (`src/parts/ui/daemon/kernel.ts`) обязан оставить в силе
  * последнюю успешно собранную таблицу, а не гасить витрину (`ui-routes`,
  * «Отказ таблицы не гасит витрину»).
@@ -301,8 +380,30 @@ export function buildRouteTable(options: RouteBuildOptions): RouteBuildResult {
   const layers: LayerFile[] = [];
   const builtin = readLayer('builtin', options.builtinPath ?? builtinRoutesPath(), true);
   if (builtin !== undefined) layers.push(builtin);
+
+  // Слияние идёт снизу вверх: встроенное ← пакеты home ← home ← пакеты проекта ←
+  // проект (`packages-directory-layer`, Решение 7); верхний слой перекрывает
+  // нижний по листьям. Пакетные слои отдаёт указатель в порядке поиска, поэтому
+  // здесь они берутся по источнику, а не по позиции.
+  const homeStepcastDir = join(options.home, '.stepcast');
+  const index = buildPackageIndex({
+    ...(options.projectRoot === undefined ? {} : { projectRoot: options.projectRoot }),
+    globalPath: join(homeStepcastDir, 'config.yml'),
+  });
+  const searchLayers = resourceLayers(index, 'routes', {
+    ...(options.projectRoot === undefined ? {} : { projectRoot: options.projectRoot }),
+    homeStepcastDir,
+  });
+  const packagesOf = (source: 'home-packages' | 'project-packages'): readonly PackageResourcePath[] => {
+    const found = searchLayers.find((layer) => layer.source === source);
+    return found !== undefined && 'packages' in found ? found.packages : [];
+  };
+
+  const failures: RoutePackageFailure[] = [];
+  layers.push(...readPackageLayers('home', packagesOf('home-packages'), failures));
   const home = readLayer('home', homeRoutesPath(options.home), false);
   if (home !== undefined) layers.push(home);
+  layers.push(...readPackageLayers('project', packagesOf('project-packages'), failures));
   if (options.projectRoot !== undefined) {
     const project = readLayer('project', projectRoutesPath(options.projectRoot), false);
     if (project !== undefined) layers.push(project);
@@ -393,7 +494,7 @@ export function buildRouteTable(options: RouteBuildOptions): RouteBuildResult {
     byNormalized.set(key, entry);
   }
 
-  return { table: entries.map((entry) => entry.definition), entries, disabled };
+  return { table: entries.map((entry) => entry.definition), entries, disabled, failures };
 }
 
 /** Имя файла слоя, в который пишет витрина, — для подсказок и для `POST /api/routes`. */

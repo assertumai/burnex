@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { readdirSync, writeFileSync } from 'node:fs';
+import { readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, it } from 'node:test';
 
@@ -535,9 +535,15 @@ jobs:
     });
   }
 
-  async function withPlugin(name: string, version: string): Promise<Registry> {
+  async function withPlugin(name: string, version: string, packageName?: string): Promise<Registry> {
     const kernel = createBuiltinKernel();
-    await applyDeclarativePlugin(kernel, { name, version }, `/модуль/${name}.js`, DECLARATIVE_CONTRIBUTION_FIELDS);
+    await applyDeclarativePlugin(
+      kernel,
+      { name, version },
+      `/модуль/${name}.js`,
+      DECLARATIVE_CONTRIBUTION_FIELDS,
+      packageName,
+    );
     return registryFromKernel(kernel);
   }
 
@@ -576,6 +582,77 @@ jobs:
 
     const note = comparison.notes.find((item) => item.includes('состав плагинов'));
     assert.match(note ?? '', /example@1\.0\.0 и example@2\.0\.0/);
+  });
+});
+
+describe('packages-directory-layer: пакет-источник плагина в манифесте и сравнении', () => {
+  const SIMPLE = `
+version: 1
+kind: pipeline
+name: сравнение
+jobs:
+  работа:
+    steps:
+      - id: шаг
+        run: [echo, ок]
+        expect: [{ exit_code: 0 }]
+`;
+
+  async function runWith(b: Bed, registry: Registry): Promise<RunResult> {
+    return runPipeline({
+      expanded: expandPipeline({ pipelinePath: b.project.path('stepcast.yml'), config: b.project.config, registry }),
+      config: { ...b.project.config, runs: { ...b.project.config.runs, root: b.runsRoot } },
+      projectRoot: b.project.root,
+      cwd: b.project.root,
+      registry,
+    });
+  }
+
+  async function withPlugin(packageName?: string): Promise<Registry> {
+    const kernel = createBuiltinKernel();
+    await applyDeclarativePlugin(
+      kernel,
+      { name: 'example', version: '1.0.0' },
+      '/модуль/example.js',
+      DECLARATIVE_CONTRIBUTION_FIELDS,
+      packageName,
+    );
+    return registryFromKernel(kernel);
+  }
+
+  it('манифест прогона записывает пакет-источник плагина', async () => {
+    const b = bed({ 'stepcast.yml': SIMPLE });
+    const result = await runWith(b, await withPlugin('hello'));
+    const manifest = JSON.parse(readFileSync(result.journal.paths.manifest, 'utf8')) as {
+      plugins: { name: string; package?: string }[];
+    };
+    assert.equal(manifest.plugins.find((plugin) => plugin.name === 'example')?.package, 'hello');
+  });
+
+  it('смена источника на пакет видна в сравнении, смена пакета — тоже', async () => {
+    const b = bed({ 'stepcast.yml': SIMPLE });
+    const free = await runWith(b, await withPlugin());
+    const packaged = await runWith(b, await withPlugin('hello'));
+    const other = await runWith(b, await withPlugin('tools'));
+
+    const toPackage = compare(b, free, packaged).notes.find((item) => item.includes('состав плагинов'));
+    assert.match(toPackage ?? '', /example@1\.0\.0 и example@1\.0\.0 \(пакет hello\)/);
+    const betweenPackages = compare(b, packaged, other).notes.find((item) => item.includes('состав плагинов'));
+    assert.match(betweenPackages ?? '', /\(пакет hello\) и example@1\.0\.0 \(пакет tools\)/);
+  });
+
+  it('прежний журнал без поля package читается и сравнивается без ошибок', async () => {
+    const b = bed({ 'stepcast.yml': SIMPLE });
+    const old = await runWith(b, await withPlugin());
+    const manifest = JSON.parse(readFileSync(old.journal.paths.manifest, 'utf8')) as {
+      plugins: { package?: string }[];
+    };
+    for (const plugin of manifest.plugins) delete plugin.package;
+    writeFileSync(old.journal.paths.manifest, JSON.stringify(manifest));
+    const fresh = await runWith(b, await withPlugin());
+
+    const comparison = compare(b, old, fresh);
+    assert.equal(comparison.notes.find((item) => item.includes('состав плагинов')), undefined);
   });
 });
 

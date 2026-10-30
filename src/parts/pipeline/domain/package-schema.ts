@@ -1,9 +1,13 @@
 import { existsSync, readdirSync } from 'node:fs';
+import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { StepcastError } from '../../../kernel/errors.js';
 import { findPackageRoot } from '../../../kernel/packageRoot.js';
+import { buildPackageIndex, findPackage, listPackagePipelineNames, packagePipelineFile } from '../../packages/index.js';
+import { describePackageFailure } from '../../packages/manifest.js';
+import { findProjectRoot } from '../run/journal/paths.js';
 
 // Реэкспорт: сам `findPackageRoot` переехал в ядро
 // (`src/kernel/packageRoot.ts`, design.md, Решение 6), а публикуется — отсюда:
@@ -143,32 +147,96 @@ export function packagedPipelinePath(name: string, reference?: SchemaReference):
   });
 }
 
-/** Разобранная цель `stepcast run`/`stepcast lint`: файл каталога запуска либо пайплайн поставки. */
+/** Разобранная цель `stepcast run`/`stepcast lint`: файл каталога запуска, пайплайн поставки либо пайплайн пакета. */
 export interface ResolvedPipelineTarget {
   readonly pipelinePath: string;
-  /** Цель названа ссылкой `stepcast:<имя>` — слои `script`/`step` ищутся от каталога запуска, а не от каталога поставки. */
-  readonly isSupplyPipeline: boolean;
+  /**
+   * Пайплайн лежит не в проекте — это поставка (`stepcast:<имя>`) либо пакет
+   * (`<пакет>:<имя>`): слои `script`/`step` ищутся от каталога запуска, а не
+   * от каталога, где лежит файл. Пайплайн пакета home, запущенный в проекте,
+   * работает с этим проектом — ради этого им и делятся.
+   */
+  readonly outsideProject: boolean;
+  /** Адрес `<пакет>:<имя>`, как цель была названа; у поставки и пути его нет. */
+  readonly address?: string;
+}
+
+export interface PipelineTargetOptions {
+  /** Каталог глобального конфига: пакеты home лежат рядом. По умолчанию `~/.stepcast`. */
+  readonly globalConfigDir?: string;
+}
+
+/**
+ * Узкая форма адреса пайплайна пакета: kebab-имя пакета, двоеточие, имя без
+ * `/` и расширения. Всё, что под неё не подходит, — по-прежнему путь, так что
+ * `./foo:bar.yml` и любой путь с `/` остаются путями.
+ */
+const PACKAGE_ADDRESS = /^([a-z0-9]+(?:-[a-z0-9]+)*):([A-Za-z0-9_-]+)$/;
+
+function resolvePackagePipeline(cwd: string, packageName: string, pipelineName: string, options: PipelineTargetOptions): string {
+  const globalConfigDir = options.globalConfigDir ?? join(homedir(), '.stepcast');
+  const index = buildPackageIndex({
+    projectRoot: findProjectRoot(cwd),
+    globalPath: join(globalConfigDir, 'config.yml'),
+  });
+  const address = `${packageName}:${pipelineName}`;
+
+  const found = findPackage(index, packageName);
+  if (found === undefined) {
+    const known = index.packages.filter((entry) => entry.shadowedBy === undefined).map((entry) => entry.name);
+    throw new StepcastError(`Пакет ${packageName} не найден (цель ${address})`, {
+      hint: known.length > 0 ? `Известные пакеты: ${known.join(', ')}` : 'Пакетов нет ни в проекте (.stepcast/packages), ни в домашнем слое',
+    });
+  }
+  if ('broken' in found) {
+    throw new StepcastError(`Пакет ${packageName} сломан: ${describePackageFailure(found.broken.failure!)}`, {
+      file: found.broken.failure!.file,
+      hint: 'Исправьте package.yml пакета — stepcast package list покажет все пакеты и их состояние',
+    });
+  }
+
+  const file = packagePipelineFile(found.entry.dir, pipelineName);
+  if (file === undefined) {
+    const names = listPackagePipelineNames(found.entry.dir);
+    throw new StepcastError(`В пакете ${packageName} нет пайплайна ${pipelineName}`, {
+      hint: names.length > 0 ? `Пайплайны пакета: ${names.join(', ')}` : `В пакете нет каталога pipelines/ с пайплайнами (${found.entry.dir})`,
+    });
+  }
+  return file;
 }
 
 /**
  * Цель позиционного аргумента: `stepcast:<имя>` — пайплайн поставки (путь от
- * расположения движка), всё остальное — **путь** от каталога запуска
- * (`pipeline-definition`, «Путь остаётся путём»). Правило одно на обе команды
- * (`stepcast run`, `stepcast lint`): написанное дважды, оно разъехалось бы —
- * и `run` с `lint` расходились бы в том, какой файл они вообще смотрят.
+ * расположения движка), `<пакет>:<имя>` узкой формы — пайплайн пакета
+ * (`packages-directory-layer`, Решение 5), всё остальное — **путь** от каталога
+ * запуска (`pipeline-definition`, «Путь остаётся путём»). Правило одно на обе
+ * команды (`stepcast run`, `stepcast lint`): написанное дважды, оно разъехалось
+ * бы — и `run` с `lint` расходились бы в том, какой файл они вообще смотрят.
  *
  * Голое имя, совпавшее с именем поставки (`migrate-widgets.yml` в каталоге
  * запуска), остаётся файлом проекта: позиционный аргумент `stepcast run`
  * сегодня путь, и поставка его смысла не отнимает.
  */
-export function resolvePipelineTarget(cwd: string, target: string): ResolvedPipelineTarget {
-  if (!target.startsWith(STEPCAST_PIPELINE_PREFIX)) {
-    return { pipelinePath: resolve(cwd, target), isSupplyPipeline: false };
+export function resolvePipelineTarget(
+  cwd: string,
+  target: string,
+  options: PipelineTargetOptions = {},
+): ResolvedPipelineTarget {
+  if (target.startsWith(STEPCAST_PIPELINE_PREFIX)) {
+    return {
+      pipelinePath: packagedPipelinePath(target.slice(STEPCAST_PIPELINE_PREFIX.length)),
+      outsideProject: true,
+    };
   }
-  return {
-    pipelinePath: packagedPipelinePath(target.slice(STEPCAST_PIPELINE_PREFIX.length)),
-    isSupplyPipeline: true,
-  };
+  const address = PACKAGE_ADDRESS.exec(target);
+  if (address !== null) {
+    return {
+      pipelinePath: resolvePackagePipeline(cwd, address[1]!, address[2]!, options),
+      outsideProject: true,
+      address: target,
+    };
+  }
+  return { pipelinePath: resolve(cwd, target), outsideProject: false };
 }
 
 /**

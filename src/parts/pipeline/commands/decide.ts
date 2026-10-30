@@ -51,6 +51,7 @@ export async function runDecideCommand(
       config,
       inputs: Object.fromEntries(Object.entries(manifest.inputs).map(([name, value]) => [name, String(value)])),
       ...(registry === undefined ? {} : { registry }),
+      ...(manifest.pipeline_address === undefined ? {} : { projectRoot: manifest.project_root }),
     });
     const knownSteps = pipelineStepAddresses(expanded.pipeline);
 

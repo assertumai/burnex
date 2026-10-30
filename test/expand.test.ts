@@ -6319,3 +6319,86 @@ describe('pipeline-definition: external', () => {
     assert.equal(keyOf(bare), keyOf({ ...bare }));
   });
 });
+
+describe('expand: скрипты из пакетов', () => {
+  const scriptPipeline = `
+kind: pipeline
+jobs:
+  build:
+    steps:
+      - id: s
+        script: report.py
+        expect: [{ exit_code: 0 }]
+`;
+
+  function writePackageScript(packagesDir: string, name: string, manifest?: string): string {
+    const dir = join(packagesDir, name);
+    mkdirSync(join(dir, 'scripts'), { recursive: true });
+    writeFileSync(
+      join(dir, 'package.yml'),
+      manifest ?? `version: 1\nkind: package\nname: ${name}\ndescription: Пример\npackage_version: 0.1.0\n`,
+    );
+    writeFileSync(join(dir, 'scripts', 'report.py'), '#!/usr/bin/env python3\nprint("hi")\n');
+    return dir;
+  }
+
+  it('скрипт пакета проекта находится, пакет и слой названы', () => {
+    const project = makeProject({ 'stepcast.yml': scriptPipeline });
+    const roots = isolatedScriptRoots(project);
+    const dir = writePackageScript(join(roots.project, '.stepcast', 'packages'), 'hello');
+
+    const step = asScript(expandScript(project, roots).pipeline.jobs[0]!.steps[0]!);
+    assert.equal(step.unresolved, undefined);
+    assert.equal(step.resolved?.layer, 'project');
+    assert.equal(step.resolved?.package, 'hello');
+    assert.equal(step.resolved?.absolutePath, join(dir, 'scripts', 'report.py'));
+  });
+
+  it('скрипт пакета home выше встроенного, ниже свободного home', () => {
+    const project = makeProject({ 'stepcast.yml': scriptPipeline });
+    const roots = isolatedScriptRoots(project);
+    writeOutsideProject(roots.builtin, 'report.py', '#!/usr/bin/env python3\n');
+    writePackageScript(join(roots.home, '.stepcast', 'packages'), 'tools');
+    assert.equal(asScript(expandScript(project, roots).pipeline.jobs[0]!.steps[0]!).resolved?.package, 'tools');
+
+    writeOutsideProject(join(roots.home, '.stepcast', 'scripts'), 'report.py', '#!/usr/bin/env python3\n');
+    const free = asScript(expandScript(project, roots).pipeline.jobs[0]!.steps[0]!);
+    assert.equal(free.resolved?.package, undefined);
+    assert.equal(free.resolved?.layer, 'home');
+  });
+
+  it('свободный каталог проекта перекрывает пакет проекта', () => {
+    const project = makeProject({ 'stepcast.yml': scriptPipeline });
+    const roots = isolatedScriptRoots(project);
+    writePackageScript(join(roots.project, '.stepcast', 'packages'), 'hello');
+    project.write('.stepcast/scripts/report.py', '#!/usr/bin/env python3\n');
+
+    const step = asScript(expandScript(project, roots).pipeline.jobs[0]!.steps[0]!);
+    assert.equal(step.resolved?.package, undefined);
+    assert.equal(step.resolved?.absolutePath, project.path('.stepcast/scripts/report.py'));
+  });
+
+  it('конфликт двух пакетов не проваливается в нижний слой', () => {
+    const project = makeProject({ 'stepcast.yml': scriptPipeline });
+    const roots = isolatedScriptRoots(project);
+    const packages = join(roots.project, '.stepcast', 'packages');
+    writePackageScript(packages, 'a');
+    writePackageScript(packages, 'b');
+    writeOutsideProject(join(roots.home, '.stepcast', 'scripts'), 'report.py', '#!/usr/bin/env python3\n');
+
+    const step = asScript(expandScript(project, roots).pipeline.jobs[0]!.steps[0]!);
+    assert.equal(step.resolved, undefined);
+    assert.equal(step.unresolved?.reason, 'resource_conflict');
+    if (step.unresolved?.reason === 'resource_conflict') assert.deepEqual(step.unresolved.packages, ['a', 'b']);
+  });
+
+  it('промах при сломанном пакете называет его причину', () => {
+    const project = makeProject({ 'stepcast.yml': scriptPipeline });
+    const roots = isolatedScriptRoots(project);
+    writePackageScript(join(roots.project, '.stepcast', 'packages'), 'broken', 'not: [valid');
+
+    const step = asScript(expandScript(project, roots).pipeline.jobs[0]!.steps[0]!);
+    assert.equal(step.unresolved?.reason, 'file_not_found');
+    if (step.unresolved?.reason === 'file_not_found') assert.match((step.unresolved.broken ?? []).join('\n'), /broken/);
+  });
+});

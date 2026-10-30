@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { ExitCode, type ExitCodeValue } from '../../../kernel/errors.js';
 import { findProjectRoot } from '../../pipeline/run/journal/paths.js';
 import { SHARED_MODULE_TABLE_VERSION } from '../daemon/sharedModules.js';
-import { listProjectWidgetIds, resolveWidgetFile } from '../widgets.js';
+import { listProjectWidgetIds, locateWidget, type WidgetSource, type WidgetSourceOptions } from '../widgets.js';
 import { parseWidgetImports, unresolvedSharedNames } from '../widgetImports.js';
 import { commandRow } from '../../../kernel/cli/commandRow.js';
 import type { ParsedArgs } from '../../../kernel/cli/args.js';
@@ -27,16 +27,38 @@ interface UnresolvedNameView {
 
 interface WidgetSummary {
   readonly id: string;
-  readonly file: string;
+  /** Нет у виджета в конфликте: файл не выбран ни один. */
+  readonly file?: string;
+  /** Слой и, если виджет из пакета, пакет (`packages-directory-layer`). */
+  readonly source: WidgetSource;
   readonly imports: readonly string[];
   readonly unresolved: readonly UnresolvedNameView[];
+  /** Причина, по которой виджет не действует: `id` в двух пакетах одного слоя. */
+  readonly error?: string;
 }
 
-function summarize(projectRoot: string): readonly WidgetSummary[] {
+function sourceLabel(source: WidgetSource): string {
+  return source.package === undefined ? source.layer : `package ${source.package} (${source.layer})`;
+}
+
+function summarize(projectRoot: string, options: WidgetSourceOptions): readonly WidgetSummary[] {
   const summaries: WidgetSummary[] = [];
-  for (const id of listProjectWidgetIds(projectRoot)) {
-    const file = resolveWidgetFile(projectRoot, id);
-    if (file === undefined) continue;
+  for (const id of listProjectWidgetIds(projectRoot, options)) {
+    const located = locateWidget(projectRoot, id, options);
+    if (located.kind === 'conflict') {
+      // Виджет в конфликте витрина не отдаёт; здесь он назван с причиной, а не
+      // пропадает из состава молча.
+      summaries.push({
+        id,
+        source: { layer: located.source.layer },
+        imports: [],
+        unresolved: [],
+        error: `declared by two packages of one layer: ${located.packages.join(' and ')}`,
+      });
+      continue;
+    }
+    if (located.kind === 'missing') continue;
+    const file = located.file;
     let source: string;
     try {
       source = readFileSync(file, 'utf8');
@@ -52,14 +74,19 @@ function summarize(projectRoot: string): readonly WidgetSummary[] {
         ...(item.noteText === undefined ? {} : { noteText: item.noteText }),
       }),
     );
-    summaries.push({ id, file, imports: imports.map((item) => item.specifier), unresolved });
+    summaries.push({ id, file, source: located.source, imports: imports.map((item) => item.specifier), unresolved });
   }
   return summaries;
 }
 
-export function runWidgetsCommand(args: ParsedArgs, write: (line: string) => void, cwd: string): ExitCodeValue {
+export function runWidgetsCommand(
+  args: ParsedArgs,
+  write: (line: string) => void,
+  cwd: string,
+  options: WidgetSourceOptions = {},
+): ExitCodeValue {
   const projectRoot = findProjectRoot(cwd);
-  const widgets = summarize(projectRoot);
+  const widgets = summarize(projectRoot, options);
   const payload = { widgets, tableVersion: SHARED_MODULE_TABLE_VERSION };
 
   if (args.flags.json === true) {
@@ -73,6 +100,10 @@ export function runWidgetsCommand(args: ParsedArgs, write: (line: string) => voi
   }
 
   for (const widget of widgets) {
+    if (widget.error !== undefined) {
+      write(`${widget.id} [${widget.source.layer} packages] — ошибка: ${widget.error}`);
+      continue;
+    }
     const importsLabel = widget.imports.length === 0 ? '—' : widget.imports.join(', ');
     const status =
       widget.unresolved.length === 0
@@ -80,7 +111,7 @@ export function runWidgetsCommand(args: ParsedArgs, write: (line: string) => voi
         : `устарел: ${widget.unresolved
             .map((item) => (item.kind === 'specifier' ? item.name : `${item.name} (из ${item.specifier})`))
             .join(', ')}`;
-    write(`${widget.id} (${widget.file}) — импорт: ${importsLabel} — ${status}`);
+    write(`${widget.id} (${widget.file ?? ''}) [${sourceLabel(widget.source)}] — импорт: ${importsLabel} — ${status}`);
   }
   write(`версия таблицы общих модулей: ${SHARED_MODULE_TABLE_VERSION}`);
   return ExitCode.ok;

@@ -223,6 +223,7 @@ lint` предупреждает, если записанная схема ус�
 | Пайплайн | `stepcast.yml` или `.stepcast/pipelines/*.yml` |
 | Работы | `.stepcast/jobs/*.yml` |
 | Переиспользуемые шаги | `.stepcast/steps/<имя>/step.yml` |
+| Пакеты | `.stepcast/packages/<имя>/package.yml` и `~/.stepcast/packages/<имя>/` — [docs/packages.md](docs/packages.md) |
 | Конфиг | `~/.stepcast/config.yml` и `.stepcast/config.yml` |
 | Прогоны | `~/.stepcast/runs/<project>/<run>/` |
 | Переменные | `STEPCAST_*` |

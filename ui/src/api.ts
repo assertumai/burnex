@@ -421,7 +421,11 @@ export interface PipelineJobView {
 export interface PipelineView {
   readonly projectKey: string;
   readonly projectPath: string;
+  /** Путь файла относительно корня проекта либо адрес `<пакет>:<имя>` у пайплайна пакета — им же он запускается. */
   readonly file: string;
+  /** Пакет, давший пайплайн, и его слой — только у пайплайна пакета. */
+  readonly package?: string;
+  readonly packageLayer?: 'project' | 'home';
   readonly name: string;
   readonly concurrency?: number;
   readonly failFast?: boolean;
@@ -472,6 +476,14 @@ export interface WidgetView {
   readonly id: string;
   /** Версия — отпечаток файла (`mtime` и размер); идёт в адрес модуля, чтобы отличить новую редакцию от прежней. */
   readonly version: string;
+  /**
+   * Где лежит виджет: свободный каталог проекта либо пакет проекта или home
+   * (`packages-directory-layer`). Витрина его не читает — поле для людей и
+   * скриптов, читающих `/api/widgets`, поэтому необязательное на стороне браузера.
+   */
+  readonly source?: { readonly layer: 'project' | 'home'; readonly package?: string };
+  /** Конфликт `id` в слое пакетов: виджет не отдаётся, причина названа здесь. */
+  readonly error?: string;
   readonly deprecated?: WidgetDeprecation;
 }
 

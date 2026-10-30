@@ -585,12 +585,14 @@ claimed_by: run:2026-10-29T23-55-04Z-6543a7
 
 ## packages-directory-layer
 
-status: todo
+status: done
 title: Пакет — каталог с пайплайнами, шагами, плагинами, виджетами и дашбордами
 why: Плагины, виджеты, дашборды и маршруты лежат порознь в `.stepcast/`; поделиться практикой (например, петлёй саморазвития) одним каталогом нельзя.
 done_when: `<project>/.stepcast/packages/<name>/` и `~/.stepcast/packages/<name>/` с манифестом `package.yml` строгой схемы (`version`, `kind`, `name`, `description`, `package_version`, `needs`); пакет приносит `pipelines/` (`stepcast run <package>:<name>`), `steps/`, `plugins/`, `widgets/`, `dashboards/`, `routes.yml`; порядок поиска проект → пакеты проекта → home → пакеты home → встроенное, дубликат в слое — ошибка; сломанный пакет падает отдельно; `stepcast package list|new`; пример в `examples/packages/hello/`; тесты.
 group: packages
 source: docs/burnex-after-stepcast.md, раздел 6 «Пакеты»
+started_at: 2026-10-30T00:36:39.771Z
+claimed_by: run:2026-10-30T00-36-38Z-fdd3b9
 
 ## container-step-isolation
 

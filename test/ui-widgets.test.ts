@@ -162,7 +162,7 @@ describe('ui-widgets: устаревание по голым импортам', 
       versions.map((widget) => widget.id),
       ['gauge'],
     );
-    assert.deepEqual(Object.keys(versions[0] as object).sort(), ['id', 'version']);
+    assert.deepEqual(Object.keys(versions[0] as object).sort(), ['id', 'source', 'version']);
     // Те же версии, что и у полного состава: дешёвая половина не расходится с ним.
     assert.deepEqual(
       versions.map((widget) => widget.version),
@@ -442,5 +442,101 @@ describe('ui-widgets: отказ подъёма компилятора', () => {
 
     assert.equal(loads, 1, 'отказавший подъём не пробуется заново на каждый запрос');
     assert.equal(lines.length, 1);
+  });
+});
+
+/** Пакет с манифестом и виджетами: `<корень>/.stepcast/packages/<имя>/widgets/<id>.tsx`. */
+function writePackageWidgets(root: string, name: string, ids: readonly string[], manifest?: string): string {
+  const dir = join(root, '.stepcast', 'packages', name);
+  mkdirSync(join(dir, 'widgets'), { recursive: true });
+  writeFileSync(
+    join(dir, 'package.yml'),
+    manifest ?? `version: 1\nkind: package\nname: ${name}\ndescription: Пример\npackage_version: 0.1.0\n`,
+  );
+  for (const id of ids) writeFileSync(join(dir, 'widgets', `${id}.tsx`), HOOK_WIDGET);
+  return dir;
+}
+
+describe('ui-widgets: виджеты пакетов (packages-directory-layer)', () => {
+  it('виджет пакета проекта перечислен и разрешается; источник назван', () => {
+    const { projectRoot, home } = makeJournalBed();
+    const dir = writePackageWidgets(projectRoot, 'hello', ['clock']);
+
+    assert.deepEqual(listProjectWidgetIds(projectRoot, { home }), ['clock']);
+    assert.equal(resolveWidgetFile(projectRoot, 'clock', { home }), realpathSync(join(dir, 'widgets', 'clock.tsx')));
+    const widget = buildProjectWidgets(projectRoot, { home })[0];
+    assert.deepEqual(widget?.source, { layer: 'project', package: 'hello' });
+    assert.equal(widget?.error, undefined);
+  });
+
+  it('виджет пакета home находится, когда выше ничего нет; свободный home виджеты не читаются', () => {
+    const { projectRoot, home } = makeJournalBed();
+    writePackageWidgets(home, 'tools', ['gauge']);
+    mkdirSync(join(home, '.stepcast', 'widgets'), { recursive: true });
+    writeFileSync(join(home, '.stepcast', 'widgets', 'ignored.tsx'), HOOK_WIDGET);
+
+    assert.deepEqual(listProjectWidgetIds(projectRoot, { home }), ['gauge']);
+    assert.deepEqual(buildProjectWidgets(projectRoot, { home })[0]?.source, { layer: 'home', package: 'tools' });
+  });
+
+  it('порядок: свободный проект → пакет проекта → пакет home', () => {
+    const { projectRoot, home } = makeJournalBed();
+    const homeDir = writePackageWidgets(home, 'tools', ['clock']);
+    const projectPackageDir = writePackageWidgets(projectRoot, 'hello', ['clock']);
+    assert.equal(
+      resolveWidgetFile(projectRoot, 'clock', { home }),
+      realpathSync(join(projectPackageDir, 'widgets', 'clock.tsx')),
+      'пакет проекта выше пакета home, конфликта между слоями нет',
+    );
+    assert.notEqual(resolveWidgetFile(projectRoot, 'clock', { home }), realpathSync(join(homeDir, 'widgets', 'clock.tsx')));
+
+    const free = join(widgetsDir(projectRoot), 'clock.tsx');
+    writeFileSync(free, HOOK_WIDGET);
+    assert.equal(resolveWidgetFile(projectRoot, 'clock', { home }), realpathSync(free));
+    assert.deepEqual(buildProjectWidgets(projectRoot, { home })[0]?.source, { layer: 'project' });
+  });
+
+  it('конфликт id в слое пакетов — запись с ошибкой, файл не отдаётся, прочие виджеты работают', () => {
+    const { projectRoot, home } = makeJournalBed();
+    writePackageWidgets(projectRoot, 'a', ['clock', 'only-a']);
+    writePackageWidgets(projectRoot, 'b', ['clock']);
+    writePackageWidgets(home, 'tools', ['clock']);
+
+    assert.equal(resolveWidgetFile(projectRoot, 'clock', { home }), undefined, 'нижний слой не подставляется');
+    assert.notEqual(resolveWidgetFile(projectRoot, 'only-a', { home }), undefined);
+
+    const views = buildProjectWidgets(projectRoot, { home });
+    const clock = views.find((widget) => widget.id === 'clock');
+    assert.match(clock?.error ?? '', /a и b/);
+    assert.equal(views.find((widget) => widget.id === 'only-a')?.error, undefined);
+  });
+
+  it('пакет проекта затеняет пакет home целиком, сломанный пакет виджетов не даёт', () => {
+    const { projectRoot, home } = makeJournalBed();
+    writePackageWidgets(projectRoot, 'hello', ['mine']);
+    writePackageWidgets(home, 'hello', ['theirs']);
+    writePackageWidgets(projectRoot, 'broken', ['ghost'], 'not: [valid');
+
+    assert.deepEqual(listProjectWidgetIds(projectRoot, { home }), ['mine']);
+  });
+
+  it('символическая ссылка из пакета наружу отклонена проверкой реального пути', () => {
+    const { projectRoot, home } = makeJournalBed();
+    const dir = writePackageWidgets(projectRoot, 'hello', []);
+    const outside = tempDir('outside-');
+    const secret = join(outside, 'secret.tsx');
+    writeFileSync(secret, 'export default 1;\n');
+    symlinkSync(secret, join(dir, 'widgets', 'escape.tsx'));
+
+    assert.equal(resolveWidgetFile(projectRoot, 'escape', { home }), undefined);
+  });
+
+  it('обзор по корню прогонов несёт виджеты пакетов с источником', () => {
+    const { runsRoot, projectRoot, home } = makeJournalBed();
+    seedRun(runsRoot, projectRoot, { runId: 'a' });
+    writePackageWidgets(projectRoot, 'hello', ['clock']);
+
+    const overview = buildWidgets(runsRoot, { home });
+    assert.deepEqual(overview.projects[0]?.widgets[0]?.source, { layer: 'project', package: 'hello' });
   });
 });

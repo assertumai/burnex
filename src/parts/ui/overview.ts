@@ -207,7 +207,9 @@ function readRun(
   const { manifest, problem: manifestProblem } = readManifestSoft(paths);
   if (manifest !== undefined) {
     pipeline = manifest.pipeline;
-    pipelineFile = pipelineFileView(projectPath, manifest.pipeline_file);
+    // Прогон по адресу пакета называется адресом: карточка пайплайна пакета на
+    // экране Pipelines подписана им же, и путь файла в пакете home к ней не привёл бы.
+    pipelineFile = manifest.pipeline_address ?? pipelineFileView(projectPath, manifest.pipeline_file);
     startedAt = manifest.started_at;
     finishedAt = manifest.finished_at;
     status = manifest.status;

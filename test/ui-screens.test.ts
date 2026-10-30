@@ -335,7 +335,7 @@ describe('ui-screens: строка каркаса снята патчем', () =
     // `TypeError` мимо всякого разбора отказа и уронило бы демон.
     const rows = ['ui-shell', 'screen-runs', 'screen-run', 'screen-pipelines', 'screen-widgets',
       'screen-backlog', 'screen-scrum', 'screen-usage', 'screen-cleanup', 'screen-agents', 'screen-settings', 'screen-routes',
-      'screen-decisions', 'screen-proposals', 'ui-dashboards', 'ui-run-launch'];
+      'screen-decisions', 'screen-proposals', 'ui-dashboards', 'ui-packages', 'ui-run-launch'];
     writePatch(
       home,
       `version: 1\nkind: plugins-patch\nplugins:\n${rows

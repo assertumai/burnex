@@ -1,7 +1,8 @@
 import { existsSync } from 'node:fs';
-import { relative } from 'node:path';
+import { homedir } from 'node:os';
+import { join, relative } from 'node:path';
 
-import { listPipelineFiles } from '../pipeline/domain/project/pipelines.js';
+import { listPipelineEntries, type PipelineEntry } from '../pipeline/domain/project/pipelines.js';
 import { listProjects } from '../pipeline/run/journal/reader.js';
 import { expandPipeline } from '../pipeline/document/expand.js';
 import { displayInputs } from '../pipeline/document/displayInputs.js';
@@ -146,8 +147,15 @@ export interface PipelineJobView {
 export interface PipelineView {
   readonly projectKey: string;
   readonly projectPath: string;
-  /** Путь файла относительно корня проекта: он же адрес для `stepcast run`. */
+  /**
+   * Путь файла относительно корня проекта: он же адрес для `stepcast run`. У
+   * пайплайна пакета — адрес `<пакет>:<имя>` (`packages-directory-layer`): путь
+   * пакета home лежит вне проекта, и запуск путём отказал бы как «путь наружу».
+   */
   readonly file: string;
+  /** Пакет, давший пайплайн, и его слой — только у пайплайна пакета. */
+  readonly package?: string;
+  readonly packageLayer?: 'project' | 'home';
   readonly name: string;
   readonly concurrency?: number;
   readonly failFast?: boolean;
@@ -503,27 +511,41 @@ function errorView(
   projectPath: string,
   file: string,
   failure: Failure,
+  origin: PackageOrigin = {},
 ): PipelineView {
-  return { projectKey, projectPath, file, name: file, jobs: [], inputs: [], ...failure };
+  return { projectKey, projectPath, file, ...origin, name: file, jobs: [], inputs: [], ...failure };
+}
+
+/** Пакет и слой пайплайна пакета — то, что карточка несёт рядом с адресом. */
+type PackageOrigin = { readonly package?: string; readonly packageLayer?: 'project' | 'home' };
+
+function originOf(entry: PipelineEntry): PackageOrigin {
+  return entry.package === undefined || entry.packageLayer === undefined
+    ? {}
+    : { package: entry.package, packageLayer: entry.packageLayer };
 }
 
 function readPipeline(
   projectKey: string,
   projectPath: string,
-  absolute: string,
+  entry: PipelineEntry,
   config: Config,
   registry: Registry,
   files: Pick<ProjectOverrides, 'modelConfigFile' | 'effortConfigFile' | 'agentPolicyFile'>,
 ): PipelineView {
-  const file = relative(projectPath, absolute).replace(/\\/g, '/');
+  const absolute = entry.path;
+  const file = entry.address ?? relative(projectPath, absolute).replace(/\\/g, '/');
   try {
     const { pipeline, modelOrigins, effortOrigins, agentOrigins, unusedAgentEntries, agentEntryName } = expandPipeline({
       pipelinePath: absolute,
       config,
       registry,
       inputs: displayInputs(absolute),
+      // Пайплайн пакета работает с проектом, в котором его показывают: слои
+      // шагов и скриптов ищутся от корня проекта, а не от каталога пакета.
+      ...(entry.address === undefined ? {} : { projectRoot: projectPath }),
     });
-    return toView(projectKey, projectPath, file, pipeline, {
+    const view = toView(projectKey, projectPath, file, pipeline, {
       modelOrigins,
       modelConfigFile: files.modelConfigFile,
       effortOrigins,
@@ -535,8 +557,9 @@ function readPipeline(
       agentPolicyFile: files.agentPolicyFile,
       registry,
     });
+    return { ...view, ...originOf(entry) };
   } catch (error) {
-    return errorView(projectKey, projectPath, file, toFailure(error, projectPath));
+    return errorView(projectKey, projectPath, file, toFailure(error, projectPath), originOf(entry));
   }
 }
 
@@ -554,6 +577,9 @@ interface ProjectOverrides {
   readonly agentPolicyFile: string;
   readonly pipelineAgents: Config['pipelineAgents'];
   readonly stepAgents: Config['stepAgents'];
+  /** Глобальный конфиг, прочитанный от домашнего каталога вызова: рядом с ним лежат пакеты home. */
+  readonly globalConfigDir: Config['globalConfigDir'];
+  readonly globalConfigFile: Config['globalConfigFile'];
   /**
    * Реестр вкладов этого проекта: без него плагинный предикат отклоняется
    * разбором как неизвестный ключ, а умолчание плагинного бэкенда не доезжает
@@ -571,7 +597,9 @@ interface ProjectOverrides {
 function sourceEqual(a: TreeRow['source'], b: TreeRow['source']): boolean {
   if (a.kind !== b.kind) return false;
   if (a.kind === 'file') return b.kind === 'file' && a.path === b.path;
-  if (a.kind === 'directory') return b.kind === 'directory' && a.dir === b.dir && a.layer === b.layer;
+  if (a.kind === 'directory') {
+    return b.kind === 'directory' && a.dir === b.dir && a.layer === b.layer && a.package === b.package;
+  }
   return true;
 }
 
@@ -792,6 +820,8 @@ async function projectSection(
     effortConfigFile: effortSource === undefined ? undefined : describeSource(effortSource),
     agentPolicy: resolved.config.agentPolicy,
     agentPolicyFile: describeSource(resolved.provenance.get('agent_policy') ?? { kind: 'builtin' }),
+    globalConfigDir: resolved.config.globalConfigDir,
+    globalConfigFile: resolved.config.globalConfigFile,
     pipelineAgents: resolved.config.pipelineAgents,
     stepAgents: resolved.config.stepAgents,
     registry,
@@ -825,8 +855,10 @@ export async function buildPipelines(
   for (const project of listProjects(runsRoot)) {
     // Проект, чей путь неизвестен, обходить негде: в указателе его нет.
     if (project.path === undefined || !existsSync(project.path)) continue;
-    const files = listPipelineFiles(project.path);
-    if (files.length === 0) continue;
+    const entries = listPipelineEntries(project.path, {
+      globalConfigDir: join(options.home ?? homedir(), '.stepcast'),
+    });
+    if (entries.length === 0) continue;
 
     // Нечитаемая конфигурация и отказ загрузки плагина показываются одной
     // веткой: с объяснением. Молча раскрыть проект чужой конфигурацией или
@@ -848,6 +880,11 @@ export async function buildPipelines(
         agentPolicy: overrides.agentPolicy,
         pipelineAgents: overrides.pipelineAgents,
         stepAgents: overrides.stepAgents,
+        // Глобальный конфиг проекта — тот, что прочитан от `options.home`: от него
+        // `expandPipeline` строит слой пакетов home, и он обязан совпасть с
+        // каталогом, из которого перечень выше взял пайплайны пакетов home.
+        globalConfigDir: overrides.globalConfigDir,
+        globalConfigFile: overrides.globalConfigFile,
       };
       registry = overrides.registry;
       modelConfigFile = overrides.modelConfigFile;
@@ -857,17 +894,18 @@ export async function buildPipelines(
       failure = toFailure(error, project.path);
     }
 
-    for (const file of files) {
+    for (const entry of entries) {
       pipelines.push(
         failure !== undefined || forProject === undefined || registry === undefined
           ? errorView(
               project.key,
               project.path,
-              relative(project.path, file).replace(/\\/g, '/'),
+              entry.address ?? relative(project.path, entry.path).replace(/\\/g, '/'),
               failure ?? { error: 'Project configuration cannot be read' },
+              originOf(entry),
             )
           : readPipeline(
-              project.key, project.path, file, forProject, registry,
+              project.key, project.path, entry, forProject, registry,
               { modelConfigFile, effortConfigFile, agentPolicyFile },
             ),
       );

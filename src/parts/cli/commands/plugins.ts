@@ -16,7 +16,7 @@ import type { Kernel } from '../../../kernel/kernel.js';
 import { rowFailureError, type RowOutcome } from '../../../kernel/load.js';
 import type { PipelineCommandEnv } from '../../pipeline/contract.js';
 import { kernelFromRegistry } from '../../../kernel/registry.js';
-import type { TreeRow, TreeRowSource } from '../../../kernel/tree/tree.js';
+import { describeOrigin, type TreeRow, type TreeRowSource } from '../../../kernel/tree/tree.js';
 import { inspectPluginTree, type DefaultLoadOptions } from '../../load.js';
 import { daemonPaths, runningDaemon } from '../../ui/daemon/daemon.js';
 import type { CliIo, ParsedArgs } from '../../../kernel/cli/args.js';
@@ -46,7 +46,7 @@ function describeLayer(layer: TreeRowSource): string {
     case 'file':
       return layer.path;
     case 'directory':
-      return `${layer.dir} (${layer.layer === 'project' ? 'проект' : 'дом'})`;
+      return `${layer.dir} (${describeOrigin(layer)})`;
   }
 }
 

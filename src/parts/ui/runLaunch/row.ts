@@ -1,9 +1,10 @@
-import { relative } from 'node:path';
+import { homedir } from 'node:os';
+import { join, relative } from 'node:path';
 import { z } from 'zod';
 
 import { listProjects } from '../../pipeline/run/journal/reader.js';
 import { packagedPipelineNames, STEPCAST_PIPELINE_PREFIX } from '../../pipeline/domain/package-schema.js';
-import { listPipelineFiles } from '../../pipeline/domain/project/pipelines.js';
+import { listPipelineEntries } from '../../pipeline/domain/project/pipelines.js';
 import { readBody, sendJson } from '../daemon/http.js';
 import { screenRow, type ApiHandler } from '../screens/registry.js';
 
@@ -105,7 +106,12 @@ const handlePost: ApiHandler = async (req, res, env) => {
       return;
     }
   } else {
-    const files = listPipelineFiles(project.path).map((file) => relative(project.path as string, file).replace(/\\/g, '/'));
+    // Файлы проекта называются относительным путём, пайплайны пакетов — адресом
+    // `<пакет>:<имя>`: путь пакета home лежит вне проекта, и запуск им отказал
+    // бы как «путь наружу». Произвольный путь вне перечня по-прежнему отказывает.
+    const files = listPipelineEntries(project.path, {
+      globalConfigDir: join(env.home ?? homedir(), '.stepcast'),
+    }).map((entry) => entry.address ?? relative(project.path as string, entry.path).replace(/\\/g, '/'));
     if (!files.includes(parsed.data.pipeline)) {
       sendJson(res, 400, {
         error: `Pipeline ${parsed.data.pipeline} not found among the files of project ${parsed.data.project}`,

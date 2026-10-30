@@ -59,6 +59,8 @@ import {
 import { toSecretDeclarations } from '../secrets/declaration.js';
 import { resolveParams, type ParamValue } from './params.js';
 import { resolveUsesStep } from './steps.js';
+import { findInLayers, packageIndexFor } from './layers.js';
+import { buildPackageIndex, type PackageIndex } from '../../packages/index.js';
 import {
   buildDocumentSchemas,
   isDefaultNativePredicates,
@@ -283,6 +285,12 @@ export interface ScriptRoots {
   readonly home: string;
   /** Встроенный каталог пакета целиком — без `.stepcast/scripts/` внутри него. */
   readonly builtin: string;
+  /**
+   * Указатель пакетов, построенный один раз на раскрытие (`expandPipeline`).
+   * Не задан — слои пакетов строятся от `project` и `home` по месту вызова:
+   * так поступают тесты, подставляющие корни напрямую.
+   */
+  readonly packages?: PackageIndex;
 }
 
 export interface ExpandOptions {
@@ -1064,25 +1072,29 @@ function resolveScriptFile(
   value: string,
   declaringFile: string,
   roots: ScriptRoots,
-): { readonly absolutePath: string; readonly layer: ScriptLayer } | { readonly searched: readonly string[] } {
+):
+  | { readonly absolutePath: string; readonly layer: ScriptLayer; readonly package?: string }
+  | { readonly searched: readonly string[]; readonly broken?: readonly string[] }
+  | { readonly conflict: readonly [string, string] } {
   if (isAbsolute(value) || value.startsWith('./') || value.startsWith('../')) {
     const absolutePath = resolveDeclaredPath(value, declaringFile);
     if (isFile(absolutePath)) return { absolutePath, layer: 'explicit' };
     return { searched: [dirname(absolutePath)] };
   }
 
-  const layers: ReadonlyArray<readonly [ScriptLayer, string]> = [
-    ['project', join(roots.project, '.stepcast', 'scripts')],
-    ['home', join(roots.home, '.stepcast', 'scripts')],
-    ['builtin', roots.builtin],
-  ];
-  const searched: string[] = [];
-  for (const [layer, dir] of layers) {
-    searched.push(dir);
-    const candidate = join(dir, value);
-    if (isFile(candidate)) return { absolutePath: candidate, layer };
+  // Слои — из указателя пакетов: свободный проект, пакеты проекта, свободный
+  // home, пакеты home, встроенное. Конфликт двух пакетов слоя отказывает и не
+  // проваливается вниз.
+  const found = findInLayers('scripts', value, roots, isFile);
+  if ('hit' in found) {
+    return {
+      absolutePath: found.hit.path,
+      layer: found.hit.layer,
+      ...(found.hit.package === undefined ? {} : { package: found.hit.package }),
+    };
   }
-  return { searched };
+  if ('conflict' in found) return found;
+  return { searched: found.searched, broken: found.broken };
 }
 
 /**
@@ -1185,6 +1197,11 @@ export function resolveWrapper(runner: RunnerConfig, roots: ScriptRoots): string
   }
 
   const located = resolveScriptFile(value, declaringFile, roots);
+  if ('conflict' in located) {
+    throw new StepcastError(`Обёртка ${value} есть в двух пакетах одного слоя — ${located.conflict.join(' и ')}`, {
+      hint: 'Переименуйте один из файлов или уберите один из пакетов',
+    });
+  }
   if ('searched' in located) {
     throw new StepcastError(`Обёртка ${value} не найдена`, {
       hint: `Искали: ${located.searched.join(', ')}`,
@@ -1218,8 +1235,17 @@ function resolveScript(
   }
 
   const located = resolveScriptFile(path, declaringFile, roots);
+  if ('conflict' in located) {
+    return { unresolved: { reason: 'resource_conflict', resource: 'script', name: path, packages: located.conflict } };
+  }
   if ('searched' in located) {
-    return { unresolved: { reason: 'file_not_found', searched: located.searched } };
+    return {
+      unresolved: {
+        reason: 'file_not_found',
+        searched: located.searched,
+        ...(located.broken === undefined || located.broken.length === 0 ? {} : { broken: located.broken }),
+      },
+    };
   }
 
   const content = readFileSync(located.absolutePath, 'utf8');
@@ -1234,6 +1260,7 @@ function resolveScript(
     resolved: {
       absolutePath: located.absolutePath,
       layer: located.layer,
+      ...(located.package === undefined ? {} : { package: located.package }),
       runner: runner.name,
       argv: [
         ...runner.command,
@@ -1244,6 +1271,17 @@ function resolveScript(
       fingerprint: fingerprintContent(content),
     },
   };
+}
+
+/** Хвост промаха: сломанные пакеты названы с причиной — они могли принести искомое. */
+export function describeBroken(broken: readonly string[] | undefined): string {
+  return broken === undefined || broken.length === 0 ? '' : `. Сломанные пакеты: ${broken.join('; ')}`;
+}
+
+/** Причина конфликта двух пакетов одного слоя — общая для сообщения прогона и диагностики линта. */
+export function describeResourceConflict(conflict: Extract<ScriptUnresolved, { reason: 'resource_conflict' }>): string {
+  const what = conflict.resource === 'step' ? 'Переиспользуемый шаг' : 'Скрипт';
+  return `${what} ${conflict.name} приносят два пакета одного слоя — ${conflict.packages[0]} и ${conflict.packages[1]}; ни один не выбран, нижние слои не просматривались`;
 }
 
 /**
@@ -1263,7 +1301,9 @@ export function describeScriptUnresolved(
 ): string {
   switch (unresolved.reason) {
     case 'file_not_found':
-      return `Файл скрипта не найден ни в одном слое. Искали: ${unresolved.searched.join(', ')}`;
+      return `Файл скрипта не найден ни в одном слое. Искали: ${unresolved.searched.join(', ')}${describeBroken(unresolved.broken)}`;
+    case 'resource_conflict':
+      return describeResourceConflict(unresolved);
     case 'unknown_runner':
       return uses === undefined
         ? `Неизвестный раннер ${unresolved.runner}. Известны: ${unresolved.known.join(', ')}`
@@ -1273,7 +1313,7 @@ export function describeScriptUnresolved(
         ? `Раннер не определяется ни расширением, ни shebang. Известные расширения: ${unresolved.extensions.join(', ')}`
         : `Шаг ${uses.name}: раннер файла, объявленного манифестом ${uses.manifestPath}, не определяется ни расширением, ни shebang. Известные расширения: ${unresolved.extensions.join(', ')}`;
     case 'step_not_found':
-      return `Переиспользуемый шаг ${unresolved.name} не найден ни в одном слое. Искали: ${unresolved.searched.join(', ')}`;
+      return `Переиспользуемый шаг ${unresolved.name} не найден ни в одном слое. Искали: ${unresolved.searched.join(', ')}${describeBroken(unresolved.broken)}`;
     case 'manifest_invalid':
       return `Манифест шага ${unresolved.name} (${unresolved.manifestPath}) некорректен: ${unresolved.detail}`;
     case 'name_mismatch':
@@ -2087,11 +2127,22 @@ export function expandPipeline(options: ExpandOptions): ExpandedPipeline {
   const { config } = options;
   const pipelinePath = resolvePath(options.pipelinePath);
   const registry = options.registry ?? builtinRegistry();
-  const scriptRoots: ScriptRoots = options.scriptRoots ?? {
+  const baseScriptRoots: ScriptRoots = options.scriptRoots ?? {
     project: findProjectRoot(options.projectRoot ?? dirname(pipelinePath)),
     home: homedir(),
     builtin: join(findPackageRoot(fileURLToPath(new URL('.', import.meta.url))), 'src', 'builtin', 'scripts'),
   };
+  // Указатель пакетов строится один раз на раскрытие: слои разделяют шаги
+  // `uses` и скрипты `script`, а корни у них одни. Пакеты home лежат рядом с
+  // глобальным конфигом (`config.globalConfigDir`), как у `resolvePipelineTarget`
+  // и дерева плагинов: иначе при подставном пути конфига пайплайн пакета нашёлся
+  // бы в одном `packages/`, а его `uses` искался бы в другом. Корни, заданные
+  // явно, задают и указатель — так тесты держат слои на своих каталогах.
+  const packages: PackageIndex =
+    options.scriptRoots === undefined
+      ? buildPackageIndex({ projectRoot: baseScriptRoots.project, globalPath: join(config.globalConfigDir, 'config.yml') })
+      : packageIndexFor(baseScriptRoots);
+  const scriptRoots: ScriptRoots = { ...baseScriptRoots, packages };
   // `project` и `home` — те же корни, что и у слоёв `script`: оба каталога
   // ищутся от одного и того же проекта и домашнего каталога, различается
   // только имя подкаталога (`steps` вместо `scripts`) и встроенный слой.
@@ -2099,6 +2150,7 @@ export function expandPipeline(options: ExpandOptions): ExpandedPipeline {
     project: scriptRoots.project,
     home: scriptRoots.home,
     builtin: join(findPackageRoot(fileURLToPath(new URL('.', import.meta.url))), 'src', 'builtin', 'steps'),
+    packages,
   };
   // Схемы документа зависят от действующего состава: ключ предиката и ключ
   // плагинного вида шага — закрытые объединения, и без их ветвей предикат или

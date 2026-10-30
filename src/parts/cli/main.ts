@@ -1,4 +1,6 @@
-import { resolveConfig } from '../pipeline/config/resolve.js';
+import { dirname } from 'node:path';
+
+import { globalConfigPath, resolveConfig, type ResolveOptions } from '../pipeline/config/resolve.js';
 import { ExitCode, isStepcastError, StepcastError, type ExitCodeValue } from '../../kernel/errors.js';
 import { parseArgs, type CliIo, type CommandSpec } from '../../kernel/cli/args.js';
 import type { RowOutcome } from '../../kernel/load.js';
@@ -7,6 +9,7 @@ import { BUILTIN_USE_PREFIX } from '../../kernel/tree/tree.js';
 import { resolveWithPlugins } from '../resolve.js';
 import { reportError } from '../../kernel/cli/output.js';
 import { row as pluginsRow, runPluginsCommandAfterLoadFailure } from './commands/plugins.js';
+import { row as packageRow, runPackageCommand } from '../packages/commands/package.js';
 import type { CommandRow } from '../../kernel/cli/commandRow.js';
 import { COMMAND_ROW_IDS, COMMAND_ROWS } from './rows.js';
 
@@ -108,17 +111,29 @@ export async function run(argv: readonly string[], io: CliIo): Promise<ExitCodeV
     // (`src/parts/ui/daemon/kernel.ts`): дерево команд CLI = перечень движка
     // (`src/parts/rows.ts`) плюс перечень команд, и ни строки витрины, ни её
     // команд в нём нет.
+    const resolveOptions: ResolveOptions = { cwd: io.cwd, builtinRows: COMMAND_ROW_IDS, independentRowIds: INDEPENDENT_COMMAND_ROW_IDS };
     let resolution: Awaited<ReturnType<typeof resolveWithPlugins>>;
     try {
       resolution = await resolveWithPlugins(
-        { cwd: io.cwd, builtinRows: COMMAND_ROW_IDS, independentRowIds: INDEPENDENT_COMMAND_ROW_IDS },
+        resolveOptions,
         { builtinRows: COMMAND_ROWS },
       );
     } catch (error) {
       // Отказ загрузки одной из строк не заслоняет команду осмотра дерева
       // (design.md, Решение 8): для неё дерево печатается всё равно, а
-      // строка-виновница несёт причину. Для прочих команд поведение прежнее —
-      // отказ прекращает команду до диспетчеризации.
+      // строка-виновница несёт причину. Не заслоняет он и перечень пакетов
+      // (`packages-directory-layer`, Решение 9): без него сломанный пакет не
+      // увидеть, а реестр бэкендов `needs` сверяется лишь когда состав собран.
+      // Для прочих команд поведение прежнее — отказ прекращает команду до
+      // диспетчеризации.
+      if (commandName === 'package' && isStepcastError(error)) {
+        // Пакеты home — рядом с тем же глобальным конфигом, что читало
+        // неудавшееся разрешение, а не рядом с собственным умолчанием команды.
+        return runPackageCommand(parseArgs(argv, { package: packageRow.command.spec }), io, {
+          cwd: io.cwd,
+          globalConfigDir: dirname(globalConfigPath(resolveOptions)),
+        });
+      }
       if (commandName !== 'plugins' || !isStepcastError(error)) throw error;
       // Повторный разбор конфигурации без загрузки: если он тоже кинет, это
       // отказ разбора (а не загрузки), и команда обязана прекратиться как

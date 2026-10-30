@@ -1,0 +1,14 @@
+version: 1
+kind: pipeline
+name: hello-greet
+
+# Запуск: stepcast run hello:greet — адрес <пакет>:<имя>. Шаг `greet` лежит в
+# этом же пакете, но пайплайн называет его голым именем: порядок поиска найдёт
+# его в пакете, пока свободный каталог .stepcast/steps/ проекта не перекрыл.
+jobs:
+  greet:
+    steps:
+      - id: say
+        uses: greet
+        with:
+          name: мир

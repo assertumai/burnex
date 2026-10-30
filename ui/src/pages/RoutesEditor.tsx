@@ -39,6 +39,8 @@ import './routes.css';
 
 interface RouteFieldSource {
   readonly layer: 'builtin' | 'home' | 'project';
+  /** Пакет, чей `routes.yml` дал поле (`packages-directory-layer`); `layer` — слой самого пакета. */
+  readonly package?: string;
   readonly file: string;
 }
 
@@ -70,6 +72,8 @@ interface DisabledRouteRow {
 interface RoutesResponse {
   readonly routes: readonly RouteRow[];
   readonly disabled?: readonly DisabledRouteRow[];
+  /** Битый `routes.yml` пакета или `id` в двух пакетах слоя: исключено только это, остальная таблица действует. */
+  readonly packageFailures?: readonly { readonly packages: readonly string[]; readonly id?: string; readonly message: string }[];
   readonly buildError?: string;
 }
 
@@ -278,6 +282,7 @@ export function RoutesEditor(): JSX.Element {
 
   const { routes, buildError } = state.data;
   const disabled = state.data.disabled ?? [];
+  const packageFailures = state.data.packageFailures ?? [];
   const editing = form.id !== '';
 
   return (
@@ -298,6 +303,11 @@ export function RoutesEditor(): JSX.Element {
           Route table was not rebuilt: {buildError}
         </Alert>
       )}
+      {packageFailures.map((failure) => (
+        <Alert key={`${failure.packages.join('+')}:${failure.id ?? ''}`} variant="destructive" className="routes-listing-error">
+          {failure.id === undefined ? `Package ${failure.packages.join(', ')}: routes excluded` : `Route ${failure.id} excluded`}: {failure.message}
+        </Alert>
+      ))}
       {routes.length === 0 && disabled.length === 0 ? (
         <EmptyState
           className="routes-empty"

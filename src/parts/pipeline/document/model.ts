@@ -259,6 +259,8 @@ export type ScriptLayer = 'project' | 'home' | 'builtin' | 'explicit';
 export interface ResolvedScript {
   readonly absolutePath: string;
   readonly layer: ScriptLayer;
+  /** Пакет, давший скрипт; `layer` при этом — слой самого пакета (`project`/`home`). */
+  readonly package?: string;
   readonly runner: string;
   /** argv целиком: команда раннера, затем путь скрипта, затем `args` шага. */
   readonly argv: readonly string[];
@@ -283,10 +285,30 @@ export interface ResolvedScript {
  * обязан назвать все промахи документа за один проход.
  */
 export type ScriptUnresolved =
-  | { readonly reason: 'file_not_found'; readonly searched: readonly string[] }
+  | {
+      readonly reason: 'file_not_found';
+      readonly searched: readonly string[];
+      /** Сломанные пакеты, которые могли бы принести файл: промах не должен выглядеть обычным «нет такого». */
+      readonly broken?: readonly string[];
+    }
   | { readonly reason: 'unknown_runner'; readonly runner: string; readonly known: readonly string[] }
   | { readonly reason: 'runner_undetermined'; readonly extensions: readonly string[] }
-  | { readonly reason: 'step_not_found'; readonly name: string; readonly searched: readonly string[] }
+  | {
+      readonly reason: 'step_not_found';
+      readonly name: string;
+      readonly searched: readonly string[];
+      readonly broken?: readonly string[];
+    }
+  /**
+   * Два пакета одного слоя приносят шаг или скрипт одного имени
+   * (`packages-directory-layer`): отказ называет оба и не проваливается в нижний слой.
+   */
+  | {
+      readonly reason: 'resource_conflict';
+      readonly resource: 'step' | 'script';
+      readonly name: string;
+      readonly packages: readonly [string, string];
+    }
   | {
       readonly reason: 'manifest_invalid';
       readonly name: string;
@@ -324,6 +346,8 @@ export type StepLayer = Exclude<ScriptLayer, 'explicit'>;
 export interface UsesOrigin {
   readonly name: string;
   readonly layer?: StepLayer;
+  /** Пакет, давший шаг; `layer` при этом — слой самого пакета (`project`/`home`). */
+  readonly package?: string;
   readonly manifestPath?: string;
   /** Короткий sha256 содержимого манифеста на момент раскрытия. */
   readonly manifestFingerprint?: string;

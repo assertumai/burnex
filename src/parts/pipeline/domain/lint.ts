@@ -8,7 +8,7 @@ import { effectivePermissions } from '../backend/permissions.js';
 import { parseExpression, references } from './expr/parse.js';
 import { buildGraph } from './graph.js';
 import { isStepcastError } from '../../../kernel/errors.js';
-import { describeScriptUnresolved } from '../document/expand.js';
+import { describeBroken, describeResourceConflict, describeScriptUnresolved } from '../document/expand.js';
 import { buildPublishedSchemas, pluginPredicateEntries, pluginStepKindEntries } from '../document/published-schema.js';
 import { builtinRegistry } from '../../builtin.js';
 import { hasPredicateEvaluator, hasStepExecutor } from '../contract.js';
@@ -1817,7 +1817,18 @@ function checkScriptStep(
         message: `Файл скрипта шага ${job.id}/${step.id} не найден ни в одном слое`,
         file: job.source,
         at: `${at}.script`,
-        hint: `Искали: ${unresolved.searched.join(', ')}`,
+        hint: `Искали: ${unresolved.searched.join(', ')}${describeBroken(unresolved.broken)}`,
+      });
+      return;
+    }
+
+    case 'resource_conflict': {
+      push({
+        severity: 'error',
+        message: `Шаг ${job.id}/${step.id}: ${describeResourceConflict(unresolved)}`,
+        file: job.source,
+        at: unresolved.resource === 'step' ? `${at}.uses` : `${at}.script`,
+        hint: 'Переименуйте ресурс в одном из пакетов, уберите один из пакетов либо положите свою копию в свободный каталог .stepcast/',
       });
       return;
     }
@@ -1876,7 +1887,7 @@ function checkScriptStep(
         message: `Шаг ${job.id}/${step.id}: переиспользуемый шаг ${unresolved.name} не найден ни в одном слое`,
         file: job.source,
         at: `${at}.uses`,
-        hint: `Искали: ${unresolved.searched.join(', ')}`,
+        hint: `Искали: ${unresolved.searched.join(', ')}${describeBroken(unresolved.broken)}`,
       });
       return;
     }
@@ -1951,7 +1962,17 @@ function checkScriptPredicate(
       message: `Файл предиката script у ${label} не найден ни в одном слое`,
       file,
       at: `${at}.script`,
-      hint: `Искали: ${unresolved.searched.join(', ')}`,
+      hint: `Искали: ${unresolved.searched.join(', ')}${describeBroken(unresolved.broken)}`,
+    });
+    return;
+  }
+
+  if (unresolved.reason === 'resource_conflict') {
+    push({
+      severity: 'error',
+      message: `Предикат script у ${label}: ${describeResourceConflict(unresolved)}`,
+      file,
+      at: `${at}.script`,
     });
     return;
   }

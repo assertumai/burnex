@@ -94,6 +94,37 @@ describe('cli widgets: состав виджетов проекта', () => {
     ]);
   });
 
+  it('виджет пакета назван с источником, виджет в конфликте двух пакетов — с причиной, а не пропадает', () => {
+    const dir = project();
+    const home = tempDir('cli-widgets-home-');
+    const writePackageWidget = (name: string, id: string): void => {
+      const packageDir = join(dir, '.stepcast', 'packages', name);
+      mkdirSync(join(packageDir, 'widgets'), { recursive: true });
+      writeFileSync(
+        join(packageDir, 'package.yml'),
+        `version: 1\nkind: package\nname: ${name}\ndescription: Пример\npackage_version: 0.1.0\n`,
+      );
+      writeFileSync(join(packageDir, 'widgets', `${id}.tsx`), 'export default function W() { return null; }\n');
+    };
+    writePackageWidget('hello', 'clock');
+    writePackageWidget('a', 'gauge');
+    writePackageWidget('b', 'gauge');
+
+    const text = capture();
+    assert.equal(runWidgetsCommand({ command: 'widgets', positional: [], flags: {} }, text.write, dir, { home }), ExitCode.ok);
+    const printed = text.lines.join('\n');
+    assert.match(printed, /clock .*\[package hello \(project\)\]/);
+    assert.match(printed, /gauge .*ошибка: .*a and b/);
+
+    const json = capture();
+    runWidgetsCommand({ command: 'widgets', positional: [], flags: { json: true } }, json.write, dir, { home });
+    const parsed = JSON.parse(json.lines.join('\n')) as {
+      readonly widgets: readonly { readonly id: string; readonly source: unknown; readonly error?: string }[];
+    };
+    assert.deepEqual(parsed.widgets.find((widget) => widget.id === 'clock')?.source, { layer: 'project', package: 'hello' });
+    assert.match(parsed.widgets.find((widget) => widget.id === 'gauge')?.error ?? '', /a and b/);
+  });
+
   it('проект без каталога виджетов — пустой состав, код возврата 0', () => {
     const dir = project();
     const { lines, write } = capture();

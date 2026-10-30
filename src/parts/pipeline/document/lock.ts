@@ -111,6 +111,7 @@ function stepToPlain(step: Step): Record<string, unknown> {
             resolved: {
               absolute_path: step.resolved.absolutePath,
               layer: step.resolved.layer,
+              ...(step.resolved.package === undefined ? {} : { package: step.resolved.package }),
               runner: step.resolved.runner,
               argv: step.resolved.argv,
               fingerprint: step.resolved.fingerprint,
@@ -129,6 +130,7 @@ function stepToPlain(step: Step): Record<string, unknown> {
             uses: {
               name: step.uses.name,
               ...(step.uses.layer === undefined ? {} : { layer: step.uses.layer }),
+              ...(step.uses.package === undefined ? {} : { package: step.uses.package }),
               ...(step.uses.manifestPath === undefined ? {} : { manifest_path: step.uses.manifestPath }),
               ...(step.uses.manifestFingerprint === undefined
                 ? {}

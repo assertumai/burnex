@@ -4,6 +4,7 @@ import { Document, isMap, isSeq, parse as parseYaml, parseDocument, type Node, t
 import { z } from 'zod';
 
 import { StepcastError } from '../../kernel/errors.js';
+import { buildPackageIndex, lookupInPackages, resourceLayers, type PackageResourcePath } from '../packages/index.js';
 import { describeSchemaFailure } from '../../kernel/schema-failure.js';
 import { checkDashboardDocument, DashboardDocumentError, type DashboardDefinition } from './dashboards.js';
 import { isSafeSegment } from './routes.js';
@@ -129,7 +130,10 @@ function parseDashboardDocument(path: string): DashboardFileDocument {
 /** Действующий дашборд, названный файлом-источником (`ui-dashboards`, «Действующий дашборд называет файл»). */
 export interface DashboardEntry {
   readonly id: string;
+  /** Слой дашборда; у дашборда пакета — слой самого пакета. */
   readonly layer: DashboardLayerName;
+  /** Пакет, давший дашборд: он только читается, сохранение правки пишет копию в свободный слой проекта. */
+  readonly package?: string;
   readonly file: string;
   readonly document: DashboardDefinition;
 }
@@ -138,6 +142,7 @@ export interface DashboardEntry {
 export interface DashboardFailure {
   readonly id: string;
   readonly layer: DashboardLayerName;
+  readonly package?: string;
   readonly file: string;
   readonly reason: string;
   readonly at?: string;
@@ -166,7 +171,12 @@ function toDefinition(document: DashboardFileDocument): DashboardDefinition {
   };
 }
 
-function buildOneDashboard(id: string, layer: DashboardLayerName, path: string): DashboardEntry {
+function buildOneDashboard(
+  id: string,
+  layer: DashboardLayerName,
+  path: string,
+  packageName?: string,
+): DashboardEntry {
   const document = toDefinition(parseDashboardDocument(path));
   try {
     checkDashboardDocument(document);
@@ -179,7 +189,7 @@ function buildOneDashboard(id: string, layer: DashboardLayerName, path: string):
     }
     throw error;
   }
-  return { id, layer, file: path, document };
+  return { id, layer, ...(packageName === undefined ? {} : { package: packageName }), file: path, document };
 }
 
 export interface DashboardBuildOptions {
@@ -188,36 +198,79 @@ export interface DashboardBuildOptions {
   readonly projectRoot?: string;
 }
 
+/** Слой поиска дашборда: свободный каталог либо слой пакетов; порядок — порядок победы. */
+type DashboardSearchLayer =
+  | { readonly kind: 'free'; readonly layer: DashboardLayerName; readonly dir: string }
+  | { readonly kind: 'packages'; readonly layer: DashboardLayerName; readonly packages: readonly PackageResourcePath[] };
+
 /**
- * Собрать действующий состав дашбордов двух слоёв. Проектный файл с тем же
- * `<id>` заменяет домашний целиком — слияния по полям здесь нет (Решение 2).
- * Отказ одного дашборда не бросается наружу: он едет в `failures` рядом с
- * прочими собранными (`ui-daemon`, «Сломанный файл не отменяет остальные»).
+ * Слои дашбордов в порядке поиска: свободный проект, пакеты проекта, свободный
+ * home, пакеты home (`packages-directory-layer`, Решение 7). Пакеты home — в
+ * `<home>/.stepcast/packages`, как и свободные дашборды home.
+ */
+function dashboardSearchLayers(options: DashboardBuildOptions): readonly DashboardSearchLayer[] {
+  const homeStepcastDir = join(options.home, '.stepcast');
+  const index = buildPackageIndex({
+    ...(options.projectRoot === undefined ? {} : { projectRoot: options.projectRoot }),
+    globalPath: join(homeStepcastDir, 'config.yml'),
+  });
+  const layers: DashboardSearchLayer[] = [];
+  for (const layer of resourceLayers(index, 'dashboards', {
+    ...(options.projectRoot === undefined ? {} : { projectRoot: options.projectRoot }),
+    homeStepcastDir,
+  })) {
+    if (layer.source === 'project' || layer.source === 'home') {
+      layers.push({ kind: 'free', layer: layer.source, dir: layer.path });
+    } else if (layer.source === 'project-packages' || layer.source === 'home-packages') {
+      layers.push({
+        kind: 'packages',
+        layer: layer.source === 'project-packages' ? 'project' : 'home',
+        packages: layer.packages,
+      });
+    }
+  }
+  return layers;
+}
+
+/**
+ * Собрать действующий состав дашбордов: свободный проект, пакеты проекта,
+ * свободный home, пакеты home. Файл верхнего слоя с тем же `<id>` заменяет
+ * нижний целиком — слияния по полям здесь нет (Решение 2). Два пакета одного
+ * слоя с одним `<id>` — запись в `failures`, а не победа первого по алфавиту
+ * и не провал в нижний слой. Отказ одного дашборда не бросается наружу: он едет
+ * в `failures` рядом с прочими собранными (`ui-daemon`, «Сломанный файл не
+ * отменяет остальные»).
  */
 export function buildDashboards(options: DashboardBuildOptions): DashboardsBuildResult {
-  const homeDir = homeDashboardsDirPath(options.home);
-  const projectDir = options.projectRoot === undefined ? undefined : projectDashboardsDirPath(options.projectRoot);
+  const layers = dashboardSearchLayers(options);
 
-  const homeIds = listDashboardIds(homeDir);
-  const projectIds = projectDir === undefined ? [] : listDashboardIds(projectDir);
-  const allIds = [...new Set([...homeIds, ...projectIds])].sort();
+  const allIds = new Set<string>();
+  for (const layer of layers) {
+    if (layer.kind === 'free') for (const id of listDashboardIds(layer.dir)) allIds.add(id);
+    else for (const entry of layer.packages) for (const id of listDashboardIds(entry.path)) allIds.add(id);
+  }
 
   const dashboards: DashboardEntry[] = [];
   const failures: DashboardFailure[] = [];
 
-  for (const id of allIds) {
-    const useProject = projectIds.includes(id);
-    const layer: DashboardLayerName = useProject ? 'project' : 'home';
-    const dir = useProject ? (projectDir as string) : homeDir;
-    const path = dashboardPath(dir, id);
+  for (const id of [...allIds].sort()) {
+    const located = locateDashboard(id, layers);
+    if (located === undefined) continue;
     try {
-      dashboards.push(buildOneDashboard(id, layer, path));
+      if ('conflict' in located) {
+        throw new StepcastError(
+          `Dashboard ${id} is provided by two packages of one layer: ${located.conflict[0]} and ${located.conflict[1]}`,
+          { file: located.path, hint: 'Rename the dashboard in one package, remove one package, or put your own copy in .stepcast/dashboards' },
+        );
+      }
+      dashboards.push(buildOneDashboard(id, located.layer, located.path, located.package));
     } catch (error) {
       if (error instanceof StepcastError) {
         failures.push({
           id,
-          layer,
-          file: path,
+          layer: located.layer,
+          ...(located.package === undefined ? {} : { package: located.package }),
+          file: located.path,
           reason: error.message,
           ...(error.at === undefined ? {} : { at: error.at }),
         });
@@ -230,13 +283,52 @@ export function buildDashboards(options: DashboardBuildOptions): DashboardsBuild
   return { dashboards, failures };
 }
 
-export function writableDashboardPath(layer: DashboardLayerName, id: string, options: DashboardBuildOptions): string {
+type LocatedDashboard =
+  | { readonly layer: DashboardLayerName; readonly path: string; readonly package?: string }
+  | {
+      readonly conflict: readonly [string, string];
+      readonly layer: DashboardLayerName;
+      readonly path: string;
+      readonly package: string;
+    };
+
+/** Первый слой по порядку поиска, где есть дашборд `id`; конфликт слоя пакетов останавливает поиск. */
+function locateDashboard(id: string, layers: readonly DashboardSearchLayer[]): LocatedDashboard | undefined {
+  for (const layer of layers) {
+    if (layer.kind === 'free') {
+      if (listDashboardIds(layer.dir).includes(id)) return { layer: layer.layer, path: dashboardPath(layer.dir, id) };
+      continue;
+    }
+    const found = lookupInPackages(layer.packages, (dir) => {
+      const path = dashboardPath(dir, id);
+      return existsSync(path) ? path : undefined;
+    });
+    if (found.kind === 'found') return { layer: layer.layer, path: found.path, package: found.package };
+    if (found.kind === 'conflict') {
+      return { conflict: found.packages, layer: layer.layer, path: found.paths[0], package: found.packages[0] };
+    }
+  }
+  return undefined;
+}
+
+/**
+ * Куда пишется дашборд. Пишется только свободный слой: дашборд, пришедший из
+ * пакета (`fromPackage`), сохраняется копией в свободный каталог проекта и
+ * затеняет пакетный — ту же семантику уже даёт правка дашборда home из
+ * проекта; каталог пакета витрина не трогает (Решение 7).
+ */
+export function writableDashboardPath(
+  layer: DashboardLayerName,
+  id: string,
+  options: DashboardBuildOptions,
+  fromPackage = false,
+): string {
   if (!isSafeSegment(id)) {
     throw new StepcastError(`Dashboard id ${id} is invalid`, {
       hint: 'id is a single safe path segment, without separators and without stepping up the tree',
     });
   }
-  if (layer === 'home') return dashboardPath(homeDashboardsDirPath(options.home), id);
+  if (layer === 'home' && !fromPackage) return dashboardPath(homeDashboardsDirPath(options.home), id);
   if (options.projectRoot === undefined) {
     throw new StepcastError('The daemon does not know the project root: there is nowhere to write the project dashboards layer', {
       hint: 'Start the dashboard in the project directory (stepcast up) or save the dashboard to the home layer',
@@ -386,6 +478,8 @@ export function writeDashboard(
   document: DashboardFileDocument,
   baseFingerprint: DashboardFingerprint | undefined,
   options: DashboardBuildOptions,
+  /** Дашборд открыт из пакета: пишется копия в свободный слой проекта, `baseFingerprint` относится к файлу пакета. */
+  fromPackage?: string,
 ): void {
   try {
     checkDashboardDocument(toDefinition(document));
@@ -399,14 +493,32 @@ export function writeDashboard(
     throw error;
   }
 
-  const path = writableDashboardPath(layer, id, options);
+  const path = writableDashboardPath(layer, id, options, fromPackage !== undefined);
 
-  const currentFingerprint = dashboardFingerprint(path);
-  if (!fingerprintsEqual(baseFingerprint, currentFingerprint)) {
-    throw new StepcastError(`Dashboard file ${id} has changed since it was opened`, {
-      file: path,
-      hint: 'Reload the dashboard and repeat the edit',
-    });
+  // Копия пакетного дашборда: сверяется файл пакета, с которого правка началась,
+  // а целевого файла в свободном слое быть не должно — иначе в витрине был бы
+  // он, а не пакетный, и правку начали бы с него.
+  if (fromPackage !== undefined) {
+    const source = buildDashboards(options).dashboards.find((entry) => entry.id === id && entry.package === fromPackage);
+    if (source === undefined) {
+      throw new StepcastError(`Dashboard ${id} of package ${fromPackage} is no longer there`, {
+        hint: 'Reload the dashboard and repeat the edit',
+      });
+    }
+    if (!fingerprintsEqual(baseFingerprint, dashboardFingerprint(source.file)) || existsSync(path)) {
+      throw new StepcastError(`Dashboard file ${id} has changed since it was opened`, {
+        file: path,
+        hint: 'Reload the dashboard and repeat the edit',
+      });
+    }
+  } else {
+    const currentFingerprint = dashboardFingerprint(path);
+    if (!fingerprintsEqual(baseFingerprint, currentFingerprint)) {
+      throw new StepcastError(`Dashboard file ${id} has changed since it was opened`, {
+        file: path,
+        hint: 'Reload the dashboard and repeat the edit',
+      });
+    }
   }
 
   let doc: Document;

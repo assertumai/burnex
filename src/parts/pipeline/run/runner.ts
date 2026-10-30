@@ -145,6 +145,12 @@ export interface RunOptions {
    */
   readonly envOverrides?: Readonly<Record<string, string>>;
   /**
+   * Адрес `<пакет>:<имя>`, которым пайплайн был назван при запуске. Возобновление
+   * берёт его из манифеста исходного прогона: пайплайн разрешается по сохранённому
+   * пути, но адрес остаётся в записи.
+   */
+  readonly pipelineAddress?: string;
+  /**
    * Режим прогона (`run --shadow`): внешние действия объявленных шагов
    * записываются, а не совершаются. Возобновление без собственного значения
    * берёт режим из манифеста исходного прогона — флага у `resume` нет.
@@ -258,6 +264,7 @@ export async function runPipeline(options: RunOptions): Promise<RunResult> {
   validateEnvOverrides(envOverrides, pipeline.env);
 
   const mode = options.mode ?? options.resume?.source.manifest.mode;
+  const pipelineAddress = options.pipelineAddress ?? options.resume?.source.manifest.pipeline_address;
   // Та же проверка стоит в `run.ts` до `--dry-run`; здесь её проходят
   // возобновление и библиотечный вызов, у которых `run.ts` нет.
   if (mode === 'shadow') assertShadowDeclarations(pipeline);
@@ -364,6 +371,7 @@ export async function runPipeline(options: RunOptions): Promise<RunResult> {
     run_id: journal.paths.runId,
     pipeline: pipeline.name,
     pipeline_file: pipeline.file,
+    ...(pipelineAddress === undefined ? {} : { pipeline_address: pipelineAddress }),
     lock_hash: lockHash,
     project_root: options.projectRoot,
     workspace: pipeline.workspace,
@@ -2790,6 +2798,7 @@ async function runJobSteps(
             script: {
               path: step.path,
               layer: step.resolved.layer,
+              ...(step.resolved.package === undefined ? {} : { package: step.resolved.package }),
               absolute_path: step.resolved.absolutePath,
               runner: step.resolved.runner,
               argv: [...step.resolved.argv],
@@ -2801,6 +2810,7 @@ async function runJobSteps(
             uses: {
               name: step.uses.name,
               ...(step.uses.layer === undefined ? {} : { layer: step.uses.layer }),
+              ...(step.uses.package === undefined ? {} : { package: step.uses.package }),
               ...(step.uses.manifestPath === undefined ? {} : { manifest_path: step.uses.manifestPath }),
             },
           }

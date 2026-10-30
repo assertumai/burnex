@@ -16,7 +16,23 @@ import type { PluginPatchRow } from './patch.js';
 export type TreeRowSource =
   | { readonly kind: 'builtin' }
   | { readonly kind: 'file'; readonly path: string }
-  | { readonly kind: 'directory'; readonly dir: string; readonly layer: 'project' | 'home' };
+  | ({ readonly kind: 'directory'; readonly dir: string } & TreeOrigin);
+
+/**
+ * Откуда пришёл каталог плагина: слой и, если каталог лежал в пакете
+ * пользователя, имя пакета (`packages-directory-layer`, design.md, Решение 6).
+ * Ядро не знает, что такое пакет, — оно хранит имя и печатает его строкой
+ * (`describeOrigin`); порядок слоёв пакетов задаёт тот, кто подаёт операции.
+ */
+export interface TreeOrigin {
+  readonly layer: 'project' | 'home';
+  readonly package?: string;
+}
+
+/** Источник строкой: `project`, `home` либо `package hello (project)`. */
+export function describeOrigin(origin: TreeOrigin): string {
+  return origin.package === undefined ? origin.layer : `package ${origin.package} (${origin.layer})`;
+}
 
 /**
  * Форма `use`, которой строка называет фабрику встроенного слоя, а не модуль
@@ -84,6 +100,15 @@ export interface TreeOperation {
   readonly file: string;
   /** Слой каталога — только при `kind: 'directory'` (`TreeRowSource`, вид `directory`). */
   readonly layer?: 'project' | 'home';
+  /** Пакет, в каталоге которого найден плагин, — только при `kind: 'directory'`. */
+  readonly package?: string;
+  /**
+   * Заведомо отказавшая операция, которая **заменяет** строку нижнего слоя, а не
+   * встаёт рядом: конфликт двух пакетов одного слоя не должен проваливаться в
+   * нижний слой (`packages-directory-layer`, Решение 4). Отказ имени встроенной
+   * строки этого не делает — встроенная строка остаётся действующей.
+   */
+  readonly supersede?: boolean;
   /**
    * Строка заведомо неприменима (`TreeRowFailure`). Такая операция никогда не
    * заменяет строку, уже стоящую в дереве: см. `applyOperation`.
@@ -108,17 +133,24 @@ export function keyOperations(specs: readonly string[], file: string): TreeOpera
  * (`applyOperation`, ветка по умолчанию), а не оставляет её за нижним.
  */
 export function directoryOperations(
-  dirs: readonly { readonly id: string; readonly dir: string; readonly failure?: TreeRowFailure }[],
-  layer: 'project' | 'home',
+  dirs: readonly {
+    readonly id: string;
+    readonly dir: string;
+    readonly failure?: TreeRowFailure;
+    readonly supersede?: boolean;
+  }[],
+  origin: TreeOrigin,
 ): TreeOperation[] {
-  return dirs.map(({ id, dir, failure }) => ({
+  return dirs.map(({ id, dir, failure, supersede }) => ({
     kind: 'directory' as const,
     id,
     use: dir,
     enabled: true,
     file: dir,
-    layer,
+    layer: origin.layer,
+    ...(origin.package === undefined ? {} : { package: origin.package }),
     ...(failure === undefined ? {} : { failure }),
+    ...(supersede === true ? { supersede } : {}),
   }));
 }
 
@@ -158,7 +190,12 @@ function operationSource(operation: TreeOperation): TreeRowSource {
   if (operation.kind === 'directory') {
     // `layer` всегда задан операциями `directoryOperations` — необязательность
     // поля здесь только ради того, чтобы `key`/`patch` его не носили.
-    return { kind: 'directory', dir: operation.use, layer: operation.layer! };
+    return {
+      kind: 'directory',
+      dir: operation.use,
+      layer: operation.layer!,
+      ...(operation.package === undefined ? {} : { package: operation.package }),
+    };
   }
   return { kind: 'file', path: operation.file };
 }
@@ -182,6 +219,15 @@ function applyOperation(tree: readonly TreeRow[], operation: TreeOperation): Tre
     // дереве: две строки с одним именем — ровно то, что произошло на диске, и
     // печать состава (`stepcast plugins`) показывает обе — действующую
     // встроенную и отказавшую каталожную с причиной.
+    //
+    // Исключение — конфликт пакетов (`supersede`): отказ занимает место строки
+    // нижнего слоя, иначе она осталась бы действующей и конфликт провалился бы
+    // вниз молчаливой подменой.
+    if (operation.supersede === true && index !== -1) {
+      const next = [...tree];
+      next[index] = row;
+      return next;
+    }
     return [...tree, row];
   }
 

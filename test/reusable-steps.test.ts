@@ -641,3 +641,154 @@ jobs:
     assert.throws(() => expandUses(project, isolatedStepRoots(project)), StepcastError);
   });
 });
+
+/** Пакет в каталоге пакетов слоя: исправный манифест и, при желании, свой манифест вместо исправного. */
+function writePackage(packagesDir: string, name: string, manifest?: string): string {
+  const dir = join(packagesDir, name);
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(
+    join(dir, 'package.yml'),
+    manifest ?? `version: 1\nkind: package\nname: ${name}\ndescription: Пример\npackage_version: 0.1.0\n`,
+  );
+  return dir;
+}
+
+function packageStep(packageDir: string, name = 'greet'): void {
+  writeStepDir(join(packageDir, 'steps'), name, GREET_MANIFEST.replace('name: greet', `name: ${name}`), {
+    'main.cjs': GREET_MAIN,
+    'output.schema.json': GREET_OUTPUT_SCHEMA,
+  });
+}
+
+describe('reusable-step: шаги из пакетов', () => {
+  it('шаг пакета проекта разрешается по голому имени, происхождение называет пакет и слой', () => {
+    const project = makeProject({ 'stepcast.yml': pipelineWithUses('greet') });
+    const stepRoots = isolatedStepRoots(project);
+    const dir = writePackage(join(stepRoots.project, '.stepcast', 'packages'), 'hello');
+    packageStep(dir);
+
+    const step = asScript(expandUses(project, stepRoots).pipeline.jobs[0]!.steps[0]!);
+    assert.equal(step.unresolved, undefined);
+    assert.equal(step.uses?.layer, 'project');
+    assert.equal(step.uses?.package, 'hello');
+    assert.equal(step.resolved?.package, 'hello');
+    assert.equal(step.resolved?.absolutePath, join(dir, 'steps', 'greet', 'main.cjs'));
+  });
+
+  it('шаг пакета home находится, когда выше ничего нет', () => {
+    const project = makeProject({ 'stepcast.yml': pipelineWithUses('greet') });
+    const stepRoots = isolatedStepRoots(project);
+    packageStep(writePackage(join(stepRoots.home, '.stepcast', 'packages'), 'tools'));
+
+    const step = asScript(expandUses(project, stepRoots).pipeline.jobs[0]!.steps[0]!);
+    assert.equal(step.uses?.layer, 'home');
+    assert.equal(step.uses?.package, 'tools');
+  });
+
+  it('без явных корней пакеты home читаются рядом с подставным путём глобального конфига', () => {
+    const project = makeProject({ 'stepcast.yml': pipelineWithUses('greet') });
+    const globalConfigDir = tempDir('custom-global-');
+    const dir = writePackage(join(globalConfigDir, 'packages'), 'tools');
+    packageStep(dir);
+
+    const step = asScript(
+      expandPipeline({
+        pipelinePath: project.path('stepcast.yml'),
+        config: { ...project.config, globalConfigDir, globalConfigFile: join(globalConfigDir, 'config.yml') },
+      }).pipeline.jobs[0]!.steps[0]!,
+    );
+    assert.equal(step.unresolved, undefined);
+    assert.equal(step.uses?.layer, 'home');
+    assert.equal(step.uses?.package, 'tools');
+    assert.equal(step.resolved?.absolutePath, join(dir, 'steps', 'greet', 'main.cjs'));
+  });
+
+  it('свободный каталог проекта перекрывает пакет проекта', () => {
+    const project = makeProject({ 'stepcast.yml': pipelineWithUses('greet') });
+    const stepRoots = isolatedStepRoots(project);
+    packageStep(writePackage(join(stepRoots.project, '.stepcast', 'packages'), 'hello'));
+    writeStepDir(join(stepRoots.project, '.stepcast', 'steps'), 'greet', GREET_MANIFEST, {
+      'main.cjs': GREET_MAIN,
+      'output.schema.json': GREET_OUTPUT_SCHEMA,
+    });
+
+    const step = asScript(expandUses(project, stepRoots).pipeline.jobs[0]!.steps[0]!);
+    assert.equal(step.uses?.package, undefined);
+    assert.equal(step.resolved?.absolutePath, join(stepRoots.project, '.stepcast', 'steps', 'greet', 'main.cjs'));
+  });
+
+  it('пакет проекта выше свободного home, пакет home выше встроенного', () => {
+    const project = makeProject({ 'stepcast.yml': pipelineWithUses('greet') });
+    const stepRoots = isolatedStepRoots(project);
+    const own = writePackage(join(stepRoots.project, '.stepcast', 'packages'), 'hello');
+    packageStep(own);
+    writeStepDir(join(stepRoots.home, '.stepcast', 'steps'), 'greet', GREET_MANIFEST, {
+      'main.cjs': GREET_MAIN,
+      'output.schema.json': GREET_OUTPUT_SCHEMA,
+    });
+    assert.equal(asScript(expandUses(project, stepRoots).pipeline.jobs[0]!.steps[0]!).uses?.package, 'hello');
+
+    const other = makeProject({ 'stepcast.yml': pipelineWithUses('greet') });
+    const roots = isolatedStepRoots(other);
+    packageStep(writePackage(join(roots.home, '.stepcast', 'packages'), 'tools'));
+    writeStepDir(roots.builtin, 'greet', GREET_MANIFEST, { 'main.cjs': GREET_MAIN, 'output.schema.json': GREET_OUTPUT_SCHEMA });
+    assert.equal(asScript(expandUses(other, roots).pipeline.jobs[0]!.steps[0]!).uses?.package, 'tools');
+  });
+
+  it('пакет проекта затеняет одноимённый пакет home целиком: шаг, которого нет в проектном, не находится', () => {
+    const project = makeProject({ 'stepcast.yml': pipelineWithUses('farewell') });
+    const stepRoots = isolatedStepRoots(project);
+    writePackage(join(stepRoots.project, '.stepcast', 'packages'), 'hello');
+    packageStep(writePackage(join(stepRoots.home, '.stepcast', 'packages'), 'hello'), 'farewell');
+
+    const step = asScript(expandUses(project, stepRoots).pipeline.jobs[0]!.steps[0]!);
+    assert.equal(step.unresolved?.reason, 'step_not_found');
+  });
+
+  it('конфликт двух пакетов слоя — значение ScriptUnresolved, называющее оба; нижний слой не просматривается', () => {
+    const project = makeProject({ 'stepcast.yml': pipelineWithUses('greet') });
+    const stepRoots = isolatedStepRoots(project);
+    const packages = join(stepRoots.project, '.stepcast', 'packages');
+    packageStep(writePackage(packages, 'a'));
+    packageStep(writePackage(packages, 'b'));
+    writeStepDir(join(stepRoots.home, '.stepcast', 'steps'), 'greet', GREET_MANIFEST, {
+      'main.cjs': GREET_MAIN,
+      'output.schema.json': GREET_OUTPUT_SCHEMA,
+    });
+
+    const step = asScript(expandUses(project, stepRoots).pipeline.jobs[0]!.steps[0]!);
+    assert.equal(step.resolved, undefined);
+    assert.equal(step.unresolved?.reason, 'resource_conflict');
+    if (step.unresolved?.reason === 'resource_conflict') {
+      assert.deepEqual(step.unresolved.packages, ['a', 'b']);
+      assert.equal(step.unresolved.resource, 'step');
+    }
+  });
+
+  it('промах при сломанном пакете называет пакет и его причину', () => {
+    const project = makeProject({ 'stepcast.yml': pipelineWithUses('greet') });
+    const stepRoots = isolatedStepRoots(project);
+    const packages = join(stepRoots.project, '.stepcast', 'packages');
+    const broken = writePackage(packages, 'broken', 'name: [oops\n');
+    packageStep(broken);
+    packageStep(writePackage(packages, 'good'), 'other');
+
+    const step = asScript(expandUses(project, stepRoots).pipeline.jobs[0]!.steps[0]!);
+    assert.equal(step.unresolved?.reason, 'step_not_found');
+    if (step.unresolved?.reason === 'step_not_found') {
+      assert.ok(step.unresolved.searched.includes(join(packages, 'good', 'steps', 'greet')));
+      assert.match((step.unresolved.broken ?? []).join('\n'), /broken/);
+      assert.match((step.unresolved.broken ?? []).join('\n'), /YAML/);
+    }
+  });
+
+  it('без пакетов поведение прежнее: перечень просмотренных каталогов — три слоя', () => {
+    const project = makeProject({ 'stepcast.yml': pipelineWithUses('greet') });
+    const step = asScript(expandUses(project, isolatedStepRoots(project)).pipeline.jobs[0]!.steps[0]!);
+    assert.equal(step.unresolved?.reason, 'step_not_found');
+    if (step.unresolved?.reason === 'step_not_found') {
+      assert.equal(step.unresolved.searched.length, 3);
+      assert.equal(step.unresolved.broken, undefined);
+    }
+  });
+});

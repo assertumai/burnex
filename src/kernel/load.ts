@@ -451,6 +451,7 @@ export async function applyPlugin(
   recognized: Recognized,
   source: string,
   fields?: DeclarativeContributionFields,
+  packageName?: string,
 ): Promise<Fiber> {
   const plugin =
     recognized.form === 'declarative' ? toContextPlugin(recognized.plugin, requireDeclarativeFields(fields)) : recognized.plugin;
@@ -473,7 +474,12 @@ export async function applyPlugin(
     await fiber.dispose().catch(() => undefined);
     throw translateReservedNameConflict(error, kernel.ctx);
   }
-  kernel.recordPlugin(fiber.ctx, { name, ...(version === undefined ? {} : { version }), source });
+  kernel.recordPlugin(fiber.ctx, {
+    name,
+    ...(version === undefined ? {} : { version }),
+    source,
+    ...(packageName === undefined ? {} : { package: packageName }),
+  });
   return fiber;
 }
 
@@ -483,8 +489,9 @@ export function applyDeclarativePlugin(
   plugin: PipelinePlugin,
   source: string,
   fields: DeclarativeContributionFields,
+  packageName?: string,
 ): Promise<Fiber> {
-  return applyPlugin(kernel, { form: 'declarative', plugin }, source, fields);
+  return applyPlugin(kernel, { form: 'declarative', plugin }, source, fields, packageName);
 }
 
 /** Применить плагин контекста — сокращение, симметричное `applyDeclarativePlugin`. */
@@ -575,7 +582,13 @@ async function applyDirectoryTreeRow(
     throw pluginNameMismatch(row, declaredName, manifest.manifestPath);
   }
 
-  const fiber = await applyPlugin(kernel, recognized, manifest.server, options.declarativeFields);
+  const fiber = await applyPlugin(
+    kernel,
+    recognized,
+    manifest.server,
+    options.declarativeFields,
+    row.source.kind === 'directory' ? row.source.package : undefined,
+  );
   try {
     options.onDirectoryRow?.({ row, manifest, fiber });
   } catch (error) {

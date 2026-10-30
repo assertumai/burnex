@@ -288,7 +288,10 @@ function describePluginDifference(
     plugins.length === 0
       ? 'без плагинов'
       : plugins
-          .map((plugin) => `${plugin.name}${plugin.version === undefined ? '' : `@${plugin.version}`}`)
+          .map(
+            (plugin) =>
+              `${plugin.name}${plugin.version === undefined ? '' : `@${plugin.version}`}${plugin.package === undefined ? '' : ` (пакет ${plugin.package})`}`,
+          )
           .sort()
           .join(', ');
 

@@ -19,6 +19,8 @@ import {
   type DashboardsBuildResult,
 } from '../dashboardsFile.js';
 import { StepcastError } from '../../../kernel/errors.js';
+import { buildPackageIndex, type PackageEntry } from '../../packages/index.js';
+import { summarizePackages, type PackageSummary } from '../../packages/summary.js';
 import type { JournalProblem } from '../../pipeline/run/journal/reader.js';
 
 /**
@@ -114,6 +116,13 @@ export interface Watcher {
    */
   currentDashboards(): DashboardsBuildResult;
   /**
+   * Сводка пакетов обоих корней со статусом и причиной поломки
+   * (`packages-directory-layer`, Решение 8). Пересобирается по сдвигу своей
+   * части отпечатка — появление, удаление пакета и правка `package.yml`
+   * доезжают без перезапуска демона.
+   */
+  currentPackages(): readonly PackageSummary[];
+  /**
    * Действующая очередь предложений всех проектов, без ожидания следующего
    * опроса (`ui-proposals`, «Состав очереди идёт потоком событий»).
    * Пересобирается только по сдвигу своей части отпечатка — такт, где
@@ -144,6 +153,8 @@ interface Fingerprint {
   readonly routes: string;
   readonly dashboards: string;
   readonly proposals: string;
+  /** Пакеты обоих корней: появление, удаление, правка `package.yml` и затенение. */
+  readonly packages: string;
 }
 
 /**
@@ -214,16 +225,52 @@ function statPart(path: string): string {
   }
 }
 
-function routesFingerprint(builtinPath: string, home: string, projectRoot: string | undefined): string {
-  const paths = [builtinPath, homeRoutesPath(home)];
-  if (projectRoot !== undefined) paths.push(projectRoutesPath(projectRoot));
-  return paths.map(statPart).join('|');
+/**
+ * Пакеты обоих корней (`<проект>/.stepcast/packages` и `packages/` рядом с
+ * глобальным конфигом): имя, слой, состояние и `mtime`+размер манифеста
+ * каждого. Правка `package.yml`, делающая пакет сломанным, сдвигает отпечаток,
+ * даже когда файлы ресурсов не тронуты (`packages-directory-layer`, Решение 8).
+ */
+function packageIndexOf(home: string, projectRoot: string | undefined): readonly PackageEntry[] {
+  return buildPackageIndex({
+    ...(projectRoot === undefined ? {} : { projectRoot }),
+    globalPath: join(home, '.stepcast', 'config.yml'),
+  }).packages;
 }
 
-function dashboardsFingerprint(home: string, projectRoot: string | undefined): string {
+function packagesFingerprint(entries: readonly PackageEntry[]): string {
+  return entries
+    .map((entry) => {
+      const state = entry.shadowedBy !== undefined ? 'shadowed' : entry.failure !== undefined ? 'broken' : 'ok';
+      return `${entry.layer}/${entry.name}:${state}:${statPart(join(entry.dir, 'package.yml'))}`;
+    })
+    .join(',');
+}
+
+function routesFingerprint(
+  builtinPath: string,
+  home: string,
+  projectRoot: string | undefined,
+  packages: readonly PackageEntry[],
+): string {
+  const paths = [builtinPath, homeRoutesPath(home)];
+  if (projectRoot !== undefined) paths.push(projectRoutesPath(projectRoot));
+  // Файл `routes.yml` каждого действующего пакета и состав самих пакетов: пакет,
+  // ставший сломанным, уносит свои строки, хотя его `routes.yml` не тронут.
+  for (const entry of packages) {
+    if (entry.manifest !== undefined && entry.shadowedBy === undefined) paths.push(join(entry.dir, 'routes.yml'));
+  }
+  return [...paths.map(statPart), packagesFingerprint(packages)].join('|');
+}
+
+function dashboardsFingerprint(home: string, projectRoot: string | undefined, packages: readonly PackageEntry[]): string {
   const homePart = dashboardsDirFingerprint(homeDashboardsDirPath(home));
   const projectPart = projectRoot === undefined ? '-' : dashboardsDirFingerprint(projectDashboardsDirPath(projectRoot));
-  return `${homePart}|${projectPart}`;
+  const packagesPart = packages
+    .filter((entry) => entry.manifest !== undefined && entry.shadowedBy === undefined)
+    .map((entry) => `${entry.layer}/${entry.name}:${dashboardsDirFingerprint(join(entry.dir, 'dashboards'))}`)
+    .join(',');
+  return `${homePart}|${projectPart}|${packagesPart}|${packagesFingerprint(packages)}`;
 }
 
 function fingerprint(
@@ -239,8 +286,9 @@ function fingerprint(
   const pluginParts = buildHomePlugins(home)
     .plugins.map((plugin) => `${plugin.id}:${plugin.version}`)
     .join(',');
-  const routes = routesFingerprint(builtinPath, home, projectRoot);
-  const dashboards = dashboardsFingerprint(home, projectRoot);
+  const packages = packageIndexOf(home, projectRoot);
+  const routes = routesFingerprint(builtinPath, home, projectRoot, packages);
+  const dashboards = dashboardsFingerprint(home, projectRoot, packages);
 
   try {
     const store = statSync(usageStorePath(runsRoot));
@@ -293,7 +341,7 @@ function fingerprint(
       // не берёт вовсе, и появление каталога обязано сдвинуть отпечаток ещё до
       // первого виджета в нём.
       const widgets = existsSync(project.path)
-        ? projectWidgetVersions(project.path)
+        ? projectWidgetVersions(project.path, { home })
             .map((widget) => `${widget.id}:${widget.version}`)
             .join(',') || '-'
         : '?';
@@ -321,6 +369,7 @@ function fingerprint(
     routes,
     dashboards,
     proposals: proposalsParts.join('|'),
+    packages: packagesFingerprint(packages),
   };
 }
 
@@ -379,7 +428,7 @@ export function createWatcher(options: WatcherOptions): Watcher {
   let overview = buildOverview(runsRoot);
   let projects = projectList(overview);
   let backlog = buildBacklog(overview);
-  let widgets = buildWidgets(runsRoot);
+  let widgets = buildWidgets(runsRoot, { home });
   let proposals = buildProposals(runsRoot);
   let plugins = buildHomePlugins(home);
   // Отказ первой сборки не имеет прежней таблицы, которой можно было бы
@@ -392,7 +441,7 @@ export function createWatcher(options: WatcherOptions): Watcher {
   // файла поставки маршрутов нет вовсе, и молчаливый подъём с пустой таблицей
   // был бы неотличим от «пользователь отключил всё сам» — ровно та подмена
   // причины, которой изменение не допускает.
-  let routes: RouteBuildResult = { table: [], entries: [], disabled: [] };
+  let routes: RouteBuildResult = { table: [], entries: [], disabled: [], failures: [] };
   let routesError: string | undefined;
   try {
     routes = buildRouteTable(routeOptions);
@@ -401,6 +450,7 @@ export function createWatcher(options: WatcherOptions): Watcher {
     routesError = reasonOf(error);
   }
   let dashboards: DashboardsBuildResult = buildDashboards(routeOptions);
+  let packages: readonly PackageSummary[] = summarizePackages({ packages: packageIndexOf(home, projectRoot) });
   reportProblems(overview);
 
   const poll = (): void => {
@@ -412,7 +462,8 @@ export function createWatcher(options: WatcherOptions): Watcher {
       next.plugins === mark.plugins &&
       next.routes === mark.routes &&
       next.dashboards === mark.dashboards &&
-      next.proposals === mark.proposals
+      next.proposals === mark.proposals &&
+      next.packages === mark.packages
     ) {
       return;
     }
@@ -422,6 +473,7 @@ export function createWatcher(options: WatcherOptions): Watcher {
     const routesChanged = next.routes !== mark.routes;
     const dashboardsChanged = next.dashboards !== mark.dashboards;
     const proposalsChanged = next.proposals !== mark.proposals;
+    const packagesChanged = next.packages !== mark.packages;
     const runsChanged = next.runs !== mark.runs;
     mark = next;
     // Обзор пересобирается только по своей части отпечатка, тем же правилом,
@@ -446,7 +498,7 @@ export function createWatcher(options: WatcherOptions): Watcher {
     // отпечатка: такт, где сдвинулись лишь прогон или очередь, оставляет
     // прежний объект (design.md изменения `ui-runtime-widget-spike`, Решение 7).
     if (widgetsChanged) {
-      widgets = buildWidgets(runsRoot);
+      widgets = buildWidgets(runsRoot, { home });
     }
     // Тем же приёмом — состав плагинов пересобирается только по своей части
     // отпечатка (design.md изменения `hot-swap-preserves-data`, задача 12).
@@ -478,6 +530,12 @@ export function createWatcher(options: WatcherOptions): Watcher {
     if (proposalsChanged) {
       proposals = buildProposals(runsRoot);
     }
+    // Тем же приёмом — сводка пакетов пересобирается только по своей части
+    // отпечатка. Виджеты, маршруты и дашборды пакетов пересобрались выше по
+    // собственным частям: каждая из них включает состояние пакетов.
+    if (packagesChanged) {
+      packages = summarizePackages({ packages: packageIndexOf(home, projectRoot) });
+    }
     reportProblems(overview);
     for (const listener of listeners) listener(overview, backlog);
   };
@@ -494,6 +552,7 @@ export function createWatcher(options: WatcherOptions): Watcher {
     currentRoutes: () => routes,
     currentRoutesError: () => routesError,
     currentDashboards: () => dashboards,
+    currentPackages: () => packages,
     currentProposals: () => proposals,
     subscribe(listener) {
       listeners.add(listener);

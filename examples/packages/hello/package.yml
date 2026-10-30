@@ -1,0 +1,5 @@
+version: 1
+kind: package
+name: hello
+description: Образец пакета — пайплайн, шаг, виджет, дашборд, маршрут и плагин в одном каталоге
+package_version: 0.1.0

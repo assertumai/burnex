@@ -85,7 +85,7 @@ describe('package-schema: resolvePipelineTarget', () => {
   it('ссылка stepcast:<имя> ведёт в поставку, а не в каталог запуска', () => {
     const dir = project();
     const resolved = resolvePipelineTarget(dir, 'stepcast:migrate-widgets');
-    assert.equal(resolved.isSupplyPipeline, true);
+    assert.equal(resolved.outsideProject, true);
     assert.equal(resolved.pipelinePath, packagedPipelinePath('migrate-widgets'));
   });
 
@@ -95,7 +95,7 @@ describe('package-schema: resolvePipelineTarget', () => {
     writeFileSync(own, 'version: 1\nkind: pipeline\nname: мой\njobs: {}\n');
 
     const resolved = resolvePipelineTarget(dir, 'migrate-widgets.yml');
-    assert.equal(resolved.isSupplyPipeline, false);
+    assert.equal(resolved.outsideProject, false);
     assert.equal(resolved.pipelinePath, own);
     assert.notEqual(resolved.pipelinePath, packagedPipelinePath('migrate-widgets'));
   });
@@ -103,7 +103,7 @@ describe('package-schema: resolvePipelineTarget', () => {
   it('голое имя без расширения — тоже путь каталога запуска, не имя поставки', () => {
     const dir = project();
     const resolved = resolvePipelineTarget(dir, 'migrate-widgets');
-    assert.equal(resolved.isSupplyPipeline, false);
+    assert.equal(resolved.outsideProject, false);
     assert.equal(resolved.pipelinePath, join(dir, 'migrate-widgets'));
   });
 });

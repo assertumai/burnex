@@ -25,6 +25,9 @@ const handleGet: ApiHandler = (_req, res, env) => {
     // обратно можно было бы только правкой файла руками (`ui-routes`,
     // «Витрина показывает маршруты с источником и правит файл слоя»).
     disabled: result.disabled,
+    // Отказы, ограниченные пакетом или строкой пакетов: таблица собрана без
+    // них, и перечень называет, что и почему исключено (`packages-directory-layer`).
+    packageFailures: result.failures,
     ...(buildError === undefined ? {} : { buildError }),
   });
 };

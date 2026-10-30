@@ -1,8 +1,10 @@
 import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, statSync } from 'node:fs';
+import { homedir } from 'node:os';
 import { basename, dirname, extname, join, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { findPackageRoot } from '../../kernel/packageRoot.js';
+import { buildPackageIndex, lookupInPackages, resourceLayers, type PackageResourcePath } from '../packages/index.js';
 
 import { listProjects } from '../pipeline/run/journal/reader.js';
 import { isSafeSegment } from './routes.js';
@@ -37,8 +39,45 @@ export function widgetsDirPath(projectPath: string): string {
  * виджетами; символическая ссылка не проходит фильтр `isFile()` — тип записи
  * `readdirSync` берётся не по её цели, а по самой записи каталога.
  */
-export function listProjectWidgetIds(projectPath: string): readonly string[] {
-  return listWidgetIdsIn(widgetsDirPath(projectPath));
+export function listProjectWidgetIds(projectPath: string, options: WidgetSourceOptions = {}): readonly string[] {
+  const ids = new Set(listWidgetIdsIn(widgetsDirPath(projectPath)));
+  const layers = widgetLayers(projectPath, options);
+  for (const layer of layers) {
+    for (const entry of layer.packages) for (const id of listWidgetIdsIn(entry.path)) ids.add(id);
+  }
+  return [...ids].sort();
+}
+
+/**
+ * Откуда читаются пакеты home. Витрина знает домашний каталог машины, а не
+ * путь глобального конфига: пакеты лежат в `<home>/.stepcast/packages`, как
+ * и остальные свободные ресурсы home (`packages-directory-layer`, Решение 1).
+ */
+export interface WidgetSourceOptions {
+  readonly home?: string;
+}
+
+/** Слой и, если виджет лежит в пакете, его имя. */
+export interface WidgetSource {
+  readonly layer: 'project' | 'home';
+  readonly package?: string;
+}
+
+interface WidgetPackageLayer {
+  readonly layer: 'project' | 'home';
+  readonly packages: readonly PackageResourcePath[];
+}
+
+/** Слои пакетов виджетов в порядке поиска: пакеты проекта, затем пакеты home. Свободный каталог home у виджетов не читается. */
+function widgetLayers(projectPath: string, options: WidgetSourceOptions): readonly WidgetPackageLayer[] {
+  const homeStepcastDir = join(options.home ?? homedir(), '.stepcast');
+  const index = buildPackageIndex({ projectRoot: projectPath, globalPath: join(homeStepcastDir, 'config.yml') });
+  const layers: WidgetPackageLayer[] = [];
+  for (const layer of resourceLayers(index, 'widgets', { projectRoot: projectPath, homeStepcastDir })) {
+    if (layer.source === 'project-packages') layers.push({ layer: 'project', packages: layer.packages });
+    if (layer.source === 'home-packages') layers.push({ layer: 'home', packages: layer.packages });
+  }
+  return layers;
 }
 
 function listWidgetIdsIn(dir: string): readonly string[] {
@@ -57,13 +96,24 @@ function listWidgetIdsIn(dir: string): readonly string[] {
  * реальному пути такая ссылка вынесла бы содержимое любого файла диска мимо
  * проверки сегмента.
  */
-export function resolveWidgetFile(projectPath: string, id: string): string | undefined {
-  if (!isSafeSegment(id)) return undefined;
+export function resolveWidgetFile(
+  projectPath: string,
+  id: string,
+  options: WidgetSourceOptions = {},
+): string | undefined {
+  const located = locateWidget(projectPath, id, options);
+  return located.kind === 'found' ? located.file : undefined;
+}
 
-  const dir = widgetsDirPath(projectPath);
-  const target = join(dir, `${id}${WIDGET_EXTENSION}`);
-  if (!existsSync(target)) return undefined;
+export type WidgetLocation =
+  | { readonly kind: 'found'; readonly file: string; readonly source: WidgetSource }
+  /** Два пакета одного слоя приносят виджет с одним `id`: ни один не отдаётся, нижний слой не просматривается. */
+  | { readonly kind: 'conflict'; readonly packages: readonly [string, string]; readonly source: WidgetSource }
+  /** Адрес не проходит проверку, файла нет либо реальный путь вне каталога виджетов слоя. */
+  | { readonly kind: 'missing' };
 
+/** Реальный путь файла внутри каталога `widgets/` того слоя, где он найден; иначе `undefined`. */
+function contained(dir: string, target: string): string | undefined {
   let realDir: string;
   let realTarget: string;
   try {
@@ -77,6 +127,43 @@ export function resolveWidgetFile(projectPath: string, id: string): string | und
   // без него каталог-сосед с общим префиксом прошёл бы как вложенный.
   if (!realTarget.startsWith(realDir + sep)) return undefined;
   return realTarget;
+}
+
+/**
+ * Найти виджет по порядку поиска: свободный каталог проекта, пакеты проекта,
+ * пакеты home (`packages-directory-layer`, Решение 7). Проверка реального пути
+ * идёт относительно `widgets/` того слоя, где файл найден: символическая ссылка
+ * из пакета наружу вынесла бы содержимое любого файла диска мимо проверки
+ * сегмента (design.md `ui-widgets`, Решение 10). Файл, найденный выше и
+ * отвергнутый проверкой, нижним слоем не подменяется.
+ */
+export function locateWidget(projectPath: string, id: string, options: WidgetSourceOptions = {}): WidgetLocation {
+  if (!isSafeSegment(id)) return { kind: 'missing' };
+  const fileName = `${id}${WIDGET_EXTENSION}`;
+
+  const dir = widgetsDirPath(projectPath);
+  const own = join(dir, fileName);
+  if (existsSync(own)) {
+    const real = contained(dir, own);
+    return real === undefined ? { kind: 'missing' } : { kind: 'found', file: real, source: { layer: 'project' } };
+  }
+
+  for (const layer of widgetLayers(projectPath, options)) {
+    const found = lookupInPackages(layer.packages, (widgetsDir) => {
+      const candidate = join(widgetsDir, fileName);
+      return existsSync(candidate) ? candidate : undefined;
+    });
+    if (found.kind === 'miss') continue;
+    if (found.kind === 'conflict') {
+      return { kind: 'conflict', packages: found.packages, source: { layer: layer.layer, package: found.packages[0] } };
+    }
+    const widgetsDir = layer.packages.find((entry) => entry.package === found.package)?.path;
+    const real = widgetsDir === undefined ? undefined : contained(widgetsDir, found.path);
+    return real === undefined
+      ? { kind: 'missing' }
+      : { kind: 'found', file: real, source: { layer: layer.layer, package: found.package } };
+  }
+  return { kind: 'missing' };
 }
 
 export interface FileFingerprint {
@@ -114,6 +201,10 @@ export interface WidgetDeprecation {
 export interface WidgetView {
   readonly id: string;
   readonly version: string;
+  /** Где лежит виджет: свободный каталог проекта либо пакет проекта или home. */
+  readonly source: WidgetSource;
+  /** Конфликт `id` в слое пакетов: виджет не отдаётся, причина названа здесь. */
+  readonly error?: string;
   /** Не отменяет отдачу виджета — устаревший виджет по-прежнему компилируется (`widget-migration`, «Признак не отменяет отдачу виджета»). */
   readonly deprecated?: WidgetDeprecation;
 }
@@ -155,7 +246,12 @@ function widgetDeprecation(path: string): WidgetDeprecation | undefined {
 export interface WidgetVersionView {
   readonly id: string;
   readonly version: string;
+  readonly source: WidgetSource;
+  readonly error?: string;
 }
+
+/** Версия записи с конфликтом: файла для отпечатка нет, но смена состава должна сдвигать отпечаток. */
+const CONFLICT_VERSION = 'conflict';
 
 /**
  * Виджеты одного проекта с версией каждого и **без** чтения их содержимого —
@@ -169,23 +265,45 @@ export interface WidgetVersionView {
  * Файл, исчезнувший между перечислением и отпечатком, пропускается — обычная
  * гонка с правкой на диске.
  */
-export function projectWidgetVersions(projectPath: string): readonly WidgetVersionView[] {
-  const dir = widgetsDirPath(projectPath);
-  const widgets: WidgetVersionView[] = [];
-  for (const id of listProjectWidgetIds(projectPath)) {
-    const fingerprint = widgetFingerprint(join(dir, `${id}${WIDGET_EXTENSION}`));
+export function projectWidgetVersions(
+  projectPath: string,
+  options: WidgetSourceOptions = {},
+): readonly WidgetVersionView[] {
+  return locatedWidgets(projectPath, options).map(({ view }) => view);
+}
+
+/** Виджеты слоёв с найденным файлом: версия и источник каждого, плюс записи конфликтов. */
+function locatedWidgets(
+  projectPath: string,
+  options: WidgetSourceOptions,
+): readonly { readonly view: WidgetVersionView; readonly file?: string }[] {
+  const out: { view: WidgetVersionView; file?: string }[] = [];
+  for (const id of listProjectWidgetIds(projectPath, options)) {
+    const located = locateWidget(projectPath, id, options);
+    if (located.kind === 'conflict') {
+      out.push({
+        view: {
+          id,
+          version: CONFLICT_VERSION,
+          source: located.source,
+          error: `Виджет ${id} приносят два пакета одного слоя — ${located.packages[0]} и ${located.packages[1]}`,
+        },
+      });
+      continue;
+    }
+    if (located.kind !== 'found') continue;
+    const fingerprint = widgetFingerprint(located.file);
     if (fingerprint === undefined) continue;
-    widgets.push({ id, version: fingerprintVersion(fingerprint) });
+    out.push({ view: { id, version: fingerprintVersion(fingerprint), source: located.source }, file: located.file });
   }
-  return widgets;
+  return out;
 }
 
 /** Виджеты одного проекта — версия плюс признак устаревания, выведенный из самого файла. */
-export function buildProjectWidgets(projectPath: string): readonly WidgetView[] {
-  const dir = widgetsDirPath(projectPath);
-  return projectWidgetVersions(projectPath).map((widget) => {
-    const deprecated = widgetDeprecation(join(dir, `${widget.id}${WIDGET_EXTENSION}`));
-    return { ...widget, ...(deprecated === undefined ? {} : { deprecated }) };
+export function buildProjectWidgets(projectPath: string, options: WidgetSourceOptions = {}): readonly WidgetView[] {
+  return locatedWidgets(projectPath, options).map(({ view, file }) => {
+    const deprecated = file === undefined ? undefined : widgetDeprecation(file);
+    return { ...view, ...(deprecated === undefined ? {} : { deprecated }) };
   });
 }
 
@@ -195,11 +313,11 @@ export function buildProjectWidgets(projectPath: string): readonly WidgetView[] 
  * списком (сценарий «Каталога виджетов нет»), а не пропадает из обзора: так
  * его отличают от проекта без известного пути, которого в обзоре нет вовсе.
  */
-export function buildWidgets(runsRoot: string): WidgetsOverview {
+export function buildWidgets(runsRoot: string, options: WidgetSourceOptions = {}): WidgetsOverview {
   const projects: ProjectWidgetsView[] = [];
   for (const project of listProjects(runsRoot)) {
     if (project.path === undefined || !existsSync(project.path)) continue;
-    projects.push({ projectKey: project.key, widgets: buildProjectWidgets(project.path) });
+    projects.push({ projectKey: project.key, widgets: buildProjectWidgets(project.path, options) });
   }
   return { projects, generatedAt: new Date().toISOString() };
 }

@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { cpSync, existsSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, readFileSync, realpathSync, symlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { describe, it } from 'node:test';
@@ -38,6 +38,11 @@ async function fakeInstall(schemaNames?: readonly string[]): Promise<{
   cpSync(fileURLToPath(new URL('../src', import.meta.url)), join(root, 'src'), {
     recursive: true,
   });
+
+  // Зависимости движка (yaml, zod) подключаются ссылкой на node_modules этого
+  // репозитория: ядро копии тянет их через пакеты пользователя
+  // (`src/parts/packages/manifest.ts`), а ставить их ради проверки раскладки не нужно.
+  symlinkSync(fileURLToPath(new URL('../../node_modules', import.meta.url)), join(root, 'node_modules'), 'dir');
 
   if (schemaNames !== undefined) {
     mkdirSync(join(root, 'schema'));

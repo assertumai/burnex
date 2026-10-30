@@ -1,0 +1,7 @@
+routes:
+  - id: hello-dashboard
+    path: /hello
+    target: { dashboard: hello }
+    nav:
+      title: Привет
+      order: 90

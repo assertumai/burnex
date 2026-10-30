@@ -36,11 +36,14 @@ export async function runRunCommand(
   const target = args.positional[0] ?? 'stepcast.yml';
   // `stepcast:<имя>` называет пайплайн поставки, а не файл каталога запуска
   // (`pipeline-definition`, «Ссылка на поставку называет и пайплайн, а не
-  // только схему»): путь разрешается от расположения движка, а не от `cwd`,
-  // и слои `script`/`step` пайплайна ищутся от `cwd`, а не от каталога
-  // поставки внутри пакета (`projectRoot` ниже).
-  const { pipelinePath, isSupplyPipeline } = resolvePipelineTarget(cwd, target);
+  // только схему»), `<пакет>:<имя>` — пайплайн пакета: путь разрешается не от
+  // `cwd`, и слои `script`/`step` пайплайна ищутся от `cwd`, а не от каталога,
+  // где файл лежит (`projectRoot` ниже). Конфигурация нужна раньше цели: пакеты
+  // home лежат рядом с глобальным конфигом.
   const config = resolvedConfig ?? resolveConfig({ cwd }).config;
+  const { pipelinePath, outsideProject, address } = resolvePipelineTarget(cwd, target, {
+    globalConfigDir: config.globalConfigDir,
+  });
   const inputs = (args.flags.input as Record<string, string> | undefined) ?? {};
   const envOverrides = (args.flags.env as Record<string, string> | undefined) ?? {};
 
@@ -49,7 +52,7 @@ export async function runRunCommand(
     config,
     inputs,
     ...(registry === undefined ? {} : { registry }),
-    ...(isSupplyPipeline ? { projectRoot: cwd } : {}),
+    ...(outsideProject ? { projectRoot: cwd } : {}),
   });
 
   // До записи прогона: отказ не должен оставлять после себя каталог журнала.
@@ -99,6 +102,7 @@ export async function runRunCommand(
       config,
       projectRoot,
       cwd,
+      ...(address === undefined ? {} : { pipelineAddress: address }),
       ...(registry === undefined ? {} : { registry }),
       signal: controller.signal,
       ...(Object.keys(envOverrides).length === 0 ? {} : { envOverrides }),

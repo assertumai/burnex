@@ -13,6 +13,7 @@ import { row as logs } from '../pipeline/commands/logs.js';
 import { row as config } from '../pipeline/commands/config.js';
 import { row as schema } from '../pipeline/commands/schema.js';
 import { row as plugins } from './commands/plugins.js';
+import { row as packageRow } from '../packages/commands/package.js';
 import { row as gc } from '../pipeline/commands/gc.js';
 import { row as init } from '../pipeline/commands/init.js';
 import { row as context } from '../pipeline/commands/context.js';
@@ -46,10 +47,11 @@ import { row as project } from '../pipeline/commands/project.js';
  * `run`, `resume`, `lint`, `status`, `logs`, `diff`, `decide`, `usage`,
  * `context`, `schema`, `gc`, `apply`, `propose`, `backlog`, `knowledge`,
  * `merge-lanes`, `assert-clean`, `project`. Восемь ядерных, без `inject`:
- * `plugins`, `config`, `up`, `down`, `update`, `widgets`, `data`, `init` — они читают
+ * `plugins`, `package`, `config`, `up`, `down`, `update`, `widgets`, `data`, `init` — они читают
  * либо ничего доменного (`widgets`, `up`, `down` знают витрину, не пайплайн; `update` — способ установки движка),
  * либо обязаны работать именно тогда, когда состав сломан (`plugins`,
- * `config`). `data`, `down`, `init` и `update` среди ядерных дополнительно независимы
+ * `config`, `package` — перечень пакетов нужен как раз для того, чтобы увидеть
+ * пакет, сломавший работу). `data`, `down`, `init` и `update` среди ядерных дополнительно независимы
  * от конфигурации (Решение 4, Решение 5) — граница проводится по порядку
  * исполнения, а не по домену: они исполняются раньше, чем состав существует,
  * и потребителем того, чего ещё нет, быть не могут.
@@ -68,6 +70,7 @@ export const COMMAND_ROWS: readonly CommandRow[] = [
   config,
   schema,
   plugins,
+  packageRow,
   gc,
   init,
   context,

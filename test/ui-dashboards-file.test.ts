@@ -9,6 +9,7 @@ import {
   dashboardFingerprint,
   homeDashboardsDirPath,
   projectDashboardsDirPath,
+  writableDashboardPath,
   writeDashboard,
   type DashboardFileDocument,
 } from '../src/parts/ui/dashboardsFile.js';
@@ -343,5 +344,145 @@ describe('ui-dashboards-file: запись документа через Documen
         return true;
       },
     );
+  });
+});
+
+function writePackageDashboard(root: string, name: string, id: string, content: string, broken = false): string {
+  const dir = join(root, '.stepcast', 'packages', name);
+  mkdirSync(join(dir, 'dashboards'), { recursive: true });
+  writeFileSync(
+    join(dir, 'package.yml'),
+    broken ? 'not: [valid' : `version: 1\nkind: package\nname: ${name}\ndescription: Пример\npackage_version: 0.1.0\n`,
+  );
+  const file = join(dir, 'dashboards', `${id}.yml`);
+  writeFileSync(file, content);
+  return file;
+}
+
+describe('ui-dashboards-file: дашборды пакетов (packages-directory-layer)', () => {
+  it('дашборд пакета проекта действует и назван пакетом и файлом внутри него', () => {
+    const { home, projectRoot } = layerDirs();
+    const file = writePackageDashboard(projectRoot, 'hello', 'ops', SIMPLE_YAML);
+
+    const entry = buildDashboards({ home, projectRoot }).dashboards.find((d) => d.id === 'ops');
+    assert.equal(entry?.layer, 'project');
+    assert.equal(entry?.package, 'hello');
+    assert.equal(entry?.file, file);
+  });
+
+  it('порядок: свободный проект → пакет проекта → свободный home → пакет home', () => {
+    const { home, projectRoot } = layerDirs();
+    writePackageDashboard(home, 'tools', 'ops', SIMPLE_YAML);
+    assert.equal(buildDashboards({ home, projectRoot }).dashboards[0]?.package, 'tools');
+
+    writeHomeDashboard(home, 'ops', SIMPLE_YAML);
+    const free = buildDashboards({ home, projectRoot }).dashboards[0];
+    assert.equal(free?.package, undefined);
+    assert.equal(free?.layer, 'home');
+
+    writePackageDashboard(projectRoot, 'hello', 'ops', SIMPLE_YAML);
+    assert.equal(buildDashboards({ home, projectRoot }).dashboards[0]?.package, 'hello');
+
+    writeProjectDashboard(projectRoot, 'ops', SIMPLE_YAML);
+    const top = buildDashboards({ home, projectRoot }).dashboards[0];
+    assert.equal(top?.package, undefined);
+    assert.equal(top?.layer, 'project');
+  });
+
+  it('конфликт id в слое пакетов — запись с ошибкой, называющей оба пакета, без провала вниз', () => {
+    const { home, projectRoot } = layerDirs();
+    writePackageDashboard(projectRoot, 'a', 'ops', SIMPLE_YAML);
+    writePackageDashboard(projectRoot, 'b', 'ops', SIMPLE_YAML);
+    writePackageDashboard(projectRoot, 'b', 'other', SIMPLE_YAML);
+    writeHomeDashboard(home, 'ops', SIMPLE_YAML);
+
+    const result = buildDashboards({ home, projectRoot });
+    assert.equal(result.dashboards.some((d) => d.id === 'ops'), false);
+    assert.deepEqual(result.dashboards.map((d) => d.id), ['other']);
+    assert.match(result.failures.find((f) => f.id === 'ops')?.reason ?? '', /a and b/);
+  });
+
+  it('дашборд пакета не прошёл схему — запись с ошибкой, называющей файл внутри пакета', () => {
+    const { home, projectRoot } = layerDirs();
+    const file = writePackageDashboard(projectRoot, 'hello', 'ops', 'cells: not-a-list\n');
+    writePackageDashboard(projectRoot, 'hello', 'fine', SIMPLE_YAML);
+
+    const result = buildDashboards({ home, projectRoot });
+    assert.equal(result.failures[0]?.file, file);
+    assert.equal(result.failures[0]?.package, 'hello');
+    assert.deepEqual(result.dashboards.map((d) => d.id), ['fine']);
+  });
+
+  it('сломанный пакет и затенённый пакет home дашбордов не дают', () => {
+    const { home, projectRoot } = layerDirs();
+    writePackageDashboard(projectRoot, 'broken', 'ghost', SIMPLE_YAML, true);
+    writePackageDashboard(projectRoot, 'hello', 'mine', SIMPLE_YAML);
+    writePackageDashboard(home, 'hello', 'theirs', SIMPLE_YAML);
+
+    assert.deepEqual(buildDashboards({ home, projectRoot }).dashboards.map((d) => d.id), ['mine']);
+  });
+
+  it('writableDashboardPath: для дашборда пакета — свободный каталог проекта, даже из пакета home', () => {
+    const { home, projectRoot } = layerDirs();
+    assert.equal(
+      writableDashboardPath('home', 'ops', { home, projectRoot }, true),
+      join(projectDashboardsDirPath(projectRoot), 'ops.yml'),
+    );
+    assert.equal(
+      writableDashboardPath('project', 'ops', { home, projectRoot }, true),
+      join(projectDashboardsDirPath(projectRoot), 'ops.yml'),
+    );
+    assert.equal(writableDashboardPath('home', 'ops', { home, projectRoot }), join(homeDashboardsDirPath(home), 'ops.yml'));
+  });
+
+  it('сохранение дашборда пакета пишет копию в проект: файл пакета не изменён, копия затеняет пакетный', () => {
+    const { home, projectRoot } = layerDirs();
+    const file = writePackageDashboard(projectRoot, 'hello', 'ops', SIMPLE_YAML);
+    const before = readFileSync(file, 'utf8');
+    const base = dashboardFingerprint(file);
+    const changed: DashboardFileDocument = {
+      title: 'Моя копия',
+      grid: { columns: 12 },
+      cells: [{ id: 'a', widget: 'runs', at: { column: 0, row: 0, width: 6, height: 2 } }],
+    };
+
+    writeDashboard('project', 'ops', changed, base, { home, projectRoot }, 'hello');
+
+    assert.equal(readFileSync(file, 'utf8'), before, 'файл пакета нетронут');
+    const copy = join(projectDashboardsDirPath(projectRoot), 'ops.yml');
+    assert.match(readFileSync(copy, 'utf8'), /Моя копия/);
+    const entry = buildDashboards({ home, projectRoot }).dashboards.find((d) => d.id === 'ops');
+    assert.equal(entry?.package, undefined);
+    assert.equal(entry?.document.title, 'Моя копия');
+  });
+
+  it('сохранение дашборда пакета home тоже пишет в проект, а не в свободный home', () => {
+    const { home, projectRoot } = layerDirs();
+    const file = writePackageDashboard(home, 'tools', 'ops', SIMPLE_YAML);
+    const changed: DashboardFileDocument = {
+      grid: { columns: 12 },
+      cells: [{ id: 'a', widget: 'runs', at: { column: 0, row: 0, width: 6, height: 2 } }],
+    };
+
+    writeDashboard('home', 'ops', changed, dashboardFingerprint(file), { home, projectRoot }, 'tools');
+
+    assert.equal(readFileSync(join(projectDashboardsDirPath(projectRoot), 'ops.yml'), 'utf8').includes('width: 6'), true);
+    assert.throws(() => readFileSync(join(homeDashboardsDirPath(home), 'ops.yml'), 'utf8'));
+  });
+
+  it('файл пакета изменился с момента открытия — отказ, копия не записана', () => {
+    const { home, projectRoot } = layerDirs();
+    const file = writePackageDashboard(projectRoot, 'hello', 'ops', SIMPLE_YAML);
+    const base = { mtimeMs: 1, size: 1 };
+    const changed: DashboardFileDocument = {
+      grid: { columns: 12 },
+      cells: [{ id: 'a', widget: 'runs', at: { column: 0, row: 0, width: 6, height: 2 } }],
+    };
+
+    assert.throws(
+      () => writeDashboard('project', 'ops', changed, base, { home, projectRoot }, 'hello'),
+      (error: unknown) => error instanceof StepcastError && /changed since it was opened/.test(error.message),
+    );
+    assert.equal(readFileSync(file, 'utf8'), SIMPLE_YAML);
   });
 });

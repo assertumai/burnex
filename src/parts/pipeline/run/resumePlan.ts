@@ -1377,6 +1377,9 @@ export function planResume(request: ResumeRequest): ResumePlanResult {
     config,
     inputs,
     ...(request.registry === undefined ? {} : { registry: request.registry }),
+    // Пайплайн пакета лежит вне проекта: слои шагов и скриптов ищутся от корня
+    // проекта прогона, а не от каталога, где лежит файл (`<пакет>:<имя>`).
+    ...(source.manifest.pipeline_address === undefined ? {} : { projectRoot: source.manifest.project_root }),
   });
 
   const from = request.from === undefined ? undefined : parseFrom(request.from);

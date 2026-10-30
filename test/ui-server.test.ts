@@ -5619,3 +5619,243 @@ jobs:
     assert.equal(readFileSync(file, 'utf8'), before);
   });
 });
+
+describe('ui-daemon: пайплайны пакетов (packages-directory-layer)', () => {
+  function writePackagePipeline(root: string, name: string, pipeline: string, yaml: string): string {
+    const dir = join(root, '.stepcast', 'packages', name);
+    mkdirSync(join(dir, 'pipelines'), { recursive: true });
+    writeFileSync(
+      join(dir, 'package.yml'),
+      `version: 1\nkind: package\nname: ${name}\ndescription: Пример\npackage_version: 0.1.0\n`,
+    );
+    const file = join(dir, 'pipelines', `${pipeline}.yml`);
+    writeFileSync(file, yaml);
+    return file;
+  }
+
+  interface PackageLaunch {
+    readonly cwd: string;
+    readonly pipeline: string;
+  }
+
+  it('экран Pipelines показывает пайплайны пакетов проекта и home с адресом и источником', async (t) => {
+    const { runsRoot, projectRoot, home } = makeJournalBed();
+    seedRun(runsRoot, projectRoot, { runId: 'a' });
+    writePackagePipeline(projectRoot, 'hello', 'greet', DEMO_PIPELINE);
+    writePackagePipeline(home, 'tools', 'report', DEMO_PIPELINE);
+    const { config } = resolveConfig({ cwd: projectRoot, home, projectPath: null });
+    const server = await startServer(t, { runsRoot, config, home });
+
+    const pipelines = await fetchJson(server, '/api/pipelines');
+    assert.equal(pipelines.code, 200);
+    const views = pick(pipelines.json, 'pipelines') as Array<{ file: string; package?: string; packageLayer?: string; name: string }>;
+    const greet = views.find((view) => view.file === 'hello:greet');
+    const report = views.find((view) => view.file === 'tools:report');
+    assert.equal(greet?.package, 'hello');
+    assert.equal(greet?.packageLayer, 'project');
+    assert.equal(greet?.name, 'demo');
+    assert.equal(report?.package, 'tools');
+    assert.equal(report?.packageLayer, 'home');
+  });
+
+  it('шаг uses пайплайна пакета home разрешается из того же пакета при подставном home демона', async (t) => {
+    const { runsRoot, projectRoot, home } = makeJournalBed();
+    seedRun(runsRoot, projectRoot, { runId: 'a' });
+    writePackagePipeline(
+      home,
+      'tools',
+      'report',
+      'version: 1\nkind: pipeline\nname: report\njobs:\n  build:\n    steps:\n      - id: hi\n        uses: tools-greet\n',
+    );
+    const stepDir = join(home, '.stepcast', 'packages', 'tools', 'steps', 'tools-greet');
+    mkdirSync(stepDir, { recursive: true });
+    writeFileSync(
+      join(stepDir, 'step.yml'),
+      'version: 1\nkind: step\nname: tools-greet\ndescription: Приветствует.\nfile: ./main.cjs\n',
+    );
+    writeFileSync(join(stepDir, 'main.cjs'), '');
+    const { config } = resolveConfig({ cwd: projectRoot, home, projectPath: null });
+    const server = await startServer(t, { runsRoot, config, home });
+
+    const pipelines = await fetchJson(server, '/api/pipelines');
+    const report = (
+      pick(pipelines.json, 'pipelines') as Array<{
+        file: string;
+        error?: string;
+        jobs: Array<{ steps: Array<{ usesName?: string; usesLayer?: string }> }>;
+      }>
+    ).find((view) => view.file === 'tools:report');
+    assert.equal(report?.error, undefined);
+    assert.equal(report?.jobs[0]?.steps[0]?.usesName, 'tools-greet');
+    assert.equal(report?.jobs[0]?.steps[0]?.usesLayer, 'home');
+  });
+
+  it('запуск адресом пакета проекта и пакета home передаёт пуску адрес, а не путь', async (t) => {
+    const { runsRoot, projectRoot, home } = makeJournalBed();
+    seedRun(runsRoot, projectRoot, { runId: 'seed' });
+    writePackagePipeline(projectRoot, 'hello', 'greet', MINIMAL_PIPELINE_YAML);
+    writePackagePipeline(home, 'tools', 'report', MINIMAL_PIPELINE_YAML);
+    const key = projectKey(projectRoot);
+    const calls: PackageLaunch[] = [];
+    const server = await createUiServer({ runsRoot, home, port: 0, launchRun: (options) => calls.push(options) });
+    t.after(() => server.close());
+
+    for (const pipeline of ['hello:greet', 'tools:report']) {
+      const written = await sendJson(server, {
+        method: 'POST',
+        path: '/api/run',
+        body: JSON.stringify({ project: key, pipeline }),
+      });
+      assert.equal(written.code, 202, pipeline);
+    }
+    assert.deepEqual(
+      calls.map((call) => [call.cwd, call.pipeline]),
+      [[projectRoot, 'hello:greet'], [projectRoot, 'tools:report']],
+    );
+  });
+
+  it('произвольный путь вне проекта и адрес несуществующего пайплайна пакета по-прежнему отказывают', async (t) => {
+    const { runsRoot, projectRoot, home } = makeJournalBed();
+    seedRun(runsRoot, projectRoot, { runId: 'seed' });
+    const outside = writePackagePipeline(home, 'tools', 'report', MINIMAL_PIPELINE_YAML);
+    const key = projectKey(projectRoot);
+    const calls: PackageLaunch[] = [];
+    const server = await createUiServer({ runsRoot, home, port: 0, launchRun: (options) => calls.push(options) });
+    t.after(() => server.close());
+
+    for (const pipeline of [outside, '../outside.yml', 'tools:missing', 'nope:report']) {
+      const written = await sendJson(server, {
+        method: 'POST',
+        path: '/api/run',
+        body: JSON.stringify({ project: key, pipeline }),
+      });
+      assert.equal(written.code, 400, pipeline);
+    }
+    assert.equal(calls.length, 0);
+  });
+
+  it('прогон по адресу пакета привязан к карточке пайплайна пакета, а не к «осиротевшим»', async (t) => {
+    const { runsRoot, projectRoot, home } = makeJournalBed();
+    writePackagePipeline(home, 'tools', 'report', DEMO_PIPELINE);
+    seedRun(runsRoot, projectRoot, { runId: 'a', manifest: { pipeline_address: 'tools:report' } });
+    const { config } = resolveConfig({ cwd: projectRoot, home, projectPath: null });
+    const server = await startServer(t, { runsRoot, config, home });
+
+    const overview = await fetchJson(server, '/api/overview');
+    assert.equal(pick(overview.json, 'projects', 0, 'runs', 0, 'pipelineFile'), 'tools:report');
+  });
+});
+
+describe('ui-daemon: пакеты без перезапуска (packages-directory-layer)', () => {
+  const CELL_YAML = 'cells:\n  - id: a\n    widget: runs\n    at: { column: 0, row: 0, width: 4, height: 2 }\n';
+  const ROUTES_YAML = 'routes:\n  - id: pkg-ops\n    path: /pkg-ops\n    target: { dashboard: ops }\n';
+  const WIDGET_SOURCE = 'export default function Clock() { return null; }\n';
+
+  function writePackage(projectRoot: string): string {
+    const dir = join(projectRoot, '.stepcast', 'packages', 'hello');
+    mkdirSync(join(dir, 'widgets'), { recursive: true });
+    mkdirSync(join(dir, 'dashboards'), { recursive: true });
+    writeFileSync(
+      join(dir, 'package.yml'),
+      'version: 1\nkind: package\nname: hello\ndescription: Пример\npackage_version: 0.1.0\n',
+    );
+    writeFileSync(join(dir, 'widgets', 'clock.tsx'), WIDGET_SOURCE);
+    writeFileSync(join(dir, 'dashboards', 'ops.yml'), CELL_YAML);
+    writeFileSync(join(dir, 'routes.yml'), ROUTES_YAML);
+    return dir;
+  }
+
+  it('пакет, добавленный при поднятом демоне, виден в составах; битый package.yml убирает его ресурсы и называет причину', async (t) => {
+    const { runsRoot, projectRoot, home } = makeJournalBed();
+    seedRun(runsRoot, projectRoot, { runId: 'a' });
+    const watcher = createWatcher({ runsRoot, home, projectRoot, intervalMs: 10_000 });
+    t.after(() => watcher.dispose());
+    const server = await startServer(t, { runsRoot, home, projectRoot, watcher });
+
+    const empty = await fetchJson(server, '/api/packages');
+    assert.deepEqual(pick(empty.json, 'packages'), []);
+
+    const dir = writePackage(projectRoot);
+    watcher.poll();
+
+    // Виджеты витрины идут потоком событий и состоянием наблюдателя, отдельного GET нет.
+    const widget = watcher.currentWidgets().projects[0]?.widgets[0];
+    assert.deepEqual(widget?.source, { layer: 'project', package: 'hello' });
+    assert.equal(widget?.id, 'clock');
+
+    const dashboards = await fetchJson(server, '/api/dashboards');
+    const found = (pick(dashboards.json, 'dashboards') as Array<{ id: string; package?: string }>).find((d) => d.id === 'ops');
+    assert.equal(found?.package, 'hello');
+
+    const routes = await fetchJson(server, '/api/routes');
+    const route = (routes.json.routes as Array<{ id: string; sources: { path: { package?: string } } }>).find(
+      (entry) => entry.id === 'pkg-ops',
+    );
+    assert.equal(route?.sources.path.package, 'hello');
+
+    const listed = await fetchJson(server, '/api/packages');
+    assert.deepEqual(
+      (pick(listed.json, 'packages') as Array<{ name: string; status: string; provides: string[] }>).map((p) => [p.name, p.status, p.provides]),
+      [['hello', 'ok', ['widgets', 'dashboards', 'routes']]],
+    );
+
+    // Правка package.yml на битый: пакет исключён целиком, причина названа.
+    writeFileSync(join(dir, 'package.yml'), 'name: [oops\n');
+    watcher.poll();
+
+    const broken = await fetchJson(server, '/api/packages');
+    const entry = (pick(broken.json, 'packages') as Array<{ status: string; reason?: string }>)[0];
+    assert.equal(entry?.status, 'broken');
+    assert.match(entry?.reason ?? '', /YAML/);
+    assert.match(entry?.reason ?? '', /package\.yml/);
+
+    assert.deepEqual(watcher.currentWidgets().projects[0]?.widgets, []);
+    const dashboardsAfter = await fetchJson(server, '/api/dashboards');
+    assert.equal((pick(dashboardsAfter.json, 'dashboards') as Array<{ id: string }>).some((d) => d.id === 'ops'), false);
+    const routesAfter = await fetchJson(server, '/api/routes');
+    assert.equal((routesAfter.json.routes as Array<{ id: string }>).some((r) => r.id === 'pkg-ops'), false);
+
+    // Починка возвращает ресурсы — тоже без перезапуска.
+    writeFileSync(
+      join(dir, 'package.yml'),
+      'version: 1\nkind: package\nname: hello\ndescription: Пример\npackage_version: 0.1.1\n',
+    );
+    watcher.poll();
+    assert.equal(watcher.currentWidgets().projects[0]?.widgets[0]?.id, 'clock');
+  });
+
+  it('удаление пакета убирает его ресурсы из составов', async (t) => {
+    const { runsRoot, projectRoot, home } = makeJournalBed();
+    seedRun(runsRoot, projectRoot, { runId: 'a' });
+    const dir = writePackage(projectRoot);
+    const watcher = createWatcher({ runsRoot, home, projectRoot, intervalMs: 10_000 });
+    t.after(() => watcher.dispose());
+    const server = await startServer(t, { runsRoot, home, projectRoot, watcher });
+
+    const before = await fetchJson(server, '/api/packages');
+    assert.equal((pick(before.json, 'packages') as unknown[]).length, 1);
+
+    rmSync(dir, { recursive: true, force: true });
+    watcher.poll();
+
+    const after = await fetchJson(server, '/api/packages');
+    assert.deepEqual(pick(after.json, 'packages'), []);
+    assert.deepEqual(watcher.currentWidgets().projects[0]?.widgets, []);
+  });
+
+  it('пакет home затенён пакетом проекта: сводка называет затенение', async (t) => {
+    const { runsRoot, projectRoot, home } = makeJournalBed();
+    seedRun(runsRoot, projectRoot, { runId: 'a' });
+    writePackage(projectRoot);
+    writePackage(home);
+    const watcher = createWatcher({ runsRoot, home, projectRoot, intervalMs: 10_000 });
+    t.after(() => watcher.dispose());
+    const server = await startServer(t, { runsRoot, home, projectRoot, watcher });
+
+    const listed = await fetchJson(server, '/api/packages');
+    assert.deepEqual(
+      (pick(listed.json, 'packages') as Array<{ layer: string; status: string; shadowedBy?: string }>).map((p) => [p.layer, p.status, p.shadowedBy]),
+      [['project', 'ok', undefined], ['home', 'shadowed', 'project']],
+    );
+  });
+});

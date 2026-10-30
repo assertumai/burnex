@@ -1,7 +1,7 @@
 import { readdirSync, type Dirent } from 'node:fs';
 import { join } from 'node:path';
 
-import { directoryOperations, type TreeOperation, type TreeRowFailure } from './tree.js';
+import { directoryOperations, type TreeOperation, type TreeOrigin, type TreeRowFailure } from './tree.js';
 
 /**
  * Обход каталога плагинов слоя (`user-plugins`, design.md, Решение 1, 2).
@@ -29,7 +29,7 @@ export function pluginsDirPath(root: string): string {
 }
 
 /** Имена каталогов верхнего уровня, отсортированные; вложенность глубже уровня не обходится. */
-function listPluginDirNames(pluginsDir: string): readonly string[] {
+export function listPluginDirNames(pluginsDir: string): readonly string[] {
   let entries: readonly Dirent[];
   try {
     entries = readdirSync(pluginsDir, { withFileTypes: true });
@@ -42,7 +42,7 @@ function listPluginDirNames(pluginsDir: string): readonly string[] {
     .sort();
 }
 
-function reservedNameFailure(id: string): TreeRowFailure {
+export function reservedNameFailure(id: string): TreeRowFailure {
   return {
     message: `Каталог плагина ${id} назван идентификатором встроенной строки ${id}`,
     hint: 'Замена встроенной строки делается патчем (plugins.patch.yml), а не именем каталога — см. docs/plugins.md',
@@ -58,7 +58,7 @@ function reservedNameFailure(id: string): TreeRowFailure {
  */
 export function discoverPluginDirectories(
   pluginsDir: string,
-  layer: 'project' | 'home',
+  origin: TreeOrigin,
   reservedIds: readonly string[],
 ): readonly TreeOperation[] {
   return directoryOperations(
@@ -67,6 +67,6 @@ export function discoverPluginDirectories(
       dir: join(pluginsDir, id),
       ...(reservedIds.includes(id) ? { failure: reservedNameFailure(id) } : {}),
     })),
-    layer,
+    origin,
   );
 }

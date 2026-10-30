@@ -381,11 +381,11 @@ describe('user-plugins: stepcast plugins печатает каталожные �
     const projectLine = outcome.stdout.split('\n').find((entry) => entry.includes('project-clock'));
     assert.match(
       homeLine ?? '',
-      new RegExp(`${escapeRegExp(join(project.home, '.stepcast', 'plugins', 'home-clock'))}.*\\(дом\\)`),
+      new RegExp(`${escapeRegExp(join(project.home, '.stepcast', 'plugins', 'home-clock'))}.*\\(home\\)`),
     );
     assert.match(
       projectLine ?? '',
-      new RegExp(`${escapeRegExp(join(project.root, '.stepcast', 'plugins', 'project-clock'))}.*\\(проект\\)`),
+      new RegExp(`${escapeRegExp(join(project.root, '.stepcast', 'plugins', 'project-clock'))}.*\\(project\\)`),
     );
     assert.match(homeLine ?? '', /действует/);
     assert.match(projectLine ?? '', /действует/);
@@ -402,7 +402,7 @@ describe('user-plugins: stepcast plugins печатает каталожные �
     assert.equal(lines.length, 2, 'встроенная строка и отказавшая каталожная — обе на месте');
     assert.match(lines[0] ?? '', /встроенный/);
     assert.match(lines[0] ?? '', /действует/);
-    assert.match(lines[1] ?? '', /\(дом\)/);
+    assert.match(lines[1] ?? '', /\(home\)/);
     assert.match(lines[1] ?? '', /отказ:.*встроенной строки/);
   });
 

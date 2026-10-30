@@ -35,6 +35,13 @@ node examples/acceptance/verify.mjs <каталог-прогона-из-выво
 `clock.tsx` в `<проект>/.stepcast/widgets/`, откройте демон и экран «Виджеты»
 — подробности и границы спайка в [`docs/widgets.md`](../docs/widgets.md).
 
+**`packages/hello/`** — образец пакета: пайплайн, шаг, виджет, дашборд, маршрут
+и каталожный плагин в одном каталоге с манифестом `package.yml`. Скопируйте его
+в `<проект>/.stepcast/packages/hello/` (или в `~/.stepcast/packages/hello/`) и
+выполните `stepcast package list`, затем `stepcast run hello:greet` —
+подробности в [`docs/packages.md`](../docs/packages.md). Проверяется тестом
+`test/example-package.test.ts`.
+
 **`plugins/`** — образцы обеих половин плагина:
 
 - движковая половина (`docs/plugins.md`, «Два подпутя»): `typed/` — доменный

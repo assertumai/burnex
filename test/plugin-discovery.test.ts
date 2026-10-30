@@ -9,7 +9,7 @@ import { tempDir } from './tmp.js';
 describe('plugin-discovery: обход каталога плагинов слоя', () => {
   it('каталога плагинов нет вовсе — пустой список без ошибки', () => {
     const root = tempDir('plugin-discovery-');
-    assert.deepEqual(discoverPluginDirectories(pluginsDirPath(root), 'home', []), []);
+    assert.deepEqual(discoverPluginDirectories(pluginsDirPath(root), { layer: 'home' }, []), []);
   });
 
   it('каталоги верхнего уровня становятся операциями, отсортированными по имени', () => {
@@ -17,7 +17,7 @@ describe('plugin-discovery: обход каталога плагинов сло�
     mkdirSync(join(pluginsDirPath(root), 'clock'), { recursive: true });
     mkdirSync(join(pluginsDirPath(root), 'analytics'), { recursive: true });
 
-    const operations = discoverPluginDirectories(pluginsDirPath(root), 'project', []);
+    const operations = discoverPluginDirectories(pluginsDirPath(root), { layer: 'project' }, []);
     assert.deepEqual(operations.map((op) => op.id), ['analytics', 'clock']);
     assert.equal(operations[0]?.kind, 'directory');
     assert.equal(operations[0]?.use, join(pluginsDirPath(root), 'analytics'));
@@ -29,7 +29,7 @@ describe('plugin-discovery: обход каталога плагинов сло�
     const root = tempDir('plugin-discovery-');
     mkdirSync(join(pluginsDirPath(root), 'broken'), { recursive: true });
 
-    const operations = discoverPluginDirectories(pluginsDirPath(root), 'home', []);
+    const operations = discoverPluginDirectories(pluginsDirPath(root), { layer: 'home' }, []);
     assert.deepEqual(operations.map((op) => op.id), ['broken']);
     assert.equal(operations[0]?.use, join(pluginsDirPath(root), 'broken'));
     assert.equal(operations[0]?.failure, undefined);
@@ -42,7 +42,7 @@ describe('plugin-discovery: обход каталога плагинов сло�
     // Файл рядом — не каталог, не должен попасть в перечень.
     writeFileSync(join(pluginsDirPath(root), 'notes.txt'), 'x');
 
-    const operations = discoverPluginDirectories(pluginsDirPath(root), 'home', []);
+    const operations = discoverPluginDirectories(pluginsDirPath(root), { layer: 'home' }, []);
     assert.deepEqual(operations.map((op) => op.id), ['real']);
   });
 
@@ -50,7 +50,7 @@ describe('plugin-discovery: обход каталога плагинов сло�
     const root = tempDir('plugin-discovery-');
     mkdirSync(join(pluginsDirPath(root), 'clock', 'nested'), { recursive: true });
 
-    const operations = discoverPluginDirectories(pluginsDirPath(root), 'home', []);
+    const operations = discoverPluginDirectories(pluginsDirPath(root), { layer: 'home' }, []);
     assert.deepEqual(operations.map((op) => op.id), ['clock']);
   });
 
@@ -59,7 +59,7 @@ describe('plugin-discovery: обход каталога плагинов сло�
     mkdirSync(join(pluginsDirPath(root), 'backend-claude'), { recursive: true });
     mkdirSync(join(pluginsDirPath(root), 'clock'), { recursive: true });
 
-    const operations = discoverPluginDirectories(pluginsDirPath(root), 'home', ['backend-claude']);
+    const operations = discoverPluginDirectories(pluginsDirPath(root), { layer: 'home' }, ['backend-claude']);
 
     assert.deepEqual(operations.map((op) => op.id), ['backend-claude', 'clock'], 'соседний каталог обойдён как обычно');
     const reserved = operations.find((op) => op.id === 'backend-claude');
@@ -72,7 +72,24 @@ describe('plugin-discovery: обход каталога плагинов сло�
     const root = tempDir('plugin-discovery-');
     mkdirSync(join(pluginsDirPath(root), 'ui-shell'), { recursive: true });
 
-    const operations = discoverPluginDirectories(pluginsDirPath(root), 'project', ['backend-claude', 'ui-shell']);
+    const operations = discoverPluginDirectories(pluginsDirPath(root), { layer: 'project' }, ['backend-claude', 'ui-shell']);
     assert.match(operations[0]?.failure?.message ?? '', /ui-shell/);
+  });
+
+  it('источник с пакетом: операции несут слой и имя пакета', () => {
+    const root = tempDir('plugin-discovery-');
+    mkdirSync(join(pluginsDirPath(root), 'board'), { recursive: true });
+
+    const operations = discoverPluginDirectories(pluginsDirPath(root), { layer: 'home', package: 'hello' }, []);
+    assert.equal(operations[0]?.layer, 'home');
+    assert.equal(operations[0]?.package, 'hello');
+  });
+
+  it('источник без пакета не заводит ключ package', () => {
+    const root = tempDir('plugin-discovery-');
+    mkdirSync(join(pluginsDirPath(root), 'board'), { recursive: true });
+
+    const operations = discoverPluginDirectories(pluginsDirPath(root), { layer: 'project' }, []);
+    assert.equal('package' in (operations[0] ?? {}), false);
   });
 });

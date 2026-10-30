@@ -373,3 +373,134 @@ describe('ui-routes-file: запись строки в слой через Docum
     assert.equal(rows[0]?.definition.path, '/new');
   });
 });
+
+/** Пакет с манифестом и, при желании, своим `routes.yml`. */
+function writePackageRoutes(root: string, name: string, routes: string | undefined, broken = false): string {
+  const dir = join(root, '.stepcast', 'packages', name);
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(
+    join(dir, 'package.yml'),
+    broken ? 'not: [valid' : `version: 1\nkind: package\nname: ${name}\ndescription: Пример\npackage_version: 0.1.0\n`,
+  );
+  const file = join(dir, 'routes.yml');
+  if (routes !== undefined) writeFileSync(file, routes);
+  return file;
+}
+
+describe('ui-routes-file: маршруты пакетов (packages-directory-layer)', () => {
+  const OPS = 'routes:\n  - id: ops\n    path: /ops\n    target: { dashboard: ops }\n';
+
+  it('маршрут пакета проекта входит в таблицу, источник называет слой, пакет и файл', () => {
+    const { home, projectRoot } = layerDirs();
+    const file = writePackageRoutes(projectRoot, 'hello', OPS);
+
+    const entry = buildRouteTable({ home, projectRoot }).entries.find((candidate) => candidate.id === 'ops');
+    assert.equal(entry?.definition.path, '/ops');
+    assert.deepEqual(entry?.sources.path, { layer: 'project', package: 'hello', file });
+  });
+
+  it('маршрут свободного routes.yml проекта перекрывает маршрут пакета проекта', () => {
+    const { home, projectRoot } = layerDirs();
+    writePackageRoutes(projectRoot, 'hello', OPS);
+    writeProjectRoutes(projectRoot, 'routes:\n  - id: ops\n    path: /operations\n');
+
+    const entry = buildRouteTable({ home, projectRoot }).entries.find((candidate) => candidate.id === 'ops');
+    assert.equal(entry?.definition.path, '/operations');
+    assert.equal(entry?.sources.path.layer, 'project');
+    assert.equal(entry?.sources.path.package, undefined);
+    // Цель осталась от пакета: слияние идёт по листьям, как у прочих слоёв.
+    assert.equal(entry?.sources.target.package, 'hello');
+  });
+
+  it('порядок слоёв: встроенное ← пакеты home ← home ← пакеты проекта ← проект', () => {
+    const { home, projectRoot } = layerDirs();
+    writePackageRoutes(home, 'tools', 'routes:\n  - id: screen-cleanup\n    nav:\n      title: Из пакета home\n');
+    assert.equal(
+      buildRouteTable({ home, projectRoot }).entries.find((e) => e.id === 'screen-cleanup')?.definition.nav?.title,
+      'Из пакета home',
+    );
+
+    writeHomeRoutes(home, 'routes:\n  - id: screen-cleanup\n    nav:\n      title: Из home\n');
+    assert.equal(
+      buildRouteTable({ home, projectRoot }).entries.find((e) => e.id === 'screen-cleanup')?.definition.nav?.title,
+      'Из home',
+    );
+
+    writePackageRoutes(projectRoot, 'hello', 'routes:\n  - id: screen-cleanup\n    nav:\n      title: Из пакета проекта\n');
+    assert.equal(
+      buildRouteTable({ home, projectRoot }).entries.find((e) => e.id === 'screen-cleanup')?.definition.nav?.title,
+      'Из пакета проекта',
+    );
+
+    writeProjectRoutes(projectRoot, 'routes:\n  - id: screen-cleanup\n    nav:\n      title: Из проекта\n');
+    assert.equal(
+      buildRouteTable({ home, projectRoot }).entries.find((e) => e.id === 'screen-cleanup')?.definition.nav?.title,
+      'Из проекта',
+    );
+  });
+
+  it('конфликт id двух пакетов одного слоя — отказ одной строки, называющий оба пакета; прочее действует', () => {
+    const { home, projectRoot } = layerDirs();
+    writePackageRoutes(projectRoot, 'a', `${OPS}  - id: only-a\n    path: /only-a\n    target: { dashboard: a }\n`);
+    writePackageRoutes(projectRoot, 'b', OPS);
+    writeProjectRoutes(projectRoot, 'routes:\n  - id: mine\n    path: /mine\n    target: { dashboard: mine }\n');
+
+    const result = buildRouteTable({ home, projectRoot });
+    assert.equal(result.entries.some((entry) => entry.id === 'ops'), false);
+    assert.ok(result.entries.some((entry) => entry.id === 'only-a'));
+    assert.ok(result.entries.some((entry) => entry.id === 'mine'));
+    assert.ok(result.entries.some((entry) => entry.id === 'screen-cleanup'), 'встроенные строки на месте');
+    assert.equal(result.failures.length, 1);
+    assert.deepEqual(result.failures[0]?.packages, ['a', 'b']);
+    assert.equal(result.failures[0]?.id, 'ops');
+    assert.match(result.failures[0]?.message ?? '', /a and b/);
+  });
+
+  it('строку в конфликте пакетов может объявить слой выше — действует она', () => {
+    const { home, projectRoot } = layerDirs();
+    writePackageRoutes(projectRoot, 'a', OPS);
+    writePackageRoutes(projectRoot, 'b', OPS);
+    writeProjectRoutes(projectRoot, 'routes:\n  - id: ops\n    path: /own-ops\n    target: { dashboard: ops }\n');
+
+    const result = buildRouteTable({ home, projectRoot });
+    assert.equal(result.entries.find((entry) => entry.id === 'ops')?.definition.path, '/own-ops');
+    assert.equal(result.failures.length, 1);
+  });
+
+  it('один id в пакете проекта и в пакете home — не конфликт: действует пакет проекта', () => {
+    const { home, projectRoot } = layerDirs();
+    writePackageRoutes(home, 'tools', 'routes:\n  - id: ops\n    path: /home-ops\n    target: { dashboard: ops }\n');
+    writePackageRoutes(projectRoot, 'hello', OPS);
+
+    const entry = buildRouteTable({ home, projectRoot }).entries.find((candidate) => candidate.id === 'ops');
+    assert.equal(entry?.definition.path, '/ops');
+  });
+
+  it('routes.yml пакета проходит прежнюю схему: ошибка называет файл пакета и исключает только его', () => {
+    const { home, projectRoot } = layerDirs();
+    const file = writePackageRoutes(projectRoot, 'hello', 'routes:\n  - id: ops\n    unknown_key: 1\n');
+    writePackageRoutes(projectRoot, 'tools', 'routes:\n  - id: tools\n    path: /tools\n    target: { dashboard: tools }\n');
+    writePackageRoutes(home, 'kit', 'routes:\n  - id: kit\n    path: /kit\n    target: { dashboard: kit }\n');
+
+    const result = buildRouteTable({ home, projectRoot });
+    assert.ok(result.entries.some((entry) => entry.id === 'tools'));
+    assert.ok(result.entries.some((entry) => entry.id === 'kit'));
+    assert.ok(result.entries.some((entry) => entry.id === 'screen-cleanup'));
+    assert.equal(result.failures.length, 1);
+    assert.deepEqual(result.failures[0]?.packages, ['hello']);
+    assert.equal(result.failures[0]?.file, file);
+    assert.match(result.failures[0]?.message ?? '', /does not match the format/);
+  });
+
+  it('пакет без routes.yml, сломанный пакет и затенённый пакет home таблицу не трогают', () => {
+    const { home, projectRoot } = layerDirs();
+    writePackageRoutes(projectRoot, 'plain', undefined);
+    writePackageRoutes(projectRoot, 'broken', OPS, true);
+    writePackageRoutes(projectRoot, 'hello', OPS);
+    writePackageRoutes(home, 'hello', 'routes:\n  - id: other\n    path: /other\n    target: { dashboard: other }\n');
+
+    const result = buildRouteTable({ home, projectRoot });
+    assert.equal(result.entries.some((entry) => entry.id === 'other'), false);
+    assert.equal(result.entries.filter((entry) => entry.id === 'ops').length, 1);
+  });
+});

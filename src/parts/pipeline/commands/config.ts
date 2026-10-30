@@ -198,13 +198,15 @@ export function runConfigCommand(
   // конфигурация, реестр и заглушки обязательных входов. Отказ раскрытия
   // (неизвестный агент в записи этого пайплайна) уходит вызывающему как есть.
   if (typeof args.flags.pipeline === 'string') {
-    const { pipelinePath, isSupplyPipeline } = resolvePipelineTarget(cwd, args.flags.pipeline);
+    const { pipelinePath, outsideProject } = resolvePipelineTarget(cwd, args.flags.pipeline, {
+      globalConfigDir: resolved.config.globalConfigDir,
+    });
     const expanded = expandPipeline({
       pipelinePath,
       config: resolved.config,
       inputs: displayInputs(pipelinePath),
       ...(registry === undefined ? {} : { registry }),
-      ...(isSupplyPipeline ? { projectRoot: cwd } : {}),
+      ...(outsideProject ? { projectRoot: cwd } : {}),
     });
     for (const line of renderAgentsReport(resolved, expanded)) write(line);
   }

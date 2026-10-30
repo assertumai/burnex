@@ -300,6 +300,8 @@ export const StepRecordSchema = z
       .object({
         path: z.string(),
         layer: z.enum(['project', 'home', 'builtin', 'explicit']),
+        /** Пакет, давший скрипт (`layer` — слой самого пакета). Ключа нет у скрипта вне пакета и у прогона прежней версии. */
+        package: z.string().optional(),
         absolute_path: z.string(),
         runner: z.string(),
         argv: z.array(z.string()),
@@ -317,6 +319,8 @@ export const StepRecordSchema = z
       .object({
         name: z.string(),
         layer: z.enum(['project', 'home', 'builtin']).optional(),
+        /** Пакет, давший шаг (`layer` — слой самого пакета). Ключа нет у шага вне пакета и у прогона прежней версии. */
+        package: z.string().optional(),
         manifest_path: z.string().optional(),
       })
       .strict()
@@ -426,6 +430,14 @@ export const RunManifestSchema = z
     run_id: z.string(),
     pipeline: z.string(),
     pipeline_file: z.string(),
+    /**
+     * Адрес `<пакет>:<имя>`, как пайплайн был назван при запуске
+     * (`packages-directory-layer`), рядом с разрешённым `pipeline_file`.
+     * Ключа нет у прогона по пути и у прогона прежней версии. `resume` идёт по
+     * `pipeline_file` и адрес не разрешает заново; поле говорит, что пайплайн
+     * лежит вне проекта и слои шагов и скриптов ищутся от корня проекта.
+     */
+    pipeline_address: z.string().optional(),
     lock_hash: z.string(),
     project_root: z.string(),
     workspace: z.object({ mode: z.string(), path: z.string().optional() }).strict(),
@@ -449,7 +461,17 @@ export const RunManifestSchema = z
      * Отсутствие поля — прогон прежней версии, а не прогон без плагинов.
      */
     plugins: z
-      .array(z.object({ name: z.string(), version: z.string().optional(), source: z.string() }).strict())
+      .array(
+        z
+          .object({
+            name: z.string(),
+            version: z.string().optional(),
+            source: z.string(),
+            /** Пакет, в каталоге которого лежал плагин. Ключа нет у плагина вне пакета и у прогона прежней версии. */
+            package: z.string().optional(),
+          })
+          .strict(),
+      )
       .optional(),
     /** Прогон, из которого этот получен возобновлением. */
     resumed_from: z.string().optional(),

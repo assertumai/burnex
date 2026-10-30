@@ -334,7 +334,11 @@ function isLayerShaped(value: unknown): boolean {
     case 'file':
       return typeof value.path === 'string';
     case 'directory':
-      return typeof value.dir === 'string' && (value.layer === 'project' || value.layer === 'home');
+      return (
+        typeof value.dir === 'string' &&
+        (value.layer === 'project' || value.layer === 'home') &&
+        (value.package === undefined || typeof value.package === 'string')
+      );
     default:
       return false;
   }

@@ -170,6 +170,7 @@ function widgetIdFromRoute(raw: string): string | undefined {
 /** `/widgets/<projectKey>/<id>.js`: компиляция при запросе, кеш и ошибка — модулем, а не отказом HTTP. */
 async function handleWidgetModule(
   runsRoot: string,
+  home: string,
   compiler: WidgetCompiler,
   rawKey: string,
   rawId: string,
@@ -199,7 +200,7 @@ async function handleWidgetModule(
       sendWidgetNotFound(res);
       return;
     }
-    file = resolveWidgetFile(project.path, id);
+    file = resolveWidgetFile(project.path, id, { home });
   }
   if (file === undefined) {
     sendWidgetNotFound(res);
@@ -229,6 +230,7 @@ async function handleWidgetModule(
  */
 async function handleWidgetRequest(
   runsRoot: string,
+  home: string,
   compiler: WidgetCompiler,
   pathname: string,
   res: ServerResponse,
@@ -236,7 +238,7 @@ async function handleWidgetRequest(
   const parts = pathname.split('/').filter((part) => part !== '');
   // `parts[0]` — всегда `widgets`: вызывающий уже проверил `isWidgetPath`.
   if (parts.length === 3) {
-    await handleWidgetModule(runsRoot, compiler, parts[1] as string, parts[2] as string, res);
+    await handleWidgetModule(runsRoot, home, compiler, parts[1] as string, parts[2] as string, res);
     return;
   }
   sendWidgetNotFound(res);
@@ -525,7 +527,7 @@ export function createUiServer(options: UiServerOptions): Promise<UiServer> {
     // экрана (design.md, Решение 16): разбирается по префиксу и сегментам, а
     // не по точному совпадению пути реестра.
     if (isWidgetPath(url.pathname)) {
-      void handleWidgetRequest(runsRoot, widgetCompiler, url.pathname, res);
+      void handleWidgetRequest(runsRoot, homeDir, widgetCompiler, url.pathname, res);
       return;
     }
 

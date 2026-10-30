@@ -1,0 +1,13 @@
+version: 1
+kind: step
+name: greet
+description: Приветствует по имени — образец шага, который приносит пакет.
+file: ./main.mjs
+params:
+  type: object
+  properties:
+    name:
+      type: string
+      default: мир
+      description: Кого приветствовать.
+output_schema: ./output.schema.json

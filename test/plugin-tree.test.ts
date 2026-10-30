@@ -1127,3 +1127,157 @@ describe('plugin-tree: замена строки pipeline строкой пол�
     assert.match(backendClaude?.error?.message ?? '', /backends/);
   });
 });
+
+/** Пакет пользователя с манифестом; плагины кладутся в его `plugins/` помощником ниже. */
+function writePackage(baseDir: string, name: string, broken = false): string {
+  const dir = join(baseDir, '.stepcast', 'packages', name);
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(
+    join(dir, 'package.yml'),
+    broken ? 'not: [valid' : `version: 1\nkind: package\nname: ${name}\ndescription: Пример\npackage_version: 0.1.0\n`,
+  );
+  return dir;
+}
+
+function writePackagePlugin(packageDir: string, id: string, predicate: string): string {
+  const dir = join(packageDir, 'plugins', id);
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(dir, 'plugin.json'), JSON.stringify({ server: 'server.mjs' }));
+  writeFileSync(
+    join(dir, 'server.mjs'),
+    `export default { name: "${id}", predicates: [{ name: "${predicate}", schema: { type: "boolean" }, evaluate: () => ({ predicate: "${predicate}", passed: true, hard: true }) }] };\n`,
+  );
+  return dir;
+}
+
+describe('plugin-tree: плагины пакетов (packages-directory-layer)', () => {
+  it('плагин пакета проекта стоит в дереве с источником «пакет, слой» и применяется', async () => {
+    const place = bed();
+    const dir = writePackagePlugin(writePackage(place.root, 'hello'), 'board', 'from_package');
+
+    const config = resolved(place);
+    const row = config.pluginTree.find((item) => item.id === 'board');
+    assert.equal(row?.use, dir);
+    assert.deepEqual(row?.source, { kind: 'directory', dir, layer: 'project', package: 'hello' });
+
+    const { registry } = await loadPlugins(config, { projectRoot: place.root });
+    assert.ok(availableNames(registry, 'predicates').includes('from_package'));
+  });
+
+  it('порядок слоёв: пакеты home → свободный home → пакеты проекта → свободный проект', () => {
+    const place = bed();
+    writePackagePlugin(writePackage(place.home, 'tools'), 'board', 'p_home');
+    const config = resolved(place);
+    assert.equal((config.pluginTree.find((row) => row.id === 'board')?.source as { package?: string }).package, 'tools');
+
+    const homeFree = writePluginDir(place.home, 'board', { server: 'server.mjs' }, { 'server.mjs': 'export default { name: "board" };\n' });
+    const afterHomeFree = resolved(place).pluginTree.filter((row) => row.id === 'board');
+    assert.equal(afterHomeFree.length, 1);
+    assert.equal(afterHomeFree[0]?.use, homeFree, 'свободный home перекрывает пакет home');
+
+    const projectPackageDir = writePackagePlugin(writePackage(place.root, 'hello'), 'board', 'p_project');
+    const afterProjectPackage = resolved(place).pluginTree.filter((row) => row.id === 'board');
+    assert.equal(afterProjectPackage.length, 1);
+    assert.equal(afterProjectPackage[0]?.use, projectPackageDir, 'пакет проекта перекрывает свободный home');
+
+    const projectFree = writePluginDir(place.root, 'board', { server: 'server.mjs' }, { 'server.mjs': 'export default { name: "board" };\n' });
+    const final = resolved(place).pluginTree.filter((row) => row.id === 'board');
+    assert.equal(final.length, 1);
+    assert.equal(final[0]?.use, projectFree, 'свободный проект перекрывает пакет проекта');
+  });
+
+  it('проект перекрывает пакет home тем же id', () => {
+    const place = bed();
+    writePackagePlugin(writePackage(place.home, 'tools'), 'board', 'p_home');
+    const projectDir = writePackagePlugin(writePackage(place.root, 'hello'), 'board', 'p_project');
+
+    const rows = resolved(place).pluginTree.filter((row) => row.id === 'board');
+    assert.equal(rows.length, 1);
+    assert.equal(rows[0]?.use, projectDir);
+  });
+
+  it('конфликт двух пакетов home — одна строка с отказом, называющим оба пакета; прочие строки целы', async () => {
+    const place = bed();
+    writePackagePlugin(writePackage(place.home, 'beta'), 'board', 'p_b');
+    writePackagePlugin(writePackage(place.home, 'alpha'), 'board', 'p_a');
+    const other = writePackagePlugin(writePackage(place.home, 'alpha'), 'clock', 'p_clock');
+
+    const config = resolved(place);
+    const rows = config.pluginTree.filter((row) => row.id === 'board');
+    assert.equal(rows.length, 1);
+    assert.match(rows[0]?.failure?.message ?? '', /alpha/);
+    assert.match(rows[0]?.failure?.message ?? '', /beta/);
+    assert.equal(config.pluginTree.find((row) => row.id === 'clock')?.use, other);
+
+    const { outcomes } = await walkPluginTree(createKernel(), config, {
+      projectRoot: place.root,
+      builtinRows: BUILTIN_ROWS,
+      declarativeFields: DECLARATIVE_CONTRIBUTION_FIELDS,
+    });
+    assert.equal(outcomes.find((outcome) => outcome.row.id === 'board')?.status, 'failed');
+    assert.equal(outcomes.find((outcome) => outcome.row.id === 'clock')?.status, 'active');
+    assert.equal(outcomes.find((outcome) => outcome.row.id === 'pipeline')?.status, 'active');
+  });
+
+  it('конфликт пакетов проекта заменяет строку нижнего слоя отказом, а не проваливается в неё', () => {
+    const place = bed();
+    writePluginDir(place.home, 'board', { server: 'server.mjs' }, { 'server.mjs': 'export default { name: "board" };\n' });
+    writePackagePlugin(writePackage(place.root, 'a'), 'board', 'p_a');
+    writePackagePlugin(writePackage(place.root, 'b'), 'board', 'p_b');
+
+    const rows = resolved(place).pluginTree.filter((row) => row.id === 'board');
+    assert.equal(rows.length, 1);
+    assert.match(rows[0]?.failure?.message ?? '', /a и b/);
+  });
+
+  it('каталог плагина пакета с id встроенной строки отказывает, встроенная остаётся действующей', () => {
+    const place = bed();
+    writePackagePlugin(writePackage(place.root, 'hello'), 'backend-claude', 'p_x');
+
+    const rows = resolved(place).pluginTree.filter((row) => row.id === 'backend-claude');
+    assert.equal(rows.length, 2);
+    assert.equal(rows[0]?.source.kind, 'builtin');
+    assert.equal(rows[0]?.failure, undefined);
+    assert.match(rows[1]?.failure?.message ?? '', /встроенной строки/);
+  });
+
+  it('два пакета слоя с плагином id встроенной строки: каждый отказывает сам, встроенная остаётся действующей', () => {
+    const place = bed();
+    writePackagePlugin(writePackage(place.root, 'a'), 'backend-claude', 'p_a');
+    writePackagePlugin(writePackage(place.root, 'b'), 'backend-claude', 'p_b');
+
+    const rows = resolved(place).pluginTree.filter((row) => row.id === 'backend-claude');
+    assert.equal(rows.length, 3);
+    assert.equal(rows[0]?.source.kind, 'builtin');
+    assert.equal(rows[0]?.failure, undefined);
+    assert.deepEqual(
+      rows.slice(1).map((row) => (row.source as { package?: string }).package),
+      ['a', 'b'],
+    );
+    for (const row of rows.slice(1)) assert.match(row.failure?.message ?? '', /встроенной строки/);
+  });
+
+  it('сломанный пакет не прекращает загрузку: плагин исправного соседа находится', async () => {
+    const place = bed();
+    writePackagePlugin(writePackage(place.root, 'broken', true), 'ghost', 'p_ghost');
+    writePackagePlugin(writePackage(place.root, 'hello'), 'board', 'from_package');
+
+    const config = resolved(place);
+    assert.equal(config.pluginTree.some((row) => row.id === 'ghost'), false);
+    const { registry } = await loadPlugins(config, { projectRoot: place.root });
+    assert.ok(availableNames(registry, 'predicates').includes('from_package'));
+  });
+
+  it('подставной путь глобального конфига не подхватывает пакеты настоящего home', () => {
+    const place = bed();
+    writePackagePlugin(writePackage(place.home, 'tools'), 'board', 'p_home');
+    const fake = tempDir('plugin-tree-fake-');
+    const config = resolveConfig({
+      cwd: place.root,
+      home: place.home,
+      globalPath: join(fake, '__builtin-fallback__', 'config.yml'),
+      projectPath: place.projectPath,
+    });
+    assert.equal(config.pluginTree.some((row) => row.id === 'board'), false);
+  });
+});
