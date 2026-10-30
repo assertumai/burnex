@@ -1,5 +1,8 @@
 import { fileURLToPath } from 'node:url';
 
+import { enginePackageRoot } from '../../pipeline/document/packagePaths.js';
+import { daemonEntryPath, readManifestQuietly } from '../../install/entry.js';
+import { installManifestPath } from '../../install/manifest.js';
 import { resolveConfig } from '../../pipeline/config/resolve.js';
 import { ExitCode, type ExitCodeValue } from '../../../kernel/errors.js';
 import {
@@ -34,12 +37,19 @@ export async function runUpCommand(
   write: (line: string) => void,
   cwd: string,
   host: LaunchdHost = systemHost(),
+  engineRoot: string = enginePackageRoot(),
 ): Promise<ExitCodeValue> {
   // Отказ вне macOS раньше чтения конфигурации: причина не зависит от неё.
   if (args.flags.install === true) requireMacos(host, '--install');
 
   const { config } = resolveConfig({ cwd });
   const paths = daemonPaths(host.home);
+  // Один путь и для агента, и для отсоединённого демона: иначе `update` поднимал бы разные версии.
+  const entry = daemonEntryPath({
+    engineRoot,
+    manifest: readManifestQuietly(installManifestPath(process.env, host.home)),
+    fallback: binPath(),
+  });
   const port = config.ui.port;
 
   if (args.flags.foreground === true) {
@@ -66,7 +76,7 @@ export async function runUpCommand(
     stopDaemon(paths);
     const plist = installAgent(host, {
       execPath: process.execPath,
-      binPath: binPath(),
+      binPath: entry,
       workingDirectory: cwd,
       logFile: paths.logFile,
       env: process.env,
@@ -86,8 +96,8 @@ export async function runUpCommand(
     return ExitCode.ok;
   }
 
-  const pid = startDetached({ paths, argv: [binPath(), 'up', '--foreground'] });
-  writeRecord(paths, { pid, port, started_at: new Date().toISOString() });
+  const pid = startDetached({ paths, argv: [entry, 'up', '--foreground'] });
+  writeRecord(paths, { pid, port, started_at: new Date().toISOString(), cwd });
 
   write(`витрина: http://127.0.0.1:${port}`);
   write(`процесс: ${pid}`);

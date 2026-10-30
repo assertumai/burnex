@@ -18,6 +18,7 @@ import { row as init } from '../pipeline/commands/init.js';
 import { row as context } from '../pipeline/commands/context.js';
 import { row as up } from '../ui/commands/up.js';
 import { row as down } from '../ui/commands/down.js';
+import { row as update } from '../install/commands/update.js';
 import { row as usage } from '../pipeline/commands/usage.js';
 import { row as backlog } from '../pipeline/commands/backlog.js';
 import { row as knowledge } from '../pipeline/commands/knowledge.js';
@@ -44,11 +45,11 @@ import { row as project } from '../pipeline/commands/project.js';
  * снимаясь каскадом вместе со строкой `pipeline`. Восемнадцать доменных:
  * `run`, `resume`, `lint`, `status`, `logs`, `diff`, `decide`, `usage`,
  * `context`, `schema`, `gc`, `apply`, `propose`, `backlog`, `knowledge`,
- * `merge-lanes`, `assert-clean`, `project`. Семь ядерных, без `inject`:
- * `plugins`, `config`, `up`, `down`, `widgets`, `data`, `init` — они читают
- * либо ничего доменного (`widgets`, `up`, `down` знают витрину, не пайплайн),
+ * `merge-lanes`, `assert-clean`, `project`. Восемь ядерных, без `inject`:
+ * `plugins`, `config`, `up`, `down`, `update`, `widgets`, `data`, `init` — они читают
+ * либо ничего доменного (`widgets`, `up`, `down` знают витрину, не пайплайн; `update` — способ установки движка),
  * либо обязаны работать именно тогда, когда состав сломан (`plugins`,
- * `config`). `data`, `down` и `init` среди ядерных дополнительно независимы
+ * `config`). `data`, `down`, `init` и `update` среди ядерных дополнительно независимы
  * от конфигурации (Решение 4, Решение 5) — граница проводится по порядку
  * исполнения, а не по домену: они исполняются раньше, чем состав существует,
  * и потребителем того, чего ещё нет, быть не могут.
@@ -72,6 +73,7 @@ export const COMMAND_ROWS: readonly CommandRow[] = [
   context,
   up,
   down,
+  update,
   usage,
   backlog,
   knowledge,

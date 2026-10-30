@@ -5,15 +5,21 @@
 #
 # Идея: /opt/homebrew/bin/stepcast указывает на
 # ~/.stepcast/releases/current/dist/src/bin.js, а current — это symlink,
-# который здесь атомарно (через rename) переключается на новую директорию
-# релиза. Пересборка в рабочем каталоге (`npm run build`, `npm run dev` и
-# т.п.) никак не трогает уже опубликованный релиз — глобальный stepcast,
-# которым пользуется, например, прогон assertum, продолжает работать со
-# старой версией, пока этот скрипт не будет запущен явно.
+# который атомарно переключается на новую директорию релиза. Пересборка в
+# рабочем каталоге (`npm run build`, `npm run dev` и т.п.) никак не трогает
+# уже опубликованный релиз — глобальный stepcast, которым пользуется,
+# например, прогон assertum, продолжает работать со старой версией, пока этот
+# скрипт не будет запущен явно.
+#
+# Раскладку релиза (состав каталога, зависимости, переключение current) знает
+# один install.sh; здесь остаётся сборка и имя релиза <ts>-<sha>[-dirty].
 set -euo pipefail
 
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-RELEASES_DIR="${STEPCAST_RELEASES_DIR:-$HOME/.stepcast/releases}"
+
+# STEPCAST_RELEASES_DIR, как и прежде, — любой каталог: install.sh в режиме
+# --from-dir берёт его вместо $STEPCAST_HOME/releases.
+RELEASES_DIR="${STEPCAST_RELEASES_DIR:-${STEPCAST_HOME:-$HOME/.stepcast}/releases}"
 
 cd "$REPO_DIR"
 
@@ -26,34 +32,11 @@ if ! git diff --quiet 2>/dev/null || ! git diff --cached --quiet 2>/dev/null; th
   DIRTY="-dirty"
 fi
 VERSION="$(date -u +%Y%m%dT%H%M%SZ)-${REV}${DIRTY}"
-RELEASE_DIR="$RELEASES_DIR/$VERSION"
 
 echo "==> Собираю независимый релиз $VERSION"
-mkdir -p "$RELEASE_DIR"
-cp -R dist "$RELEASE_DIR/dist"
-# tsc пишет bin.js как 0644, а /opt/homebrew/bin/stepcast — симлинк прямо на
-# него: без бита исполнения оболочка отвечает «permission denied: stepcast».
-chmod +x "$RELEASE_DIR/dist/src/bin.js"
-cp -R schema "$RELEASE_DIR/schema"
-# Файлы поставки (routes.yml, встроенные шаги и пайплайны) рантайм ищет
-# по пути <корень пакета>/src/builtin — они не проходят через tsc, поэтому
-# копируются как есть, ровно как их объявляет package.json "files".
-mkdir -p "$RELEASE_DIR/src"
-cp -R src/builtin "$RELEASE_DIR/src/builtin"
-cp package.json "$RELEASE_DIR/package.json"
-cp package-lock.json "$RELEASE_DIR/package-lock.json"
+# Паспорт установки и лаунчер в этом режиме не трогаются: релиз из рабочего
+# дерева — путь разработки, а не установка.
+bash "$REPO_DIR/scripts/install.sh" --from-dir "$REPO_DIR" --name "$VERSION"
 
-echo "==> Ставлю зависимости релиза (npm ci --omit=dev)"
-npm ci --omit=dev --prefix "$RELEASE_DIR" --no-audit --no-fund >/dev/null
-
-echo "==> Атомарно переключаю current -> $VERSION"
-# ln -sfn меняет саму ссылку current (unlink+symlink), а не то, на что она
-# указывает. Раньше здесь стояла пара `ln .../current.tmp` + `mv current.tmp
-# current` — на macOS BSD mv, увидев, что current указывает на директорию,
-# перемещает current.tmp ВНУТРЬ неё вместо подмены самой ссылки (mv: ...
-# identical), и current молча остаётся на старом релизе, хотя скрипт ниже уже
-# печатает "Готово".
-ln -sfn "$RELEASE_DIR" "$RELEASES_DIR/current"
-
-echo "==> Готово: $RELEASES_DIR/current -> $RELEASE_DIR"
+echo "==> Готово: $RELEASES_DIR/current -> $RELEASES_DIR/$VERSION"
 echo "    Глобальный stepcast (если настроен через bin-symlink) уже использует новую версию."

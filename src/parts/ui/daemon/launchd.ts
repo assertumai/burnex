@@ -106,6 +106,11 @@ function domain(host: LaunchdHost): string {
   return `gui/${host.uid}`;
 }
 
+/** Адрес загруженного агента для `launchctl print` и `kickstart`. */
+export function agentTarget(host: LaunchdHost): string {
+  return `${domain(host)}/${AGENT_LABEL}`;
+}
+
 /** Выгрузить агент. Возвращает, был ли он загружен: отсутствие — не ошибка. */
 function bootout(host: LaunchdHost): boolean {
   return host.launchctl(['bootout', `${domain(host)}/${AGENT_LABEL}`]).status === 0;

@@ -39,6 +39,32 @@ describe('ui-daemon: жизненный цикл', () => {
     assert.equal(readFileSync(paths.pidFile, 'utf8').includes('7717'), true);
   });
 
+  it('новая запись хранит каталог, в котором поднят демон', () => {
+    const paths = bed();
+    writeRecord(paths, { pid: 4242, port: 7717, started_at: '2026-08-01T00:00:00.000Z', cwd: '/work/proj' });
+
+    assert.equal(readRecord(paths)?.cwd, '/work/proj');
+  });
+
+  it('запись прежней версии без cwd читается, и демон по ней считается поднятым', () => {
+    const paths = bed();
+    writeFileSync(
+      paths.pidFile,
+      JSON.stringify({ pid: process.pid, port: 7717, started_at: '2026-08-01T00:00:00.000Z' }),
+    );
+
+    const running = runningDaemon(paths);
+    assert.equal(running?.pid, process.pid);
+    assert.equal(running?.cwd, undefined);
+  });
+
+  it('не принимает cwd не строкой', () => {
+    const paths = bed();
+    writeFileSync(paths.pidFile, JSON.stringify({ pid: process.pid, port: 7717, cwd: 42 }));
+
+    assert.equal(readRecord(paths)?.cwd, undefined);
+  });
+
   it('считает текущий процесс живым, а несуществующий — мёртвым', () => {
     assert.equal(isAlive(process.pid), true);
     assert.equal(isAlive(DEAD_PID), false);

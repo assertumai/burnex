@@ -574,12 +574,14 @@ claimed_by: run:2026-10-29T23-33-35Z-b626b7
 
 ## install-script-and-update
 
-status: todo
+status: done
 title: `install.sh`, `stepcast update` и поставка через npm
 why: Движок ставится только из чекаута `npm link`; на вторую машину или коллеге его не отдать одной командой, и обновление — ручной `git pull` + `npm run build`.
 done_when: `install.sh` раскладывает релизы в `~/.stepcast/releases/<v>` и ставит `~/.local/bin/stepcast`, берёт последний тег `v*`, поддерживает `--ref`/`--repo`; `stepcast update` действует по `~/.stepcast/install.json` (`managed`/`checkout`/`npm`) и перезапускает демон; публикация npm-пакета по тегу `vX.Y.Z` описана; тесты разбора install.json.
 group: daemon-ops
 source: docs/burnex-after-stepcast.md, раздел 4 «Установщик» и «Самообновление»
+started_at: 2026-10-29T23:55:05.564Z
+claimed_by: run:2026-10-29T23-55-04Z-6543a7
 
 ## packages-directory-layer
 

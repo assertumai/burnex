@@ -4,6 +4,13 @@
   "description": "Движок пайплайнов для разработки с ИИ-агентами",
   "type": "module",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/assertumai/stepcast.git"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
   "engines": {
     "node": ">=22"
   },
@@ -25,6 +32,7 @@
     "src/builtin"
   ],
   "scripts": {
+    "prepack": "npm run build",
     "build:node": "tsc -p tsconfig.json",
     "build:ui": "vite build",
     "build": "npm run build:node && npm run build:ui",

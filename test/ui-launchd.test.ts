@@ -3,6 +3,8 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, it } from 'node:test';
 
+import { daemonEntryPath } from '../src/parts/install/entry.js';
+import type { InstallManifest } from '../src/parts/install/manifest.js';
 import { runDownCommand } from '../src/parts/ui/commands/down.js';
 import { runUpCommand } from '../src/parts/ui/commands/up.js';
 import {
@@ -136,3 +138,72 @@ describe('launchd: команды', () => {
     assert.deepEqual(calls, []);
   });
 });
+
+const MANAGED = (releasesDir: string): InstallManifest => ({
+  method: 'managed',
+  repo: 'https://example.com/stepcast.git',
+  ref: 'v0.3.0',
+  version: '0.3.0',
+  releases_dir: releasesDir,
+});
+
+describe('launchd: устойчивый путь входа через current', () => {
+  const identity = (path: string): string => path;
+
+  it('managed и движок внутри releases_dir — путь через current', () => {
+    const entry = daemonEntryPath({
+      engineRoot: '/h/.stepcast/releases/0.3.0',
+      manifest: MANAGED('/h/.stepcast/releases'),
+      fallback: '/h/.stepcast/releases/0.3.0/dist/src/bin.js',
+      realpath: identity,
+    });
+    assert.equal(entry, '/h/.stepcast/releases/current/dist/src/bin.js');
+  });
+
+  it('движок вне releases_dir, другой способ или нет паспорта — прежний путь', () => {
+    const fallback = '/work/stepcast/dist/src/bin.js';
+    const base = { engineRoot: '/work/stepcast', fallback, realpath: identity };
+    assert.equal(daemonEntryPath({ ...base, manifest: MANAGED('/h/.stepcast/releases') }), fallback);
+    assert.equal(daemonEntryPath({ ...base, manifest: { method: 'checkout', dir: '/work/stepcast' } }), fallback);
+    assert.equal(daemonEntryPath({ ...base, manifest: undefined }), fallback);
+  });
+
+  it('up --install кладёт в ProgramArguments путь через current при managed', async () => {
+    const { host, home } = fakeHost('darwin');
+    const releases = join(home, '.stepcast', 'releases');
+    const engineRoot = join(releases, '0.3.0');
+    mkdirSync(engineRoot, { recursive: true });
+    writeFileSync(join(home, '.stepcast', 'install.json'), JSON.stringify(MANAGED(releases)));
+
+    await withoutStepcastHome(() =>
+      runUpCommand(args('up', { install: true }), () => undefined, tempDir('cwd-'), host, engineRoot),
+    );
+
+    const plist = readFileSync(agentPlistPath(home), 'utf8');
+    assert.ok(plist.includes(`<string>${join(releases, 'current', 'dist', 'src', 'bin.js')}</string>`));
+  });
+
+  it('без паспорта в ProgramArguments прежний путь, а битый паспорт up не ломает', async () => {
+    const { host, home } = fakeHost('darwin');
+    mkdirSync(join(home, '.stepcast'), { recursive: true });
+    writeFileSync(join(home, '.stepcast', 'install.json'), '{не json');
+
+    await withoutStepcastHome(() =>
+      runUpCommand(args('up', { install: true }), () => undefined, tempDir('cwd-'), host),
+    );
+
+    const plist = readFileSync(agentPlistPath(home), 'utf8');
+    assert.equal(plist.includes('/current/dist/src/bin.js'), false);
+    assert.ok(plist.includes('bin.js'));
+  });
+});
+
+async function withoutStepcastHome<T>(fn: () => Promise<T>): Promise<T> {
+  const saved = process.env.STEPCAST_HOME;
+  delete process.env.STEPCAST_HOME;
+  try {
+    return await fn();
+  } finally {
+    if (saved !== undefined) process.env.STEPCAST_HOME = saved;
+  }
+}

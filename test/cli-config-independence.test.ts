@@ -115,6 +115,20 @@ describe('config-error-breaks-every-command: команды перечня ис�
     assert.equal(outcome.stderr, '');
   });
 
+  it('update при неразбираемой конфигурации доходит до своей логики, а не падает на конфиге', async () => {
+    // Паспорт с неизвестным способом нужен не ради самого отказа, а чтобы
+    // тест ничего не обновил на деле: без паспорта `update` вывел бы
+    // `checkout` из пути движка и пошёл бы тянуть настоящее дерево.
+    const project = withBrokenProjectConfig();
+    mkdirSync(join(project.home, '.stepcast'), { recursive: true });
+    writeFileSync(join(project.home, '.stepcast', 'install.json'), '{"method":"brew"}');
+
+    const outcome = await cli(project, ['update']);
+
+    assert.match(outcome.stderr, /Неизвестный способ установки/);
+    assert.doesNotMatch(outcome.stderr, /config\.yml/);
+  });
+
   it('init заводит пайплайн поверх ключа, недопустимого в проектном слое', async () => {
     // runs.root допустим только в глобальной конфигурации — этот же ключ в
     // проектном слое отказывает разбором ещё до того, как известно, что
@@ -219,12 +233,12 @@ describe('config-error-breaks-every-command: зависимые команды �
 });
 
 describe('config-error-breaks-every-command: граница выводится из объявлений строк (cli-commands-as-rows)', () => {
-  it('независимыми объявлены ровно data, down и init', () => {
+  it('независимыми объявлены ровно data, down, init и update', () => {
     // Единственный источник перечня — сами строки (design.md изменения
     // `cli-commands-as-rows`, Решение 5): второго списка имён рядом с ними
     // нет, и опечатка в объявлении строки была бы видна здесь же.
     const independentNames = COMMAND_ROWS.filter((row) => row.independent).map((row) => row.command.name).sort();
-    assert.deepEqual(independentNames, ['data', 'down', 'init']);
+    assert.deepEqual(independentNames, ['data', 'down', 'init', 'update']);
   });
 
   it('каждая встроенная команда вне независимых строк отказывает при сломанной конфигурации', async () => {

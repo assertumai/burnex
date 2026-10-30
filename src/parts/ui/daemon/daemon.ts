@@ -19,6 +19,12 @@ export interface DaemonRecord {
   readonly pid: number;
   readonly port: number;
   readonly started_at: string;
+  /**
+   * Каталог, в котором поднят демон (он же корень проекта). `stepcast update`
+   * поднимает обновлённый демон обратно именно там; запись прежней версии поля
+   * не несёт, и такой демон перезапускать автоматически нельзя.
+   */
+  readonly cwd?: string;
 }
 
 export interface DaemonPaths {
@@ -47,6 +53,7 @@ export function readRecord(paths: DaemonPaths): DaemonRecord | undefined {
     pid: record.pid,
     port: record.port,
     started_at: typeof record.started_at === 'string' ? record.started_at : '',
+    ...(typeof record.cwd === 'string' ? { cwd: record.cwd } : {}),
   };
 }
 
