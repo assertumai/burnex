@@ -263,7 +263,10 @@ function Shell(): JSX.Element {
             navigate('/');
           }}
         >
-          stepcast
+          <svg className="brand-mark" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path d="M12 2c1 4 5 5 5 10a5 5 0 0 1-10 0c0-2 1-3 2-4 0 2 1 3 2 3 1-3-1-6 1-9z" fill="currentColor" />
+          </svg>
+          burnex
         </a>
 
         {[...groups].filter(([, routes]) => routes.length > 0).map(([group, routes]) => (

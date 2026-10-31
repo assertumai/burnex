@@ -15,6 +15,15 @@
 .sc-badge--default { background: var(--primary); border-color: var(--primary); color: var(--primary-foreground); }
 .sc-badge--secondary { background: var(--secondary); border-color: var(--secondary); color: var(--secondary-foreground); }
 .sc-badge--outline { background: transparent; }
-.sc-badge--destructive { color: var(--status-failed); border-color: var(--status-failed); }
-.sc-badge--success { color: var(--status-success); border-color: var(--status-success); }
-.sc-badge--running { color: var(--status-running); border-color: var(--status-running); }
+/* Три статуса — залитые пилюли с точкой слева (тема «Ember»): заливка тоном
+   своего цвета (`--status-*-bg`), рамка не нужна, точка читается и там, где
+   цвет различить трудно. */
+.sc-badge--destructive,
+.sc-badge--success,
+.sc-badge--running { font-weight: 600; border-color: transparent; }
+.sc-badge--destructive::before,
+.sc-badge--success::before,
+.sc-badge--running::before { content: ''; width: 6px; height: 6px; border-radius: 99px; background: currentcolor; flex: none; }
+.sc-badge--destructive { color: var(--status-failed); background: var(--status-failed-bg); }
+.sc-badge--success { color: var(--status-success); background: var(--status-success-bg); }
+.sc-badge--running { color: var(--status-running); background: var(--status-running-bg); }

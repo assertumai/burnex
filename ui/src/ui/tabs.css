@@ -1,17 +1,21 @@
-.sc-tabs-list { display: flex; gap: .3rem; flex-wrap: wrap; }
+/* Вкладки темы «Ember»: ряд над линией, активная подчёркнута акцентом — а не
+   пилюля с рамкой, чтобы вкладки не спорили с бейджами статусов. */
+.sc-tabs-list { display: flex; gap: .2rem; flex-wrap: wrap; border-bottom: 1px solid var(--border); }
 
 .sc-tabs-trigger {
   font: inherit;
-  font-size: .82rem;
-  padding: .2rem .6rem;
-  border-radius: 99px;
-  border: 1px solid var(--border);
+  font-size: .88rem;
+  padding: .45rem .8rem;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  border-radius: 0;
   background: none;
   color: var(--muted-foreground);
   cursor: pointer;
 }
 .sc-tabs-trigger:hover { color: var(--foreground); }
-.sc-tabs-trigger[data-state='active'] { color: var(--foreground); border-color: var(--primary); font-weight: 600; }
-.sc-tabs-trigger:focus-visible { outline: 2px solid var(--ring); outline-offset: -1px; }
+.sc-tabs-trigger[data-state='active'] { color: var(--accent-foreground); border-bottom-color: var(--primary); font-weight: 600; }
+.sc-tabs-trigger:focus-visible { outline: 2px solid var(--ring); outline-offset: -2px; border-radius: var(--radius); }
 
 .sc-tabs-content { margin-top: .8rem; }

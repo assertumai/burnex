@@ -2,7 +2,7 @@
   background: var(--card);
   color: var(--card-foreground);
   border: 1px solid var(--border);
-  border-radius: calc(var(--radius) + 2px);
+  border-radius: calc(var(--radius) + 4px);
   padding: .8rem 1rem;
 }
 

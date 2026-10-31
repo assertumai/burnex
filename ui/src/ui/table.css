@@ -4,7 +4,9 @@
 .sc-table-head {
   text-align: left;
   font-weight: 600;
-  font-size: .76rem;
+  font-size: .72rem;
+  letter-spacing: .03em;
+  text-transform: uppercase;
   color: var(--muted-foreground);
   padding: .35rem .5rem;
   border-bottom: 1px solid var(--border);
