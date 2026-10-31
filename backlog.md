@@ -594,6 +594,101 @@ source: docs/burnex-after-stepcast.md, раздел 6 «Пакеты»
 started_at: 2026-10-30T00:36:39.771Z
 claimed_by: run:2026-10-30T00-36-38Z-fdd3b9
 
+## ui-agents-settings-merge
+
+status: done
+title: Один экран «Agents» с вкладками Default / Backends / Tiers / Policy вместо Settings и Agents
+why: Два экрана правят один и тот же файл одними полями (`defaults.agent` есть на обоих), а выбор агента на пайплайн и шаг спрятан в карточке шага на «Pipelines»; человек обходит три экрана ради одного вопроса «кто и чем работает» (`docs/ui-proposals.md`, п. 1).
+done_when: экран `screen-settings` удалён, `/api/settings` принадлежит строке `screen-agents`; маршрут `/agents/:tab?` с закрытым перечнем вкладок; `/settings` ведёт на вкладку Default; вкладка Policy показывает `agent_policy` и записи выбора агента по пайплайнам и шагам; тесты состава экранов и маршрутов обновлены; `docs/config.md` и `docs/routes.md` правлены; `npm run check` зелёный
+group: ui-agents
+started_at: 2026-10-31T17:20:00.000Z
+source: docs/ui-proposals.md, п. 1
+
+## ui-secrets-screen
+
+status: todo
+title: Экран «Secrets»: провайдеры, имена секретов, статус — без значений
+why: Секреты по имени (`secrets-named-providers`, `secrets-keychain-provider`) объявляются в пайплайнах и конфигурации, но витрина о них не знает ничего: ни какие имена ждут пайплайны, ни где они разрешаются, ни какой провайдер отказал (`docs/ui-proposals.md`, п. 2).
+done_when: строка `screen-secrets` с `GET /api/secrets`: провайдеры из конфигурации, имена секретов из известных пайплайнов с провайдером и признаком «разрешается / не найден / провайдер недоступен»; значения секретов ни в ответе API, ни на экране не появляются (тест); маршрут `/secrets` в группе `system`; документация в `docs/config.md`
+group: ui-config
+source: docs/ui-proposals.md, п. 2
+
+## ui-schedule-view
+
+status: todo
+title: Экран «Schedule»: триггеры расписания пайплайнов, ближайший момент, догон и флаги
+why: Расписание с догоном, `keep_awake` и `require_network` (`schedule-trigger`, `schedule-catchup-and-keep-awake`) задаётся только в документе пайплайна, а витрина не показывает ни когда что сработает, ни был ли догон; в `Runs.tsx` следов догона нет, вопреки `docs/ui-proposals.md` (`docs/ui-proposals.md`, п. 2).
+done_when: экран перечисляет по проекту пайплайны с `on.schedule`: выражение, ближайший момент, последний запуск по расписанию, признак догона, `keep_awake` и `require_network`; прогон, запущенный расписанием или догоном, помечен в списке прогонов; правка расписания с экрана не делается — документ пайплайна витрина не пишет; тесты; `docs/pipeline-format.md` ссылается на экран
+group: ui-config
+source: docs/ui-proposals.md, п. 2
+
+## ui-system-health
+
+status: todo
+title: Экран «System»: версия и состояние демона, автозапуск, обновление, доступность бэкендов
+why: Истёкший OAuth бэкенда уже останавливал петлю, а узнать о нём из витрины нельзя; версия демона, доступность `stepcast update`, состояние launchd-агента (`launchd-autostart`) и предупреждение «цена модели неизвестна — `budget.cost` не действует» тоже видны только из CLI (`docs/ui-proposals.md`, п. 2 и 3).
+done_when: строка `screen-system` с `GET /api/system`: версия пакета и релиз, pid и время подъёма демона, состояние launchd-агента с переключателем «запускать при входе» (`POST`, только macOS, иначе причина), доступное обновление с кнопкой «Обновить» через тот же путь, что `stepcast update`, по каждому бэкенду доступность команды и исход последней пробы, перечень моделей без цены в каталоге; тесты; документация в `docs/release.md`
+group: ui-system
+source: docs/ui-proposals.md, п. 2–3
+
+## ui-run-launch-dialog
+
+status: todo
+title: Диалог ручного запуска: вход, env, shadow и агент в одной форме; shadow-прогон помечен в списке
+why: `POST /api/run` уже принимает `env` и `shadow` (`run-launch/row.ts`), но ни одно поле формы их не выставляет; shadow-режим (`shadow-run-mode`) с витрины недоступен, а прогон «насухо» в списке неотличим от настоящего (`docs/ui-proposals.md`, п. 2 и 3).
+done_when: диалог запуска на «Scrum»/«Runs» содержит поля env (`KEY=VALUE`, проверка имени и однострочности как в схеме демона), переключатель shadow и выбор агента; shadow-прогон помечен бейджем в списке и на странице прогона, если признак записан в `run.json` — иначе пункт сначала добавляет его в журнал; тесты формы и пометки
+group: ui-runs
+source: docs/ui-proposals.md, п. 2–3
+
+## ui-packages-screen
+
+status: todo
+title: Экран «Packages»: каталог пакетов, их состав и ошибки слоя
+why: `GET /api/packages` уже отдаёт пакеты (`packages-directory-layer`), но в витрине они видны только предупреждением на «Маршруты»; какие пайплайны, шаги, виджеты и дашборды пришли из пакета и почему пакет исключён — не видно (`docs/ui-proposals.md`, п. 2).
+done_when: экран по слоям home/проект перечисляет пакеты с путём, составом (пайплайны, шаги, плагины, виджеты, дашборды, маршруты) и причинами отказа файлов и конфликтов `id`; маршрут `/packages` в группе `extend`; тесты; `docs/packages.md` ссылается на экран
+group: ui-config
+needs: packages-directory-layer
+source: docs/ui-proposals.md, п. 2
+
+## ui-backlog-owner-and-lock
+
+status: todo
+title: Очередь в витрине: владелец взятого пункта и блокировка файла
+why: Поле `claimed_by` (`backlog-claimed-by-owner`) и lock-файл очереди (`backlog-queue-lock`) есть в движке, но `Backlog.tsx` их не показывает: не видно, какой прогон держит пункт и почему правка карточки может отказать (`docs/ui-proposals.md`, п. 2 и 3).
+done_when: пункт `in_progress` показывает владельца ссылкой на прогон, если `claimed_by` вида `run:<id>`; занятая блокировка названа на экране с владельцем и возрастом; отказ записи из-за блокировки показан текстом демона; тесты
+group: ui-backlog
+source: docs/ui-proposals.md, п. 2
+
+## ui-connect-bundled-backends
+
+status: todo
+title: Вкладка Backends предлагает подключить любой встроенный плагин бэкенда, не только Codex
+why: `readSettings` добавляет в список недоступный `codex` с чекбоксом «Connect Codex», а `cursor` и `copilot` (`backend-cursor-adapter`, `backend-copilot-adapter`) появляются только после ручной правки `plugins:` — поэтому их «нет на экранах» (`docs/ui-proposals.md`, п. 2).
+done_when: список бэкендов включает все встроенные плагины бэкендов (`src/parts/backends/*`) с признаком «не подключён» и одним действием подключения на каждый; `connectCodex` обобщён до `connect: [<имя>]` в `SettingsPatch` без потери прежнего поведения; тесты `readSettings`/`writeSettings`
+group: ui-agents
+needs: ui-agents-settings-merge
+source: docs/ui-proposals.md, п. 2
+
+## ui-run-graph-loops
+
+status: todo
+title: Проходы группы (`loops`) на графе прогона
+why: Группа работ с `loops` (`job-group-loops`) исполняется несколько раз, а граф прогона рисует каждую работу один раз и показывает только попытки шага; сколько проходов было и на каком остановились — не видно (`docs/ui-proposals.md`, п. 2).
+done_when: узел работы в группе с `loops` показывает число проходов и текущий; раскрытие работы даёт выход по каждому проходу; `attempts` шага остаются как есть; тесты снимка и графа
+group: ui-runs
+source: docs/ui-proposals.md, п. 2
+
+## ui-nav-config-group
+
+status: todo
+title: Группа меню `config`: Agents, Secrets, Schedule, Packages, System
+why: После появления экранов конфигурации группа `system` смешает наблюдение (Usage, Cleanup) с настройкой; отдельная группа — одна правка `routes.yml` и порядка групп в каркасе (`docs/ui-proposals.md`, п. 3).
+done_when: `src/builtin/routes.yml` объявляет `nav.group: config` у экранов настроек, каркас знает порядок групп `work, extend, config, system`; `docs/routes.md` перечисляет группы поставки; тест порядка групп
+group: ui-nav
+track: express
+needs: ui-secrets-screen, ui-schedule-view, ui-system-health
+source: docs/ui-proposals.md, п. 3
+
 ## container-step-isolation
 
 status: postponed

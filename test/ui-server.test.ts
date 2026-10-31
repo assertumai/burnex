@@ -4667,7 +4667,7 @@ describe('ui-routes: экран «Маршруты»', () => {
     const disabled = json.disabled as Array<{ id: string; path: string; disabledBy: { layer: string } }>;
     // Перечень отключённых — вход обратно: без него включить маршрут можно
     // было бы только правкой файла руками.
-    assert.equal(disabled.find((route) => route.id === 'screen-agents')?.path, '/agents');
+    assert.equal(disabled.find((route) => route.id === 'screen-agents')?.path, '/agents/:tab?');
     assert.equal(disabled.find((route) => route.id === 'screen-agents')?.disabledBy.layer, 'home');
   });
 

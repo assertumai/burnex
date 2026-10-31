@@ -25,3 +25,17 @@
   .agent-field-label { flex-basis: 100%; }
   .tier-add { align-items: stretch; flex-direction: column; }
 }
+
+/* Вкладки экрана (`ui-agents-settings-merge`): предупреждение о глобальной модели
+   стоит под полем, которое его снимает; чекбокс подключения — в карточке бэкенда. */
+.agent-model-warning { margin-top: .8rem; margin-bottom: 0; }
+.agent-connect { margin-top: .6rem; flex-wrap: wrap; }
+.agent-cards .agent-card .ctx:first-child { margin-top: 0; }
+
+/* Вкладка Policy: карточка на пайплайн, агентские шаги плоским списком. */
+.agents-policy .pipelines-project { margin: 1.2rem 0 .6rem; }
+.agents-policy .pipelines-project:first-of-type { margin-top: 0; }
+.policy-card { margin: .6rem 0 .8rem; }
+.policy-card .sc-card-header .mono { font-size: .8rem; }
+.policy-step { border-top: 1px solid var(--border); margin-top: .7rem; padding-top: .6rem; }
+.policy-step .step-head { display: flex; gap: .6rem; align-items: center; flex-wrap: wrap; }

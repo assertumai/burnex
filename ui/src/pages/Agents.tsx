@@ -2,8 +2,8 @@ import { useEffect, useState, type JSX } from 'react';
 
 import { MODEL_TIERS, type ModelTier, type ModelTierSelection } from '../../../src/parts/pipeline/config/modelTiers';
 import {
-  fetchModels, fetchSettings, saveSettings,
-  type ModelOption, type ModelsForBackend, type ModelsResult, type Settings, type SettingsPatch,
+  fetchModels, fetchPipelines, fetchSettings, saveSettings,
+  type ModelOption, type ModelsForBackend, type ModelsResult, type PipelineView, type Settings, type SettingsPatch,
 } from '../api';
 import {
   Alert,
@@ -15,6 +15,7 @@ import {
   CardHeader,
   CardTitle,
   Combobox,
+  EmptyState,
   Input,
   Label,
   PageHeader,
@@ -23,8 +24,13 @@ import {
   SelectItem,
   SelectTrigger,
   SelectValue,
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
   type ComboboxOption,
 } from '@stepcast/ui';
+import { AgentsPolicy } from './AgentsPolicy';
 import './agents.css';
 
 export type TierDraft = { model: string; effort: string };
@@ -32,11 +38,72 @@ export type AgentDraft = { defaultModel: string; modelTiers: Record<ModelTier, T
 
 const TIER_NAME = /^[a-z][a-z0-9_-]*$/;
 
+/**
+ * Вкладки экрана — тот же закрытый перечень, что `values.tab` маршрута
+ * `screen-agents` в `src/builtin/routes.yml` (`ui-agents-settings-merge`,
+ * design.md Решение 1). Порядок — порядок кнопок.
+ */
+export const AGENT_TABS = ['default', 'backends', 'tiers', 'policy'] as const;
+export type AgentTab = (typeof AGENT_TABS)[number];
+
+/** Вкладка по параметру маршрута: пустое или неизвестное значение — Default. */
+export function tabOf(param: string | undefined): AgentTab {
+  return (AGENT_TABS as readonly string[]).includes(param ?? '') ? (param as AgentTab) : 'default';
+}
+
 export function orderedTierNames(names: readonly string[]): readonly string[] {
   const custom = [...new Set(names.filter((name) => !(MODEL_TIERS as readonly string[]).includes(name)))].sort(
     (left, right) => left.localeCompare(right),
   );
   return [...MODEL_TIERS, ...custom];
+}
+
+/** Четыре числа для области действия `defaults.model`, посчитанные по известным витрине пайплайнам. */
+export interface ModelScope {
+  /** Агентские шаги, которым модель назначит именно правка этого экрана. */
+  readonly affected: number;
+  /** Агентские шаги, объявившие модель сами (слой step/job/pipeline) — их правка не коснётся. */
+  readonly unaffected: number;
+  /** Агентские шаги, чью модель задаёт другой файл: проектный `.stepcast/config.yml` либо плагин. */
+  readonly overridden: number;
+  /** Пайплайны, которые не разбираются: их шаги не сосчитаны ни в одну из групп. */
+  readonly unparsed: number;
+}
+
+/**
+ * Счёт складывается здесь, из ответа `/api/pipelines`, а не в `readSettings`
+ * (`ui-effective-model`, design.md Решение 3): `defaults.model` — вопрос
+ * конфигурации, размер области действия — вопрос пайплайнов.
+ *
+ * Слоя `config` для счёта мало: экран пишет только глобальный файл
+ * (`src/parts/ui/settings.ts`), а значение того же слоя может прийти из
+ * проектного `.stepcast/config.yml` или от плагина — и там правка отсюда
+ * проиграет ближнему слою. Различает их файл, победивший в проекте: карточка
+ * шага несёт его, и сравнить с файлом настроек — единственный способ не
+ * посчитать чужой шаг своим (docs/config.md, «Разрешение»).
+ */
+export function scopeOf(pipelines: readonly PipelineView[], settingsFile: string): ModelScope {
+  let affected = 0;
+  let unaffected = 0;
+  let overridden = 0;
+  let unparsed = 0;
+  for (const pipeline of pipelines) {
+    if (pipeline.error !== undefined) {
+      unparsed += 1;
+      continue;
+    }
+    for (const job of pipeline.jobs) {
+      for (const step of job.steps) {
+        const origin = step.modelOrigin;
+        if (origin === undefined) continue;
+        if (origin.layer === 'step' || origin.layer === 'job' || origin.layer === 'pipeline') unaffected += 1;
+        else if (origin.layer !== 'config') affected += 1;
+        else if (origin.file === settingsFile) affected += 1;
+        else overridden += 1;
+      }
+    }
+  }
+  return { affected, unaffected, overridden, unparsed };
 }
 
 /**
@@ -198,11 +265,68 @@ function ModelField({ id, label, value, placeholder, sourceNote, options, knownV
   );
 }
 
-/** Глобальные модели агентов; отправляются только изменённые поля. */
-export function Agents(): JSX.Element {
+/** Размер области действия `defaults.model` словами — по счёту `scopeOf`. */
+function ScopeNote({
+  pipelines,
+  error,
+  settingsFile,
+}: {
+  readonly pipelines: readonly PipelineView[] | undefined;
+  readonly error: string | undefined;
+  readonly settingsFile: string;
+}): JSX.Element {
+  // Отказ или пустой список — «пайплайнов не известно», а не ноль: ноль здесь
+  // был бы неправдой, а не фактом (`ui-effective-model`, design.md Решение 3).
+  if (error === undefined && pipelines === undefined) return <>The scope is still being counted…</>;
+  if (error !== undefined || pipelines === undefined || pipelines.length === 0) {
+    return <>No pipelines are known — there is nothing to count the scope from.</>;
+  }
+  const scope = scopeOf(pipelines, settingsFile);
+  return (
+    <>
+      Across the pipelines known to the dashboard it affects <b>{scope.affected}</b> step(s) and leaves{' '}
+      <b>{scope.unaffected}</b> alone — they already declare a model
+      {scope.overridden === 0 ? null : (
+        <>
+          ; <b>{scope.overridden}</b> more take the model from a closer file — the project or a plugin — and editing
+          here does not change them
+        </>
+      )}
+      {scope.unparsed === 0 ? null : (
+        <>
+          ; <b>{scope.unparsed}</b> pipeline(s) could not be parsed, their steps are not counted
+        </>
+      )}
+      .
+    </>
+  );
+}
+
+/**
+ * Экран «Agents» — все настройки агентов одним экраном с четырьмя вкладками
+ * (`ui-agents-settings-merge`): Default — агент, модель и effort по умолчанию;
+ * Backends — бэкенды и исход перечисления их моделей; Tiers — общие уровни и
+ * модели по агентам; Policy — `agent_policy` и выбор агента на пайплайн и шаг.
+ *
+ * Default, Backends и Tiers правят один глобальный файл одним `PUT
+ * /api/settings`, поэтому черновик, `Save` и `Discard` у них общие и живут в
+ * этом компоненте: смена вкладки меняет адрес, а не компонент, и черновик
+ * переживает её (design.md Решение 4). Policy пишет другой маршрут и своими
+ * кнопками на запись — общего `Save` на ней нет. Отправляются только
+ * изменённые поля.
+ */
+export function Agents({
+  tab,
+  onSelectTab,
+}: {
+  readonly tab: AgentTab;
+  /** Смена вкладки через адрес; `false` — маршрута к цели нет, и экран переключает вкладку сам. */
+  readonly onSelectTab: (tab: AgentTab) => boolean;
+}): JSX.Element {
   const [settings, setSettings] = useState<Settings>();
   const [draft, setDraft] = useState<Record<string, AgentDraft>>({});
   const [agent, setAgent] = useState('');
+  const [model, setModel] = useState('');
   const [effort, setEffort] = useState('');
   const [tierNames, setTierNames] = useState<readonly string[]>(MODEL_TIERS);
   const [removedTiers, setRemovedTiers] = useState<readonly string[]>([]);
@@ -215,10 +339,16 @@ export function Agents(): JSX.Element {
   const [models, setModels] = useState<ModelsResult>();
   const [modelsError, setModelsError] = useState<string>();
   const [modelsBusy, setModelsBusy] = useState(true);
+  const [pipelines, setPipelines] = useState<readonly PipelineView[]>();
+  const [pipelinesError, setPipelinesError] = useState<string>();
+  // Вкладка без маршрута к цели: адрес не меняется, а экран всё же переключается.
+  const [localTab, setLocalTab] = useState<AgentTab | undefined>(undefined);
+  const activeTab = localTab ?? tab;
 
   const adopt = (data: Settings): void => {
     setSettings(data);
     setAgent(data.agent.value ?? '');
+    setModel(data.model.value ?? '');
     setEffort(data.effort.value ?? '');
     setTierNames(orderedTierNames(data.modelTiers));
     setRemovedTiers([]);
@@ -236,6 +366,11 @@ export function Agents(): JSX.Element {
 
   useEffect(() => {
     fetchSettings().then(adopt).catch((failure: Error) => setError(failure.message));
+    // Один запрос на экран: Default считает по нему область действия модели,
+    // Policy показывает по нему политику и записи выбора.
+    fetchPipelines()
+      .then((data) => setPipelines(data.pipelines))
+      .catch((failure: Error) => setPipelinesError(failure.message));
   }, []);
 
   // Списки — отдельным запросом (design.md, решение 5): пробы поднимают
@@ -259,10 +394,15 @@ export function Agents(): JSX.Element {
   // Один запрос на открытие страницы; дальше — только по кнопке.
   useEffect(() => loadModels(), []);
 
+  const selectTab = (value: string): void => {
+    const next = tabOf(value);
+    setLocalTab(onSelectTab(next) ? undefined : next);
+  };
+
   const header = (
     <PageHeader
       title="Agents"
-      description="Default models for every project, per agent and per tier. Project settings may override these values."
+      description="Who runs the agent steps and with which model: defaults, backends, tiers and per-pipeline policy. Written to the global config file; project settings may override these values."
       actions={
         <Button variant="outline" size="sm" onClick={() => loadModels(true)} disabled={modelsBusy}>
           {modelsBusy ? 'Listing models…' : 'Reload models'}
@@ -275,7 +415,7 @@ export function Agents(): JSX.Element {
     return (
       <>
         {header}
-        {error === undefined ? <p className="dim">Loading…</p> : <Alert variant="destructive">{error}</Alert>}
+        {error === undefined ? <EmptyState title="Loading…" /> : <Alert variant="destructive">{error}</Alert>}
       </>
     );
   }
@@ -298,16 +438,17 @@ export function Agents(): JSX.Element {
       }]];
     }),
   );
+  const modelChanged = model.trim() !== (settings.model.value ?? '');
   const effortChanged = effort.trim() !== (settings.effort.value ?? '');
   const addedTiers = tierNames.filter((tier) => !settings.modelTiers.includes(tier));
-  const dirty = agent !== settings.agent.value || effortChanged || connectCodex || removedTiers.length > 0 ||
+  const dirty = agent !== settings.agent.value || modelChanged || effortChanged || connectCodex || removedTiers.length > 0 ||
     addedTiers.length > 0 || Object.keys(backendPatch).length > 0;
   const selected = settings.backends.find((backend) => backend.name === agent);
   const canSelect = selected?.enabled && (selected.available || (agent === 'codex' && connectCodex));
   const draftProblem = tierDraftProblem(tierNames, settings.modelTiers, draft);
   const selectedDiscovery = models?.backends[agent];
   const selectedModels = selectedDiscovery?.status === 'ok' ? selectedDiscovery.models : [];
-  const selectedModel = settings.model.value ?? draft[agent]?.defaultModel ?? selected?.defaultModel ?? '';
+  const selectedModel = model.trim() || draft[agent]?.defaultModel.trim() || selected?.defaultModel || '';
   const selectedModelDefaultEffort = selectedModels.find((option) => option.name === selectedModel)?.defaultEffort;
   const globalEffortOptions = effortOptions(selectedModels, selectedModel, effort);
 
@@ -362,6 +503,10 @@ export function Agents(): JSX.Element {
     setError(undefined);
     saveSettings({
       ...(agent === settings.agent.value ? {} : { agent }),
+      // Пустая модель — снятие значения (`null`), а не пустая строка: модель
+      // тогда берётся у бэкенда, и записать вместо неё пустоту значило бы
+      // сломать следующий прогон вместо возврата к умолчанию.
+      ...(modelChanged ? { model: model.trim() || null } : {}),
       ...(effortChanged ? { effort: effort.trim() || null } : {}),
       ...(connectCodex ? { connectCodex: true } : {}),
       ...(removedTiers.length === 0 ? {} : { removeModelTiers: removedTiers }),
@@ -373,187 +518,264 @@ export function Agents(): JSX.Element {
 
   const codexOffered = settings.backends.some((backend) => backend.name === 'codex' && !backend.available);
 
+  const defaultTab = (
+    <Card>
+      <CardHeader>
+        <CardTitle>Defaults for all projects</CardTitle>
+        <CardDescription>
+          Used when a pipeline, job or step does not set <code>agent</code>, <code>model</code> or <code>effort</code>.
+          Written to <span className="mono">{settings.file}</span>.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <div className="agent-field">
+          <Label htmlFor="default-agent" className="agent-field-label">agent</Label>
+          <div className="agent-field-body">
+            {/* Пустого пункта в списке нет: `defaults.agent` снятию не подлежит. */}
+            <Select value={agent} onValueChange={(value) => { setAgent(value); setSaved(false); }}>
+              <SelectTrigger id="default-agent" className="agent-select">
+                <SelectValue placeholder="not set" />
+              </SelectTrigger>
+              <SelectContent>
+                {settings.backends.map((backend) => (
+                  <SelectItem key={backend.name} value={backend.name}
+                    disabled={!backend.enabled || (!backend.available && !(backend.name === 'codex' && connectCodex))}>
+                    {backend.name}{!backend.available ? ' — plugin not connected' : !backend.enabled ? ' — disabled' : ''}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <span className="small dim">{settings.agent.source}</span>
+          </div>
+        </div>
+
+        <div className="agent-field">
+          <Label htmlFor="default-model" className="agent-field-label mono">model</Label>
+          <div className="agent-field-body">
+            <Input
+              id="default-model"
+              className="mono"
+              value={model}
+              placeholder={selected?.defaultModel ?? 'backend model'}
+              onChange={(event) => { setModel(event.target.value); setSaved(false); }}
+            />
+            <span className="small dim">
+              {settings.model.value === undefined
+                ? `not set — a step without its own model gets the backend model${selected?.defaultModel === undefined ? '' : `: ${selected.defaultModel}`}`
+                : settings.model.source}
+            </span>
+            <p className="note dim">
+              The value applies only to steps that do not declare a model themselves — neither in the step, nor in
+              the job, nor in the pipeline defaults.{' '}
+              <ScopeNote pipelines={pipelines} error={pipelinesError} settingsFile={settings.file} />
+            </p>
+          </div>
+        </div>
+
+        <ModelField
+          id="default-effort"
+          label="effort"
+          value={effort}
+          placeholder={selectedModelDefaultEffort === undefined ? 'model default' : `model default: ${selectedModelDefaultEffort}`}
+          sourceNote={`${settings.effort.source}. An empty field lets the selected model and CLI choose.`}
+          options={globalEffortOptions}
+          knownValues={selectedModels.find((option) => option.name === selectedModel)?.efforts?.map((item) => item.name) ?? []}
+          onChange={(value) => { setEffort(value); setSaved(false); }}
+        />
+
+        {settings.model.value === undefined ? null : (
+          <Alert variant="warning" className="agent-model-warning">
+            A global <code>model</code> override <span className="mono">{settings.model.value}</span> ({settings.model.source}) takes
+            precedence over tiers and per-agent models. Clear the model field above and save to remove it.
+          </Alert>
+        )}
+      </CardContent>
+    </Card>
+  );
+
+  const backendsTab = (
+    <div className="agent-cards">
+      {settings.backends.map((backend) => {
+        const discovery = models?.backends[backend.name];
+        const reason = discovery === undefined
+          ? (modelsError ?? 'Listing models…')
+          : unavailableReason(discovery);
+        return (
+          <Card key={backend.name} className="agent-card">
+            <CardHeader>
+              <div className="agent-card-head">
+                <CardTitle>{backend.name}</CardTitle>
+                {backend.name === settings.agent.value ? <Badge variant="success">default</Badge> : null}
+                {!backend.available ? <Badge>plugin not connected</Badge> : !backend.enabled ? <Badge>disabled</Badge> : null}
+                {discovery?.status === 'ok' ? <Badge variant="success">{discovery.models.length} models listed</Badge> : null}
+              </div>
+              {reason === undefined ? null : <CardDescription>{reason}</CardDescription>}
+            </CardHeader>
+            <CardContent>
+              <div className="ctx">$ {backend.command}</div>
+              <div className="ctx">
+                {backend.defaultModel === undefined
+                  ? 'backend model: the agent’s built-in model'
+                  : `backend model: ${backend.defaultModel} (${backend.defaultModelSource})`}
+              </div>
+              {backend.name === 'codex' && codexOffered ? (
+                <label className="check agent-connect">
+                  <input type="checkbox" checked={connectCodex} onChange={(event) => { setConnectCodex(event.target.checked); setSaved(false); }} />
+                  {' '}Connect Codex
+                  <span className="small dim">— adds the Codex plugin shipped with Stepcast; running it needs an installed and signed-in Codex CLI</span>
+                </label>
+              ) : null}
+            </CardContent>
+          </Card>
+        );
+      })}
+    </div>
+  );
+
+  const tiersTab = (
+    <>
+      <p className="small dim agent-note">
+        <code>agent</code>, <code>model</code>, <code>effort</code> and <code>model_tier</code> are inherited independently: step → job → pipeline → settings.
+        A tier selects its model and optional effort together. An explicit <code>model</code> disconnects the tier effort; an explicit <code>effort</code> wins.
+        The dropdown lists what the agent’s CLI reports and is not exhaustive — a typed name is saved as is.
+        Lists are read once and kept while the daemon runs; after installing an agent or changing its command, reload them.
+      </p>
+
+      <Card className="tier-manager">
+        <CardHeader>
+          <CardTitle>Shared tiers</CardTitle>
+          <CardDescription>
+            One ordered set is shown for every agent. A custom tier may be mapped for only the agents that need it.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="tier-list">
+            {tierNames.map((tier) => (
+              <span className="tier-chip" key={tier}>
+                <Badge variant={(MODEL_TIERS as readonly string[]).includes(tier) ? 'secondary' : 'default'}>{tier}</Badge>
+                {(MODEL_TIERS as readonly string[]).includes(tier) ? null : (
+                  <Button variant="ghost" size="sm" onClick={() => removeTier(tier)} aria-label={`Remove tier ${tier}`}>Remove</Button>
+                )}
+              </span>
+            ))}
+          </div>
+          <div className="tier-add">
+            <Input
+              value={newTier}
+              placeholder="review"
+              aria-label="New tier name"
+              onChange={(event) => { setNewTier(event.target.value); setTierError(undefined); }}
+              onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); addTier(); } }}
+            />
+            <Button type="button" variant="outline" onClick={addTier}>Add tier</Button>
+          </div>
+          {tierError === undefined ? null : <span className="small tier-error">{tierError}</span>}
+        </CardContent>
+      </Card>
+
+      <div className="agent-cards">
+        {settings.backends.map((backend) => {
+          const discovery = models?.backends[backend.name];
+          const listed: readonly ModelOption[] = discovery?.status === 'ok' ? discovery.models : [];
+          const current = draft[backend.name]!;
+          const options = modelOptions(listed, [
+            backend.defaultModel,
+            current.defaultModel,
+            ...tierNames.map((tier) => ownValue(backend.modelTiers, tier)?.model),
+          ]);
+
+          return (
+            <Card key={backend.name} className="agent-card">
+              <CardHeader>
+                <div className="agent-card-head">
+                  <CardTitle>{backend.name}</CardTitle>
+                  {!backend.available ? <Badge>plugin not connected</Badge> : !backend.enabled ? <Badge>disabled</Badge> : null}
+                </div>
+              </CardHeader>
+              <CardContent>
+                <ModelField
+                  id={`agent-${backend.name}-model`}
+                  label="default model"
+                  value={current.defaultModel}
+                  placeholder="agent’s built-in model"
+                  sourceNote={`${backend.defaultModelSource}. An empty field removes the override.`}
+                  options={options}
+                  knownValues={listed.map((option) => option.name)}
+                  onChange={(value) => updateModel(backend.name, value)}
+                />
+                {tierNames.map((tier) => {
+                  const selection = ownValue(current.modelTiers, tier) ?? { model: '', effort: '' };
+                  const listedModel = listed.find((option) => option.name === selection.model.trim());
+                  return (
+                    <div className="tier-config" key={tier}>
+                      <ModelField
+                        id={`agent-${backend.name}-${tier}-model`}
+                        label={`${tier} model`}
+                        value={selection.model}
+                        placeholder={current.defaultModel.trim() || 'default model'}
+                        sourceNote={ownValue(backend.modelTierSources, tier) ?? 'not set — falls back to the default model'}
+                        options={options}
+                        knownValues={listed.map((option) => option.name)}
+                        onChange={(value) => updateModel(backend.name, value, tier, 'model')}
+                      />
+                      <ModelField
+                        id={`agent-${backend.name}-${tier}-effort`}
+                        label="effort"
+                        value={selection.effort}
+                        placeholder={listedModel?.defaultEffort === undefined ? 'model default' : `model default: ${listedModel.defaultEffort}`}
+                        sourceNote={ownValue(backend.modelTierEffortSources, tier) ?? 'not set — the selected model chooses its default'}
+                        options={effortOptions(listed, selection.model, selection.effort)}
+                        knownValues={listedModel?.efforts?.map((item) => item.name) ?? []}
+                        onChange={(value) => updateModel(backend.name, value, tier, 'effort')}
+                      />
+                    </div>
+                  );
+                })}
+              </CardContent>
+            </Card>
+          );
+        })}
+      </div>
+    </>
+  );
+
   return (
     <>
       {header}
-      <fieldset className="agent-settings" disabled={saving}>
-        <Card>
-          <CardHeader>
-            <CardTitle>Default agent</CardTitle>
-            <CardDescription>
-              Used when a pipeline, job or step does not set <code>agent</code>. Written to{' '}
-              <span className="mono">{settings.file}</span>.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="agent-field">
-              <Label htmlFor="default-agent" className="agent-field-label">agent</Label>
-              <div className="agent-field-body">
-                <Select value={agent} onValueChange={(value) => { setAgent(value); setSaved(false); }}>
-                  <SelectTrigger id="default-agent" className="agent-select">
-                    <SelectValue placeholder="not set" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {settings.backends.map((backend) => (
-                      <SelectItem key={backend.name} value={backend.name}
-                        disabled={!backend.enabled || (!backend.available && !(backend.name === 'codex' && connectCodex))}>
-                        {backend.name}{!backend.available ? ' — plugin not connected' : !backend.enabled ? ' — disabled' : ''}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <span className="small dim">{settings.agent.source}</span>
+      <Tabs value={activeTab} onValueChange={selectTab}>
+        <TabsList aria-label="Agent settings">
+          <TabsTrigger value="default">Default</TabsTrigger>
+          <TabsTrigger value="backends">Backends</TabsTrigger>
+          <TabsTrigger value="tiers">Tiers</TabsTrigger>
+          <TabsTrigger value="policy">Policy</TabsTrigger>
+        </TabsList>
+
+        {/* Один `fieldset` на три вкладки одного файла: `disabled` на время записи
+            гасит поля всех трёх разом, а черновик живёт выше вкладок. */}
+        <fieldset className="agent-settings" disabled={saving}>
+          <TabsContent value="default">{defaultTab}</TabsContent>
+          <TabsContent value="backends">{backendsTab}</TabsContent>
+          <TabsContent value="tiers">{tiersTab}</TabsContent>
+          {activeTab === 'policy' ? null : (
+            <>
+              <div className="agent-actions">
+                <Button disabled={!dirty || !canSelect || draftProblem !== undefined} onClick={submit}>{saving ? 'Saving…' : 'Save'}</Button>
+                {dirty ? <Button variant="ghost" size="sm" onClick={() => { adopt(settings); setSaved(false); setError(undefined); }}>Discard changes</Button> : null}
+                {saved && !dirty ? <span role="status" className="small dim">Saved</span> : null}
+                {dirty && activeTab !== 'tiers' && (removedTiers.length > 0 || addedTiers.length > 0 || Object.keys(backendPatch).length > 0) ? (
+                  <span className="small dim">includes unsaved changes on the Tiers tab</span>
+                ) : null}
               </div>
-            </div>
-            {codexOffered ? (
-              <div className="agent-field">
-                <span className="agent-field-label" />
-                <div className="agent-field-body">
-                  <label className="check">
-                    <input type="checkbox" checked={connectCodex} onChange={(event) => { setConnectCodex(event.target.checked); setSaved(false); }} />
-                    {' '}Connect Codex
-                  </label>
-                  <span className="small dim">Adds the Codex plugin shipped with Stepcast. Running it needs an installed and signed-in Codex CLI.</span>
-                </div>
-              </div>
-            ) : null}
-            <ModelField
-              id="default-effort"
-              label="effort"
-              value={effort}
-              placeholder={selectedModelDefaultEffort === undefined ? 'model default' : `model default: ${selectedModelDefaultEffort}`}
-              sourceNote={`${settings.effort.source}. An empty field lets the selected model and CLI choose.`}
-              options={globalEffortOptions}
-              knownValues={selectedModels.find((option) => option.name === selectedModel)?.efforts?.map((item) => item.name) ?? []}
-              onChange={(value) => { setEffort(value); setSaved(false); }}
-            />
-          </CardContent>
-        </Card>
+              {draftProblem === undefined ? null : <Alert variant="warning">{draftProblem}</Alert>}
+              {error === undefined ? null : <Alert variant="destructive">{error}</Alert>}
+            </>
+          )}
+        </fieldset>
 
-        {settings.model.value === undefined ? null : (
-          <Alert variant="warning">
-            A global <code>model</code> override <span className="mono">{settings.model.value}</span> ({settings.model.source}) takes
-            precedence over tiers and per-agent models. Remove it on the <a href="/settings">Settings</a> page.
-          </Alert>
-        )}
-
-        <p className="small dim agent-note">
-          <code>agent</code>, <code>model</code>, <code>effort</code> and <code>model_tier</code> are inherited independently: step → job → pipeline → settings.
-          A tier selects its model and optional effort together. An explicit <code>model</code> disconnects the tier effort; an explicit <code>effort</code> wins.
-          The dropdown lists what the agent’s CLI reports and is not exhaustive — a typed name is saved as is.
-          Lists are read once and kept while the daemon runs; after installing an agent or changing its command, reload them.
-        </p>
-
-        <Card className="tier-manager">
-          <CardHeader>
-            <CardTitle>Shared tiers</CardTitle>
-            <CardDescription>
-              One ordered set is shown for every agent. A custom tier may be mapped for only the agents that need it.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="tier-list">
-              {tierNames.map((tier) => (
-                <span className="tier-chip" key={tier}>
-                  <Badge variant={(MODEL_TIERS as readonly string[]).includes(tier) ? 'secondary' : 'default'}>{tier}</Badge>
-                  {(MODEL_TIERS as readonly string[]).includes(tier) ? null : (
-                    <Button variant="ghost" size="sm" onClick={() => removeTier(tier)} aria-label={`Remove tier ${tier}`}>Remove</Button>
-                  )}
-                </span>
-              ))}
-            </div>
-            <div className="tier-add">
-              <Input
-                value={newTier}
-                placeholder="review"
-                aria-label="New tier name"
-                onChange={(event) => { setNewTier(event.target.value); setTierError(undefined); }}
-                onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); addTier(); } }}
-              />
-              <Button type="button" variant="outline" onClick={addTier}>Add tier</Button>
-            </div>
-            {tierError === undefined ? null : <span className="small tier-error">{tierError}</span>}
-          </CardContent>
-        </Card>
-
-        <div className="agent-cards">
-          {settings.backends.map((backend) => {
-            const discovery = models?.backends[backend.name];
-            const reason = discovery === undefined
-              ? (modelsError ?? 'Listing models…')
-              : unavailableReason(discovery);
-            const listed: readonly ModelOption[] = discovery?.status === 'ok' ? discovery.models : [];
-            const current = draft[backend.name]!;
-            const options = modelOptions(listed, [
-              backend.defaultModel,
-              current.defaultModel,
-              ...tierNames.map((tier) => ownValue(backend.modelTiers, tier)?.model),
-            ]);
-
-            return (
-              <Card key={backend.name} className="agent-card">
-                <CardHeader>
-                  <div className="agent-card-head">
-                    <CardTitle>{backend.name}</CardTitle>
-                    <span className="small dim mono">{backend.command}</span>
-                    {!backend.available ? <Badge>plugin not connected</Badge> : !backend.enabled ? <Badge>disabled</Badge> : null}
-                    {discovery?.status === 'ok' ? <Badge variant="success">{discovery.models.length} models listed</Badge> : null}
-                  </div>
-                  {reason === undefined ? null : <CardDescription>{reason}</CardDescription>}
-                </CardHeader>
-                <CardContent>
-                  <ModelField
-                    id={`agent-${backend.name}-model`}
-                    label="default model"
-                    value={current.defaultModel}
-                    placeholder="agent’s built-in model"
-                    sourceNote={`${backend.defaultModelSource}. An empty field removes the override.`}
-                    options={options}
-                    knownValues={listed.map((option) => option.name)}
-                    onChange={(value) => updateModel(backend.name, value)}
-                  />
-                  {tierNames.map((tier) => {
-                    const selection = ownValue(current.modelTiers, tier) ?? { model: '', effort: '' };
-                    const listedModel = listed.find((option) => option.name === selection.model.trim());
-                    return (
-                      <div className="tier-config" key={tier}>
-                        <ModelField
-                          id={`agent-${backend.name}-${tier}-model`}
-                          label={`${tier} model`}
-                          value={selection.model}
-                          placeholder={current.defaultModel.trim() || 'default model'}
-                          sourceNote={ownValue(backend.modelTierSources, tier) ?? 'not set — falls back to the default model'}
-                          options={options}
-                          knownValues={listed.map((option) => option.name)}
-                          onChange={(value) => updateModel(backend.name, value, tier, 'model')}
-                        />
-                        <ModelField
-                          id={`agent-${backend.name}-${tier}-effort`}
-                          label="effort"
-                          value={selection.effort}
-                          placeholder={listedModel?.defaultEffort === undefined ? 'model default' : `model default: ${listedModel.defaultEffort}`}
-                          sourceNote={ownValue(backend.modelTierEffortSources, tier) ?? 'not set — the selected model chooses its default'}
-                          options={effortOptions(listed, selection.model, selection.effort)}
-                          knownValues={listedModel?.efforts?.map((item) => item.name) ?? []}
-                          onChange={(value) => updateModel(backend.name, value, tier, 'effort')}
-                        />
-                      </div>
-                    );
-                  })}
-                </CardContent>
-              </Card>
-            );
-          })}
-        </div>
-
-        <div className="agent-actions">
-          <Button disabled={!dirty || !canSelect || draftProblem !== undefined} onClick={submit}>{saving ? 'Saving…' : 'Save'}</Button>
-          {dirty ? <Button variant="ghost" size="sm" onClick={() => { adopt(settings); setSaved(false); setError(undefined); }}>Discard changes</Button> : null}
-          {saved && !dirty ? <span role="status" className="small dim">Saved</span> : null}
-        </div>
-        {draftProblem === undefined ? null : <Alert variant="warning">{draftProblem}</Alert>}
-        {error === undefined ? null : <Alert variant="destructive">{error}</Alert>}
-      </fieldset>
+        <TabsContent value="policy">
+          <AgentsPolicy settings={settings} pipelines={pipelines} error={pipelinesError} onPipelines={setPipelines} />
+        </TabsContent>
+      </Tabs>
     </>
   );
 }

@@ -46,15 +46,22 @@ routes:
     target: { screen: screen-cleanup }
     nav: { order: 6, group: system }
 
+  # Вкладка экрана — необязательный параметр пути с закрытым перечнем
+  # (`ui-agents-settings-merge`, design.md Решение 1): адрес без вкладки
+  # открывает Default. Пункт меню подсвечен и на псевдониме `/settings`.
   - id: screen-agents
-    path: /agents
+    path: /agents/:tab?
     target: { screen: screen-agents }
-    nav: { order: 7, group: system }
+    values: { tab: [default, backends, tiers, policy] }
+    nav: { order: 7, group: system, active_for: [screen-settings] }
 
+  # Прежний адрес настроек — строка-псевдоним с чужой целью, не редирект
+  # (design.md Решение 2): `id` сохранён, чтобы перекрытия пользовательских
+  # `routes.yml` по нему продолжали действовать; пункта меню у строки нет.
   - id: screen-settings
     path: /settings
-    target: { screen: screen-settings }
-    nav: { order: 8, group: system }
+    target: { screen: screen-agents }
+    params: { tab: default }
 
   - id: screen-routes
     path: /routes

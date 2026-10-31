@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { describe, it } from 'node:test';
 
 import { StepcastError } from '../src/kernel/errors.js';
+import { parseRoute } from '../src/parts/ui/routes.js';
 import { buildRouteTable, homeRoutesPath, projectRoutesPath, writeRouteRow } from '../src/parts/ui/routesFile.js';
 import { tempDir } from './tmp.js';
 
@@ -91,7 +92,7 @@ describe('ui-routes-file: сборка таблицы трёх слоёв', () =
     // Без этого перечня отключённый маршрут исчезал бы из витрины совсем, и
     // включить его обратно можно было бы только правкой файла руками.
     const off = result.disabled.find((entry) => entry.id === 'screen-agents');
-    assert.equal(off?.path, '/agents', 'поля отключённой строки слиты слоями так же, как у действующей');
+    assert.equal(off?.path, '/agents/:tab?', 'поля отключённой строки слиты слоями так же, как у действующей');
     assert.deepEqual(off?.target, { kind: 'screen', id: 'screen-agents' });
     assert.equal(off?.disabledBy.layer, 'home');
     assert.equal(off?.disabledBy.file, homeRoutesPath(home));
@@ -315,6 +316,41 @@ describe('ui-routes-file: сборка таблицы трёх слоёв', () =
         return true;
       },
     );
+  });
+
+  it('встроенная таблица: вкладка экрана агентов — параметр пути, а /settings — псевдоним с чужой целью', () => {
+    // `ui-agents-settings-merge`: экрана настроек нет, адрес остался.
+    const { home } = layerDirs();
+    const table = buildRouteTable({ home }).entries.map((entry) => entry.definition);
+    assert.equal(table.some((route) => route.target.id === 'screen-settings'), false, 'цели screen-settings нет');
+
+    const policy = parseRoute('/agents/policy', table);
+    assert.equal(policy?.route.id, 'screen-agents');
+    assert.equal(policy?.pathParams.tab, 'policy');
+
+    const bare = parseRoute('/agents', table);
+    assert.equal(bare?.route.id, 'screen-agents');
+    assert.equal(bare?.pathParams.tab, undefined);
+    assert.equal(bare?.targetParams.tab, undefined);
+
+    const settings = parseRoute('/settings', table);
+    assert.equal(settings?.route.id, 'screen-settings');
+    assert.deepEqual(settings?.route.target, { kind: 'screen', id: 'screen-agents' });
+    assert.equal(settings?.targetParams.tab, 'default', 'параметр цели подставлен литералом');
+    assert.equal(settings?.route.nav, undefined, 'пункта меню у псевдонима нет');
+
+    assert.equal(parseRoute('/agents/other', table), undefined, 'значение вне перечня — неразобранный адрес');
+
+    const agents = table.find((route) => route.id === 'screen-agents');
+    assert.deepEqual(agents?.nav?.activeFor, ['screen-settings']);
+  });
+
+  it('домашний слой отключает псевдоним /settings, не трогая экран агентов', () => {
+    const { home } = layerDirs();
+    writeHomeRoutes(home, 'routes:\n  - id: screen-settings\n    enabled: false\n');
+    const table = buildRouteTable({ home }).entries.map((entry) => entry.definition);
+    assert.equal(parseRoute('/settings', table), undefined);
+    assert.equal(parseRoute('/agents/tiers', table)?.route.id, 'screen-agents');
   });
 });
 

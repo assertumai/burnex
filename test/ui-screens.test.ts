@@ -106,7 +106,6 @@ describe('ui-screens: состав экранов у демона', () => {
       'screen-run',
       'screen-runs',
       'screen-scrum',
-      'screen-settings',
       'screen-usage',
       'screen-widgets',
     ]);
@@ -119,8 +118,11 @@ describe('ui-screens: состав экранов у демона', () => {
       'screen-usage': '/api/usage',
       'screen-cleanup': '/api/usage-records',
       'screen-agents': '/api/models',
-      'screen-settings': '/api/settings',
     };
+    // Настройки принадлежат той же строке, что и перечисление моделей
+    // (`ui-agents-settings-merge`): отдельного экрана настроек в составе нет.
+    const agentsSettings = await fetchJson(server, '/api/settings');
+    assert.notEqual(agentsSettings.code, 404, 'screen-agents → /api/settings');
     for (const [id, path] of Object.entries(routed)) {
       const response = await fetchJson(server, path);
       assert.notEqual(response.code, 404, `${id} → ${path}`);
@@ -334,7 +336,7 @@ describe('ui-screens: строка каркаса снята патчем', () =
     // нет. Без разбора этого случая первое же обращение к составу дало бы
     // `TypeError` мимо всякого разбора отказа и уронило бы демон.
     const rows = ['ui-shell', 'screen-runs', 'screen-run', 'screen-pipelines', 'screen-widgets',
-      'screen-backlog', 'screen-scrum', 'screen-usage', 'screen-cleanup', 'screen-agents', 'screen-settings', 'screen-routes',
+      'screen-backlog', 'screen-scrum', 'screen-usage', 'screen-cleanup', 'screen-agents', 'screen-routes',
       'screen-decisions', 'screen-proposals', 'ui-dashboards', 'ui-packages', 'ui-run-launch'];
     writePatch(
       home,

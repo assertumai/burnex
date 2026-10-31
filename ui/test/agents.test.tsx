@@ -1,11 +1,15 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
+import type { PipelineView } from '../src/api';
 import {
+  AGENT_TABS,
   effortOptions,
   isCustomValue,
   modelOptions,
   orderedTierNames,
+  scopeOf,
+  tabOf,
   tierDraftProblem,
   tierSelectionPatch,
   unavailableReason,
@@ -100,5 +104,42 @@ describe('ui-agents: причина недоступности перечисл�
     assert.equal(unavailableReason({ status: 'failed', message: 'boom' }), 'The agent failed: boom');
     assert.match(unavailableReason({ status: 'unparsed' }) ?? '', /could not be parsed/);
     assert.equal(unavailableReason({ status: 'probe_error', message: 'x' }), 'Listing crashed: x');
+  });
+});
+
+describe('ui-agents: вкладка из адреса и область действия модели по умолчанию', () => {
+  it('tabOf знает четыре вкладки, пустое и неизвестное значение открывают Default', () => {
+    assert.deepEqual(AGENT_TABS, ['default', 'backends', 'tiers', 'policy']);
+    for (const tab of AGENT_TABS) assert.equal(tabOf(tab), tab);
+    assert.equal(tabOf(undefined), 'default');
+    assert.equal(tabOf(''), 'default');
+    assert.equal(tabOf('other'), 'default');
+  });
+
+  it('scopeOf различает затронутые, объявившие сами, перекрытые ближним файлом и неразобранные', () => {
+    const settingsFile = '/home/me/.stepcast/config.yml';
+    const pipeline = (name: string, steps: readonly { readonly layer: string; readonly file?: string }[]): PipelineView =>
+      ({
+        projectKey: 'p', projectPath: '/p', file: `${name}.yml`, name, inputs: [],
+        jobs: [{
+          id: 'job', needs: [], on: 'success', publishesOutput: false, agentEntryJob: 'job',
+          steps: steps.map((origin, index) => ({
+            id: `s${index}`, kind: 'agent', agent: 'claude',
+            modelOrigin: { layer: origin.layer, ...(origin.file === undefined ? {} : { file: origin.file }) },
+          })),
+        }],
+      }) as unknown as PipelineView;
+    const broken = { projectKey: 'p', projectPath: '/p', file: 'x.yml', name: 'x', inputs: [], jobs: [], error: 'boom' } as unknown as PipelineView;
+
+    assert.deepEqual(scopeOf([
+      pipeline('a', [
+        { layer: 'step' }, { layer: 'job' }, { layer: 'pipeline' },
+        { layer: 'config', file: settingsFile },
+        { layer: 'config', file: '/p/.stepcast/config.yml' },
+        { layer: 'backend' }, { layer: 'none' },
+      ]),
+      broken,
+    ], settingsFile), { affected: 3, unaffected: 3, overridden: 1, unparsed: 1 });
+    assert.deepEqual(scopeOf([], settingsFile), { affected: 0, unaffected: 0, overridden: 0, unparsed: 0 });
   });
 });
