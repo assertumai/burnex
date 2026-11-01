@@ -26,8 +26,8 @@ function bed(options: {
     uid: 501,
     launchctl: (args) => {
       calls.push(`launchctl ${args.join(' ')}`);
-      if (args[0] === 'print') return { status: options.agentLoaded === true ? 0 : 113, stderr: '' };
-      return { status: options.kickstartStatus ?? 0, stderr: '' };
+      if (args[0] === 'print') return { status: options.agentLoaded === true ? 0 : 113, stdout: '', stderr: '' };
+      return { status: options.kickstartStatus ?? 0, stdout: '', stderr: '' };
     },
     runningDaemon: () => options.daemon,
     stopDaemon: async () => {

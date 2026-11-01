@@ -1,5 +1,5 @@
 import { spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 
@@ -15,13 +15,19 @@ import { StepcastError } from '../../../kernel/errors.js';
 
 export const AGENT_LABEL = 'ai.stepcast.daemon';
 
+/**
+ * Путь входа, который переживает обновление: `install.sh` перекладывает
+ * `current`, а plist с путём в конкретный релиз остался бы на старом коде.
+ */
+export const STABLE_ENTRY = '/current/dist/src/bin.js';
+
 /** Всё, что касается системы, внедряется: тест не должен трогать настоящий launchd. */
 export interface LaunchdHost {
   readonly platform: NodeJS.Platform;
   readonly home: string;
   readonly uid: number;
-  /** Запустить `launchctl`; `status` — код возврата, `stderr` — для сообщения об отказе. */
-  readonly launchctl: (args: readonly string[]) => { status: number; stderr: string };
+  /** Запустить `launchctl`; `status` — код возврата, `stderr` — для сообщения об отказе, `stdout` — для `print`. */
+  readonly launchctl: (args: readonly string[]) => { status: number; stdout: string; stderr: string };
 }
 
 export function systemHost(): LaunchdHost {
@@ -31,7 +37,7 @@ export function systemHost(): LaunchdHost {
     uid: process.getuid?.() ?? 0,
     launchctl: (args) => {
       const result = spawnSync('launchctl', [...args], { encoding: 'utf8' });
-      return { status: result.status ?? 1, stderr: result.stderr ?? '' };
+      return { status: result.status ?? 1, stdout: result.stdout ?? '', stderr: result.stderr ?? '' };
     },
   };
 }
@@ -157,4 +163,68 @@ export function removeAgent(host: LaunchdHost): boolean {
   if (existed) bootout(host);
   rmSync(plist, { force: true });
   return existed;
+}
+
+export type AgentState =
+  | { readonly supported: false; readonly reason: string }
+  | {
+      readonly supported: true;
+      /** Есть ли plist агента на диске. */
+      readonly plist: boolean;
+      /** Загружен ли агент: `launchctl print` его находит. */
+      readonly loaded: boolean;
+      /** Pid процесса агента, если он сейчас запущен. */
+      readonly pid?: number;
+      /** Точка входа CLI из `ProgramArguments` plist. */
+      readonly entry?: string;
+      /** Проходит ли `entry` через `current` (см. `STABLE_ENTRY`). */
+      readonly entryStable?: boolean;
+    };
+
+function xmlUnescape(value: string): string {
+  return value
+    .replaceAll('&lt;', '<')
+    .replaceAll('&gt;', '>')
+    .replaceAll('&quot;', '"')
+    .replaceAll('&apos;', "'")
+    .replaceAll('&amp;', '&');
+}
+
+/** Второй элемент `ProgramArguments`: первый — интерпретатор, второй — точка входа. */
+function plistEntry(text: string): string | undefined {
+  const array = /<key>ProgramArguments<\/key>\s*<array>([\s\S]*?)<\/array>/.exec(text)?.[1];
+  const second = array === undefined ? undefined : [...array.matchAll(/<string>([\s\S]*?)<\/string>/g)][1]?.[1];
+  return second === undefined ? undefined : xmlUnescape(second);
+}
+
+/**
+ * Что launchd знает об агенте демона. Вне macOS `launchctl` не зовётся — тот же
+ * отказ словами `requireMacos`, что и у `--install`.
+ */
+export function agentState(host: LaunchdHost): AgentState {
+  if (host.platform !== 'darwin') {
+    return { supported: false, reason: `автозапуск работает только на macOS: launchd нет на этой системе (${host.platform})` };
+  }
+
+  const plistPath = agentPlistPath(host.home);
+  const plist = existsSync(plistPath);
+  const printed = host.launchctl(['print', agentTarget(host)]);
+  const loaded = printed.status === 0;
+  const pid = loaded ? /^\s*pid = (\d+)\s*$/m.exec(printed.stdout)?.[1] : undefined;
+
+  let entry: string | undefined;
+  if (plist) {
+    try {
+      entry = plistEntry(readFileSync(plistPath, 'utf8'));
+    } catch {
+      // Нечитаемый plist — то же, что plist без точки входа: остальное состояние всё равно верно.
+    }
+  }
+  return {
+    supported: true,
+    plist,
+    loaded,
+    ...(pid === undefined ? {} : { pid: Number(pid) }),
+    ...(entry === undefined ? {} : { entry, entryStable: entry.includes(STABLE_ENTRY) }),
+  };
 }

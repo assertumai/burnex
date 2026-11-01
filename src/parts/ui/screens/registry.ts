@@ -9,7 +9,8 @@ import type { Kernel } from '../../../kernel/kernel.js';
 import type { KernelCache } from '../pipelines.js';
 import type { PluginsOverview } from '../plugins.js';
 import type { Watcher } from '../daemon/watcher.js';
-import type { LaunchDecideFn, LaunchResumeFn, LaunchRunFn } from '../runLaunch.js';
+import type { LaunchDecideFn, LaunchMaintenance, LaunchResumeFn, LaunchRunFn } from '../runLaunch.js';
+import type { DaemonSelf, SystemHost, UpdateHold } from '../system.js';
 import type { ScreenDeclaration } from './declaration.js';
 
 export type { ScreenDeclaration, ScreenListing } from './declaration.js';
@@ -94,6 +95,20 @@ export interface RequestEnv {
    * Маршрут проверяет запрос до порождения; демон в журнал по-прежнему не пишет.
    */
   readonly launchResume: LaunchResumeFn;
+  /**
+   * Сведения демона о самом себе (`ui-system-health`): от процесса, а не из
+   * `ui.pid`, которого у демона под launchd нет.
+   */
+  readonly self: DaemonSelf;
+  /**
+   * Процессы обслуживания — обновление и переключение автозапуска: отсоединённые,
+   * с учётом живого ребёнка. Тем же приёмом, что `launchRun`: проверки подменяют.
+   */
+  readonly launchMaintenance: LaunchMaintenance;
+  /** Системные вызовы экрана System: launchd, git, npm, диск установки. */
+  readonly systemHost: SystemHost;
+  /** Удержанный исход проверки обновления. */
+  readonly updateHold: UpdateHold;
 }
 
 export type ApiHandler = (req: IncomingMessage, res: ServerResponse, env: RequestEnv) => void | Promise<void>;

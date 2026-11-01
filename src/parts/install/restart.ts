@@ -9,7 +9,7 @@ import {
   stopDaemon,
   type DaemonRecord,
 } from '../ui/daemon/daemon.js';
-import { agentPlistPath, agentTarget, systemHost, type LaunchdHost } from '../ui/daemon/launchd.js';
+import { STABLE_ENTRY, agentPlistPath, agentTarget, systemHost, type LaunchdHost } from '../ui/daemon/launchd.js';
 
 /**
  * Перезапуск демона витрины после успешного обновления.
@@ -42,8 +42,6 @@ export interface RestartOptions {
 }
 
 export type RestartOutcome = 'skipped' | 'kickstarted' | 'restarted' | 'manual' | 'none';
-
-const STABLE_ENTRY = '/current/dist/src/bin.js';
 
 export async function restartDaemon(
   host: RestartHost,

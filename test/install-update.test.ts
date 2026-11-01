@@ -46,7 +46,7 @@ function bed(options: {
     uid: 501,
     launchctl: (argv) => {
       restartCalls.push(`launchctl ${argv.join(' ')}`);
-      return { status: options.agentLoaded === true ? 0 : 1, stderr: '' };
+      return { status: options.agentLoaded === true ? 0 : 1, stdout: '', stderr: '' };
     },
     runningDaemon: () => undefined,
     stopDaemon: async () => undefined,

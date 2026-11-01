@@ -45,7 +45,7 @@ import { namedSecrets, resolveBackendCredentials, resolveSecrets } from './secre
 import { executeRunStep } from './exec/runStep.js';
 import { runJudgePass } from './exec/judgePass.js';
 import { planAttempt } from './exec/attempts.js';
-import { loadPriceCatalog, type PriceCatalog } from './budget/priceCatalog.js';
+import { isUnpricedCall, loadPriceCatalog, type PriceCatalog } from './budget/priceCatalog.js';
 import { runPluginStep } from './exec/pluginStep.js';
 import { evaluatePredicates, validateAgainstSchema, validateAgainstSchemaFile } from '../expect/evaluate.js';
 import { createKnowledgeSource } from '../domain/knowledge/source.js';
@@ -1170,10 +1170,7 @@ function warnAboutUnpricedCalls(context: RunContext): void {
   const seen = new Set<string>();
   const check = (job: Job, step: Step, backend: string, model: string | undefined, judge: boolean): void => {
     const adapter = adapterOf(backend, context);
-    if (adapter.capabilities.reportsCost === true) return;
-    // Каталог ищется по имени адаптера — тому же, что окажется в `Usage.backend`
-    // и по которому цену найдёт сам вызов.
-    if (model !== undefined && context.priceCatalog?.find(adapter.name, model) !== undefined) return;
+    if (!isUnpricedCall(adapter, model, context.priceCatalog)) return;
     const key = [job.id, step.id, judge ? 'judge' : 'step', backend, model ?? ''].join('\u0000');
     if (seen.has(key)) return;
     seen.add(key);

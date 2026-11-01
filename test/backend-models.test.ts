@@ -1,10 +1,10 @@
 import assert from 'node:assert/strict';
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, it } from 'node:test';
 
 import { createClaudeAdapter } from '../src/parts/backends/claude/adapter.js';
-import { discoverModels, resetModelDiscoveryCache } from '../src/parts/pipeline/backend/models.js';
+import { discoverModels, heldModelDiscovery, resetModelDiscoveryCache } from '../src/parts/pipeline/backend/models.js';
 import type { ModelDiscovery, ProbeOutput } from '../src/parts/pipeline/backend/types.js';
 import { resolveConfig, type Config } from '../src/parts/pipeline/config/resolve.js';
 import { lintPipeline } from '../src/parts/pipeline/domain/lint.js';
@@ -366,6 +366,37 @@ describe('agent-backend: удержание распознанного на вр
 
     const refreshed = await discoverModels('probe', config, registry, { refresh: true });
     assert.deepEqual(refreshed, { status: 'ok', models: [{ name: 'run-2' }] });
+  });
+
+  it('heldModelDiscovery: до пробы — undefined, после — тот же исход, число запусков не растёт', async () => {
+    resetModelDiscoveryCache();
+    const dir = tempDir('models-held-');
+    const counter = join(dir, 'counter');
+    writeFileSync(counter, '');
+    const config = configFrom(`backends:\n  probe:\n    command: probe\n    env:\n      COUNTER_FILE: ${counter}\n`);
+    const registry = registryWith(
+      'probe',
+      jsonNamesDiscovery(
+        nodeScript(
+          'const fs = require("fs");' +
+            'fs.appendFileSync(process.env.COUNTER_FILE, "x");' +
+            'process.stdout.write(JSON.stringify(["m"]));',
+        ),
+      ),
+    );
+
+    assert.equal(heldModelDiscovery('probe', 'probe'), undefined);
+    assert.equal(readFileSync(counter, 'utf8'), '', 'чтение удержанного ничего не запускает');
+
+    const outcome = await discoverModels('probe', config, registry);
+    await Promise.resolve();
+    assert.deepEqual(heldModelDiscovery('probe', 'probe'), outcome);
+    assert.deepEqual(heldModelDiscovery('probe', 'probe'), outcome);
+    assert.equal(readFileSync(counter, 'utf8'), 'x', 'проба запускалась один раз');
+    assert.equal(heldModelDiscovery('probe', 'другая-команда'), undefined, 'ключ несёт команду');
+
+    resetModelDiscoveryCache();
+    assert.equal(heldModelDiscovery('probe', 'probe'), undefined);
   });
 
   it('смена command бэкенда даёт новую пробу, а не удержанный ответ прежней команды', async () => {

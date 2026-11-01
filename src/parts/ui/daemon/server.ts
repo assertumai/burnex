@@ -1,6 +1,7 @@
 import { createServer, type IncomingMessage, type ServerResponse, type Server } from 'node:http';
 import { existsSync } from 'node:fs';
 import { homedir } from 'node:os';
+import { join } from 'node:path';
 
 import { listProjects } from '../../pipeline/run/journal/reader.js';
 import { backfillUsageStore } from '../../pipeline/run/journal/usageStore.js';
@@ -22,10 +23,13 @@ import {
   launchDecide as defaultLaunchDecide,
   launchResume as defaultLaunchResume,
   launchRun as defaultLaunchRun,
+  createMaintenance,
   type LaunchDecideFn,
+  type LaunchMaintenance,
   type LaunchResumeFn,
   type LaunchRunFn,
 } from '../runLaunch.js';
+import { createUpdateHold, systemSystemHost, type SystemHost } from '../system.js';
 import {
   createWidgetCompiler,
   errorModuleText,
@@ -108,6 +112,16 @@ export interface UiServerOptions {
    * подмена нужна проверкам по той же причине, что и у `launchRun`.
    */
   readonly launchResume?: LaunchResumeFn;
+  /**
+   * Процессы обслуживания экрана System (`POST /api/system/update` и
+   * `/autostart`). По умолчанию — отсоединённые процессы с журналом под
+   * `~/.stepcast`; подмена нужна проверкам по той же причине, что и у `launchRun`.
+   */
+  readonly launchMaintenance?: LaunchMaintenance;
+  /** Системные вызовы экрана System; подмена — чтобы проверка не трогала настоящие launchd, git и npm. */
+  readonly systemHost?: SystemHost;
+  /** Точка входа CLI, которой порождаются процессы обслуживания. По умолчанию — `process.argv[1]` демона. */
+  readonly entry?: string;
 }
 
 export interface UiServer {
@@ -386,6 +400,11 @@ export function createUiServer(options: UiServerOptions): Promise<UiServer> {
   if (pruned.length > 0) {
     options.log?.(`forgot ${pruned.length} orphaned project(s): ${pruned.map((orphan) => orphan.path).join(', ')}`);
   }
+  const startedAt = Date.now();
+  let boundPort = options.port;
+  const launchMaintenance = options.launchMaintenance ?? createMaintenance(join(homeDir, '.stepcast'));
+  const systemHost = options.systemHost ?? systemSystemHost();
+  const updateHold = createUpdateHold();
   const watcher =
     options.watcher ??
     createWatcher({
@@ -481,6 +500,16 @@ export function createUiServer(options: UiServerOptions): Promise<UiServer> {
       launchRun: options.launchRun ?? defaultLaunchRun,
       launchDecide: options.launchDecide ?? defaultLaunchDecide,
       launchResume: options.launchResume ?? defaultLaunchResume,
+      self: {
+        pid: process.pid,
+        startedAt,
+        port: boundPort,
+        projectRoot: options.projectRoot,
+        entry: options.entry ?? process.argv[1] ?? '',
+      },
+      launchMaintenance,
+      systemHost,
+      updateHold,
     };
     await handler(req, res, env);
   }
@@ -555,6 +584,7 @@ export function createUiServer(options: UiServerOptions): Promise<UiServer> {
       server.removeListener('error', reject);
       const address = server.address();
       const port = typeof address === 'object' && address !== null ? address.port : options.port;
+      boundPort = port;
 
       resolve({
         server,

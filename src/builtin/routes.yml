@@ -86,6 +86,13 @@ routes:
     target: { screen: screen-schedule }
     nav: { order: 9, group: system }
 
+  # Здоровье установки: версия и способ установки, демон, автозапуск, бэкенды,
+  # модели без цены (`ui-system-health`).
+  - id: screen-system
+    path: /system
+    target: { screen: screen-system }
+    nav: { order: 10, group: system }
+
   - id: screen-routes
     path: /routes
     target: { screen: screen-routes }

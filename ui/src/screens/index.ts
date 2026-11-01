@@ -13,6 +13,7 @@ import runs from './runs';
 import schedule from './schedule';
 import scrum from './scrum';
 import secrets from './secrets';
+import system from './system';
 import usage from './usage';
 import widgets from './widgets';
 
@@ -39,6 +40,7 @@ export const BUILTIN_SCREENS: Readonly<Record<string, ScreenPlugin>> = {
   'screen-agents': agents,
   'screen-secrets': secrets,
   'screen-schedule': schedule,
+  'screen-system': system,
   'screen-routes': routes,
   'screen-proposals': proposals,
 };

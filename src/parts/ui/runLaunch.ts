@@ -1,4 +1,6 @@
 import { spawn } from 'node:child_process';
+import { appendFileSync, closeSync, mkdirSync, openSync } from 'node:fs';
+import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { finalizeInterruptedRun } from '../pipeline/run/journal/recover.js';
@@ -195,3 +197,100 @@ export const launchDecide: LaunchDecideFn = (options) => {
   });
   child.unref();
 };
+
+export type MaintenanceKind = 'update' | 'autostart';
+
+export interface LaunchMaintenanceOptions {
+  readonly kind: MaintenanceKind;
+  /** Исполняемый файл и его argv целиком: оболочка — только там, где нужна цепочка команд. */
+  readonly command: string;
+  readonly args: readonly string[];
+  /** Корень проекта демона: `up --install` записывает его в `WorkingDirectory` plist. */
+  readonly cwd: string;
+}
+
+/**
+ * Последний запуск действия, как его видит демон. Успешное действие
+ * перезапускает демон, и знать о своём исходе ему уже некому; завершившийся
+ * при живом демоне процесс значит, что перезапуска не было: «обновлять нечего»,
+ * отказ или сбой — экран отличает это от зависшего перезапуска по коду выхода.
+ */
+export interface MaintenanceRun {
+  readonly startedAt: string;
+  readonly running: boolean;
+  /** Код выхода; `null` — процесс убит сигналом или не запустился вовсе. */
+  readonly exitCode?: number | null;
+  readonly finishedAt?: string;
+}
+
+/**
+ * Процессы обслуживания, которые порождает демон (`ui-system-health`): обновление
+ * движка и переключение автозапуска. Оба перезапускают сам демон, поэтому
+ * исполняются отсоединённым процессом, а не кодом в обработчике запроса.
+ */
+export interface LaunchMaintenance {
+  /** Породить процесс; вывод дописывается в журнал действия. Отказ самого порождения уходит туда же. */
+  launch(options: LaunchMaintenanceOptions): void;
+  /** Какое действие идёт прямо сейчас: два наперегонки ломают друг другу `current` и plist. */
+  busy(): MaintenanceKind | undefined;
+  /** Последний запуск действия этим демоном; `undefined` — с подъёма не запускалось. */
+  last(kind: MaintenanceKind): MaintenanceRun | undefined;
+  /** Журнал действия: `update.log`, `autostart.log`. */
+  logPath(kind: MaintenanceKind): string;
+}
+
+/**
+ * Знание о живом ребёнке — в памяти демона: после перезапуска удерживать
+ * нечего, а чужой процесс обслуживания (из терминала) демон всё равно не видит.
+ *
+ * `detached` — новая сессия: launchd убивает группу процессов задания при
+ * `bootout` и `kickstart -k`, а ребёнок в эту группу не входит и доводит
+ * перезапуск до конца.
+ */
+export function createMaintenance(logDir: string): LaunchMaintenance {
+  let running: MaintenanceKind | undefined;
+  const runs = new Map<MaintenanceKind, MaintenanceRun>();
+  const logPath = (kind: MaintenanceKind): string => join(logDir, `${kind}.log`);
+
+  return {
+    logPath,
+    busy: () => running,
+    last: (kind) => runs.get(kind),
+    launch: (options) => {
+      const log = logPath(options.kind);
+      mkdirSync(logDir, { recursive: true });
+      appendFileSync(log, `\n--- ${new Date().toISOString()} ${[options.command, ...options.args].join(' ')}\n`);
+      const fd = openSync(log, 'a');
+
+      running = options.kind;
+      const startedAt = new Date().toISOString();
+      runs.set(options.kind, { startedAt, running: true });
+      let settled = false;
+      const settle = (exitCode: number | null): void => {
+        if (settled) return;
+        settled = true;
+        if (running === options.kind) running = undefined;
+        runs.set(options.kind, { startedAt, running: false, exitCode, finishedAt: new Date().toISOString() });
+      };
+      try {
+        const child = spawn(options.command, [...options.args], {
+          cwd: options.cwd,
+          detached: true,
+          stdio: ['ignore', fd, fd],
+        });
+        child.on('exit', (code) => settle(code));
+        // Отказ порождения приходит событием уже после ответа 202; без слушателя он роняет демон.
+        child.on('error', (error) => {
+          appendFileSync(log, `не запустилось: ${error.message}\n`);
+          settle(null);
+        });
+        child.unref();
+      } catch (error) {
+        settle(null);
+        throw error;
+      } finally {
+        closeSync(fd);
+      }
+    },
+  };
+}

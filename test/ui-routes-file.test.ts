@@ -83,6 +83,10 @@ describe('ui-routes-file: сборка таблицы трёх слоёв', () =
     assert.equal(schedule?.definition.path, '/schedule');
     assert.equal(schedule?.definition.nav?.group, 'system');
     assert.equal(schedule?.definition.nav?.order, 9);
+    const system = result.entries.find((candidate) => candidate.id === 'screen-system');
+    assert.equal(system?.definition.path, '/system');
+    assert.equal(system?.definition.nav?.group, 'system');
+    assert.equal(system?.definition.nav?.order, 10);
   });
 
   it('enabled: false убирает маршрут из действующей таблицы целиком', () => {
@@ -163,10 +167,10 @@ describe('ui-routes-file: сборка таблицы трёх слоёв', () =
     );
 
     const result = buildRouteTable({ home, projectRoot });
-    // 17 встроенных маршрутов (включая screen-home, screen-scrum,
-    // screen-decisions, screen-proposals, screen-secrets и screen-schedule)
-    // плюс этот новый.
-    assert.equal(result.entries.length, 17);
+    // 18 встроенных маршрутов (включая screen-home, screen-scrum,
+    // screen-decisions, screen-proposals, screen-secrets, screen-schedule и
+    // screen-system) плюс этот новый.
+    assert.equal(result.entries.length, 18);
     const entry = result.entries.find((candidate) => candidate.id === 'my-dashboard');
     assert.deepEqual(entry?.definition.target, { kind: 'widget', id: 'proj/team' });
     const runs = result.entries.find((candidate) => candidate.id === 'screen-runs');

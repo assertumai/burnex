@@ -11,6 +11,7 @@ import { declaration as runsDeclaration } from '../../../src/parts/ui/screens/ru
 import { declaration as scrumDeclaration } from '../../../src/parts/ui/screens/scrum/declaration.ts';
 import { declaration as scheduleDeclaration } from '../../../src/parts/ui/screens/schedule/declaration.ts';
 import { declaration as secretsDeclaration } from '../../../src/parts/ui/screens/secrets/declaration.ts';
+import { declaration as systemDeclaration } from '../../../src/parts/ui/screens/system/declaration.ts';
 import { declaration as usageDeclaration } from '../../../src/parts/ui/screens/usage/declaration.ts';
 import { declaration as widgetsDeclaration } from '../../../src/parts/ui/screens/widgets/declaration.ts';
 import type { RouteTarget } from '../../../src/parts/ui/routes.ts';
@@ -167,6 +168,11 @@ export const SECTIONS: readonly SectionGroup[] = [
         target: screenTarget(scheduleDeclaration.id),
         title: scheduleDeclaration.title,
         description: 'Which pipelines are declared on a schedule, the next moment and the last scheduled run; read-only.',
+      },
+      {
+        target: screenTarget(systemDeclaration.id),
+        title: systemDeclaration.title,
+        description: 'Engine version and install method, the daemon, autostart, backends and models without a price.',
       },
     ],
   },

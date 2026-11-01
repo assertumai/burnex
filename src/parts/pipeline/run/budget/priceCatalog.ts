@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { z } from 'zod';
 
 import { StepcastError } from '../../../../kernel/errors.js';
+import type { BackendAdapter } from '../../backend/types.js';
 import { enginePackageRoot } from '../../document/packagePaths.js';
 import type { Usage } from '../journal/schema.js';
 
@@ -143,6 +144,21 @@ export function priceUsage(usage: Usage, catalog: PriceCatalog | undefined): Usa
   const entry = catalog.find(usage.backend, usage.model);
   if (entry === undefined) return usage;
   return { ...usage, cost_usd: estimateCostUsd(entry, usage), cost_source: 'catalog' };
+}
+
+/**
+ * Вызов без цены: бэкенд её не сообщает, а модель не названа или каталог её не
+ * знает — `budget.cost` такой вызов не увидит. Каталог ищется по имени
+ * адаптера — тому же, что окажется в `Usage.backend`. Правило одно на раннер
+ * (предупреждение `budget.cost_unpriced`) и на экран System.
+ */
+export function isUnpricedCall(
+  adapter: Pick<BackendAdapter, 'name' | 'capabilities'>,
+  model: string | undefined,
+  catalog: PriceCatalog | undefined,
+): boolean {
+  if (adapter.capabilities.reportsCost === true) return false;
+  return model === undefined || catalog?.find(adapter.name, model) === undefined;
 }
 
 const catalogBackendsByModel = new Map<string, Map<string, Set<string>>>();

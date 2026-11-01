@@ -7,6 +7,7 @@ import {
   PriceCatalogError,
   backendsKnowingModel,
   estimateCostUsd,
+  isUnpricedCall,
   loadPriceCatalog,
   priceCatalogPath,
   priceUsage,
@@ -198,5 +199,32 @@ describe('price-catalog: бэкенды, знающие модель', () => {
     ]);
     assert.deepEqual([...backendsKnowingModel('big', path)], ['claude']);
     assert.deepEqual([...backendsKnowingModel('b', path)].sort(), ['claude', 'codex']);
+  });
+});
+
+describe('price-catalog: isUnpricedCall', () => {
+  const catalog = loadPriceCatalog(writeCatalog([entry({ backend: 'codex', model: 'm1', aliases: ['mini'] })]));
+  const adapter = (name: string, reportsCost: boolean): Parameters<typeof isUnpricedCall>[0] => ({
+    name,
+    capabilities: { reportsCost } as Parameters<typeof isUnpricedCall>[0]['capabilities'],
+  });
+
+  it('бэкенд, сообщающий цену, неучтённым не бывает — даже без модели', () => {
+    assert.equal(isUnpricedCall(adapter('claude', true), undefined, catalog), false);
+  });
+
+  it('модель в каталоге по имени и псевдониму — цена есть', () => {
+    assert.equal(isUnpricedCall(adapter('codex', false), 'm1', catalog), false);
+    assert.equal(isUnpricedCall(adapter('codex', false), 'mini', catalog), false);
+  });
+
+  it('модель не названа — без цены', () => {
+    assert.equal(isUnpricedCall(adapter('codex', false), undefined, catalog), true);
+  });
+
+  it('модели нет в каталоге этого бэкенда или самого каталога нет — без цены', () => {
+    assert.equal(isUnpricedCall(adapter('codex', false), 'unknown', catalog), true);
+    assert.equal(isUnpricedCall(adapter('other', false), 'm1', catalog), true);
+    assert.equal(isUnpricedCall(adapter('codex', false), 'm1', undefined), true);
   });
 });

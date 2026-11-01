@@ -9,7 +9,7 @@ import { ExitCode, StepcastError, type ExitCodeValue } from '../../../kernel/err
 import { enginePackageRoot } from '../../pipeline/document/packagePaths.js';
 import { resolveInstallMethod, type InferProbes } from '../infer.js';
 import { installManifestPath, stepcastHome, type InstallManifest } from '../manifest.js';
-import { pickLatestTag, planUpdate, type UpdateStep } from '../plan.js';
+import { checkUpdate, planUpdate, type UpdateStep } from '../plan.js';
 import { restartDaemon, systemRestartHost, type RestartHost } from '../restart.js';
 
 /** Всё, что касается системы, внедряется: тест не запускает ни git, ни npm, ни install.sh. */
@@ -20,8 +20,8 @@ export interface UpdateHost {
   readonly readManifest: () => string | undefined;
   /** Выполнить команду с выводом в терминал; возвращает код возврата. */
   readonly exec: (step: UpdateStep) => number;
-  /** Выполнить команду и вернуть stdout (`git status`, `git ls-remote`); `undefined` — команда не удалась. */
-  readonly capture: (step: UpdateStep) => string | undefined;
+  /** Выполнить команду и вернуть stdout (`git status`, `git ls-remote`); `undefined` — команда не удалась или не уложилась в `timeoutMs`. */
+  readonly capture: (step: UpdateStep, timeoutMs?: number) => string | undefined;
   readonly restart: RestartHost;
 }
 
@@ -56,40 +56,19 @@ export async function runUpdateCommand(
       : `способ установки: ${manifest.method} (выведен из пути ${host.engineRoot}, паспорта нет)`,
   );
 
-  let latestTag: string | undefined;
-  if (manifest.method === 'managed' && ref === undefined) {
-    const listed = host.capture({ cmd: 'git', args: ['ls-remote', '--tags', '--refs', manifest.repo, 'v*'] });
-    if (listed === undefined) {
-      throw new StepcastError(`Не удалось получить список тегов ${manifest.repo}`, {
-        exitCode: ExitCode.jobFailed,
-        hint: 'Проверьте сеть и доступ к репозиторию либо назовите ссылку явно: stepcast update --ref <ссылка>',
-      });
-    }
-    latestTag = pickLatestTag(listed);
+  // Как и экран System, команда спрашивает одну функцию, но не ходит за новостями: `git pull`
+  // и `npm install` сами решат, есть ли что тянуть. Предела времени нет: в терминале прервать
+  // может сам человек, а медленная сеть — не повод отказывать.
+  const check = await checkUpdate(manifest, host, { ...(ref === undefined ? {} : { ref }), remote: false });
+  if (check.status === 'unknown' || check.status === 'blocked' || check.status === 'no-tags') {
+    throw new StepcastError(check.reason, { exitCode: ExitCode.jobFailed, ...(check.hint === undefined ? {} : { hint: check.hint }) });
+  }
+  if (check.status === 'up-to-date') {
+    write(`уже установлена версия ${check.version}, обновлять нечего`);
+    return ExitCode.ok;
   }
 
-  let dirty = false;
-  let detached = false;
-  if (manifest.method === 'checkout') {
-    const status = host.capture({ cmd: 'git', args: ['status', '--porcelain'], cwd: manifest.dir });
-    if (status === undefined) {
-      throw new StepcastError(`git status в ${manifest.dir} не удался`, {
-        exitCode: ExitCode.jobFailed,
-        hint: 'Каталог из паспорта должен быть git-деревом',
-      });
-    }
-    dirty = status.trim() !== '';
-    // Без --ref тянуть можно только ветку: отцеплённый HEAD план отвергнет с подсказкой.
-    detached = ref === undefined && host.capture({ cmd: 'git', args: ['symbolic-ref', '-q', 'HEAD'], cwd: manifest.dir }) === undefined;
-  }
-
-  const plan = planUpdate(manifest, {
-    ...(ref === undefined ? {} : { ref }),
-    latestTag,
-    dirty,
-    detached,
-  });
-
+  const plan = planUpdate(manifest, { ...(ref === undefined ? {} : { ref }), latestTag: check.latest });
   if (plan.kind === 'up-to-date') {
     write(`уже установлена версия ${plan.version}, обновлять нечего`);
     return ExitCode.ok;
@@ -123,8 +102,12 @@ function systemUpdateHost(): UpdateHost {
   const releasesDir = join(stepcastHome(process.env, home), 'releases');
   const manifestPath = installManifestPath(process.env, home);
 
-  const capture = (step: UpdateStep): string | undefined => {
-    const result = spawnSync(step.cmd, [...step.args], { cwd: step.cwd, encoding: 'utf8' });
+  const capture = (step: UpdateStep, timeoutMs?: number): string | undefined => {
+    const result = spawnSync(step.cmd, [...step.args], {
+      cwd: step.cwd,
+      encoding: 'utf8',
+      ...(timeoutMs === undefined ? {} : { timeout: timeoutMs }),
+    });
     return result.status === 0 ? result.stdout : undefined;
   };
 

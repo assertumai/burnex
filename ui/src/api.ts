@@ -1182,6 +1182,148 @@ export async function fetchSecrets(): Promise<SecretsOverview> {
   return json<SecretsOverview>(await fetch('/api/secrets'));
 }
 
+/** Здоровье установки (`ui-system-health`): зеркало `src/parts/ui/system.ts`. */
+export interface SystemEngine {
+  readonly version?: string;
+  readonly root: string;
+  readonly method?: 'managed' | 'checkout' | 'npm';
+  readonly source?: 'manifest' | 'inferred';
+  readonly managed?: {
+    readonly ref: string;
+    readonly version: string;
+    readonly installedAt?: string;
+    readonly release?: string;
+  };
+  readonly checkoutDir?: string;
+  readonly npmPackage?: string;
+  /** Способ установки не определён — «Обновить» неактивна с этой причиной. */
+  readonly error?: string;
+}
+
+export interface SystemDaemon {
+  readonly pid: number;
+  readonly startedAt: string;
+  readonly port: number;
+  readonly projectRoot?: string;
+  readonly entry: string;
+  readonly underLaunchd: boolean;
+}
+
+export type SystemAutostart =
+  | { readonly supported: false; readonly reason: string }
+  | {
+      readonly supported: true;
+      readonly plist: boolean;
+      readonly loaded: boolean;
+      readonly thisDaemon: boolean;
+      readonly pid?: number;
+      readonly entry?: string;
+      readonly entryStable?: boolean;
+    };
+
+export type SystemProbe =
+  | { readonly status: 'not-probed' }
+  | { readonly status: ModelsForBackend['status']; readonly modelCount?: number; readonly message?: string };
+
+export interface SystemRefusal {
+  readonly class: 'rate_limit' | 'unauthenticated';
+  readonly at: string;
+  readonly project: string;
+  readonly run: string;
+  readonly job: string;
+  readonly step: string;
+  readonly statusCode?: number;
+  readonly message: string;
+  readonly backend?: string;
+}
+
+export interface SystemBackend {
+  readonly id: string;
+  readonly command: string;
+  readonly enabled: boolean;
+  readonly adapter: boolean;
+  readonly commandState: { readonly status: 'found'; readonly path: string } | { readonly status: 'missing' };
+  readonly probe: SystemProbe;
+  readonly refusals: readonly SystemRefusal[];
+}
+
+export interface SystemUnpricedModel {
+  readonly backend: string;
+  /** `null` — конфигурация модели не называет: вызов пойдёт на модели CLI по умолчанию. */
+  readonly model: string | null;
+  readonly path: string | null;
+}
+
+export interface SystemOverview {
+  readonly generatedAt: string;
+  readonly engine: SystemEngine;
+  readonly daemon: SystemDaemon;
+  readonly autostart: SystemAutostart;
+  readonly backends: readonly SystemBackend[];
+  readonly backendsError?: string;
+  readonly unattributedRefusals: readonly SystemRefusal[];
+  readonly unpriced: { readonly asOf?: string; readonly models: readonly SystemUnpricedModel[] };
+}
+
+export type SystemUpdateCheck =
+  | { readonly status: 'available'; readonly current: string; readonly latest?: string; readonly commits?: number }
+  | { readonly status: 'up-to-date'; readonly version: string }
+  | { readonly status: 'blocked' | 'no-tags' | 'unknown'; readonly reason: string; readonly hint?: string };
+
+export interface SystemUpdate {
+  readonly checkedAt: string;
+  readonly held: boolean;
+  readonly error?: string;
+  readonly check?: SystemUpdateCheck;
+}
+
+export type SystemActionKind = 'update' | 'autostart';
+
+/** Последний процесс действия, порождённый этим демоном; `exitCode: null` — убит сигналом или не запустился. */
+export interface SystemMaintenanceRun {
+  readonly startedAt: string;
+  readonly running: boolean;
+  readonly exitCode?: number | null;
+  readonly finishedAt?: string;
+}
+
+export interface SystemLog {
+  readonly kind: SystemActionKind;
+  readonly path: string;
+  readonly lines: readonly string[];
+  /** Нет — этот демон действия не запускал (или уже перезапущен). */
+  readonly run?: SystemMaintenanceRun;
+}
+
+/** Без сети и без новых проб бэкендов: только диск, launchd и память демона. */
+export async function fetchSystem(): Promise<SystemOverview> {
+  return json<SystemOverview>(await fetch('/api/system'));
+}
+
+/** Единственный вызов экрана, который ходит в сеть; `refresh` обходит удержанное демоном. */
+export async function fetchSystemUpdate(refresh?: boolean): Promise<SystemUpdate> {
+  return json<SystemUpdate>(await fetch(`/api/system/update${refresh === true ? '?refresh=1' : ''}`));
+}
+
+/** `202`: процесс порождён; `409` и `400` приходят ошибкой с причиной демона. */
+export async function startSystemUpdate(): Promise<{ readonly log: string }> {
+  return json<{ readonly log: string }>(await fetch('/api/system/update', { method: 'POST' }));
+}
+
+export async function setSystemAutostart(enabled: boolean): Promise<{ readonly log: string }> {
+  return json<{ readonly log: string }>(
+    await fetch('/api/system/autostart', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ enabled }),
+    }),
+  );
+}
+
+export async function fetchSystemLog(kind: SystemActionKind): Promise<SystemLog> {
+  return json<SystemLog>(await fetch(`/api/system/log?kind=${kind}`));
+}
+
 export interface LastScheduledRun {
   readonly runId: string;
   readonly moment: string;
