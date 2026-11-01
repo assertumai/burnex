@@ -106,6 +106,8 @@ prepare_engine() {
   fi
   rm -rf "$ENGINE_DIR/dist"
   (cd "$ENGINE_DIR" && npm run build) >&2 || return 1
+  # tsc не ставит бит исполнения, а шаги зовут движок через $STEPCAST_BIN напрямую.
+  chmod +x "$ENGINE_DIR/dist/src/bin.js" || return 1
 }
 
 for ((i = 1; i <= MAX_RUNS; i++)); do
