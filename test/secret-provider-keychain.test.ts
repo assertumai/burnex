@@ -3,7 +3,7 @@ import { chmodSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, it } from 'node:test';
 
-import type { SecretProviderInput } from '../src/parts/pipeline/contract.js';
+import { SecretProviderUnavailableError, type SecretProviderInput } from '../src/parts/pipeline/contract.js';
 import { createKeychainProvider, KEYCHAIN_PROVIDER } from '../src/parts/pipeline/secrets/keychain.js';
 import { describeSecretParamsIssue } from '../src/parts/pipeline/secrets/declaration.js';
 import { tempDir } from './tmp.js';
@@ -80,6 +80,7 @@ describe('провайдер keychain', () => {
 
     const error = await failure(provider.resolve(input()));
     assert.match(error.message, /нет записи/);
+    assert.ok(!(error instanceof SecretProviderUnavailableError), "запись не найдена — не «провайдер недоступен»");
     assert.match(error.message, /service=github\.com/);
     assert.match(error.message, /account=alice/);
     assert.doesNotMatch(error.message, new RegExp(LEAK));
@@ -91,6 +92,7 @@ describe('провайдер keychain', () => {
 
     const error = await failure(provider.resolve(input()));
     assert.match(error.message, /кодом 36/);
+    assert.ok(!(error instanceof SecretProviderUnavailableError));
     assert.match(error.message, /account=alice/);
     assert.doesNotMatch(error.message, new RegExp(LEAK));
   });
@@ -100,6 +102,7 @@ describe('провайдер keychain', () => {
 
     const error = await failure(provider.resolve(input()));
     assert.match(error.message, /не найдена/);
+    assert.ok(error instanceof SecretProviderUnavailableError);
     assert.match(error.message, /service=github\.com/);
   });
 
@@ -112,6 +115,7 @@ describe('провайдер keychain', () => {
 
     const error = await failure(provider.resolve(input()));
     assert.match(error.message, /не ответила за 2 с/);
+    assert.ok(error instanceof SecretProviderUnavailableError);
     assert.match(error.message, /account=alice/);
     assert.doesNotMatch(error.message, new RegExp(LEAK));
 
@@ -130,6 +134,7 @@ describe('провайдер keychain', () => {
 
     const error = await pending;
     assert.match(error.message, /отменён/);
+    assert.ok(error instanceof SecretProviderUnavailableError);
   });
 
   it('не macOS: отказ до запуска команды', async () => {
@@ -138,6 +143,7 @@ describe('провайдер keychain', () => {
 
     const error = await failure(provider.resolve(input()));
     assert.match(error.message, /только на macOS/);
+    assert.ok(error instanceof SecretProviderUnavailableError);
     assert.equal(existsSync(join(fake.dir, 'ran')), false, 'команда не должна запускаться');
     assert.equal(existsSync(join(fake.dir, 'argv.json')), false);
   });

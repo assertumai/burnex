@@ -72,6 +72,13 @@ routes:
     target: { screen: screen-agents }
     params: { tab: default }
 
+  # Статусы секретов проектов: проба провайдеров на каждом открытии, значения
+  # не показываются (`ui-secrets-screen`).
+  - id: screen-secrets
+    path: /secrets
+    target: { screen: screen-secrets }
+    nav: { order: 8, group: system }
+
   - id: screen-routes
     path: /routes
     target: { screen: screen-routes }

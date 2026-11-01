@@ -1,6 +1,6 @@
 import { execFile } from 'node:child_process';
 
-import type { SecretProviderContribution } from '../contract.js';
+import { SecretProviderUnavailableError, type SecretProviderContribution } from '../contract.js';
 
 /**
  * Встроенный провайдер секретов `keychain` (`secrets-keychain-provider`,
@@ -32,7 +32,9 @@ const EXIT_ITEM_NOT_FOUND = 44;
 /**
  * Сообщения отказов не включают stdout и stderr команды: первый содержит
  * чужие секреты записей, второй — подробности связки ключей, которым в
- * журнале и выводе запуска делать нечего.
+ * журнале и выводе запуска делать нечего. «Не здесь» (не macOS, таймаут или
+ * отмена, нет команды) — `SecretProviderUnavailableError`: экран «Secrets»
+ * отличает его от «записи нет» (код 44) и прочих кодов возврата.
  */
 export function createKeychainProvider(options: KeychainProviderOptions = {}): SecretProviderContribution {
   const command = options.command ?? 'security';
@@ -56,7 +58,7 @@ export function createKeychainProvider(options: KeychainProviderOptions = {}): S
       const entry = `service=${service}, account=${account}`;
 
       if (platform !== 'darwin') {
-        throw new Error(`секрет ${secret}: провайдер keychain доступен только на macOS (${entry})`);
+        throw new SecretProviderUnavailableError(`секрет ${secret}: провайдер keychain доступен только на macOS (${entry})`);
       }
 
       return new Promise<string>((resolvePromise, reject) => {
@@ -74,14 +76,14 @@ export function createKeychainProvider(options: KeychainProviderOptions = {}): S
             const failure = error as Error & { killed?: boolean; code?: string | number };
             if (failure.name === 'AbortError' || failure.killed === true) {
               reject(
-                new Error(
+                new SecretProviderUnavailableError(
                   `секрет ${secret}: ${command} не ответила за ${timeoutMs / 1000} с или запуск отменён (${entry}); связка ключей заблокирована? Разблокируйте её или разрешите доступ ${command} к записи («Always Allow»)`,
                 ),
               );
               return;
             }
             if (failure.code === 'ENOENT') {
-              reject(new Error(`секрет ${secret}: команда ${command} не найдена (${entry})`));
+              reject(new SecretProviderUnavailableError(`секрет ${secret}: команда ${command} не найдена (${entry})`));
               return;
             }
             if (failure.code === EXIT_ITEM_NOT_FOUND) {

@@ -466,7 +466,7 @@ function toView(
 }
 
 /** Отказ разбора в полях карточки: место и подсказка — половина объяснения. */
-interface Failure {
+export interface Failure {
   readonly error: string;
   readonly errorFile?: string;
   readonly errorAt?: string;
@@ -494,7 +494,7 @@ function errorFileName(projectPath: string, file: string): string {
  * их отдельными строками, и витрина, показывая один только `message`,
  * оставляла бы пользователя без ответа на вопрос «где именно».
  */
-function toFailure(error: unknown, projectPath: string): Failure {
+export function toFailure(error: unknown, projectPath: string): Failure {
   if (!isStepcastError(error)) return { error: (error as Error).message };
   const file = error.file === undefined ? undefined : errorFileName(projectPath, error.file);
   return {
@@ -519,7 +519,7 @@ function errorView(
 /** Пакет и слой пайплайна пакета — то, что карточка несёт рядом с адресом. */
 type PackageOrigin = { readonly package?: string; readonly packageLayer?: 'project' | 'home' };
 
-function originOf(entry: PipelineEntry): PackageOrigin {
+export function originOf(entry: PipelineEntry): PackageOrigin {
   return entry.package === undefined || entry.packageLayer === undefined
     ? {}
     : { package: entry.package, packageLayer: entry.packageLayer };
@@ -564,7 +564,7 @@ function readPipeline(
 }
 
 /** `project`, `defaults`, `backends` и реестр вкладов того репозитория, чей пайплайн раскрывается. */
-interface ProjectOverrides {
+export interface ProjectOverrides {
   readonly project: Config['project'];
   readonly defaults: Config['defaults'];
   readonly backends: Config['backends'];
@@ -802,7 +802,7 @@ export async function resolveWithCachedKernel(
  * `builtinCommands` не передаётся: вклады команд витрине не нужны, их
  * диспетчеризует CLI.
  */
-async function projectSection(
+export async function projectSection(
   projectPath: string,
   home: string | undefined,
   kernelCache: KernelCache | undefined,
@@ -825,6 +825,28 @@ async function projectSection(
     pipelineAgents: resolved.config.pipelineAgents,
     stepAgents: resolved.config.stepAgents,
     registry,
+  };
+}
+
+/**
+ * Конфигурация демона, подменённая секциями проекта. Глобальный конфиг проекта
+ * — тот, что прочитан от `home`: от него `expandPipeline` строит слой пакетов
+ * home, и он обязан совпасть с каталогом, из которого перечень пайплайнов взял
+ * пайплайны пакетов home. Общая для «Pipelines» и «Secrets»: экран секретов
+ * раскрывает пайплайны той же конфигурацией, иначе его статусы разошлись бы с
+ * карточками.
+ */
+export function withProjectSection(config: Config, overrides: ProjectOverrides): Config {
+  return {
+    ...config,
+    project: overrides.project,
+    defaults: overrides.defaults,
+    backends: overrides.backends,
+    agentPolicy: overrides.agentPolicy,
+    pipelineAgents: overrides.pipelineAgents,
+    stepAgents: overrides.stepAgents,
+    globalConfigDir: overrides.globalConfigDir,
+    globalConfigFile: overrides.globalConfigFile,
   };
 }
 
@@ -872,20 +894,7 @@ export async function buildPipelines(
     let failure: Failure | undefined;
     try {
       const overrides = await projectSection(project.path, options.home, options.kernelCache);
-      forProject = {
-        ...config,
-        project: overrides.project,
-        defaults: overrides.defaults,
-        backends: overrides.backends,
-        agentPolicy: overrides.agentPolicy,
-        pipelineAgents: overrides.pipelineAgents,
-        stepAgents: overrides.stepAgents,
-        // Глобальный конфиг проекта — тот, что прочитан от `options.home`: от него
-        // `expandPipeline` строит слой пакетов home, и он обязан совпасть с
-        // каталогом, из которого перечень выше взял пайплайны пакетов home.
-        globalConfigDir: overrides.globalConfigDir,
-        globalConfigFile: overrides.globalConfigFile,
-      };
+      forProject = withProjectSection(config, overrides);
       registry = overrides.registry;
       modelConfigFile = overrides.modelConfigFile;
       effortConfigFile = overrides.effortConfigFile;

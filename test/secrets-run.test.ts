@@ -18,6 +18,8 @@ import { expandPipeline } from '../src/parts/pipeline/document/expand.js';
 import { readEvents, readManifest } from '../src/parts/pipeline/run/journal/reader.js';
 import { planResume, readSourceRun } from '../src/parts/pipeline/run/resumePlan.js';
 import { runPipeline, type RunResult } from '../src/parts/pipeline/run/runner.js';
+import { SecretProviderUnavailableError } from '../src/parts/pipeline/contract.js';
+import { probeBackendCredential, probePipelineSecret, resolveSecrets } from '../src/parts/pipeline/run/secrets.js';
 import { createKeychainProvider } from '../src/parts/pipeline/secrets/keychain.js';
 import { gitCommit, gitInit, makeProject, testBaseEnv, type Project } from './helpers.js';
 import { tempDir } from './tmp.js';
@@ -594,5 +596,136 @@ jobs:
       return true;
     });
     assert.deepEqual(readdirSync(runsRoot), [], 'отказ не оставляет каталога прогона');
+  });
+});
+
+describe('secrets: проба для витрины', () => {
+  const signal = new AbortController().signal;
+  const declaration = (provider: string, params: Record<string, unknown> = {}) => ({
+    name: 'svc',
+    provider,
+    env: 'SVC_CRED',
+    params,
+  });
+  const withResolve = (resolve: () => Promise<unknown>): PipelinePlugin => ({
+    name: 'probe-plugin',
+    secretProviders: [{ name: 'probe', schema: { type: 'object' }, resolve: resolve as () => Promise<string> }],
+  });
+
+  /** Проба и запуск для одного и того же объявления: тексты отказов обязаны совпасть. */
+  async function probed(plugin: PipelinePlugin | undefined, files: Record<string, string>, provider: string) {
+    const registry = await registryWith(plugin);
+    const project = makeProject(files);
+    const secret = declaration(provider, provider === 'env-file' ? { file: '.env.local' } : {});
+    const probe = await probePipelineSecret(secret, registry, project.root, signal);
+    const pipeline = { secrets: [secret], jobs: [{ steps: [{ secrets: ['svc'] }] }] };
+    const refused = await resolveSecrets({
+      pipeline,
+      registry,
+      projectRoot: project.root,
+      signal,
+    } as unknown as Parameters<typeof resolveSecrets>[0]).then(
+      () => undefined,
+      (error: unknown) => error,
+    );
+    return { probe, refused };
+  }
+
+  it('успех: ok и значение только вызывающему', async () => {
+    const { probe, refused } = await probed(undefined, { '.env.local': `SVC_CRED=${SECRET}\n` }, 'env-file');
+    assert.deepEqual(probe, { ok: true, value: SECRET });
+    assert.equal(refused, undefined);
+  });
+
+  for (const [title, plugin, files, provider, status] of [
+    ['провайдер не зарегистрирован', undefined, {}, 'vault', 'provider-unavailable'],
+    ['нет файла', undefined, {}, 'env-file', 'not-found'],
+    ['нет ключа в файле', undefined, { '.env.local': 'OTHER=значение-значение\n' }, 'env-file', 'not-found'],
+    ['короткое значение', undefined, { '.env.local': 'SVC_CRED=short\n' }, 'env-file', 'not-found'],
+    ['resolve бросил', withResolve(() => Promise.reject(new Error('сеть недоступна'))), {}, 'probe', 'not-found'],
+    [
+      'resolve бросил SecretProviderUnavailableError',
+      withResolve(() => Promise.reject(new SecretProviderUnavailableError('сервис недоступен'))),
+      {},
+      'probe',
+      'provider-unavailable',
+    ],
+    ['не строка', withResolve(async () => 42), {}, 'probe', 'not-found'],
+    ['пустое значение', withResolve(async () => ''), {}, 'probe', 'not-found'],
+    ['перевод строки', withResolve(async () => 'первая-строка\nвторая'), {}, 'probe', 'not-found'],
+  ] as const) {
+    it(`${title}: статус ${status}, текст отказа как у запуска`, async () => {
+      const { probe, refused } = await probed(plugin, files, provider);
+      assert.equal(probe.ok, false);
+      if (probe.ok) return;
+      assert.equal(probe.status, status);
+      assert.ok(refused instanceof StepcastError);
+      assert.equal(probe.error.message, refused.message);
+      assert.equal(probe.error.at, refused.at);
+      assert.equal(probe.error.hint, refused.hint);
+    });
+  }
+
+  it('параметры против схемы провайдера: not-found', async () => {
+    const registry = await registryWith();
+    const secret = { ...declaration('env-file'), params: { extra: 1 } };
+    const probe = await probePipelineSecret(secret, registry, tempDir('cfg-'), signal);
+    assert.equal(probe.ok, false);
+    if (probe.ok) return;
+    assert.equal(probe.status, 'not-found');
+    assert.match(probe.error.message, /не соответствуют схеме провайдера env-file/);
+  });
+
+  it('провайдер, глухой к сигналу: проба не ждёт его дольше сигнала', async () => {
+    // Провайдер не отвечает никогда и сигнал не слушает — как сетевой vault без таймаута.
+    const registry = await registryWith(withResolve(() => new Promise(() => undefined)));
+    const controller = new AbortController();
+    const pending = probePipelineSecret(declaration('probe'), registry, tempDir('cfg-'), controller.signal);
+    setTimeout(() => controller.abort(), 20);
+    const probe = await pending;
+    assert.equal(probe.ok, false);
+    if (probe.ok) return;
+    assert.equal(probe.status, 'provider-unavailable');
+    assert.match(probe.error.message, /^Секрет svc не разрешён: провайдер probe не ответил до истечения срока пробы/);
+    assert.equal(probe.error.at, 'secrets.svc');
+  });
+
+  it('уже сработавший сигнал: provider-unavailable без вызова провайдера', async () => {
+    let called = false;
+    const registry = await registryWith(
+      withResolve(() => {
+        called = true;
+        return Promise.resolve(SECRET);
+      }),
+    );
+    const probe = await probeBackendCredential(
+      'claude',
+      'API_KEY',
+      { provider: 'probe', params: {} },
+      registry,
+      tempDir('cfg-'),
+      AbortSignal.abort(),
+    );
+    assert.equal(called, false);
+    assert.equal(probe.ok, false);
+    if (probe.ok) return;
+    assert.equal(probe.status, 'provider-unavailable');
+  });
+
+  it('запись credentials: тот же Target, что у запуска', async () => {
+    const registry = await registryWith();
+    const probe = await probeBackendCredential(
+      'claude',
+      'API_KEY',
+      { provider: 'env-file', params: { file: '.env.absent' } },
+      registry,
+      tempDir('cfg-'),
+      signal,
+    );
+    assert.equal(probe.ok, false);
+    if (probe.ok) return;
+    assert.equal(probe.status, 'not-found');
+    assert.equal(probe.error.at, 'backends.claude.credentials.API_KEY');
+    assert.match(probe.error.message, /^Учётные данные backends\.claude\.credentials\.API_KEY не разрешены: /);
   });
 });

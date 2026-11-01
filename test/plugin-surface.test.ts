@@ -184,3 +184,16 @@ describe('backends и steps/decision: публичная поверхность'
     assert.deepEqual(parsed.computed, ['import(…)']);
   });
 });
+
+describe('stepcast/pipeline: SecretProviderUnavailableError', () => {
+  it('экспортируется значением, а не типом, и является Error', async () => {
+    const surface = (await import('../src/parts/pipeline/surface.js')) as Record<string, unknown>;
+    const Unavailable = surface.SecretProviderUnavailableError as new (message: string) => Error;
+
+    assert.equal(typeof Unavailable, 'function');
+    const error = new Unavailable('нет связки');
+    assert.ok(error instanceof Error);
+    assert.equal(error.name, 'SecretProviderUnavailableError');
+    assert.equal(error.message, 'нет связки');
+  });
+});

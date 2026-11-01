@@ -83,7 +83,17 @@ describe('home: свёртка полосы состояния', () => {
 
 describe('home: разметка', () => {
   it('ссылки карты и плиток собраны по действующей таблице; цель без маршрута называет причину', () => {
-    const markup = renderToStaticMarkup(<Home overview={overview()} proposals={proposals()} navigate={() => {}} />);
+    // `Home` считает «сегодня» по настоящим часам, а у фикстуры дата зафиксирована:
+    // без подмены плитка «spent today» с наступлением следующих суток показывала бы $0.00.
+    const base = overview();
+    const live = {
+      ...base,
+      projects: base.projects.map((project) => ({
+        ...project,
+        runs: project.runs.map((run) => (run.runId === 'a-1' ? { ...run, startedAt: new Date().toISOString() } : run)),
+      })),
+    };
+    const markup = renderToStaticMarkup(<Home overview={live} proposals={proposals()} navigate={() => {}} />);
     assert.match(markup, /href="\/runs"/);
     assert.match(markup, /href="\/decisions"/);
     // Маршрута на Pipelines в таблице нет — карточка остаётся с причиной, а не исчезает.

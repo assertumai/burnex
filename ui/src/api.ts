@@ -1102,6 +1102,79 @@ export async function fetchPipelines(): Promise<PipelinesOverview> {
 }
 
 /**
+ * Секреты проектов (`ui-secrets-screen`): зеркало `src/parts/ui/secrets.ts`.
+ * Поля значения нет намеренно — демон его не отдаёт, и тип не даёт странице
+ * случайно сослаться на несуществующее.
+ */
+export type SecretStatus = 'resolved' | 'not-found' | 'provider-unavailable';
+
+interface SecretOutcome {
+  readonly status: SecretStatus;
+  readonly reason?: string;
+  readonly reasonAt?: string;
+  readonly reasonHint?: string;
+}
+
+export interface SecretUsage {
+  readonly pipeline: string;
+  readonly steps: readonly string[];
+}
+
+export interface SecretView extends SecretOutcome {
+  readonly name: string;
+  readonly env: string;
+  readonly provider: string;
+  readonly params: Readonly<Record<string, unknown>>;
+  readonly usedBy: readonly SecretUsage[];
+  readonly unused: boolean;
+}
+
+export interface CredentialView extends SecretOutcome {
+  readonly backend: string;
+  readonly variable: string;
+  readonly provider: string;
+  readonly params: Readonly<Record<string, unknown>>;
+  readonly at: string;
+  readonly inUse: boolean;
+}
+
+export interface ProviderView {
+  readonly name: string;
+  readonly owner: string;
+}
+
+export interface SecretsPipelineError {
+  readonly pipeline: string;
+  readonly error: string;
+  readonly errorFile?: string;
+  readonly errorAt?: string;
+  readonly errorHint?: string;
+}
+
+export interface ProjectSecretsView {
+  readonly projectKey: string;
+  readonly projectPath: string;
+  readonly error?: string;
+  readonly errorFile?: string;
+  readonly errorAt?: string;
+  readonly errorHint?: string;
+  readonly providers: readonly ProviderView[];
+  readonly secrets: readonly SecretView[];
+  readonly credentials: readonly CredentialView[];
+  readonly pipelineErrors: readonly SecretsPipelineError[];
+}
+
+export interface SecretsOverview {
+  readonly projects: readonly ProjectSecretsView[];
+  readonly generatedAt: string;
+}
+
+/** Каждый вызов — настоящая проба провайдеров: кеша статусов нет ни здесь, ни у демона. */
+export async function fetchSecrets(): Promise<SecretsOverview> {
+  return json<SecretsOverview>(await fetch('/api/secrets'));
+}
+
+/**
  * Правка выбора пользователя. Поле со значением `null` снимается; `selection:
  * null` снимает запись целиком. Выбор tier снимает `model` той же записи,
  * и наоборот — это делает демон.

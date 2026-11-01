@@ -1,6 +1,7 @@
 import { StepcastError } from '../../../kernel/errors.js';
 import { availableNames, type Registry } from '../../../kernel/registry.js';
-import type { Config } from '../config/resolve.js';
+import type { BackendCredential, Config } from '../config/resolve.js';
+import { SecretProviderUnavailableError } from '../contract.js';
 import type { Pipeline, SecretDeclaration } from '../document/model.js';
 import { backendsInUse, describeSecretParamsIssue } from '../secrets/declaration.js';
 
@@ -56,25 +57,45 @@ function refusal(target: Target, reason: string, hint?: string): StepcastError {
   });
 }
 
-async function resolveTarget(
+/**
+ * Исход пробы. `provider-unavailable` — провайдера нет в реестре либо он сам
+ * сказал, что здесь работать не может (`SecretProviderUnavailableError`);
+ * `not-found` — провайдер работал, годного значения нет. Витрина показывает
+ * статус, запуск — `error`: тексты отказов один и тот же `StepcastError`.
+ */
+export type SecretProbeStatus = 'not-found' | 'provider-unavailable';
+
+export type SecretProbe =
+  | { readonly ok: true; readonly value: string }
+  | { readonly ok: false; readonly status: SecretProbeStatus; readonly error: StepcastError };
+
+async function probeTarget(
   target: Target,
   registry: Registry,
   projectRoot: string,
   signal: AbortSignal,
-): Promise<string> {
+): Promise<SecretProbe> {
+  const fail = (status: SecretProbeStatus, error: StepcastError): SecretProbe => ({ ok: false, status, error });
+
   const provider = registry.secretProviders.get(target.provider);
   if (provider === undefined) {
     const known = availableNames(registry, 'secretProviders');
-    throw refusal(
-      target,
-      `провайдер ${target.provider} не зарегистрирован`,
-      known.length === 0 ? undefined : `Доступны: ${known.join(', ')}`,
+    return fail(
+      'provider-unavailable',
+      refusal(
+        target,
+        `провайдер ${target.provider} не зарегистрирован`,
+        known.length === 0 ? undefined : `Доступны: ${known.join(', ')}`,
+      ),
     );
   }
 
   const issue = describeSecretParamsIssue(provider, target.params);
   if (issue !== undefined) {
-    throw refusal(target, `параметры не соответствуют схеме провайдера ${target.provider}: ${issue}`);
+    return fail(
+      'not-found',
+      refusal(target, `параметры не соответствуют схеме провайдера ${target.provider}: ${issue}`),
+    );
   }
 
   let value: unknown;
@@ -87,33 +108,142 @@ async function resolveTarget(
       signal,
     });
   } catch (error) {
-    throw new StepcastError(
-      `${target.refused}: провайдер ${target.provider} завершился ошибкой: ${error instanceof Error ? error.message : String(error)}`,
-      { at: target.at, cause: error },
+    return fail(
+      error instanceof SecretProviderUnavailableError ? 'provider-unavailable' : 'not-found',
+      new StepcastError(
+        `${target.refused}: провайдер ${target.provider} завершился ошибкой: ${error instanceof Error ? error.message : String(error)}`,
+        { at: target.at, cause: error },
+      ),
     );
   }
 
   if (typeof value !== 'string') {
-    throw refusal(target, `провайдер ${target.provider} вернул не строку`);
+    return fail('not-found', refusal(target, `провайдер ${target.provider} вернул не строку`));
   }
   if (value === '') {
-    throw refusal(target, `провайдер ${target.provider} вернул пустое значение`);
+    return fail('not-found', refusal(target, `провайдер ${target.provider} вернул пустое значение`));
   }
   if (value.length < MIN_SECRET_LENGTH) {
-    throw refusal(
-      target,
-      `значение короче ${MIN_SECRET_LENGTH} символов`,
-      'Короткое значение нельзя надёжно замаскировать в журнале: оно совпадало бы с обычным текстом',
+    return fail(
+      'not-found',
+      refusal(
+        target,
+        `значение короче ${MIN_SECRET_LENGTH} символов`,
+        'Короткое значение нельзя надёжно замаскировать в журнале: оно совпадало бы с обычным текстом',
+      ),
     );
   }
   if (/[\r\n]/.test(value)) {
-    throw refusal(
-      target,
-      'значение содержит перевод строки',
-      'Маскирование построчное; многострочный материал (например, PEM) передайте путём к файлу',
+    return fail(
+      'not-found',
+      refusal(
+        target,
+        'значение содержит перевод строки',
+        'Маскирование построчное; многострочный материал (например, PEM) передайте путём к файлу',
+      ),
     );
   }
-  return value;
+  return { ok: true, value };
+}
+
+async function resolveTarget(
+  target: Target,
+  registry: Registry,
+  projectRoot: string,
+  signal: AbortSignal,
+): Promise<string> {
+  const probe = await probeTarget(target, registry, projectRoot, signal);
+  if (!probe.ok) throw probe.error;
+  return probe.value;
+}
+
+function secretTarget(secret: SecretDeclaration): Target {
+  return {
+    refused: `Секрет ${secret.name} не разрешён`,
+    at: `secrets.${secret.name}`,
+    provider: secret.provider,
+    params: secret.params,
+    secret: secret.name,
+    env: secret.env,
+  };
+}
+
+function credentialTarget(backend: string, variable: string, credential: BackendCredential): Target {
+  const at = `backends.${backend}.credentials.${variable}`;
+  return {
+    refused: `Учётные данные ${at} не разрешены`,
+    at,
+    provider: credential.provider,
+    params: credential.params,
+    secret: at,
+    env: variable,
+  };
+}
+
+/**
+ * Проба, которая не ждёт провайдера дольше сигнала. Плагинный провайдер вправе
+ * сигнал не слушать (сетевой vault без своего таймаута), и тогда срок пробы
+ * и отмена запроса витрины ничего бы не ограничивали. Сработавший сигнал —
+ * `provider-unavailable`: провайдер не дал ответа здесь и сейчас, о наличии
+ * значения ничего не известно. Запуск этой обёрткой не пользуется: его
+ * отмена — дело самого прогона.
+ */
+function probeUntilAborted(
+  target: Target,
+  registry: Registry,
+  projectRoot: string,
+  signal: AbortSignal,
+): Promise<SecretProbe> {
+  const abandoned = (): SecretProbe => ({
+    ok: false,
+    status: 'provider-unavailable',
+    error: refusal(
+      target,
+      `провайдер ${target.provider} не ответил до истечения срока пробы или отмены запроса`,
+    ),
+  });
+  if (signal.aborted) return Promise.resolve(abandoned());
+
+  return new Promise<SecretProbe>((resolve, reject) => {
+    const onAbort = (): void => resolve(abandoned());
+    signal.addEventListener('abort', onAbort, { once: true });
+    probeTarget(target, registry, projectRoot, signal).then(
+      (probe) => {
+        signal.removeEventListener('abort', onAbort);
+        resolve(probe);
+      },
+      (error: unknown) => {
+        signal.removeEventListener('abort', onAbort);
+        reject(error);
+      },
+    );
+  });
+}
+
+/**
+ * Пробы для экрана «Secrets» (`ui-secrets-screen`, design.md, Решение 1): те
+ * же Target и проверки, что у запуска, но исход — статус, а не исключение.
+ * Значение достаётся только вызывающему; витрина читает от пробы `ok`.
+ * Сработавший `signal` завершает пробу сразу, даже если провайдер его не слушает.
+ */
+export function probePipelineSecret(
+  secret: SecretDeclaration,
+  registry: Registry,
+  projectRoot: string,
+  signal: AbortSignal,
+): Promise<SecretProbe> {
+  return probeUntilAborted(secretTarget(secret), registry, projectRoot, signal);
+}
+
+export function probeBackendCredential(
+  backend: string,
+  variable: string,
+  credential: BackendCredential,
+  registry: Registry,
+  globalConfigDir: string,
+  signal: AbortSignal,
+): Promise<SecretProbe> {
+  return probeUntilAborted(credentialTarget(backend, variable, credential), registry, globalConfigDir, signal);
 }
 
 /**
@@ -128,14 +258,7 @@ export async function resolveSecrets(options: ResolveSecretsOptions): Promise<Re
 
   for (const secret of namedSecrets(options.pipeline)) {
     const value = await resolveTarget(
-      {
-        refused: `Секрет ${secret.name} не разрешён`,
-        at: `secrets.${secret.name}`,
-        provider: secret.provider,
-        params: secret.params,
-        secret: secret.name,
-        env: secret.env,
-      },
+      secretTarget(secret),
       options.registry,
       options.projectRoot,
       signal,
@@ -174,16 +297,8 @@ export async function resolveBackendCredentials(
 
     const values: Record<string, string> = {};
     for (const [variable, credential] of credentials) {
-      const at = `backends.${backend}.credentials.${variable}`;
       values[variable] = await resolveTarget(
-        {
-          refused: `Учётные данные ${at} не разрешены`,
-          at,
-          provider: credential.provider,
-          params: credential.params,
-          secret: at,
-          env: variable,
-        },
+        credentialTarget(backend, variable, credential),
         options.registry,
         config.globalConfigDir,
         signal,

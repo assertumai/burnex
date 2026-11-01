@@ -61,6 +61,7 @@ export {
   definePipelinePlugin,
   definePredicate,
   defineStepKind,
+  SecretProviderUnavailableError,
 } from './contract.js';
 
 export type {

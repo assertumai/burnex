@@ -107,6 +107,7 @@ describe('ui-screens: состав экранов у демона', () => {
       'screen-run',
       'screen-runs',
       'screen-scrum',
+      'screen-secrets',
       'screen-usage',
       'screen-widgets',
     ]);
@@ -119,6 +120,7 @@ describe('ui-screens: состав экранов у демона', () => {
       'screen-usage': '/api/usage',
       'screen-cleanup': '/api/usage-records',
       'screen-agents': '/api/models',
+      'screen-secrets': '/api/secrets',
     };
     // Настройки принадлежат той же строке, что и перечисление моделей
     // (`ui-agents-settings-merge`): отдельного экрана настроек в составе нет.
@@ -337,7 +339,7 @@ describe('ui-screens: строка каркаса снята патчем', () =
     // нет. Без разбора этого случая первое же обращение к составу дало бы
     // `TypeError` мимо всякого разбора отказа и уронило бы демон.
     const rows = ['ui-shell', 'screen-home', 'screen-runs', 'screen-run', 'screen-pipelines', 'screen-widgets',
-      'screen-backlog', 'screen-scrum', 'screen-usage', 'screen-cleanup', 'screen-agents', 'screen-routes',
+      'screen-backlog', 'screen-scrum', 'screen-usage', 'screen-cleanup', 'screen-agents', 'screen-secrets', 'screen-routes',
       'screen-decisions', 'screen-proposals', 'ui-dashboards', 'ui-packages', 'ui-run-launch'];
     writePatch(
       home,

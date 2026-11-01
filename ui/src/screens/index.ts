@@ -11,6 +11,7 @@ import routes from './routes';
 import run from './run';
 import runs from './runs';
 import scrum from './scrum';
+import secrets from './secrets';
 import usage from './usage';
 import widgets from './widgets';
 
@@ -35,6 +36,7 @@ export const BUILTIN_SCREENS: Readonly<Record<string, ScreenPlugin>> = {
   'screen-usage': usage,
   'screen-cleanup': cleanup,
   'screen-agents': agents,
+  'screen-secrets': secrets,
   'screen-routes': routes,
   'screen-proposals': proposals,
 };

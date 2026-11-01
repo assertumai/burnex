@@ -616,12 +616,14 @@ source: осмотр UX витрины
 
 ## ui-secrets-screen
 
-status: todo
+status: done
 title: Экран «Secrets»: провайдеры, имена секретов, статус — без значений
 why: Секреты по имени (`secrets-named-providers`, `secrets-keychain-provider`) объявляются в пайплайнах и конфигурации, но витрина о них не знает ничего: ни какие имена ждут пайплайны, ни где они разрешаются, ни какой провайдер отказал (`docs/ui-proposals.md`, п. 2).
 done_when: строка `screen-secrets` с `GET /api/secrets`: провайдеры из конфигурации, имена секретов из известных пайплайнов с провайдером и признаком «разрешается / не найден / провайдер недоступен»; значения секретов ни в ответе API, ни на экране не появляются (тест); маршрут `/secrets` в группе `system`; документация в `docs/config.md`
 group: ui-config
 source: docs/ui-proposals.md, п. 2
+started_at: 2026-11-01T06:59:33.417Z
+claimed_by: run:2026-11-01T06-59-32Z-368dfc
 
 ## ui-schedule-view
 

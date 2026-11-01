@@ -9,6 +9,7 @@ import { declaration as proposalsDeclaration } from '../../../src/parts/ui/scree
 import { declaration as routesDeclaration } from '../../../src/parts/ui/screens/routes/declaration.ts';
 import { declaration as runsDeclaration } from '../../../src/parts/ui/screens/runs/declaration.ts';
 import { declaration as scrumDeclaration } from '../../../src/parts/ui/screens/scrum/declaration.ts';
+import { declaration as secretsDeclaration } from '../../../src/parts/ui/screens/secrets/declaration.ts';
 import { declaration as usageDeclaration } from '../../../src/parts/ui/screens/usage/declaration.ts';
 import { declaration as widgetsDeclaration } from '../../../src/parts/ui/screens/widgets/declaration.ts';
 import type { RouteTarget } from '../../../src/parts/ui/routes.ts';
@@ -155,6 +156,11 @@ export const SECTIONS: readonly SectionGroup[] = [
         target: screenTarget(agentsDeclaration.id),
         title: agentsDeclaration.title,
         description: 'Who runs the agent steps and with which model: defaults, backends, tiers and per-pipeline policy.',
+      },
+      {
+        target: screenTarget(secretsDeclaration.id),
+        title: secretsDeclaration.title,
+        description: 'Which secrets the pipelines and backends expect and whether each one resolves here; values are never shown.',
       },
     ],
   },
