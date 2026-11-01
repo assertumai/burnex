@@ -4537,7 +4537,8 @@ describe('ui-routes: экран «Маршруты»', () => {
     assert.equal(code, 200);
     const routes = json.routes as Array<{ id: string; path: string; sources: { path: { layer: string; file: string } } }>;
     const runsEntry = routes.find((route) => route.id === 'screen-runs');
-    assert.equal(runsEntry?.path, '/');
+    assert.equal(runsEntry?.path, '/runs');
+    assert.equal(routes.find((route) => route.id === 'screen-home')?.path, '/', 'корень ведёт на экран Home');
     assert.equal(runsEntry?.sources.path.layer, 'builtin');
   });
 
@@ -4687,7 +4688,7 @@ describe('ui-routes: экран «Маршруты»', () => {
 
     const after = await fetchJson(server, '/api/routes');
     const routes = after.json.routes as Array<{ id: string; path: string }>;
-    assert.equal(routes.find((route) => route.id === 'screen-runs')?.path, '/', 'прежние маршруты продолжают действовать');
+    assert.equal(routes.find((route) => route.id === 'screen-runs')?.path, '/runs', 'прежние маршруты продолжают действовать');
     assert.match(String(after.json.buildError), /bogus/, 'причина отказа едет рядом с прежней таблицей');
   });
 

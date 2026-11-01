@@ -4,6 +4,7 @@ import agents from './agents';
 import backlog from './backlog';
 import cleanup from './cleanup';
 import decisions from './decisions';
+import home from './home';
 import pipelines from './pipelines';
 import proposals from './proposals';
 import routes from './routes';
@@ -23,6 +24,7 @@ import widgets from './widgets';
 export type ScreenPlugin = (ctx: Context) => void;
 
 export const BUILTIN_SCREENS: Readonly<Record<string, ScreenPlugin>> = {
+  'screen-home': home,
   'screen-runs': runs,
   'screen-run': run,
   'screen-pipelines': pipelines,

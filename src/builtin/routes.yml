@@ -6,10 +6,19 @@
 # берётся из заголовка цели (`nav.title` отсутствует означает «как экран»),
 # и правка заголовка экрана не расходится с меню сама по себе.
 routes:
-  - id: screen-runs
+  # Стартовая страница — экран «Home» (`ui-home-screen`): корень объясняет,
+  # что за приложение открыто и что демон видит сейчас; таблица прогонов
+  # переехала на `/runs`. Оба `id` сохранены: перекрытия пользовательских
+  # `routes.yml` по ним продолжают действовать.
+  - id: screen-home
     path: /
+    target: { screen: screen-home }
+    nav: { order: 0, group: work }
+
+  - id: screen-runs
+    path: /runs
     target: { screen: screen-runs }
-    nav: { order: 0, active_for: [screen-run], group: work }
+    nav: { order: 1, active_for: [screen-run], group: work }
 
   - id: screen-run
     path: /runs/:projectKey/:runId

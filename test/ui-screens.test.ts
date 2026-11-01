@@ -100,6 +100,7 @@ describe('ui-screens: состав экранов у демона', () => {
       'screen-backlog',
       'screen-cleanup',
       'screen-decisions',
+      'screen-home',
       'screen-pipelines',
       'screen-proposals',
       'screen-routes',
@@ -335,7 +336,7 @@ describe('ui-screens: строка каркаса снята патчем', () =
     // сервисов некому, — но ни реестра экранов, ни реестра маршрутов в нём
     // нет. Без разбора этого случая первое же обращение к составу дало бы
     // `TypeError` мимо всякого разбора отказа и уронило бы демон.
-    const rows = ['ui-shell', 'screen-runs', 'screen-run', 'screen-pipelines', 'screen-widgets',
+    const rows = ['ui-shell', 'screen-home', 'screen-runs', 'screen-run', 'screen-pipelines', 'screen-widgets',
       'screen-backlog', 'screen-scrum', 'screen-usage', 'screen-cleanup', 'screen-agents', 'screen-routes',
       'screen-decisions', 'screen-proposals', 'ui-dashboards', 'ui-packages', 'ui-run-launch'];
     writePatch(

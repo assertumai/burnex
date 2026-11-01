@@ -4,6 +4,7 @@ import { row as agentsRow } from './screens/agents/server.js';
 import { row as backlogRow } from './screens/backlog/server.js';
 import { row as cleanupRow } from './screens/cleanup/server.js';
 import { row as decisionsRow } from './screens/decisions/server.js';
+import { row as homeRow } from './screens/home/server.js';
 import { row as pipelinesRow } from './screens/pipelines/server.js';
 import { row as proposalsRow } from './screens/proposals/server.js';
 import { row as routesRow } from './screens/routes/server.js';
@@ -38,6 +39,7 @@ export const UI_SHELL_ROW: BuiltinRow = uiShellRow;
 
 /** По одной строке на встроенный экран, в порядке навигации (`ui-screens`, «Перевод экранов»). */
 export const SCREEN_ROWS: readonly BuiltinRow[] = [
+  homeRow,
   runsRow,
   runRow,
   pipelinesRow,

@@ -604,6 +604,16 @@ group: ui-agents
 started_at: 2026-10-31T17:20:00.000Z
 source: docs/ui-proposals.md, п. 1
 
+## ui-home-screen
+
+status: done
+title: Экран «Home» на корне витрины вместо таблицы прогонов
+why: Открыв `/`, человек видит список прогонов и не узнаёт ни что это за приложение, ни какие проекты оно видит, ни куда идти; логотип ведёт туда же (осмотр UX витрины, 2026-10-31).
+done_when: строка `screen-home` на `/` с вводным текстом, полосой состояния по обзору и очереди предложений и картой разделов ссылками `TargetLink`; `screen-runs` на `/runs` с прежним `id`; тесты маршрутов и состава обновлены, `ui/test/home.test.tsx` добавлен; `docs/routes.md` правлен; `npm run check` зелёный
+group: ui-home
+started_at: 2026-10-31T21:00:00.000Z
+source: осмотр UX витрины
+
 ## ui-secrets-screen
 
 status: todo

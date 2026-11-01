@@ -33,7 +33,8 @@ describe('ui-routes-file: сборка таблицы трёх слоёв', () =
     const result = buildRouteTable({ home });
     const runs = result.entries.find((entry) => entry.id === 'screen-runs');
     assert.ok(runs !== undefined);
-    assert.equal(runs?.definition.path, '/');
+    assert.equal(runs?.definition.path, '/runs');
+    assert.equal(result.entries.find((entry) => entry.id === 'screen-home')?.definition.path, '/');
     assert.equal(runs?.sources.path.layer, 'builtin');
   });
 
@@ -108,7 +109,7 @@ describe('ui-routes-file: сборка таблицы трёх слоёв', () =
     );
 
     const result = buildRouteTable({ home, projectRoot });
-    assert.equal(result.entries.find((entry) => entry.id === 'screen-runs')?.definition.path, '/');
+    assert.equal(result.entries.find((entry) => entry.id === 'screen-home')?.definition.path, '/');
     assert.deepEqual(
       result.disabled.map((entry) => entry.id).sort(),
       ['my-half', 'my-runs'],
@@ -154,13 +155,13 @@ describe('ui-routes-file: сборка таблицы трёх слоёв', () =
     );
 
     const result = buildRouteTable({ home, projectRoot });
-    // 14 встроенных маршрутов (включая screen-scrum, screen-decisions и
-    // screen-proposals) плюс этот новый.
-    assert.equal(result.entries.length, 14);
+    // 15 встроенных маршрутов (включая screen-home, screen-scrum,
+    // screen-decisions и screen-proposals) плюс этот новый.
+    assert.equal(result.entries.length, 15);
     const entry = result.entries.find((candidate) => candidate.id === 'my-dashboard');
     assert.deepEqual(entry?.definition.target, { kind: 'widget', id: 'proj/team' });
     const runs = result.entries.find((candidate) => candidate.id === 'screen-runs');
-    assert.equal(runs?.definition.path, '/');
+    assert.equal(runs?.definition.path, '/runs');
   });
 
   it('проектный слой — только файл каталога, в котором поднят демон', () => {
@@ -170,7 +171,7 @@ describe('ui-routes-file: сборка таблицы трёх слоёв', () =
 
     const result = buildRouteTable({ home, projectRoot });
     const runs = result.entries.find((candidate) => candidate.id === 'screen-runs');
-    assert.equal(runs?.definition.path, '/');
+    assert.equal(runs?.definition.path, '/runs');
   });
 
   it('два маршрута с одинаковым нормализованным шаблоном — названный отказ с обоими id и файлами', () => {
