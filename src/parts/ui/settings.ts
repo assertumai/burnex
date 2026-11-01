@@ -4,7 +4,7 @@ import { dirname, join } from 'node:path';
 import { parseDocument, type Document } from 'yaml';
 import { z } from 'zod';
 
-import codexPlugin from '../backends/codex/index.js';
+import { BUNDLED_BACKENDS, bundledByBackend } from '../backends/bundled.js';
 import { describeSource, type Source } from '../pipeline/config/merge.js';
 import { MODEL_TIERS, type ModelTiers } from '../pipeline/config/modelTiers.js';
 import type { ResolvedConfig } from '../pipeline/config/resolve.js';
@@ -22,8 +22,10 @@ export interface BackendView {
   readonly name: string;
   readonly command: string;
   readonly enabled: boolean;
-  /** Есть адаптер; настройки неподключённого Codex можно заполнить заранее. */
+  /** Есть адаптер; настройки неподключённого поставляемого бэкенда можно заполнить заранее. */
   readonly available: boolean;
+  /** Строка для `plugins:`, если бэкенд поставляется со Stepcast и ещё не подключён. */
+  readonly plugin?: string;
   readonly defaultModel: string | undefined;
   readonly defaultModelSource: string;
   readonly modelTiers: ModelTiers;
@@ -58,7 +60,9 @@ const SettingsPatchSchema = z.object({
   effort: EffortSchema.nullable().optional(),
   backends: z.record(z.string(), BackendPatchSchema).optional(),
   removeModelTiers: z.array(ModelTierSchema).optional(),
-  /** Явное подключение адаптера из поставки, без установки внешнего пакета. */
+  /** Явное подключение адаптеров из поставки (имена бэкендов), без установки внешнего пакета. */
+  connect: z.array(ModelNameSchema).optional(),
+  /** Прежняя форма `connect: ['codex']`: оставлена, чтобы старые клиенты не ломались. */
   connectCodex: z.literal(true).optional(),
 }).strict();
 
@@ -98,13 +102,24 @@ function sharedModelTiers(backends: readonly BackendView[]): readonly string[] {
   return [...MODEL_TIERS, ...[...custom].sort((left, right) => left.localeCompare(right))];
 }
 
+function readDeclaredPlugins(home: string): readonly string[] {
+  let text = '';
+  try {
+    text = readFileSync(globalConfigPath(home), 'utf8');
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+  }
+  const plugins = (parseDocument(text).toJS() as { plugins?: unknown } | null)?.plugins;
+  return Array.isArray(plugins) ? plugins.filter((item): item is string => typeof item === 'string') : [];
+}
+
 /**
  * Витрина правит глобальный файл; проектный слой отключён независимо от cwd.
  *
  * `kernelCache` — кеш ядра демона (`src/parts/ui/daemon/server.ts`, `createUiServer`):
  * ядро переживает отдельный запрос тем же правилом, каким кеш проверяет ключ
  * проекта (design.md, Решение 6) — свежая правка настроек, добавившая плагин
- * (`connectCodex`), меняет объявления, и следующий вызов поднимает ядро
+ * (`connect`), меняет объявления, и следующий вызов поднимает ядро
  * заново, а не читает устаревшее. Без кеша, как и при прямом вызове вне
  * сервера (тесты), плагины загружаются заново на каждый вызов.
  */
@@ -145,21 +160,36 @@ export async function readSettings(home: string = homedir(), kernelCache?: Kerne
       })),
   }));
 
-  // Codex поставляется как opt-in плагин: карточка видна и до подключения,
-  // но агентом по умолчанию он может стать только вместе с адаптером.
-  if (!backends.some((backend) => backend.name === 'codex')) {
-    backends.push({
-      name: 'codex', command: 'codex', enabled: true, available: false,
-      defaultModel: codexPlugin.backends!.codex!.defaults!.default_model,
-      defaultModelSource: 'plugin:codex', modelTiers: {}, modelTierSources: {}, modelTierEffortSources: {},
-    });
-  } else {
-    const codex = backends.find((backend) => backend.name === 'codex')!;
-    if (!codex.available && codex.defaultModel === undefined) {
-      backends[backends.indexOf(codex)] = {
-        ...codex, defaultModel: codexPlugin.backends!.codex!.defaults!.default_model,
-        defaultModelSource: 'plugin:codex',
-      };
+  // Поставляемые адаптеры (`BUNDLED_BACKENDS`) — opt-in плагины: карточка видна
+  // и до подключения, но агентом по умолчанию бэкенд может стать только вместе
+  // с адаптером. Уже подключённый попадает в список обычным путём и `plugin`
+  // не несёт — подключать нечего. Не несёт его и адаптер, уже объявленный в
+  // `plugins:`, но не поднявшийся (сборка состава отказала, демон живёт на
+  // прежнем ядре): строка в файле есть, дописывать нечего, а причину называет
+  // полоса отказа сборки.
+  const declared = new Set(readDeclaredPlugins(home));
+  const offered = (specifier: string): { plugin?: string } => (declared.has(specifier) ? {} : { plugin: specifier });
+  for (const [index, backend] of backends.entries()) {
+    const entry = backend.available ? undefined : bundledByBackend(backend.name);
+    if (entry === undefined) continue;
+    const fallbackModel = backend.defaultModel === undefined
+      ? entry.plugin.backends![backend.name]!.defaults?.default_model
+      : undefined;
+    backends[index] = {
+      ...backend, ...offered(entry.specifier),
+      ...(fallbackModel === undefined ? {} : { defaultModel: fallbackModel, defaultModelSource: `plugin:${entry.plugin.name}` }),
+    };
+  }
+  for (const entry of BUNDLED_BACKENDS) {
+    for (const [name, definition] of Object.entries(entry.plugin.backends ?? {})) {
+      if (backends.some((backend) => backend.name === name)) continue;
+      backends.push({
+        name, command: definition.defaults?.command ?? name, enabled: true, available: false,
+        ...offered(entry.specifier),
+        defaultModel: definition.defaults?.default_model,
+        defaultModelSource: `plugin:${entry.plugin.name}`,
+        modelTiers: {}, modelTierSources: {}, modelTierEffortSources: {},
+      });
     }
   }
 
@@ -217,6 +247,22 @@ export async function writeSettings(
   const patch = parsedPatch.data;
   const current = await readSettings(home, kernelCache);
   const known = new Map(current.backends.map((backend) => [backend.name, backend]));
+  const connect = new Set([...(patch.connect ?? []), ...(patch.connectCodex === true ? ['codex'] : [])]);
+  const specifiers = new Map<string, string>();
+  for (const name of connect) {
+    const entry = bundledByBackend(name);
+    if (entry === undefined) throw new StepcastError(`Agent ${name} cannot be connected from the dashboard`);
+    specifiers.set(name, entry.specifier);
+  }
+  const declared = new Set(readDeclaredPlugins(home));
+  // Адаптер уже объявлен, но не поднялся: строка в `plugins:` его не лечит, и
+  // молча принять такое подключение значило бы снять отметку, ничего не
+  // изменив. Подключённый же бэкенд — повтор без последствий.
+  for (const [name, specifier] of specifiers) {
+    if (declared.has(specifier) && known.get(name)?.available !== true) {
+      throw new StepcastError(`Agent ${name} is already declared in plugins (${specifier}) but did not load: fix the reason shown in the bar above the screen`);
+    }
+  }
   for (const name of Object.keys(patch.backends ?? {})) {
     if (!known.has(name)) throw new StepcastError(`Unknown agent ${name}`);
   }
@@ -224,7 +270,9 @@ export async function writeSettings(
     const backend = known.get(patch.agent);
     if (backend === undefined) throw new StepcastError(`Unknown agent ${patch.agent}`);
     if (!backend.enabled) throw new StepcastError(`Agent ${patch.agent} is disabled`);
-    if (!backend.available && !(patch.agent === 'codex' && patch.connectCodex === true)) {
+    // Неподключённый бэкенд можно выбрать только той же правкой, что его
+    // подключает (объявленный, но не поднявшийся отклонён выше).
+    if (!backend.available && !connect.has(patch.agent)) {
       throw new StepcastError(`Agent ${patch.agent} is not connected: connect its plugin first`);
     }
   }
@@ -235,12 +283,11 @@ export async function writeSettings(
   }
 
   editGlobalConfig(home, (document) => {
-    if (patch.connectCodex === true) {
-      const plugins = (document.toJS() as { plugins?: string[] } | null)?.plugins ?? [];
-      if (!plugins.includes('stepcast/backends/codex')) {
-        if (!document.has('plugins')) document.set('plugins', document.createNode([]));
-        document.addIn(['plugins'], 'stepcast/backends/codex');
-      }
+    const plugins = (document.toJS() as { plugins?: string[] } | null)?.plugins ?? [];
+    for (const specifier of new Set(specifiers.values())) {
+      if (plugins.includes(specifier)) continue;
+      if (!document.has('plugins')) document.set('plugins', document.createNode([]));
+      document.addIn(['plugins'], specifier);
     }
     if (patch.agent !== undefined) document.setIn(['defaults', 'agent'], patch.agent);
     if (patch.model !== undefined) {
@@ -272,12 +319,14 @@ export async function writeSettings(
     const documentBackends = (document.toJS() as { backends?: Record<string, unknown> } | null)?.backends ?? {};
     for (const tier of patch.removeModelTiers ?? []) {
       for (const name of new Set([...Object.keys(documentBackends), ...current.backends.map((backend) => backend.name)])) {
-        document.deleteIn(['backends', name, 'model_tiers', tier]);
+        // Карточки неподключённых бэкендов в файле могут отсутствовать вовсе, а
+        // `deleteIn` по несуществующему промежуточному узлу бросает.
+        if (document.hasIn(['backends', name, 'model_tiers'])) document.deleteIn(['backends', name, 'model_tiers', tier]);
       }
     }
   });
   // Кеш перечитывает объявления плагинов заново при каждом обращении: правка,
-  // добавившая plugins (`connectCodex`), обязана быть видна тут же, без
+  // добавившая plugins (`connect`), обязана быть видна тут же, без
   // перезапуска демона.
   return readSettings(home, kernelCache);
 }

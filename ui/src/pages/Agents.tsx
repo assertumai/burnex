@@ -106,6 +106,24 @@ export function scopeOf(pipelines: readonly PipelineView[], settingsFile: string
   return { affected, unaffected, overridden, unparsed };
 }
 
+/** Бэкенд можно выбрать агентом: включён и либо подключён, либо отмечен к подключению этой же правкой. */
+export function selectableAgent(
+  backend: { readonly name: string; readonly enabled: boolean; readonly available: boolean },
+  connect: ReadonlySet<string>,
+): boolean {
+  return backend.enabled && (backend.available || connect.has(backend.name));
+}
+
+/** У карточки есть действие «Connect»: бэкенд не подключён, а его адаптер поставляется со Stepcast. */
+export function connectOffered(backend: { readonly available: boolean; readonly plugin?: string }): boolean {
+  return !backend.available && backend.plugin !== undefined;
+}
+
+/** Часть правки настроек про подключение: `connect` только при непустом множестве, прежнего `connectCodex` витрина не шлёт. */
+export function connectPatch(connect: ReadonlySet<string>): Pick<SettingsPatch, 'connect'> {
+  return connect.size === 0 ? {} : { connect: [...connect] };
+}
+
 /**
  * Причина недоступности распознавания — словами, как её видит пользователь.
  *
@@ -332,7 +350,7 @@ export function Agents({
   const [removedTiers, setRemovedTiers] = useState<readonly string[]>([]);
   const [newTier, setNewTier] = useState('');
   const [tierError, setTierError] = useState<string>();
-  const [connectCodex, setConnectCodex] = useState(false);
+  const [connect, setConnect] = useState<ReadonlySet<string>>(new Set());
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string>();
@@ -352,6 +370,7 @@ export function Agents({
     setEffort(data.effort.value ?? '');
     setTierNames(orderedTierNames(data.modelTiers));
     setRemovedTiers([]);
+    setConnect(new Set());
     setNewTier('');
     setTierError(undefined);
     setDraft(Object.fromEntries(data.backends.map((backend) => [backend.name, {
@@ -361,7 +380,6 @@ export function Agents({
         return [tier, { model: selection?.model ?? '', effort: selection?.effort ?? '' }];
       })),
     }])));
-    setConnectCodex(false);
   };
 
   useEffect(() => {
@@ -441,10 +459,10 @@ export function Agents({
   const modelChanged = model.trim() !== (settings.model.value ?? '');
   const effortChanged = effort.trim() !== (settings.effort.value ?? '');
   const addedTiers = tierNames.filter((tier) => !settings.modelTiers.includes(tier));
-  const dirty = agent !== settings.agent.value || modelChanged || effortChanged || connectCodex || removedTiers.length > 0 ||
+  const dirty = agent !== settings.agent.value || modelChanged || effortChanged || connect.size > 0 || removedTiers.length > 0 ||
     addedTiers.length > 0 || Object.keys(backendPatch).length > 0;
   const selected = settings.backends.find((backend) => backend.name === agent);
-  const canSelect = selected?.enabled && (selected.available || (agent === 'codex' && connectCodex));
+  const canSelect = selected !== undefined && selectableAgent(selected, connect);
   const draftProblem = tierDraftProblem(tierNames, settings.modelTiers, draft);
   const selectedDiscovery = models?.backends[agent];
   const selectedModels = selectedDiscovery?.status === 'ok' ? selectedDiscovery.models : [];
@@ -508,7 +526,7 @@ export function Agents({
       // сломать следующий прогон вместо возврата к умолчанию.
       ...(modelChanged ? { model: model.trim() || null } : {}),
       ...(effortChanged ? { effort: effort.trim() || null } : {}),
-      ...(connectCodex ? { connectCodex: true } : {}),
+      ...connectPatch(connect),
       ...(removedTiers.length === 0 ? {} : { removeModelTiers: removedTiers }),
       ...(Object.keys(backendPatch).length === 0 ? {} : { backends: backendPatch }),
     }).then((data) => { adopt(data); setSaved(true); })
@@ -516,7 +534,13 @@ export function Agents({
       .finally(() => setSaving(false));
   };
 
-  const codexOffered = settings.backends.some((backend) => backend.name === 'codex' && !backend.available);
+  const toggleConnect = (name: string, on: boolean): void => {
+    const next = new Set(connect);
+    if (on) next.add(name);
+    else next.delete(name);
+    setConnect(next);
+    setSaved(false);
+  };
 
   const defaultTab = (
     <Card>
@@ -539,7 +563,7 @@ export function Agents({
               <SelectContent>
                 {settings.backends.map((backend) => (
                   <SelectItem key={backend.name} value={backend.name}
-                    disabled={!backend.enabled || (!backend.available && !(backend.name === 'codex' && connectCodex))}>
+                    disabled={!selectableAgent(backend, connect)}>
                     {backend.name}{!backend.available ? ' — plugin not connected' : !backend.enabled ? ' — disabled' : ''}
                   </SelectItem>
                 ))}
@@ -618,11 +642,11 @@ export function Agents({
                   ? 'backend model: the agent’s built-in model'
                   : `backend model: ${backend.defaultModel} (${backend.defaultModelSource})`}
               </div>
-              {backend.name === 'codex' && codexOffered ? (
+              {connectOffered(backend) ? (
                 <label className="check agent-connect">
-                  <input type="checkbox" checked={connectCodex} onChange={(event) => { setConnectCodex(event.target.checked); setSaved(false); }} />
-                  {' '}Connect Codex
-                  <span className="small dim">— adds the Codex plugin shipped with Stepcast; running it needs an installed and signed-in Codex CLI</span>
+                  <input type="checkbox" checked={connect.has(backend.name)} onChange={(event) => toggleConnect(backend.name, event.target.checked)} />
+                  {' '}Connect {backend.name}
+                  <span className="small dim">— adds the adapter shipped with Stepcast; the CLI (<code>{backend.command}</code>) must be installed and signed in separately</span>
                 </label>
               ) : null}
             </CardContent>

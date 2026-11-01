@@ -19,7 +19,7 @@
 | Автозапуск, обновление, здоровье системы | слиты в один экран «System»: версия, демон, launchd, обновление, бэкенды, модели без цены | `ui-system-health` |
 | Пакеты | принято; экран «Packages» (`/packages`) сделан: состав, статус и отказы ресурсов | `ui-packages-screen` |
 | Shadow и `--env` | принято одним пунктом: `POST /api/run` уже принимает `env` и `shadow`, нет полей формы; пометка shadow-прогона зависит от записи признака в `run.json` | `ui-run-launch-dialog` |
-| Бэкенды Cursor и Copilot | формулировка неточна: в списке они появляются, когда объявлены в `plugins:`; настоящий пробел — «Connect» есть только у Codex | `ui-connect-bundled-backends` |
+| ~~Бэкенды Cursor и Copilot~~ | принято; «Connect» для всех поставляемых адаптеров на вкладке Backends сделан | `ui-connect-bundled-backends` |
 | `loops` на графе прогона | принято | `ui-run-graph-loops` |
 | `claimed_by` и lock-файл | принято | `ui-backlog-owner-and-lock` |
 | `backlog add` / `backlog show` в UI | отклонено как отдельный пункт: `POST /api/backlog/item` и правка карточки уже есть на «Scrum»; просмотр пункта — там же | — |
@@ -63,7 +63,7 @@ Agents (≈560 строк) — уровни (tier), эскалация и бэк
 | Пакеты (`packages-directory-layer`) | каталог пакетов, состав, ошибки слоя; сейчас они только в предупреждении на «Маршруты» |
 | ~~Shadow-режим~~ | запуск «насухо» и пометка таких прогонов в списке — сделано в `ui-run-launch-dialog` |
 | ~~`run --env KEY=VALUE`~~ | поля env в диалоге ручного запуска — сделано в `ui-run-launch-dialog` |
-| Бэкенды Cursor и Copilot | в списке есть, когда объявлены; нет действия «подключить», как у Codex |
+| ~~Бэкенды Cursor и Copilot~~ | действие «подключить» у каждого поставляемого адаптера — сделано в `ui-connect-bundled-backends` |
 | `loops` на работе | проходы группы на графе прогона; `attempts` в `RunDetail`/`StepOutput` уже есть |
 | ~~Очередь: `claimed_by`, lock-файл~~ | владелец взятого пункта и занятая блокировка очереди на «Backlog» и «Scrum» — сделано в `ui-backlog-owner-and-lock` |
 | `backlog add` / `backlog show` | уже есть на «Scrum» через `POST /api/backlog/item` |

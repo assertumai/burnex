@@ -4158,6 +4158,131 @@ describe('ui-dashboard: конфигурация агентов и tier', () => 
     assert.equal(backends.find((b) => b.name === 'codex')?.defaultModel, 'gpt-5.6-terra');
     assert.equal(backends.find((b) => b.name === 'codex')?.available, false);
   });
+
+  type SettingsBackend = { name: string; defaultModel?: string; defaultModelSource: string; available: boolean; plugin?: string };
+
+  it('перечисляет поставляемые бэкенды чистого дома с их спецификаторами', async (t) => {
+    const { runsRoot, home } = makeJournalBed();
+    const server = await startServer(t, { runsRoot, home });
+    const result = await fetchJson(server, '/api/settings');
+    const backends = result.json.backends as SettingsBackend[];
+    const by = (name: string) => backends.find((b) => b.name === name);
+    assert.equal(by('claude')?.available, true);
+    assert.equal(by('claude')?.plugin, undefined);
+    for (const [name, plugin] of [['codex', 'codex'], ['cursor-agent', 'cursor'], ['copilot', 'copilot']] as const) {
+      assert.equal(by(name)?.available, false, name);
+      assert.equal(by(name)?.plugin, `stepcast/backends/${plugin}`, name);
+    }
+    assert.equal(by('codex')?.defaultModel, 'gpt-5.6-terra');
+    assert.equal(by('codex')?.defaultModelSource, 'plugin:codex');
+    assert.equal(by('cursor-agent')?.defaultModel, undefined);
+    assert.equal(by('copilot')?.defaultModel, undefined);
+  });
+
+  it('уже подключённый поставляемый бэкенд не дублируется и не несёт plugin', async (t) => {
+    const { runsRoot, home } = makeJournalBed();
+    const file = join(home, '.stepcast', 'config.yml');
+    writeFileSync(file, `${readFileSync(file, 'utf8')}\nplugins: [stepcast/backends/cursor]\n`);
+    const server = await startServer(t, { runsRoot, home });
+    const result = await fetchJson(server, '/api/settings');
+    const cursor = (result.json.backends as SettingsBackend[]).filter((b) => b.name === 'cursor-agent');
+    assert.equal(cursor.length, 1);
+    assert.equal(cursor[0]?.available, true);
+    assert.equal(cursor[0]?.plugin, undefined);
+  });
+
+  it('connect подключает бэкенд и делает его агентом, сохраняя комментарии; повтор не дублирует', async (t) => {
+    const { runsRoot, home } = makeJournalBed();
+    const server = await startServer(t, { runsRoot, home });
+    const file = join(home, '.stepcast', 'config.yml');
+    writeFileSync(file, `# сохранить комментарий\n${readFileSync(file, 'utf8')}`);
+    const saved = await sendJson(server, {
+      method: 'PUT', path: '/api/settings', body: JSON.stringify({ agent: 'cursor-agent', connect: ['cursor-agent'] }),
+    });
+    assert.equal(saved.code, 200, JSON.stringify(saved.json));
+    const text = readFileSync(file, 'utf8');
+    assert.match(text, /# сохранить комментарий/);
+    assert.match(text, /stepcast\/backends\/cursor/);
+    assert.equal(pick(saved.json, 'agent', 'value'), 'cursor-agent');
+    assert.equal((saved.json.backends as SettingsBackend[]).find((b) => b.name === 'cursor-agent')?.available, true);
+
+    const again = await sendJson(server, {
+      method: 'PUT', path: '/api/settings', body: JSON.stringify({ connect: ['cursor-agent', 'copilot'] }),
+    });
+    assert.equal(again.code, 200, JSON.stringify(again.json));
+    const next = readFileSync(file, 'utf8');
+    assert.equal(next.match(/stepcast\/backends\/cursor/g)?.length, 1);
+    assert.equal(next.match(/stepcast\/backends\/copilot/g)?.length, 1);
+  });
+
+  it('connect отказывает на claude и неизвестном имени, не меняя файл', async (t) => {
+    const { runsRoot, home } = makeJournalBed();
+    const server = await startServer(t, { runsRoot, home });
+    const file = join(home, '.stepcast', 'config.yml');
+    const before = readFileSync(file, 'utf8');
+    for (const name of ['claude', 'gemini']) {
+      const result = await sendJson(server, {
+        method: 'PUT', path: '/api/settings', body: JSON.stringify({ effort: 'high', connect: [name] }),
+      });
+      assert.equal(result.code, 400, name);
+      assert.match(String(result.json.error), new RegExp(`Agent ${name} cannot be connected from the dashboard`));
+      assert.equal(readFileSync(file, 'utf8'), before);
+    }
+  });
+
+  it('удаление своего tier не спотыкается о неподключённые бэкенды без карточки в файле', async (t) => {
+    const { runsRoot, home } = makeJournalBed();
+    const file = join(home, '.stepcast', 'config.yml');
+    writeFileSync(file, `${readFileSync(file, 'utf8')}backends:\n  claude:\n    model_tiers:\n      review: opus\n`);
+    const server = await startServer(t, { runsRoot, home });
+    const result = await sendJson(server, {
+      method: 'PUT', path: '/api/settings', body: JSON.stringify({ removeModelTiers: ['review'] }),
+    });
+    assert.equal(result.code, 200, JSON.stringify(result.json));
+    const text = readFileSync(file, 'utf8');
+    assert.doesNotMatch(text, /review:/);
+    assert.doesNotMatch(text, /cursor-agent|copilot|codex/, 'карточки неподключённых бэкендов в файле не появляются');
+    assert.deepEqual(pick(result.json, 'modelTiers'), ['max', 'deep', 'balance', 'fast', 'mini']);
+  });
+
+  it('объявленный, но не поднявшийся адаптер не предлагает Connect, а голый connect отклоняется', async (t) => {
+    const { runsRoot, home } = makeJournalBed();
+    const watcher = createWatcher({ runsRoot, home, intervalMs: 10_000 });
+    t.after(() => watcher.dispose());
+    const server = await startServer(t, { runsRoot, home, watcher });
+    const first = await fetchJson(server, '/api/settings');
+    assert.equal(first.code, 200);
+
+    // Сборка состава отказывает (рядом объявлен несуществующий плагин), и
+    // демон живёт на прежнем ядре без адаптера, хотя строка в `plugins:` уже есть.
+    const file = join(home, '.stepcast', 'config.yml');
+    writeFileSync(file, `${readFileSync(file, 'utf8')}plugins: [stepcast/backends/copilot, ./missing-plugin.js]\n`);
+    watcher.poll();
+
+    const read = await fetchJson(server, '/api/settings');
+    assert.equal(read.code, 200, JSON.stringify(read.json));
+    const copilot = (read.json.backends as SettingsBackend[]).find((b) => b.name === 'copilot');
+    assert.equal(copilot?.available, false);
+    assert.equal(copilot?.plugin, undefined, 'подключать нечего: строка уже объявлена');
+    assert.equal((read.json.backends as SettingsBackend[]).find((b) => b.name === 'cursor-agent')?.plugin, 'stepcast/backends/cursor');
+
+    const before = readFileSync(file, 'utf8');
+    const result = await sendJson(server, { method: 'PUT', path: '/api/settings', body: JSON.stringify({ connect: ['copilot'] }) });
+    assert.equal(result.code, 400);
+    assert.match(String(result.json.error), /Agent copilot is already declared in plugins \(stepcast\/backends\/copilot\) but did not load/);
+    assert.equal(readFileSync(file, 'utf8'), before);
+  });
+
+  it('неподключённый агент без connect отклоняется', async (t) => {
+    const { runsRoot, home } = makeJournalBed();
+    const server = await startServer(t, { runsRoot, home });
+    const file = join(home, '.stepcast', 'config.yml');
+    const before = readFileSync(file, 'utf8');
+    const result = await sendJson(server, { method: 'PUT', path: '/api/settings', body: JSON.stringify({ agent: 'copilot' }) });
+    assert.equal(result.code, 400);
+    assert.match(String(result.json.error), /Agent copilot is not connected/);
+    assert.equal(readFileSync(file, 'utf8'), before);
+  });
 });
 
 const HOOK_WIDGET = `import { useState } from 'react';

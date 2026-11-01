@@ -813,6 +813,8 @@ export interface BackendView {
   readonly enabled: boolean;
   readonly defaultModel?: string;
   readonly available: boolean;
+  /** Строка для `plugins:` у поставляемого, ещё не подключённого бэкенда. */
+  readonly plugin?: string;
   readonly defaultModelSource: string;
   readonly modelTiers: ModelTiers;
   readonly modelTierSources: Readonly<Record<string, string>>;
@@ -860,6 +862,9 @@ export interface ModelsResult {
 }
 
 export interface SettingsPatch {
+  /** Имена поставляемых бэкендов, которые правка подключает. */
+  readonly connect?: readonly string[];
+  /** Прежняя форма `connect: ['codex']`; витрина её больше не шлёт. */
   readonly connectCodex?: true;
   readonly backends?: Readonly<Record<string, {
     readonly defaultModel?: string | null;

@@ -4,11 +4,14 @@ import { describe, it } from 'node:test';
 import type { PipelineView } from '../src/api';
 import {
   AGENT_TABS,
+  connectOffered,
+  connectPatch,
   effortOptions,
   isCustomValue,
   modelOptions,
   orderedTierNames,
   scopeOf,
+  selectableAgent,
   tabOf,
   tierDraftProblem,
   tierSelectionPatch,
@@ -141,5 +144,36 @@ describe('ui-agents: вкладка из адреса и область дейс
       broken,
     ], settingsFile), { affected: 3, unaffected: 3, overridden: 1, unparsed: 1 });
     assert.deepEqual(scopeOf([], settingsFile), { affected: 0, unaffected: 0, overridden: 0, unparsed: 0 });
+  });
+});
+
+describe('selectableAgent', () => {
+  const none = new Set<string>();
+  it('подключённый включённый бэкенд выбирается без отметки', () => {
+    assert.equal(selectableAgent({ name: 'claude', enabled: true, available: true }, none), true);
+  });
+  it('неподключённый выбирается только вместе с отметкой «Connect»', () => {
+    const backend = { name: 'cursor-agent', enabled: true, available: false };
+    assert.equal(selectableAgent(backend, none), false);
+    assert.equal(selectableAgent(backend, new Set(['copilot'])), false);
+    assert.equal(selectableAgent(backend, new Set(['cursor-agent'])), true);
+  });
+  it('выключенный не выбирается, даже отмеченный', () => {
+    assert.equal(selectableAgent({ name: 'codex', enabled: false, available: false }, new Set(['codex'])), false);
+    assert.equal(selectableAgent({ name: 'claude', enabled: false, available: true }, none), false);
+  });
+});
+
+describe('действие «Connect» на вкладке Backends', () => {
+  it('есть только у неподключённого бэкенда, адаптер которого поставляется со Stepcast', () => {
+    assert.equal(connectOffered({ available: false, plugin: 'stepcast/backends/copilot' }), true);
+    assert.equal(connectOffered({ available: true }), false, 'claude и подключённые бэкенды plugin не несут');
+    assert.equal(connectOffered({ available: true, plugin: 'stepcast/backends/codex' }), false);
+    assert.equal(connectOffered({ available: false }), false, 'подключить из витрины нечем');
+  });
+  it('отмеченное подключение уходит полем connect, без connectCodex', () => {
+    assert.deepEqual(connectPatch(new Set(['copilot'])), { connect: ['copilot'] });
+    assert.deepEqual(connectPatch(new Set(['codex'])), { connect: ['codex'] });
+    assert.deepEqual(connectPatch(new Set()), {});
   });
 });

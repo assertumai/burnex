@@ -683,13 +683,15 @@ claimed_by: run:2026-11-01T10-31-20Z-eaac52
 
 ## ui-connect-bundled-backends
 
-status: todo
+status: done
 title: Вкладка Backends предлагает подключить любой встроенный плагин бэкенда, не только Codex
 why: `readSettings` добавляет в список недоступный `codex` с чекбоксом «Connect Codex», а `cursor` и `copilot` (`backend-cursor-adapter`, `backend-copilot-adapter`) появляются только после ручной правки `plugins:` — поэтому их «нет на экранах» (`docs/ui-proposals.md`, п. 2).
 done_when: список бэкендов включает все встроенные плагины бэкендов (`src/parts/backends/*`) с признаком «не подключён» и одним действием подключения на каждый; `connectCodex` обобщён до `connect: [<имя>]` в `SettingsPatch` без потери прежнего поведения; тесты `readSettings`/`writeSettings`
 group: ui-agents
 needs: ui-agents-settings-merge
 source: docs/ui-proposals.md, п. 2
+started_at: 2026-11-01T11:02:14.262Z
+claimed_by: run:2026-11-01T11-02-13Z-825f78
 
 ## ui-run-graph-loops
 
