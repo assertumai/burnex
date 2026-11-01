@@ -1,0 +1,52 @@
+import { StepcastError } from '../../../kernel/errors.js';
+import { contributionOwner, type Registry } from '../../../kernel/registry.js';
+import { resolveConfig, type Config } from './resolve.js';
+
+/** Умолчания бэкендов из реестра — тем же слоем, что и при разрешении в точке входа. */
+export function pluginDefaultsOf(registry: Registry | undefined): {
+  pluginDefaults?: readonly { plugin: string; values: Record<string, unknown> }[];
+} {
+  if (registry === undefined) return {};
+  const layers = registry.plugins.flatMap((plugin) => {
+    const backends: Record<string, unknown> = {};
+    for (const [name, contribution] of registry.backends) {
+      if (contribution.defaults === undefined) continue;
+      if (contributionOwner(registry, 'backends', name) !== plugin.name) continue;
+      backends[name] = contribution.defaults;
+    }
+    return Object.keys(backends).length === 0 ? [] : [{ plugin: plugin.name, values: { backends } }];
+  });
+  return layers.length === 0 ? {} : { pluginDefaults: layers };
+}
+
+/**
+ * Конфигурация со слоем флага `defaults.agent` (`run --agent`, `resume` по
+ * `agent_override` манифеста). Слой тот же, что у `stepcast config --agent`:
+ * агент шага и работы документа, `pipeline_agents` и `step_agents` его
+ * сильнее, поэтому шаги с явным агентом остаются при своём. Агент корня
+ * документа сильнее только под `agent_policy: force`: под `fallback` он
+ * уступает `defaults.agent` из любого источника, флагу тоже.
+ *
+ * Конфигурация разрешается заново, а не правится в готовой: источник значения
+ * (`flag`) и `agentFromUser` выводятся только из слоёв. Неизвестное имя —
+ * отказ с перечнем бэкендов, чтобы он случился до каталога прогона, а не на
+ * первом агентском шаге.
+ */
+export function resolveConfigWithAgent(options: {
+  readonly cwd: string;
+  readonly agent: string;
+  readonly registry?: Registry;
+}): Config {
+  const resolved = resolveConfig({
+    cwd: options.cwd,
+    flags: { 'defaults.agent': options.agent },
+    ...pluginDefaultsOf(options.registry),
+  });
+  const known = Object.keys(resolved.config.backends);
+  if (!known.includes(options.agent)) {
+    throw new StepcastError(`Неизвестный агент ${options.agent}: --agent принимает имя бэкенда`, {
+      hint: `Известны: ${known.sort().join(', ')}`,
+    });
+  }
+  return resolved.config;
+}

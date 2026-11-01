@@ -130,6 +130,27 @@ require('node:fs').writeFileSync(process.argv[1] + '.' + (process.argv.includes(
     assert.deepEqual(argvOf('shadow').slice(-3), ['run', 'stepcast.yml', '--shadow']);
   });
 
+  it('agent превращается в --agent <имя>, без него флага нет', async () => {
+    const { runsRoot, projectRoot } = makeJournalBed();
+    const key = projectKey(projectRoot);
+    const executable = join(projectRoot, 'argv-dump-agent');
+    writeFileSync(
+      executable,
+      `#!/usr/bin/env node
+require('node:fs').writeFileSync(process.argv[1] + '.' + (process.argv.includes('--agent') ? 'agent' : 'plain'), JSON.stringify(process.argv.slice(2)));
+`,
+    );
+    chmodSync(executable, 0o700);
+
+    launchRun({ cwd: projectRoot, pipeline: 'stepcast.yml', runsRoot, projectKey: key, execPath: executable });
+    launchRun({ cwd: projectRoot, pipeline: 'stepcast.yml', runsRoot, projectKey: key, execPath: executable, agent: 'codex' });
+    await waitFor(() => existsSync(`${executable}.plain`) && existsSync(`${executable}.agent`));
+
+    const argvOf = (suffix: string): string[] => JSON.parse(readFileSync(`${executable}.${suffix}`, 'utf8'));
+    assert.deepEqual(argvOf('plain').slice(-2), ['run', 'stepcast.yml']);
+    assert.deepEqual(argvOf('agent').slice(-4), ['run', 'stepcast.yml', '--agent', 'codex']);
+  });
+
   it('scheduled превращается во флаги --scheduled/--schedule-entry, а догон добавляет --catchup', async () => {
     const { runsRoot, projectRoot } = makeJournalBed();
     const key = projectKey(projectRoot);

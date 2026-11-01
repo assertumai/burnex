@@ -186,6 +186,10 @@ export interface RunSnapshot {
   readonly jobs: readonly JobSnapshot[];
   /** Раскладка работ по зависимостям: браузеру остаётся отрисовка. */
   readonly graph: JobGraph;
+  /** Режим прогона из манифеста: `shadow` — внешние действия записаны, а не совершены. */
+  readonly mode?: 'shadow';
+  /** Агент, выбранный `run --agent`; шапка страницы прогона показывает его рядом с режимом. */
+  readonly agentOverride?: string;
   /** Прогон убран: остались только манифест, состояние и расход. */
   readonly swept: boolean;
   /**
@@ -461,7 +465,7 @@ export function buildSnapshot(paths: RunPaths, projectKeyValue: string): RunSnap
   // строки обзора за подробностями, обязан найти здесь тот же ответ. Порядок
   // тот же, что в обзоре: манифест первым, отсутствие ещё не записанного
   // состояния бедой не считается.
-  const { problem: manifestProblem } = readManifestSoft(paths);
+  const { manifest, problem: manifestProblem } = readManifestSoft(paths);
   const { summary, problem: usageProblem } = readUsageSoft(paths);
   const told = (candidate: JournalProblem | undefined): JournalProblem | undefined =>
     candidate?.kind === 'missing' ? undefined : candidate;
@@ -515,6 +519,8 @@ export function buildSnapshot(paths: RunPaths, projectKeyValue: string): RunSnap
         ...(job.display === undefined ? {} : { display: job.display }),
       })),
     ),
+    ...(manifest?.mode === undefined ? {} : { mode: manifest.mode }),
+    ...(manifest?.agent_override === undefined ? {} : { agentOverride: manifest.agent_override }),
     swept,
     filesGone: false,
     ...(isRunAlive(paths) ? { alive: true as const } : {}),

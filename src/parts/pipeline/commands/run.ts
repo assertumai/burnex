@@ -11,6 +11,7 @@ import type { PipelineCommandEnv } from '../contract.js';
 import { runPipeline } from '../run/runner.js';
 import { validateEnvOverrides } from '../run/envOverrides.js';
 import { assertShadowDeclarations } from '../run/shadow.js';
+import { resolveConfigWithAgent } from '../config/agentOverride.js';
 import { checkScheduleEntry } from '../domain/trigger/entry.js';
 import type { ExpandedPipeline } from '../document/model.js';
 import type { UsageSnapshot } from '../run/budget/accumulator.js';
@@ -42,7 +43,27 @@ export async function runRunCommand(
   // `cwd`, и слои `script`/`step` пайплайна ищутся от `cwd`, а не от каталога,
   // где файл лежит (`projectRoot` ниже). Конфигурация нужна раньше цели: пакеты
   // home лежат рядом с глобальным конфигом.
-  const config = resolvedConfig ?? resolveConfig({ cwd }).config;
+  const baseConfig = resolvedConfig ?? resolveConfig({ cwd }).config;
+  // Повторное разрешение — только при флаге: без него действует конфигурация
+  // точки входа. Отказ (неизвестный агент) случается до раскрытия пайплайна и,
+  // как отказ `--env`, до каталога прогона — в том числе при `--dry-run`.
+  const agentOverride = typeof args.flags.agent === 'string' ? args.flags.agent : undefined;
+  let config = baseConfig;
+  if (agentOverride !== undefined) {
+    try {
+      config = resolveConfigWithAgent({ cwd, agent: agentOverride, ...(registry === undefined ? {} : { registry }) });
+    } catch (error) {
+      if (!isStepcastError(error)) throw error;
+      for (const line of formatDiagnostic({
+        severity: 'error',
+        message: error.message,
+        ...(error.hint === undefined ? {} : { hint: error.hint }),
+      })) {
+        write(line);
+      }
+      return error.exitCode;
+    }
+  }
   const { pipelinePath, outsideProject, address } = resolvePipelineTarget(cwd, target, {
     globalConfigDir: config.globalConfigDir,
   });
@@ -111,6 +132,7 @@ export async function runRunCommand(
       signal: controller.signal,
       ...(Object.keys(envOverrides).length === 0 ? {} : { envOverrides }),
       ...(shadow ? { mode: 'shadow' as const } : {}),
+      ...(agentOverride === undefined ? {} : { agentOverride }),
       ...(trigger === undefined ? {} : { trigger }),
       ...(onEvent === undefined ? {} : { onEvent }),
     });
@@ -288,6 +310,11 @@ export const row = commandRow<PipelineCommandEnv>(
           kind: 'boolean',
           description:
             'исполнить локальное, а действия шагов с external: true записать, не совершая (external обязателен у каждого шага)',
+        },
+        agent: {
+          kind: 'string',
+          description:
+            'бэкенд агента на этот прогон — слой флага над defaults.agent; агент шага или работы документа, pipeline_agents и step_agents сильнее флага, агент корня документа — только при agent_policy: force',
         },
         scheduled: {
           kind: 'string',

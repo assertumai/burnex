@@ -5126,6 +5126,35 @@ describe('ui-daemon: POST /api/run', () => {
     assert.equal(calls.length, 2);
   });
 
+  it('agent доезжает до пуска, флагоподобное и не строковое значение отклонено без пуска', async (t) => {
+    const { runsRoot, projectRoot } = makeJournalBed();
+    seedRun(runsRoot, projectRoot, { runId: 'seed' });
+    writeFileSync(join(projectRoot, 'stepcast.yml'), MINIMAL_PIPELINE_YAML);
+    const key = projectKey(projectRoot);
+    const { launchRun, calls } = stubLaunch();
+    const server = await createUiServer({ runsRoot, port: 0, launchRun });
+    t.after(() => server.close());
+
+    const post = (extra: Record<string, unknown>) =>
+      sendJson(server, {
+        method: 'POST',
+        path: '/api/run',
+        body: JSON.stringify({ project: key, pipeline: 'stepcast.yml', ...extra }),
+      });
+
+    assert.equal((await post({ agent: 'codex' })).code, 202);
+    assert.equal((calls[0] as { agent?: unknown } | undefined)?.agent, 'codex');
+    assert.equal((await post({})).code, 202);
+    assert.equal('agent' in (calls[1] ?? {}), false);
+
+    for (const agent of ['--shadow', 1, 'a b', '']) {
+      const refused = await post({ agent });
+      assert.equal(refused.code, 400);
+      assert.match(JSON.stringify(refused.json), /agent/);
+    }
+    assert.equal(calls.length, 2);
+  });
+
   it('лишние поля тела отклонены', async (t) => {
     const { runsRoot, projectRoot } = makeJournalBed();
     seedRun(runsRoot, projectRoot, { runId: 'seed' });

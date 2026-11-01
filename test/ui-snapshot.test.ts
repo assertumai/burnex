@@ -127,6 +127,23 @@ function seed() {
 }
 
 describe('ui-dashboard: детальный снимок прогона', () => {
+  it('несёт mode и agentOverride манифеста для шапки; у обычного прогона их нет', () => {
+    const bed = makeJournalBed();
+    const key = projectKey(bed.projectRoot);
+    const shadowed = seedRun(bed.runsRoot, bed.projectRoot, {
+      runId: 'shadowed',
+      manifest: { mode: 'shadow', agent_override: 'codex' },
+    });
+    const plain = seedRun(bed.runsRoot, bed.projectRoot, { runId: 'plain' });
+
+    const withFlags = buildSnapshot(shadowed.paths, key);
+    assert.equal(withFlags.mode, 'shadow');
+    assert.equal(withFlags.agentOverride, 'codex');
+    const without = buildSnapshot(plain.paths, key);
+    assert.equal('mode' in without, false);
+    assert.equal('agentOverride' in without, false);
+  });
+
   // Сценарий: «Выход предшественника виден как вход зависимой работы»
   it('показывает выход предшественника входом зависимой работы', () => {
     const { journal, key } = seed();

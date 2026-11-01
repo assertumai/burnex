@@ -64,7 +64,7 @@ describe('ui-pipelines: выбор агента на карточке шага',
       generatedAt: '2026-10-29T00:00:00.000Z',
       pipelines: [
         {
-          projectKey: 'proj', projectPath: '/proj', file: 'p.yml', name: 'p', inputs: [],
+          projectKey: 'proj', projectPath: '/proj', file: 'p.yml', name: 'p', inputs: [], envNames: [], shadow: { ready: true },
           agentPolicy: 'force', agentPolicyFile: 'built-in',
           jobs: [
             jobOf({

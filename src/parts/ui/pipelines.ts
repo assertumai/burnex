@@ -17,6 +17,7 @@ import type { TreeRow } from '../../kernel/tree/tree.js';
 import type { AgentOrigin, EffortOrigin, Job, ModelOrigin, Pipeline, UnusedAgentEntry } from '../pipeline/document/model.js';
 import type { AgentSelectionConfig } from '../pipeline/config/agentSelections.js';
 import type { AgentPolicy } from '../pipeline/config/schema.js';
+import { stepsMissingExternal } from '../pipeline/run/shadow.js';
 import { hasStepExecutor } from '../pipeline/contract.js';
 import { layoutJobs, type JobGraph } from './graph.js';
 import { paramViews, type StepParamView } from './steps.js';
@@ -183,6 +184,19 @@ export interface PipelineView {
    * пайплайна, а не состояние, за которым витрине стоит следить.
    */
   readonly inputs: readonly string[];
+  /**
+   * Имена верхнеуровневого `env:` — то, что форма запуска может переопределить
+   * (`run --env`). Только имена: значения могут нести `${secrets.*}`, и витрине
+   * они не нужны.
+   */
+  readonly envNames: readonly string[];
+  /**
+   * Готовность к shadow-режиму: у каждого шага встроенного вида объявлен
+   * `external`. Тот же перечень шагов, что в отказе `run --shadow`, — форма
+   * показывает его до запуска, потому что отказ дочернего процесса после 202
+   * витрина не видит. У пайплайна, который не разбирается, готовности нет.
+   */
+  readonly shadow: { readonly ready: true } | { readonly ready: false; readonly steps: readonly string[] };
   readonly graph?: JobGraph;
   /**
    * Пайплайн не разбирается. Как и нечитаемый прогон в обзоре, он остаётся
@@ -454,6 +468,8 @@ function toView(
     // Ключи раскрытых входов — это и есть объявленные имена: раскрытие
     // подставляет умолчания объявленным и ничего не добавляет от себя.
     inputs: Object.keys(pipeline.inputs),
+    envNames: Object.keys(pipeline.env),
+    shadow: shadowReadiness(pipeline),
     graph: layoutJobs(
       jobs.map((job) => ({
         id: job.id,
@@ -463,6 +479,11 @@ function toView(
       })),
     ),
   };
+}
+
+function shadowReadiness(pipeline: Pick<Pipeline, 'jobs'>): PipelineView['shadow'] {
+  const steps = stepsMissingExternal(pipeline);
+  return steps.length === 0 ? { ready: true } : { ready: false, steps };
 }
 
 /** Отказ разбора в полях карточки: место и подсказка — половина объяснения. */
@@ -513,7 +534,7 @@ function errorView(
   failure: Failure,
   origin: PackageOrigin = {},
 ): PipelineView {
-  return { projectKey, projectPath, file, ...origin, name: file, jobs: [], inputs: [], ...failure };
+  return { projectKey, projectPath, file, ...origin, name: file, jobs: [], inputs: [], envNames: [], shadow: { ready: false, steps: [] }, ...failure };
 }
 
 /** Пакет и слой пайплайна пакета — то, что карточка несёт рядом с адресом. */

@@ -145,6 +145,12 @@ export interface RunOptions {
    */
   readonly envOverrides?: Readonly<Record<string, string>>;
   /**
+   * Агент, выбранный `run --agent`: runner его только записывает в манифест —
+   * конфигурацию с этим слоем вызывающий разрешает до раскрытия пайплайна.
+   * Возобновление без собственного значения берёт имя из исходного манифеста.
+   */
+  readonly agentOverride?: string;
+  /**
    * Адрес `<пакет>:<имя>`, которым пайплайн был назван при запуске. Возобновление
    * берёт его из манифеста исходного прогона: пайплайн разрешается по сохранённому
    * пути, но адрес остаётся в записи.
@@ -270,6 +276,7 @@ export async function runPipeline(options: RunOptions): Promise<RunResult> {
   validateEnvOverrides(envOverrides, pipeline.env);
 
   const mode = options.mode ?? options.resume?.source.manifest.mode;
+  const agentOverride = options.agentOverride ?? options.resume?.source.manifest.agent_override;
   const pipelineAddress = options.pipelineAddress ?? options.resume?.source.manifest.pipeline_address;
   // Та же проверка стоит в `run.ts` до `--dry-run`; здесь её проходят
   // возобновление и библиотечный вызов, у которых `run.ts` нет.
@@ -392,6 +399,7 @@ export async function runPipeline(options: RunOptions): Promise<RunResult> {
     inputs: pipeline.inputs,
     ...(Object.keys(envOverrides).length === 0 ? {} : { env_overrides: envOverrides }),
     ...(mode === undefined ? {} : { mode }),
+    ...(agentOverride === undefined ? {} : { agent_override: agentOverride }),
     ...(options.trigger === undefined ? {} : { trigger: options.trigger }),
     git: {},
     backends: Object.fromEntries(

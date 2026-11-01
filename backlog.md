@@ -649,12 +649,14 @@ claimed_by: run:2026-11-01T08-13-20Z-250ac0
 
 ## ui-run-launch-dialog
 
-status: todo
+status: done
 title: Диалог ручного запуска: вход, env, shadow и агент в одной форме; shadow-прогон помечен в списке
 why: `POST /api/run` уже принимает `env` и `shadow` (`run-launch/row.ts`), но ни одно поле формы их не выставляет; shadow-режим (`shadow-run-mode`) с витрины недоступен, а прогон «насухо» в списке неотличим от настоящего (`docs/ui-proposals.md`, п. 2 и 3).
 done_when: диалог запуска на «Scrum»/«Runs» содержит поля env (`KEY=VALUE`, проверка имени и однострочности как в схеме демона), переключатель shadow и выбор агента; shadow-прогон помечен бейджем в списке и на странице прогона, если признак записан в `run.json` — иначе пункт сначала добавляет его в журнал; тесты формы и пометки
 group: ui-runs
 source: docs/ui-proposals.md, п. 2–3
+started_at: 2026-11-01T08:56:43.459Z
+claimed_by: run:2026-11-01T08-56-42Z-43b4d0
 
 ## ui-packages-screen
 

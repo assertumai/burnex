@@ -7,6 +7,7 @@ import { expandPipeline } from '../document/expand.js';
 import { displayInputs } from '../document/displayInputs.js';
 import { resolvePipelineTarget } from '../domain/package-schema.js';
 import { renderAgentsReport } from './configAgents.js';
+import { pluginDefaultsOf } from '../config/agentOverride.js';
 import { commandRow } from '../../../kernel/cli/commandRow.js';
 import type { ParsedArgs } from '../../../kernel/cli/args.js';
 import { contributionOwner, type Registry } from '../../../kernel/registry.js';
@@ -213,23 +214,6 @@ export function runConfigCommand(
   for (const line of renderPluginsReport(registry)) write(line);
   for (const line of renderMissingServicesReport(registry)) write(line);
   return ExitCode.ok;
-}
-
-/** Умолчания бэкендов из реестра — тем же слоем, что и при разрешении в точке входа. */
-function pluginDefaultsOf(registry: Registry | undefined): {
-  pluginDefaults?: readonly { plugin: string; values: Record<string, unknown> }[];
-} {
-  if (registry === undefined) return {};
-  const layers = registry.plugins.flatMap((plugin) => {
-    const backends: Record<string, unknown> = {};
-    for (const [name, contribution] of registry.backends) {
-      if (contribution.defaults === undefined) continue;
-      if (contributionOwner(registry, 'backends', name) !== plugin.name) continue;
-      backends[name] = contribution.defaults;
-    }
-    return Object.keys(backends).length === 0 ? [] : [{ plugin: plugin.name, values: { backends } }];
-  });
-  return layers.length === 0 ? {} : { pluginDefaults: layers };
 }
 
 export const row = commandRow<PipelineCommandEnv>({

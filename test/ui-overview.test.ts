@@ -80,6 +80,20 @@ describe('ui-dashboard: обзор всех проектов и прогонов
     assert.equal('trigger' in (runs.find((run) => run.runId === 'manual') ?? {}), false);
   });
 
+  it('несёт mode и agentOverride из манифеста; у обычного прогона и прежнего манифеста их нет', () => {
+    const { runsRoot, projectRoot } = makeJournalBed();
+    seedRun(runsRoot, projectRoot, { runId: 'shadowed', manifest: { mode: 'shadow', agent_override: 'codex' } });
+    seedRun(runsRoot, projectRoot, { runId: 'plain' });
+
+    const runs = buildOverview(runsRoot).projects[0]?.runs ?? [];
+    const shadowed = runs.find((run) => run.runId === 'shadowed');
+    assert.equal(shadowed?.mode, 'shadow');
+    assert.equal(shadowed?.agentOverride, 'codex');
+    const plain = runs.find((run) => run.runId === 'plain') ?? {};
+    assert.equal('mode' in plain, false);
+    assert.equal('agentOverride' in plain, false);
+  });
+
   // Сценарий: «Проект без записи в указателе»
   it('показывает проект без пути, если его нет в указателе', () => {
     const { runsRoot, projectRoot } = makeJournalBed();

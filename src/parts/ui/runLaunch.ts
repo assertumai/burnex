@@ -40,6 +40,8 @@ export interface LaunchRunOptions {
   readonly env?: Readonly<Record<string, string>>;
   /** Shadow-режим прогона — флагом `--shadow` (`shadow-run-mode`). */
   readonly shadow?: boolean;
+  /** Агент на один прогон — флагом `--agent`; имя бэкенда проверяет дочерний процесс. */
+  readonly agent?: string;
   /**
    * Прогон по расписанию — флагами `--scheduled`, `--schedule-entry` и
    * `--catchup` (`ui-schedule-view`). Опция для сервиса в демоне; `POST
@@ -87,6 +89,7 @@ export const launchRun: LaunchRunFn = (options) => {
   for (const [name, value] of Object.entries(options.inputs ?? {})) argv.push('--input', `${name}=${value}`);
   for (const [name, value] of Object.entries(options.env ?? {})) argv.push('--env', `${name}=${value}`);
   if (options.shadow === true) argv.push('--shadow');
+  if (options.agent !== undefined) argv.push('--agent', options.agent);
   if (options.scheduled !== undefined) {
     argv.push('--scheduled', options.scheduled.moment, '--schedule-entry', String(options.scheduled.entry));
     if (options.scheduled.catchup) argv.push('--catchup');

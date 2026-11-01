@@ -119,6 +119,10 @@ export interface RunOverview {
   readonly wakeAt?: string;
   /** Ожидания решения человека, идущие прямо сейчас — тем же полем, что и `wakeAt`. */
   readonly awaiting?: readonly AwaitingDecision[];
+  /** Режим прогона из манифеста: `shadow` — внешние действия записаны, а не совершены. */
+  readonly mode?: 'shadow';
+  /** Агент, выбранный `run --agent` на этот прогон; без флага поля нет. */
+  readonly agentOverride?: string;
   /** Прогон запущен по записи расписания; у ручного прогона поля нет. */
   readonly trigger?: {
     readonly entry: number;
@@ -283,6 +287,10 @@ export interface RunSnapshot {
   readonly status?: StatusValue;
   readonly jobs: readonly JobSnapshot[];
   readonly graph: JobGraph;
+  /** Режим прогона из манифеста: `shadow` — внешние действия записаны, а не совершены. */
+  readonly mode?: 'shadow';
+  /** Агент, выбранный `run --agent`; шапка показывает его рядом с режимом. */
+  readonly agentOverride?: string;
   readonly swept: boolean;
   /** У прогона нет каталога — снимок собран по записи хранилища расхода. */
   readonly filesGone: boolean;
@@ -447,6 +455,10 @@ export interface PipelineView {
   readonly agentEntryName?: string;
   /** Имена объявленных входов пайплайна: доска предлагает к запуску только те, кому слаг пункта есть куда передать. */
   readonly inputs: readonly string[];
+  /** Имена верхнеуровневого `env:` — значения демон не отдаёт. */
+  readonly envNames: readonly string[];
+  /** Готовность к shadow-режиму: у неготового — адреса `<работа>.<шаг>` без `external`. */
+  readonly shadow: { readonly ready: true } | { readonly ready: false; readonly steps: readonly string[] };
   readonly graph?: JobGraph;
   /** Файл не разбирается: текст, место и подсказка — тем же составом, что печатает CLI. */
   readonly error?: string;
@@ -955,6 +967,12 @@ export async function launchRun(payload: {
   readonly pipeline: string;
   /** Значения объявленных входов пайплайна: доска шлёт сюда `item` — слаг пункта. */
   readonly inputs?: Readonly<Record<string, string>>;
+  /** Переопределения объявленного `env:` пайплайна на этот прогон. */
+  readonly env?: Readonly<Record<string, string>>;
+  /** Shadow-режим: внешние действия шагов записываются, а не совершаются. */
+  readonly shadow?: boolean;
+  /** Бэкенд агента на этот прогон — слой флага над `defaults.agent`. */
+  readonly agent?: string;
 }): Promise<{ readonly ok: true }> {
   return json(
     await fetch('/api/run', {

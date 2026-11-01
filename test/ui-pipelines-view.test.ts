@@ -95,6 +95,52 @@ describe('ui-pipelines: имя и входы в виде пайплайна', ()
   });
 });
 
+describe('ui-pipelines: данные формы запуска', () => {
+  const WITH_ENV = (steps: string): string => `kind: pipeline
+name: launchable
+env:
+  MODE: fast
+  TOKEN: s3cret-value
+jobs:
+  work:
+    steps:
+${steps}`;
+
+  it('envNames несёт ключи env без значений', async () => {
+    const { runsRoot, projectRoot, home } = bed();
+    write(projectRoot, 'env.yml', WITH_ENV('      - { id: a, run: [echo, ok] }\n'));
+    const { config } = resolveConfig({ cwd: home, home, projectPath: null });
+
+    const view = (await buildPipelines(runsRoot, config, { home })).pipelines.find((entry) =>
+      entry.file.endsWith('env.yml'),
+    );
+
+    assert.equal(view?.error, undefined);
+    assert.deepEqual([...(view?.envNames ?? [])], ['MODE', 'TOKEN']);
+    const serialized = JSON.stringify(view);
+    assert.doesNotMatch(serialized, /fast/);
+    assert.doesNotMatch(serialized, /s3cret-value/);
+  });
+
+  it('shadow: готов, когда external объявлен у каждого шага, иначе перечень адресов', async () => {
+    const { runsRoot, projectRoot, home } = bed();
+    write(projectRoot, 'ready.yml', WITH_ENV('      - { id: a, run: [echo, ok], external: false }\n'));
+    write(
+      projectRoot,
+      'unready.yml',
+      WITH_ENV('      - { id: a, run: [echo, ok], external: false }\n      - { id: push, run: [echo, ok] }\n'),
+    );
+    const { config } = resolveConfig({ cwd: home, home, projectPath: null });
+
+    const pipelines = (await buildPipelines(runsRoot, config, { home })).pipelines;
+    assert.deepEqual(pipelines.find((entry) => entry.file.endsWith('ready.yml'))?.shadow, { ready: true });
+    assert.deepEqual(pipelines.find((entry) => entry.file.endsWith('unready.yml'))?.shadow, {
+      ready: false,
+      steps: ['work.push'],
+    });
+  });
+});
+
 describe('ui-pipelines: выбор пользователя в виде пайплайна', () => {
   const AGENT_PIPELINE = `kind: pipeline
 name: p

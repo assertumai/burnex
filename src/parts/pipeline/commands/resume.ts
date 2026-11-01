@@ -1,4 +1,5 @@
 import { resolveConfig, type Config } from '../config/resolve.js';
+import { resolveConfigWithAgent } from '../config/agentOverride.js';
 import type { Registry } from '../../../kernel/registry.js';
 import { ExitCode, isStepcastError, type ExitCodeValue } from '../../../kernel/errors.js';
 import { findProjectRoot, shortRunId, type RunPaths } from '../run/journal/paths.js';
@@ -26,7 +27,7 @@ import type { ParsedArgs } from '../../../kernel/cli/args.js';
 export async function continueRestartChain(
   from: string,
   sourcePaths: RunPaths,
-  config: Config,
+  baseConfig: Config,
   cwd: string,
   write: (line: string) => void,
   registry?: Registry,
@@ -40,6 +41,7 @@ export async function continueRestartChain(
 ): Promise<ExitCodeValue> {
   const projectRoot = findProjectRoot(cwd);
   const source = readSourceRun(sourcePaths);
+  const config = configForSource(baseConfig, source.manifest.agent_override, cwd, registry);
 
   const { expanded, plan } = planResume({
     cwd,
@@ -64,9 +66,25 @@ export async function continueRestartChain(
   write(`журнал: ${result.journal.paths.dir}`);
 
   if (result.restart !== undefined) {
-    return continueRestartChain(result.restart.from, result.journal.paths, config, cwd, write, registry, signal);
+    return continueRestartChain(result.restart.from, result.journal.paths, baseConfig, cwd, write, registry, signal);
   }
   return result.exitCode;
+}
+
+/**
+ * Возобновлённый прогон исполняет шаги тем же агентом, что исходный: слой флага
+ * `run --agent` восстанавливается из манифеста до раскрытия пайплайна (у
+ * `resume` собственного флага нет). Без `agent_override` конфигурация
+ * остаётся той, что дала точка входа.
+ */
+function configForSource(
+  config: Config,
+  agentOverride: string | undefined,
+  cwd: string,
+  registry: Registry | undefined,
+): Config {
+  if (agentOverride === undefined) return config;
+  return resolveConfigWithAgent({ cwd, agent: agentOverride, ...(registry === undefined ? {} : { registry }) });
 }
 
 /** Конфигурация — из окружения команды, см. комментарий у `runRunCommand`. */
@@ -77,12 +95,13 @@ export async function runResumeCommand(
   registry?: Registry,
   resolvedConfig?: Config,
 ): Promise<ExitCodeValue> {
-  const config = resolvedConfig ?? resolveConfig({ cwd }).config;
+  const baseConfig = resolvedConfig ?? resolveConfig({ cwd }).config;
   const projectRoot = findProjectRoot(cwd);
 
   try {
-    const sourcePaths = resolveRun(config.runs.root, projectRoot, args.positional[0]);
+    const sourcePaths = resolveRun(baseConfig.runs.root, projectRoot, args.positional[0]);
     const source = readSourceRun(sourcePaths);
+    const config = configForSource(baseConfig, source.manifest.agent_override, cwd, registry);
 
     // Входы берутся из исходного прогона; `--set` их переопределяет и тем
     // самым меняет ключи всех зависящих шагов.
@@ -131,7 +150,7 @@ export async function runResumeCommand(
         return continueRestartChain(
           result.restart.from,
           result.journal.paths,
-          config,
+          baseConfig,
           cwd,
           write,
           registry,

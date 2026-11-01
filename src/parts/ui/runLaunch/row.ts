@@ -64,6 +64,16 @@ const PostBodySchema = z
      * `external` у шагов проверяет он сам — здесь только форма значения.
      */
     shadow: z.boolean().optional(),
+    /**
+     * Агент на один прогон: дочерний `stepcast run` получает `--agent`. Имя
+     * бэкенда он проверяет сам; здесь — только форма, и ведущий дефис в неё не
+     * входит: `--shadow` не должен стать значением, которое разбор флагов
+     * прочтёт как следующий флаг.
+     */
+    agent: z
+      .string({ error: 'agent must be a string' })
+      .regex(/^[A-Za-z0-9_][A-Za-z0-9_-]*$/, 'agent: letters, digits, hyphen and underscore, no leading hyphen')
+      .optional(),
     // `scheduled` опции `launchRun` здесь нарочно нет: происхождение «по
     // расписанию» объявляет сервис, а не форма, и `.strict()` отклоняет ключ.
   })
@@ -89,7 +99,7 @@ const handlePost: ApiHandler = async (req, res, env) => {
   const parsed = PostBodySchema.safeParse(raw);
   if (!parsed.success) {
     sendJson(res, 400, {
-      error: `Request body does not match the format: ${parsed.error.issues[0]?.message ?? 'only project, pipeline and inputs'}`,
+      error: `Request body does not match the format: ${parsed.error.issues[0]?.message ?? 'only project, pipeline, inputs, env, shadow and agent'}`,
     });
     return;
   }
@@ -130,6 +140,7 @@ const handlePost: ApiHandler = async (req, res, env) => {
     ...(parsed.data.inputs === undefined ? {} : { inputs: parsed.data.inputs }),
     ...(parsed.data.env === undefined ? {} : { env: parsed.data.env }),
     ...(parsed.data.shadow === true ? { shadow: true } : {}),
+    ...(parsed.data.agent === undefined ? {} : { agent: parsed.data.agent }),
   });
   // 202: подтверждение запуска, не обещание идентификатора прогона — он
   // появится в обзоре обычным тактом наблюдателя, когда дочерний процесс

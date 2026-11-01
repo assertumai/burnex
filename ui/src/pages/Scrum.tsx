@@ -29,14 +29,12 @@ import {
 import {
   addBoardColumn,
   editBacklogItem,
-  fetchPipelines,
-  launchRun,
   moveBacklogItem,
   type BacklogItemView,
   type BacklogOverview,
-  type PipelineView,
 } from '../api';
 import { fmtTime } from '../format';
+import { RunLaunchDialog } from '../components/RunLaunchDialog';
 import {
   Alert,
   AlertDescription,
@@ -84,9 +82,6 @@ import './scrum.css';
  * взятия одним вызовом. Поэтому бросок на неё открывает выбор пайплайна, а
  * состояние меняет уже прогон.
  */
-
-/** Название входа, которым пайплайн принимает слаг пункта: доска ищет именно его. */
-const ITEM_INPUT = 'item';
 
 /** Последний сегмент пути проекта — короткое имя для меню; полный путь остаётся подсказкой. */
 function projectName(path: string): string {
@@ -199,140 +194,6 @@ function Column({
 interface LaunchIntent {
   readonly item: BacklogItemView;
   readonly projectKey: string;
-}
-
-function LaunchDialog({
-  intent,
-  pipelines,
-  onClose,
-}: {
-  readonly intent: LaunchIntent | undefined;
-  readonly pipelines: readonly PipelineView[];
-  readonly onClose: () => void;
-}): JSX.Element {
-  const [chosen, setChosen] = useState<string | undefined>(undefined);
-  const [error, setError] = useState<string | undefined>(undefined);
-  const [busy, setBusy] = useState(false);
-
-  // Пайплайны проекта целиком, как их нашёл обходом каталога плагин пайплайнов
-  // (`GET /api/pipelines`): доска своего перечня не ведёт и о расположении
-  // файлов не знает. Разбирающиеся идут первыми — сломанный файл виден с
-  // причиной, но выбрать его нельзя.
-  const own = pipelines.filter((pipeline) => pipeline.projectKey === intent?.projectKey);
-  const runnable = own.filter((pipeline) => pipeline.error === undefined);
-  const broken = own.filter((pipeline) => pipeline.error !== undefined);
-
-  useEffect(() => {
-    // Выбор сбрасывается на каждое открытие: прошлый пайплайн мог исчезнуть, а
-    // предвыбранным ставится тот, кому слаг пункта есть куда передать.
-    if (intent === undefined) {
-      setChosen(undefined);
-      return;
-    }
-    setError(undefined);
-    setChosen(
-      (runnable.find((pipeline) => pipeline.inputs.includes(ITEM_INPUT)) ?? runnable[0])?.file,
-    );
-  }, [intent?.item.slug, intent?.projectKey]);
-
-  const selected = runnable.find((pipeline) => pipeline.file === chosen);
-
-  const start = async (): Promise<void> => {
-    if (intent === undefined || selected === undefined) return;
-    setBusy(true);
-    setError(undefined);
-    try {
-      await launchRun({
-        project: intent.projectKey,
-        pipeline: selected.file,
-        // Вход передаётся только объявившему его пайплайну: движок отвергает
-        // необъявленный вход целиком («Параметр item не объявлен»), и запуск
-        // умер бы на разборе документа вместо того, чтобы просто отобрать
-        // очередной свободный пункт сам.
-        ...(selected.inputs.includes(ITEM_INPUT)
-          ? { inputs: { [ITEM_INPUT]: intent.item.slug } }
-          : {}),
-      });
-      onClose();
-    } catch (cause) {
-      setError((cause as Error).message);
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  return (
-    <Dialog open={intent !== undefined} onOpenChange={(open) => (open ? undefined : onClose())}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>Start work</DialogTitle>
-          <DialogDescription>
-            {intent === undefined ? null : (
-              <>
-                Item <span className="mono">{intent.item.slug}</span>: {intent.item.title}
-              </>
-            )}
-          </DialogDescription>
-        </DialogHeader>
-
-        {own.length === 0 ? (
-          <EmptyState title="No pipelines" description="No pipeline files were found in this project’s pipeline directory." />
-        ) : (
-          <ul className="scrum-pipelines">
-            {runnable.map((pipeline) => (
-              <li key={pipeline.file}>
-                <label className="scrum-pipeline">
-                  <input
-                    type="radio"
-                    name="scrum-pipeline"
-                    value={pipeline.file}
-                    checked={pipeline.file === chosen}
-                    onChange={() => setChosen(pipeline.file)}
-                  />
-                  <span className="scrum-pipeline-body">
-                    <span className="scrum-pipeline-name">{pipeline.name}</span>
-                    <span className="small dim mono">{pipeline.file}</span>
-                    <span className="small dim">
-                      {pipeline.jobs.length} jobs
-                      {pipeline.inputs.includes(ITEM_INPUT)
-                        ? null
-                        : // Честнее сказать заранее, чем показать прогон, взявший
-                          // не тот пункт: пайплайн без входа отбирает очередной
-                          // свободный сам.
-                          ' · does not accept an item: picks the next free one itself'}
-                    </span>
-                  </span>
-                </label>
-              </li>
-            ))}
-            {broken.map((pipeline) => (
-              <li key={pipeline.file}>
-                <span className="scrum-pipeline-body">
-                  <span className="scrum-pipeline-name dim">{pipeline.name}</span>
-                  <span className="small scrum-pipeline-error">{pipeline.error}</span>
-                </span>
-              </li>
-            ))}
-          </ul>
-        )}
-
-        {error === undefined ? null : (
-          <Alert variant="destructive">
-            <AlertDescription>{error}</AlertDescription>
-          </Alert>
-        )}
-
-        <DialogFooter>
-          <Button variant="ghost" onClick={onClose}>
-            Cancel
-          </Button>
-          <Button disabled={busy || selected === undefined} onClick={() => void start()}>
-            Start
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  );
 }
 
 /** Статус без колонки, для которого открыт диалог добавления. */
@@ -664,24 +525,6 @@ export function Scrum({ backlog }: { readonly backlog: BacklogOverview | undefin
   const [failure, setFailure] = useState<string | undefined>(undefined);
   const [intent, setIntent] = useState<LaunchIntent | undefined>(undefined);
   const [columnIntent, setColumnIntent] = useState<ColumnIntent | undefined>(undefined);
-  const [pipelines, setPipelines] = useState<readonly PipelineView[]>([]);
-
-  // Пайплайны нужны только диалогу и меняются редко — они приходят разовым
-  // запросом, а не живым потоком, тем же приёмом, что на экране «Пайплайны».
-  useEffect(() => {
-    let alive = true;
-    void fetchPipelines()
-      .then((result) => {
-        if (alive) setPipelines(result.pipelines);
-      })
-      .catch(() => {
-        // Отсутствие списка видно в самом диалоге: он скажет, что подходящего
-        // пайплайна нет. Гасить доску из-за этого незачем.
-      });
-    return () => {
-      alive = false;
-    };
-  }, []);
 
   const projects = backlog?.projects ?? [];
   const view = useMemo(() => viewBoard(projects, selected), [projects, selected]);
@@ -878,7 +721,13 @@ export function Scrum({ backlog }: { readonly backlog: BacklogOverview | undefin
         )}
       </div>
 
-      <LaunchDialog intent={intent} pipelines={pipelines} onClose={() => setIntent(undefined)} />
+      <RunLaunchDialog
+        open={intent !== undefined}
+        {...(intent === undefined
+          ? {}
+          : { preselect: { projectKey: intent.projectKey, item: { slug: intent.item.slug, title: intent.item.title } } })}
+        onClose={() => setIntent(undefined)}
+      />
       <AddColumnDialog
         intent={columnIntent}
         columns={view.columns}

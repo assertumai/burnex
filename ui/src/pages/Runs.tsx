@@ -55,6 +55,8 @@ import {
   type SortOrder,
 } from '../../../src/parts/ui/runsView';
 import { SortHeader } from '../SortHeader';
+import { RunLaunchDialog } from '../components/RunLaunchDialog';
+import { ShadowBadge } from '../components/ShadowBadge';
 import './runs.css';
 
 /**
@@ -524,6 +526,7 @@ export function Runs({
   // Сводка исходов переживает снятие отметки: см. `RemovalOutcomes`.
   const [summary, setSummary] = useState<RemovalSummary | undefined>(undefined);
   const headerCheckboxRef = useRef<HTMLInputElement>(null);
+  const [launching, setLaunching] = useState(false);
 
   const projects = overview?.projects ?? [];
   const total = useMemo(() => projects.reduce((sum, project) => sum + project.runs.length, 0), [projects]);
@@ -570,10 +573,18 @@ export function Runs({
       </>
     );
   }
+  const newRun = (
+    <Button size="sm" onClick={() => setLaunching(true)}>
+      New run
+    </Button>
+  );
+  const launchDialog = <RunLaunchDialog open={launching} onClose={() => setLaunching(false)} />;
+
   if (total === 0) {
     return (
       <>
-        <PageHeader title={PAGE_TITLE} description={PAGE_DESCRIPTION} />
+        <PageHeader title={PAGE_TITLE} description={PAGE_DESCRIPTION} actions={newRun} />
+        {launchDialog}
         <EmptyState
           title="No runs yet"
           description={
@@ -642,22 +653,26 @@ export function Runs({
         title={PAGE_TITLE}
         description={PAGE_DESCRIPTION}
         actions={
-          isDefaultView ? undefined : (
-            <>
-              {/* Число показанных — про сужение: при одном лишь ином порядке
-                  состав списка тот же, и «showing 12 of 12» ничего не сообщает. */}
-              {rows.length === total ? null : (
-                <span className="small dim">
-                  showing {rows.length} of {total}
-                </span>
-              )}
-              <Button variant="ghost" size="sm" onClick={resetView} title="Clear filters and return to newest first">
-                reset
-              </Button>
-            </>
-          )
+          <>
+            {isDefaultView ? null : (
+              <>
+                {/* Число показанных — про сужение: при одном лишь ином порядке
+                    состав списка тот же, и «showing 12 of 12» ничего не сообщает. */}
+                {rows.length === total ? null : (
+                  <span className="small dim">
+                    showing {rows.length} of {total}
+                  </span>
+                )}
+                <Button variant="ghost" size="sm" onClick={resetView} title="Clear filters and return to newest first">
+                  reset
+                </Button>
+              </>
+            )}
+            {newRun}
+          </>
         }
       />
+      {launchDialog}
       <VersionSkewBanner overview={overview} />
 
       <div className="filters">
@@ -815,6 +830,7 @@ export function Runs({
                       {run.swept ? <Badge>swept</Badge> : null}
                       {run.filesGone ? <Badge>files gone</Badge> : null}
                       <TriggerBadge trigger={run.trigger} />
+                      <ShadowBadge mode={run.mode} />
                       {run.problem?.kind === 'version-skew' ? (
                         <Badge>reader out of date</Badge>
                       ) : run.problem?.kind === 'legacy-journal' ? (

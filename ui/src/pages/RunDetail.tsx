@@ -20,6 +20,7 @@ import { Cost } from '../components/Cost';
 import { FileView } from '../components/FileView';
 import { JobGraph } from '../components/JobGraph';
 import { StepOutput } from '../components/StepOutput';
+import { ShadowBadge } from '../components/ShadowBadge';
 import { TargetLink } from '../routeLink';
 import { DECISIONS_TARGET } from '../screens/decisions';
 import './runDetail.css';
@@ -478,6 +479,10 @@ export function RunDetail({
             {current.pipeline || 'run'} <span className="run-id">{runId.slice(runId.lastIndexOf('-') + 1)}</span>{' '}
             {current.status === undefined ? null : (
               <Badge variant={statusBadgeVariant(current.status)}>{current.status}</Badge>
+            )}{' '}
+            <ShadowBadge mode={current.mode} />
+            {current.agentOverride === undefined ? null : (
+              <Badge title="agent chosen for this run with --agent">agent: {current.agentOverride}</Badge>
             )}
           </>
         }

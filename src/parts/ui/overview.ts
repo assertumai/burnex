@@ -70,6 +70,13 @@ export interface RunOverview {
     readonly moment: string;
     readonly catchup: boolean;
   };
+  /**
+   * Режим прогона из манифеста (`shadow-run-mode`): внешние действия записаны,
+   * а не совершены. Отсутствует у обычного прогона и у манифеста прежней формы.
+   */
+  readonly mode?: 'shadow';
+  /** Агент, выбранный `run --agent` на этот прогон; отсутствует, если флага не было. */
+  readonly agentOverride?: string;
   /** Прогон после уборки: подробностей на диске уже нет, но каталог остался. */
   readonly swept: boolean;
   /**
@@ -306,6 +313,8 @@ function readRun(
             catchup: manifest.trigger.catchup,
           },
         }),
+    ...(manifest?.mode === undefined ? {} : { mode: manifest.mode }),
+    ...(manifest?.agent_override === undefined ? {} : { agentOverride: manifest.agent_override }),
     // Каталог работ исчезает только после уборки: движок создаёт его всегда.
     swept: !existsSync(paths.jobs),
     filesGone: false,

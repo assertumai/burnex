@@ -12,7 +12,7 @@ import { expandPipeline } from '../src/parts/pipeline/document/expand.js';
 import { projectKey, runPaths, stepDir } from '../src/parts/pipeline/run/journal/paths.js';
 import { listRuns, readEvents, readManifest } from '../src/parts/pipeline/run/journal/reader.js';
 import { runPipeline, type RunResult } from '../src/parts/pipeline/run/runner.js';
-import { assertShadowDeclarations } from '../src/parts/pipeline/run/shadow.js';
+import { assertShadowDeclarations, stepsMissingExternal } from '../src/parts/pipeline/run/shadow.js';
 import { gitCommit, gitInit, makeProject, testBaseEnv, withHome, type Project } from './helpers.js';
 import { tempDir } from './tmp.js';
 
@@ -78,6 +78,21 @@ describe('run --shadow: проверка объявлений до старта'
         return true;
       },
     );
+  });
+
+  it('stepsMissingExternal называет те же шаги без броска, готовый пайплайн даёт пустой перечень', () => {
+    const project = makeProject({ 'stepcast.yml': UNDECLARED });
+    const expanded = expandPipeline({ pipelinePath: project.path('stepcast.yml'), config: project.config });
+    assert.deepEqual(stepsMissingExternal(expanded.pipeline), ['build.compile', 'publish.push']);
+
+    const ready = makeProject({
+      'stepcast.yml': UNDECLARED.replace("'echo built > built.txt'] }", "'echo built > built.txt'], external: false }").replace(
+        "'echo pushed > pushed.txt'] }",
+        "'echo pushed > pushed.txt'], external: true }",
+      ),
+    });
+    const readyExpanded = expandPipeline({ pipelinePath: ready.path('stepcast.yml'), config: ready.config });
+    assert.deepEqual(stepsMissingExternal(readyExpanded.pipeline), []);
   });
 
   it('отказ команды — ошибка конфигурации без каталога прогона, и при --dry-run тоже', async () => {

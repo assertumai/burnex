@@ -22,13 +22,7 @@ function stepAddress(jobId: string, stepId: string): string {
  * признак объявляет контракт вида, а не документ.
  */
 export function assertShadowDeclarations(pipeline: Pick<Pipeline, 'jobs'>): void {
-  const undeclared: string[] = [];
-  for (const job of pipeline.jobs) {
-    for (const step of job.steps) {
-      if (step.kind === 'plugin') continue;
-      if (step.external === undefined) undeclared.push(stepAddress(job.id, step.id));
-    }
-  }
+  const undeclared = stepsMissingExternal(pipeline);
   if (undeclared.length === 0) return;
   throw new StepcastError(
     `Shadow-режим требует объявить external у каждого шага agent, run, script и uses; не объявлено: ${undeclared.join(', ')}`,
@@ -36,6 +30,21 @@ export function assertShadowDeclarations(pipeline: Pick<Pipeline, 'jobs'>): void
       hint: 'Поставьте external: true шагу, который действует вовне рабочего дерева, и external: false — локальному',
     },
   );
+}
+
+/**
+ * Адреса шагов встроенных видов без `external`. Без броска: витрина показывает
+ * тот же перечень заранее, а CLI превращает его в отказ.
+ */
+export function stepsMissingExternal(pipeline: Pick<Pipeline, 'jobs'>): string[] {
+  const undeclared: string[] = [];
+  for (const job of pipeline.jobs) {
+    for (const step of job.steps) {
+      if (step.kind === 'plugin') continue;
+      if (step.external === undefined) undeclared.push(stepAddress(job.id, step.id));
+    }
+  }
+  return undeclared;
 }
 
 /**
