@@ -65,7 +65,7 @@ Agents (≈560 строк) — уровни (tier), эскалация и бэк
 | ~~`run --env KEY=VALUE`~~ | поля env в диалоге ручного запуска — сделано в `ui-run-launch-dialog` |
 | Бэкенды Cursor и Copilot | в списке есть, когда объявлены; нет действия «подключить», как у Codex |
 | `loops` на работе | проходы группы на графе прогона; `attempts` в `RunDetail`/`StepOutput` уже есть |
-| Очередь: `claimed_by`, lock-файл | кто держит пункт и блокировка; в `Backlog.tsx` нет |
+| ~~Очередь: `claimed_by`, lock-файл~~ | владелец взятого пункта и занятая блокировка очереди на «Backlog» и «Scrum» — сделано в `ui-backlog-owner-and-lock` |
 | `backlog add` / `backlog show` | уже есть на «Scrum» через `POST /api/backlog/item` |
 
 Частично есть: цена `reported`/`catalog` (Usage, Runs, RunDetail), `needs`
@@ -80,7 +80,7 @@ Agents (≈560 строк) — уровни (tier), эскалация и бэк
   действует».
 - ~~**Диалог запуска прогона**: вход, env, shadow, выбор агента в одной форме.~~
   Сделано в `ui-run-launch-dialog`: «Start work» на «Scrum» и «New run» на «Runs».
-- **Очередь**: владелец пункта, блокировка, добавление пункта из UI.
+- **Очередь**: ~~владелец пункта, блокировка~~ — сделано в `ui-backlog-owner-and-lock`; добавление пункта из UI.
 
 ## Порядок
 

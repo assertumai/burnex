@@ -16,3 +16,8 @@
 /* Свёрнутая подробность заголовка: сам заголовок — строка, `why` и `done_when` — под ним. */
 .backlog-title summary { cursor: pointer; }
 .backlog-title .note { margin-top: .3rem; }
+
+/* Владелец взятого пункта и предупреждение о блокировке очереди: общие для «Backlog» и «Scrum». */
+.backlog-owner { margin-left: .5rem; }
+.backlog-lock { margin-bottom: .6rem; }
+.backlog-lock p { margin: .25rem 0 0; }

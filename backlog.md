@@ -672,12 +672,14 @@ claimed_by: run:2026-11-01T09-40-44Z-e0ff5b
 
 ## ui-backlog-owner-and-lock
 
-status: todo
+status: done
 title: Очередь в витрине: владелец взятого пункта и блокировка файла
 why: Поле `claimed_by` (`backlog-claimed-by-owner`) и lock-файл очереди (`backlog-queue-lock`) есть в движке, но `Backlog.tsx` их не показывает: не видно, какой прогон держит пункт и почему правка карточки может отказать (`docs/ui-proposals.md`, п. 2 и 3).
 done_when: пункт `in_progress` показывает владельца ссылкой на прогон, если `claimed_by` вида `run:<id>`; занятая блокировка названа на экране с владельцем и возрастом; отказ записи из-за блокировки показан текстом демона; тесты
 group: ui-backlog
 source: docs/ui-proposals.md, п. 2
+started_at: 2026-11-01T10:31:21.831Z
+claimed_by: run:2026-11-01T10-31-20Z-eaac52
 
 ## ui-connect-bundled-backends
 

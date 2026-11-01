@@ -935,6 +935,39 @@ describe('screen-scrum: правка пункта панелью деталей'
     return { method: 'POST', path: '/api/backlog/item', body: JSON.stringify(body) };
   }
 
+  it('по пределу ожидания очереди — 409 с владельцем и путём lock-файла, файл не тронут', async (t) => {
+    const { runsRoot, projectRoot } = makeJournalBed();
+    seedRun(runsRoot, projectRoot, { runId: 'a' });
+    const tasks = join(projectRoot, 'backlog.md');
+    writeFileSync(tasks, ITEMS(ITEM('one', 'todo')));
+    const before = readFileSync(tasks, 'utf8');
+    const server = await startServer(t, { runsRoot });
+    const lock = backlogLockPath(tasks);
+    writeFileSync(
+      lock,
+      JSON.stringify({
+        pid: process.pid,
+        host: hostname(),
+        command: 'backlog pick',
+        acquired_at: new Date().toISOString(),
+      }),
+    );
+    boardLockWait.current = { intervalMs: 10, timeoutMs: 300 };
+    t.after(() => {
+      boardLockWait.current = {};
+    });
+
+    const saved = await sendJson(
+      server,
+      editPayload({ project: projectKey(projectRoot), slug: 'one', fields: { title: 'новое' } }),
+    );
+
+    assert.equal(saved.code, 409);
+    assert.match(String(pick(saved.json, 'error')), /backlog pick/u);
+    assert.ok(String(pick(saved.json, 'error')).includes(lock), 'в тексте — путь lock-файла');
+    assert.equal(readFileSync(tasks, 'utf8'), before);
+  });
+
   function fieldOf(text: string, slug: string, field: string): string | undefined {
     const block = text.split(/^## /mu).find((part) => part.startsWith(slug));
     return new RegExp(`^${field}: (.*)$`, 'mu').exec(block ?? '')?.[1];

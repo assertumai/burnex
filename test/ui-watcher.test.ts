@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
-import { existsSync, mkdirSync, readFileSync, rmSync, unlinkSync, utimesSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { spawnSync } from 'node:child_process';
+import { existsSync, mkdirSync, readFileSync, rmSync, statSync, unlinkSync, utimesSync, writeFileSync } from 'node:fs';
+import { hostname } from 'node:os';
+import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, it } from 'node:test';
 
@@ -13,6 +15,7 @@ import { widgetsDirPath } from '../src/parts/ui/widgets.js';
 import { homeRoutesPath, projectRoutesPath } from '../src/parts/ui/routesFile.js';
 import { homeDashboardsDirPath, projectDashboardsDirPath } from '../src/parts/ui/dashboardsFile.js';
 import { proposalsDirPath, proposeEntry, readProposalsDir } from '../src/parts/pipeline/domain/proposals/store.js';
+import { lockPathOf } from '../src/parts/ui/backlog.js';
 import type { BacklogOverview } from '../src/parts/ui/backlog.js';
 import type { Overview } from '../src/parts/ui/overview.js';
 import type { WidgetsOverview } from '../src/parts/ui/widgets.js';
@@ -284,6 +287,66 @@ describe('ui-dashboard: наблюдатель за корнем прогоно�
     assert.equal(seen.length, 1, 'правка очереди должна дойти до подписчика');
     assert.equal(seen[0]?.backlog.projects[0]?.items[0]?.status, 'done');
     watcher.dispose();
+  });
+
+  // Блокировка очереди едет в кадре без правки самой очереди (design.md, Решение 5)
+  describe('lock-файл очереди в отпечатке', () => {
+    function lockBed() {
+      const { runsRoot, projectRoot } = makeJournalBed();
+      seedRun(runsRoot, projectRoot, { runId: 'a' });
+      writeFileSync(join(projectRoot, 'backlog.md'), backlogText('todo'));
+      const lockFile = lockPathOf(projectRoot);
+      mkdirSync(dirname(lockFile), { recursive: true });
+      const watcher = createWatcher({ runsRoot, intervalMs: 10_000 });
+      const seen: BacklogOverview[] = [];
+      watcher.subscribe((_overview, backlog) => seen.push(backlog));
+      return { watcher, seen, lockFile };
+    }
+
+    function owner(pid: number): string {
+      return JSON.stringify({ pid, host: hostname(), command: 'backlog pick', acquired_at: '2026-01-01T00:00:00.000Z' });
+    }
+
+    it('появление и снятие lock-файла дают кадр backlog', () => {
+      const { watcher, seen, lockFile } = lockBed();
+
+      writeFileSync(lockFile, owner(process.pid));
+      watcher.poll();
+      assert.equal(seen.length, 1);
+      assert.equal(seen[0]?.projects[0]?.lock.state, 'held');
+
+      unlinkSync(lockFile);
+      watcher.poll();
+      assert.equal(seen.length, 2);
+      assert.deepEqual(seen[1]?.projects[0]?.lock, { state: 'free' });
+      watcher.dispose();
+    });
+
+    it('смерть владельца при том же файле даёт кадр с abandoned', () => {
+      const { watcher, seen, lockFile } = lockBed();
+      const dead = spawnSync(process.execPath, ['-e', '']).pid ?? 0;
+      assert.ok(dead > 0);
+
+      // Содержимое одной длины и тот же mtime: от «живого» к «мёртвому» меняется
+      // только признак брошенности. Живой владелец — сам процесс теста; пробелы в хвосте JSON выравнивают размер.
+      const text = owner(process.pid);
+      const same = owner(dead).padEnd(text.length);
+      const live = text.padEnd(same.length);
+      writeFileSync(lockFile, live);
+      watcher.poll();
+      assert.equal(seen.length, 1);
+      const mtime = statSync(lockFile).mtime;
+
+      writeFileSync(lockFile, same.slice(0, live.length).padEnd(live.length));
+      utimesSync(lockFile, mtime, mtime);
+      assert.equal(statSync(lockFile).size, live.length);
+      watcher.poll();
+
+      assert.equal(seen.length, 2, 'смена живого владельца на мёртвого обязана дойти до экрана');
+      const lock = seen[1]?.projects[0]?.lock;
+      assert.equal(lock?.state === 'held' && lock.abandoned, true);
+      watcher.dispose();
+    });
   });
 
   // Сценарий: «Неизменный файл не перечитывается»

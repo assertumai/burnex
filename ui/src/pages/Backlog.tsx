@@ -1,7 +1,9 @@
 import { useMemo, useState, type JSX } from 'react';
 
-import type { BacklogFailure, BacklogItemView, BacklogOverview } from '../api';
+import type { BacklogFailure, BacklogItemView, BacklogLockView, BacklogOverview } from '../api';
 import { fmtTime } from '../format';
+import { BacklogLockNotice } from '../components/BacklogLockNotice';
+import { BacklogOwner } from '../components/BacklogOwner';
 import { SortHeader } from '../SortHeader';
 import {
   viewBacklog,
@@ -57,6 +59,9 @@ const PLAN_METRIC = 'plan';
  */
 const ALL = '__all__';
 
+/** Блокировка раздела, которого в кадре нет: нечего предупреждать. */
+const FREE: BacklogLockView = { state: 'free' };
+
 /** Последний сегмент пути проекта — короткое имя для меню и заголовка; полный путь остаётся подсказкой. */
 function projectName(path: string): string {
   const segments = path.split('/').filter((segment) => segment !== '');
@@ -106,10 +111,28 @@ function TitleCell({ item }: { readonly item: BacklogItemView }): JSX.Element {
   );
 }
 
-/** Момент взятия у идущего пункта, причина отказа у отказавшего — остальным сказать нечего. */
-function OutcomeCell({ item }: { readonly item: BacklogItemView }): JSX.Element | null {
+/** Момент взятия и владелец у идущего пункта, причина отказа у отказавшего — остальным сказать нечего. */
+function OutcomeCell({
+  item,
+  projectKey,
+  navigate,
+}: {
+  readonly item: BacklogItemView;
+  readonly projectKey: string;
+  readonly navigate: (href: string) => void;
+}): JSX.Element | null {
   if (item.status === 'in_progress' && item.startedAt !== undefined) {
-    return <span className="small dim">picked up {fmtTime(item.startedAt)}</span>;
+    return (
+      <>
+        <span className="small dim">picked up {fmtTime(item.startedAt)}</span>
+        <BacklogOwner
+          projectKey={projectKey}
+          claimedBy={item.claimedBy}
+          ownerRunId={item.ownerRunId}
+          navigate={navigate}
+        />
+      </>
+    );
   }
   if (item.status === 'failed' && item.reason !== undefined) {
     return <span className="small dim">{item.reason}</span>;
@@ -119,10 +142,14 @@ function OutcomeCell({ item }: { readonly item: BacklogItemView }): JSX.Element 
 
 function ProjectSection({
   section,
+  lock,
   order,
   onSort,
+  navigate,
 }: {
   readonly section: BacklogSectionView<BacklogItemView, BacklogFailure>;
+  readonly lock: BacklogLockView;
+  readonly navigate: (href: string) => void;
   readonly order: BacklogOrderDirection;
   readonly onSort: () => void;
 }): JSX.Element {
@@ -132,6 +159,8 @@ function ProjectSection({
         <h2 className="backlog-section-title">{projectName(section.projectPath)}</h2>
         <span className="mono small dim backlog-section-path">{section.projectPath}</span>
       </header>
+
+      <BacklogLockNotice lock={lock} />
 
       {section.failures.length > 0 ? <BacklogFailures failures={section.failures} /> : null}
 
@@ -159,7 +188,7 @@ function ProjectSection({
               <TableHead>Title</TableHead>
               <TableHead>Group</TableHead>
               <TableHead>Track</TableHead>
-              <TableHead>Picked up / reason</TableHead>
+              <TableHead>Picked up / owner / reason</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -177,7 +206,7 @@ function ProjectSection({
                 <TableCell className="mono small dim">{item.group}</TableCell>
                 <TableCell className="mono small dim">{item.track}</TableCell>
                 <TableCell>
-                  <OutcomeCell item={item} />
+                  <OutcomeCell item={item} projectKey={section.projectKey} navigate={navigate} />
                 </TableCell>
               </TableRow>
             ))}
@@ -206,7 +235,13 @@ function setProjectFilter(filters: BacklogFilters, value: string): BacklogFilter
   return { ...filters, project: value };
 }
 
-export function Backlog({ backlog }: { readonly backlog: BacklogOverview | undefined }): JSX.Element {
+export function Backlog({
+  backlog,
+  navigate,
+}: {
+  readonly backlog: BacklogOverview | undefined;
+  readonly navigate: (href: string) => void;
+}): JSX.Element {
   const [filters, setFilters] = useState<BacklogFilters>(EMPTY_BACKLOG_FILTERS);
   const [order, setOrder] = useState<BacklogOrderDirection>(DEFAULT_ORDER);
 
@@ -320,7 +355,14 @@ export function Backlog({ backlog }: { readonly backlog: BacklogOverview | undef
         />
       ) : (
         view.sections.map((section) => (
-          <ProjectSection key={section.projectKey} section={section} order={order} onSort={onSort} />
+          <ProjectSection
+            key={section.projectKey}
+            section={section}
+            lock={projects.find((project) => project.projectKey === section.projectKey)?.lock ?? FREE}
+            order={order}
+            onSort={onSort}
+            navigate={navigate}
+          />
         ))
       )}
     </>

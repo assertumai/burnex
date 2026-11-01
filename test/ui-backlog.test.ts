@@ -1,13 +1,16 @@
 import assert from 'node:assert/strict';
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
+import { mkdirSync, readFileSync, realpathSync, renameSync, writeFileSync } from 'node:fs';
+import { hostname } from 'node:os';
 import { join } from 'node:path';
 import { describe, it } from 'node:test';
 
-import { buildBacklog } from '../src/parts/ui/backlog.js';
+import { buildBacklog, LOCK_PATH_RETRY_MS, lockPathOf } from '../src/parts/ui/backlog.js';
 import { writeBoardColumns } from '../src/parts/ui/boardFile.js';
 import { buildOverview } from '../src/parts/ui/overview.js';
 import { projectKey } from '../src/parts/pipeline/run/journal/paths.js';
 import { makeJournalBed, seedRun } from './helpers.js';
+import { tempDir } from './tmp.js';
 
 /**
  * Фикстуры очереди — тот же приём, что в `test/backlog.test.ts`: заголовок
@@ -314,5 +317,117 @@ describe('ui-dashboard: сборка вида очереди (src/parts/ui/backl
     assert.match(backlog.projects[0]?.failures[0]?.error ?? '', /in_progress/);
     assert.equal(backlog.projects[0]?.columns.length, 4);
     assert.deepEqual(backlog.projects[0]?.items.map((entry) => entry.slug), ['one']);
+  });
+
+  it('пункт с run:<id> несёт claimedBy и ownerRunId, иной владелец — только claimedBy, без владельца — ни одного', () => {
+    const { runsRoot, projectRoot } = makeJournalBed();
+    seedRun(runsRoot, projectRoot, { runId: 'a' });
+    writeFileSync(
+      join(projectRoot, 'backlog.md'),
+      backlogText(
+        item('by-run', { ...BASE, status: 'in_progress', claimed_by: 'run:9169657a1513-abc' }),
+        item('by-host', { ...BASE, status: 'in_progress', claimed_by: 'host:build-7' }),
+        item('free', BASE),
+      ),
+    );
+
+    const items = buildBacklog(buildOverview(runsRoot)).projects[0]?.items ?? [];
+    const bySlug = (slug: string) => items.find((entry) => entry.slug === slug);
+    assert.equal(bySlug('by-run')?.claimedBy, 'run:9169657a1513-abc');
+    assert.equal(bySlug('by-run')?.ownerRunId, '9169657a1513-abc');
+    assert.equal(bySlug('by-host')?.claimedBy, 'host:build-7');
+    assert.ok(!('ownerRunId' in (bySlug('by-host') ?? {})), 'иная форма владельца не даёт ownerRunId');
+    assert.ok(!('claimedBy' in (bySlug('free') ?? {})));
+    assert.ok(!('ownerRunId' in (bySlug('free') ?? {})));
+  });
+});
+
+describe('ui-dashboard: блокировка очереди в виде проекта', () => {
+  function bedWithQueue() {
+    const bed = makeJournalBed();
+    seedRun(bed.runsRoot, bed.projectRoot, { runId: 'a' });
+    writeFileSync(join(bed.projectRoot, 'backlog.md'), backlogText(item('one', BASE)));
+    return bed;
+  }
+
+  function writeLock(projectRoot: string, owner: Record<string, unknown> | string): string {
+    const path = lockPathOf(projectRoot);
+    mkdirSync(join(path, '..'), { recursive: true });
+    writeFileSync(path, typeof owner === 'string' ? owner : JSON.stringify(owner));
+    return path;
+  }
+
+  function deadPid(): number {
+    const child = spawnSync(process.execPath, ['-e', '']);
+    assert.ok(child.pid !== undefined);
+    return child.pid;
+  }
+
+  const ACQUIRED = '2026-01-01T00:00:00.000Z';
+
+  it('файла нет — free', () => {
+    const { runsRoot } = bedWithQueue();
+    assert.deepEqual(buildBacklog(buildOverview(runsRoot)).projects[0]?.lock, { state: 'free' });
+  });
+
+  it('владелец — живой процесс: held без брошенности и без чужой машины', () => {
+    const { runsRoot, projectRoot } = bedWithQueue();
+    const path = writeLock(projectRoot, {
+      pid: process.pid,
+      host: hostname(),
+      command: 'backlog pick',
+      acquired_at: new Date(Date.now() - 1).toISOString(),
+    });
+    const lock = buildBacklog(buildOverview(runsRoot)).projects[0]?.lock;
+    assert.equal(lock?.state, 'held');
+    if (lock?.state !== 'held') return;
+    assert.equal(lock.command, 'backlog pick');
+    assert.equal(lock.pid, process.pid);
+    assert.equal(lock.host, hostname());
+    assert.equal(lock.abandoned, false);
+    assert.equal(lock.foreignHost, false);
+    assert.equal(lock.path, path);
+  });
+
+  it('pid мёртвого процесса той же машины — abandoned', () => {
+    const { runsRoot, projectRoot } = bedWithQueue();
+    writeLock(projectRoot, { pid: deadPid(), host: hostname(), command: 'backlog pick', acquired_at: ACQUIRED });
+    const lock = buildBacklog(buildOverview(runsRoot)).projects[0]?.lock;
+    assert.equal(lock?.state === 'held' && lock.abandoned, true);
+    assert.equal(lock?.state === 'held' && lock.foreignHost, false);
+  });
+
+  it('чужая машина — foreignHost, а не abandoned', () => {
+    const { runsRoot, projectRoot } = bedWithQueue();
+    writeLock(projectRoot, { pid: deadPid(), host: 'other-machine', command: 'backlog pick', acquired_at: ACQUIRED });
+    const lock = buildBacklog(buildOverview(runsRoot)).projects[0]?.lock;
+    assert.equal(lock?.state === 'held' && lock.foreignHost, true);
+    assert.equal(lock?.state === 'held' && lock.abandoned, false);
+  });
+
+  it('мусор в файле — unreadable с путём', () => {
+    const { runsRoot, projectRoot } = bedWithQueue();
+    const path = writeLock(projectRoot, 'не json');
+    assert.deepEqual(buildBacklog(buildOverview(runsRoot)).projects[0]?.lock, { state: 'unreadable', path });
+  });
+
+  it('путь в общем каталоге git запоминается по пути проекта: повторный вызов git не порождает', () => {
+    const dir = realpathSync(tempDir('lockpath-'));
+    assert.equal(spawnSync('git', ['init', '-q', dir]).status, 0);
+    const before = lockPathOf(dir, 0);
+    assert.equal(before, join(dir, '.git', 'stepcast-backlog.lock'));
+    // Если бы путь пересчитывался, без `.git` он ушёл бы в запасной.
+    renameSync(join(dir, '.git'), join(dir, 'moved-git'));
+    assert.equal(lockPathOf(dir, LOCK_PATH_RETRY_MS * 10), before);
+  });
+
+  it('запасной путь без репозитория перепроверяется не чаще предела: `git init` при живом демоне доходит', () => {
+    const dir = realpathSync(tempDir('lockpath-'));
+    const fallback = lockPathOf(dir, 0);
+    assert.equal(fallback, join(dir, '.backlog.lock'));
+    assert.equal(spawnSync('git', ['init', '-q', dir]).status, 0);
+    // До предела — прежний путь, без нового процесса git на каждом такте.
+    assert.equal(lockPathOf(dir, LOCK_PATH_RETRY_MS - 1), fallback);
+    assert.equal(lockPathOf(dir, LOCK_PATH_RETRY_MS), join(dir, '.git', 'stepcast-backlog.lock'));
   });
 });

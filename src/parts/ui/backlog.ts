@@ -1,12 +1,16 @@
-import { join } from 'node:path';
+import { hostname } from 'node:os';
+import { join, resolve } from 'node:path';
 
 import {
+  backlogLockPath,
   effectiveGroup,
   parseBacklogFile,
+  parseRunOwner,
   readBacklogFile,
   type BacklogEntry,
   type BacklogStatus,
 } from '../pipeline/domain/backlog/index.js';
+import { isAbandoned, readOwner } from '../pipeline/domain/lockfile.js';
 import { isStepcastError } from '../../kernel/errors.js';
 import { BOARD_FILE, readBoardColumns } from './boardFile.js';
 import type { Overview } from './overview.js';
@@ -52,6 +56,13 @@ export interface BacklogItemView {
   readonly needs: readonly string[];
   readonly startedAt?: string;
   readonly reason?: string;
+  /** `claimed_by` как записан; показывается и владелец иной формы, чем `run:<id>`. */
+  readonly claimedBy?: string;
+  /**
+   * Идентификатор прогона-владельца, разобранный `parseRunOwner` движка: браузеру
+   * правило формы не отдаётся, второе правило разошлось бы с первым.
+   */
+  readonly ownerRunId?: string;
   /** Файл, из которого пришёл пункт — `backlog.md` либо `archived.md`. */
   readonly sourceFile: BacklogSourceFile;
 }
@@ -76,6 +87,26 @@ export interface BacklogFailure {
   readonly errorAt?: string;
 }
 
+/**
+ * Состояние lock-файла очереди проекта. Занятая блокировка — предупреждение, а
+ * не отказ: запрос верен, очередь просто занята.
+ */
+export type BacklogLockView =
+  | { readonly state: 'free' }
+  | {
+      readonly state: 'held';
+      readonly command: string;
+      readonly pid: number;
+      readonly host: string;
+      readonly acquiredAt: string;
+      /** Та же машина, процесса нет: следующий писатель снимет lock сам. */
+      readonly abandoned: boolean;
+      /** Владелец на другой машине: демон его не проверит, снимает человек. */
+      readonly foreignHost: boolean;
+      readonly path: string;
+    }
+  | { readonly state: 'unreadable'; readonly path: string };
+
 export interface BacklogProjectView {
   readonly projectKey: string;
   readonly projectPath: string;
@@ -92,6 +123,8 @@ export interface BacklogProjectView {
    * одного статуса обязаны появиться на доске одним кадром.
    */
   readonly columns: readonly BoardColumnSpec[];
+  /** Блокировка очереди проекта — тем же кадром, что и пункты. */
+  readonly lock: BacklogLockView;
 }
 
 export interface BacklogOverview {
@@ -111,7 +144,52 @@ function toFailure(error: unknown, sourceFile: BacklogFailure['sourceFile']): Ba
   return { sourceFile, error: error.message, ...(error.at === undefined ? {} : { errorAt: error.at }) };
 }
 
+/**
+ * Через сколько запасной путь lock'а (git не ответил) спрашивается у git снова.
+ * Реже такта наблюдателя, чтобы проект без репозитория не порождал git каждую
+ * секунду; достаточно часто, чтобы `git init` при живом демоне дошёл до экрана.
+ */
+export const LOCK_PATH_RETRY_MS = 30_000;
+
+/**
+ * Пути lock'а по пути проекта. `backlogLockPath` порождает git, а отпечаток
+ * наблюдателя считается каждый такт: общий каталог git за жизнь демона не
+ * меняется, и путь в нём запоминается навсегда. Запасной `.backlog.lock`
+ * рядом с файлом — лишь до `retryAt`: git мог не ответить временно, а проект
+ * мог стать репозиторием, и движок тогда пишет уже в общий каталог git
+ * (design.md, Решение 4).
+ */
+const lockPaths = new Map<string, { readonly path: string; readonly retryAt: number }>();
+
+export function lockPathOf(projectPath: string, now: number = Date.now()): string {
+  const cached = lockPaths.get(projectPath);
+  if (cached !== undefined && now < cached.retryAt) return cached.path;
+  const path = backlogLockPath(join(projectPath, 'backlog.md'));
+  const fallback = path === join(resolve(projectPath), '.backlog.lock');
+  lockPaths.set(projectPath, { path, retryAt: fallback ? now + LOCK_PATH_RETRY_MS : Number.POSITIVE_INFINITY });
+  return path;
+}
+
+export function readBacklogLock(projectPath: string): BacklogLockView {
+  const path = lockPathOf(projectPath);
+  const owner = readOwner(path);
+  if (owner === undefined) return { state: 'free' };
+  if (owner === 'unreadable') return { state: 'unreadable', path };
+  return {
+    state: 'held',
+    command: owner.command,
+    pid: owner.pid,
+    host: owner.host,
+    acquiredAt: owner.acquired_at,
+    abandoned: isAbandoned(owner),
+    foreignHost: owner.host !== hostname(),
+    path,
+  };
+}
+
 function toItemView(entry: BacklogEntry, sourceFile: BacklogSourceFile): BacklogItemView {
+  const claimedBy = entry.data.claimed_by;
+  const ownerRunId = claimedBy === undefined ? undefined : parseRunOwner(claimedBy);
   return {
     slug: entry.slug,
     status: entry.data.status,
@@ -123,6 +201,8 @@ function toItemView(entry: BacklogEntry, sourceFile: BacklogSourceFile): Backlog
     needs: entry.data.needs ?? [],
     ...(entry.data.started_at === undefined ? {} : { startedAt: entry.data.started_at }),
     ...(entry.data.reason === undefined ? {} : { reason: entry.data.reason }),
+    ...(claimedBy === undefined ? {} : { claimedBy }),
+    ...(ownerRunId === undefined ? {} : { ownerRunId }),
     sourceFile,
   };
 }
@@ -174,7 +254,7 @@ export function buildBacklog(overview: Overview): BacklogOverview {
       failures.push(toFailure(error, BOARD_FILE));
     }
 
-    projects.push({ projectKey: project.key, projectPath: project.path, items, failures, columns });
+    projects.push({ projectKey: project.key, projectPath: project.path, items, failures, columns, lock: readBacklogLock(project.path) });
   }
 
   return { projects, generatedAt: overview.generatedAt };

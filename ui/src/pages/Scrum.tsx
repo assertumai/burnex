@@ -30,10 +30,14 @@ import {
   addBoardColumn,
   editBacklogItem,
   moveBacklogItem,
+  type BacklogFailure,
   type BacklogItemView,
+  type BacklogLockView,
   type BacklogOverview,
 } from '../api';
 import { fmtTime } from '../format';
+import { BacklogLockNotice } from '../components/BacklogLockNotice';
+import { BacklogOwner } from '../components/BacklogOwner';
 import { RunLaunchDialog } from '../components/RunLaunchDialog';
 import {
   Alert,
@@ -320,8 +324,23 @@ function AddColumnDialog({
   );
 }
 
+/**
+ * Исход записи доски: `undefined` — принята, иначе текст отказа как есть. Это
+ * `error` ответа демона (`json()`, `api.ts`): при `409` в нём владелец
+ * блокировки и путь lock-файла, которых у клиента нет, — подменять его своим
+ * нельзя (`ui-backlog-owner-and-lock`, design.md, Решение 8).
+ */
+export async function writeFailure(write: Promise<unknown>): Promise<string | undefined> {
+  try {
+    await write;
+    return undefined;
+  } catch (cause) {
+    return (cause as Error).message;
+  }
+}
+
 /** Поля пункта, которые правит панель: те же, что принимает `POST /api/backlog/item`. */
-interface ItemFields {
+export interface ItemFields {
   title: string;
   why: string;
   done_when: string;
@@ -367,17 +386,19 @@ function fieldsOf(item: BacklogItemView): ItemFields {
  * заново только при смене выбранного пункта. Иначе такт наблюдателя,
  * пришедший посреди набора, стирал бы недописанную строку.
  */
-function ItemDetails({
+export function ItemDetails({
   item,
   projectKey,
   statusBySlug,
   onClose,
+  navigate,
 }: {
   readonly item: BacklogItemView;
   readonly projectKey: string;
   /** Статусы пунктов проекта из обоих файлов, очередь приоритетнее архива — как у `statusResolver` движка. */
   readonly statusBySlug: ReadonlyMap<string, string>;
   readonly onClose: () => void;
+  readonly navigate: (href: string) => void;
 }): JSX.Element {
   const [fields, setFields] = useState<ItemFields>(() => fieldsOf(item));
   const [error, setError] = useState<string | undefined>(undefined);
@@ -399,8 +420,10 @@ function ItemDetails({
   const save = async (): Promise<void> => {
     setBusy(true);
     setError(undefined);
-    try {
-      await editBacklogItem({
+    // Отказ не закрывает панель и не трогает набранное: человек повторит
+    // сохранение, когда очередь освободится.
+    const failure = await writeFailure(
+      editBacklogItem({
         project: projectKey,
         slug: item.slug,
         fields: {
@@ -415,15 +438,60 @@ function ItemDetails({
           // убирает поле. Пункт без зависимостей пустое поле не шлёт вовсе.
           ...(fields.needs === '' && item.needs.length === 0 ? {} : { needs: oneLine(fields.needs) }),
         },
-      });
-      setSaved(true);
-    } catch (cause) {
-      setError((cause as Error).message);
-    } finally {
-      setBusy(false);
-    }
+      }),
+    );
+    setBusy(false);
+    if (failure === undefined) setSaved(true);
+    else setError(failure);
   };
 
+  return (
+    <ItemDetailsView
+      item={item}
+      projectKey={projectKey}
+      statusBySlug={statusBySlug}
+      onClose={onClose}
+      navigate={navigate}
+      fields={fields}
+      error={error}
+      saved={saved}
+      busy={busy}
+      onChange={set}
+      onSave={() => void save()}
+    />
+  );
+}
+
+/**
+ * Разметка панели по её состоянию — отдельно от `ItemDetails`, чтобы панель
+ * после отказа записи (набранные значения и текст отказа) проверялась
+ * статическим рендером: щелчков в тестах витрины нет.
+ */
+export function ItemDetailsView({
+  item,
+  projectKey,
+  statusBySlug,
+  onClose,
+  navigate,
+  fields,
+  error,
+  saved,
+  busy,
+  onChange: set,
+  onSave,
+}: {
+  readonly item: BacklogItemView;
+  readonly projectKey: string;
+  readonly statusBySlug: ReadonlyMap<string, string>;
+  readonly onClose: () => void;
+  readonly navigate: (href: string) => void;
+  readonly fields: ItemFields;
+  readonly error: string | undefined;
+  readonly saved: boolean;
+  readonly busy: boolean;
+  readonly onChange: (name: keyof ItemFields, value: string) => void;
+  readonly onSave: () => void;
+}): JSX.Element {
   return (
     <aside className="scrum-details">
       <header className="scrum-details-head">
@@ -437,6 +505,14 @@ function ItemDetails({
         <Badge variant={statusBadgeVariant(item.status)}>{item.status}</Badge>
         <span className="mono">{item.sourceFile}</span>
         {item.startedAt === undefined ? null : <span>picked up {fmtTime(item.startedAt)}</span>}
+        {item.status === 'in_progress' ? (
+          <BacklogOwner
+            projectKey={projectKey}
+            claimedBy={item.claimedBy}
+            ownerRunId={item.ownerRunId}
+            navigate={navigate}
+          />
+        ) : null}
       </p>
 
       {item.reason === undefined ? null : <p className="small">failure reason: {item.reason}</p>}
@@ -509,7 +585,7 @@ function ItemDetails({
       )}
 
       <div className="scrum-details-foot">
-        <Button disabled={busy} onClick={() => void save()}>
+        <Button disabled={busy} onClick={onSave}>
           Save
         </Button>
         {saved ? <span className="small dim">saved</span> : null}
@@ -518,7 +594,48 @@ function ItemDetails({
   );
 }
 
-export function Scrum({ backlog }: { readonly backlog: BacklogOverview | undefined }): JSX.Element {
+/**
+ * Всё, что стоит над колонками: блокировка очереди, ошибки разбора файлов и
+ * отказ последнего переноса. Отдельный компонент — чтобы место отказа над
+ * доской проверялось статическим рендером без перетаскивания.
+ */
+export function BoardNotices({
+  lock,
+  failures,
+  failure,
+}: {
+  readonly lock: BacklogLockView;
+  readonly failures: readonly BacklogFailure[];
+  readonly failure: string | undefined;
+}): JSX.Element {
+  return (
+    <>
+      <BacklogLockNotice lock={lock} />
+
+      {failures.map((entry) => (
+        <Alert variant="destructive" key={entry.sourceFile}>
+          <AlertDescription>
+            <span className="mono">{entry.sourceFile}</span>: {entry.error}
+          </AlertDescription>
+        </Alert>
+      ))}
+
+      {failure === undefined ? null : (
+        <Alert variant="destructive">
+          <AlertDescription>{failure}</AlertDescription>
+        </Alert>
+      )}
+    </>
+  );
+}
+
+export function Scrum({
+  backlog,
+  navigate,
+}: {
+  readonly backlog: BacklogOverview | undefined;
+  readonly navigate: (href: string) => void;
+}): JSX.Element {
   const [selected, setSelected] = useState<string | undefined>(undefined);
   const [openItem, setOpenItem] = useState<string | undefined>(undefined);
   const [dragging, setDragging] = useState<string | undefined>(undefined);
@@ -627,12 +744,14 @@ export function Scrum({ backlog }: { readonly backlog: BacklogOverview | undefin
     );
 
     setFailure(undefined);
-    void moveBacklogItem({
-      project: view.projectKey,
-      slug,
-      column: target,
-      ...(before === undefined ? {} : { before }),
-    }).catch((cause: Error) => setFailure(cause.message));
+    void writeFailure(
+      moveBacklogItem({
+        project: view.projectKey,
+        slug,
+        column: target,
+        ...(before === undefined ? {} : { before }),
+      }),
+    ).then(setFailure);
   };
 
   const onDragStart = (event: DragStartEvent): void => setDragging(String(event.active.id));
@@ -657,19 +776,11 @@ export function Scrum({ backlog }: { readonly backlog: BacklogOverview | undefin
         <span className="mono small dim scrum-project-path">{view.projectPath}</span>
       </div>
 
-      {view.failures.map((entry) => (
-        <Alert variant="destructive" key={entry.sourceFile}>
-          <AlertDescription>
-            <span className="mono">{entry.sourceFile}</span>: {entry.error}
-          </AlertDescription>
-        </Alert>
-      ))}
-
-      {failure === undefined ? null : (
-        <Alert variant="destructive">
-          <AlertDescription>{failure}</AlertDescription>
-        </Alert>
-      )}
+      <BoardNotices
+        lock={projects.find((project) => project.projectKey === view.projectKey)?.lock ?? { state: 'free' }}
+        failures={view.failures}
+        failure={failure}
+      />
 
       {view.unplaced.map((entry) => (
         <div className="scrum-unplaced" key={entry.status}>
@@ -717,6 +828,7 @@ export function Scrum({ backlog }: { readonly backlog: BacklogOverview | undefin
             projectKey={view.projectKey}
             statusBySlug={statusBySlug}
             onClose={() => setOpenItem(undefined)}
+            navigate={navigate}
           />
         )}
       </div>

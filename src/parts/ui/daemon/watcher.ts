@@ -3,8 +3,9 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 
 import { listProjects, listRunsByKey } from '../../pipeline/run/journal/reader.js';
+import { isAbandoned, readOwner } from '../../pipeline/domain/lockfile.js';
 import { runPaths, usageStorePath } from '../../pipeline/run/journal/paths.js';
-import { buildBacklog, type BacklogOverview } from '../backlog.js';
+import { buildBacklog, lockPathOf, type BacklogOverview } from '../backlog.js';
 import { BOARD_FILE } from '../boardFile.js';
 import { buildOverview, type Overview, type RunOverview } from '../overview.js';
 import { buildWidgets, projectWidgetVersions, type WidgetsOverview } from '../widgets.js';
@@ -319,6 +320,20 @@ function fingerprint(
         } catch {
           backlogParts.push(`${project.key}/${name}:-`);
         }
+      }
+
+      // Lock-файл очереди: его взятие и снятие файлов очереди не трогают, а
+      // экран показывает занятую блокировку до попытки правки. Признак
+      // брошенности нужен отдельно: смерть процесса-владельца файла не меняет.
+      // Путь — из кэша вида очереди, чтобы не порождать git каждый такт.
+      const lockFile = lockPathOf(project.path);
+      try {
+        const stat = statSync(lockFile);
+        const owner = readOwner(lockFile);
+        const abandoned = owner !== undefined && owner !== 'unreadable' && isAbandoned(owner);
+        backlogParts.push(`${project.key}/lock:${stat.mtimeMs}:${stat.size}:${abandoned}`);
+      } catch {
+        backlogParts.push(`${project.key}/lock:-`);
       }
 
       // Версия каждого виджета уже несёт `mtime` и размер (`fingerprintVersion`

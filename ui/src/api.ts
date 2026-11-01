@@ -650,8 +650,27 @@ export interface BacklogItemView {
   readonly needs: readonly string[];
   readonly startedAt?: string;
   readonly reason?: string;
+  /** `claimed_by` как записан; показывается и владелец иной формы, чем `run:<id>`. */
+  readonly claimedBy?: string;
+  /** Идентификатор прогона-владельца, разобранный демоном (`parseRunOwner`). */
+  readonly ownerRunId?: string;
   readonly sourceFile: BacklogSourceFile;
 }
+
+/** Сверено построчно с `BacklogLockView` (`src/parts/ui/backlog.ts`). */
+export type BacklogLockView =
+  | { readonly state: 'free' }
+  | {
+      readonly state: 'held';
+      readonly command: string;
+      readonly pid: number;
+      readonly host: string;
+      readonly acquiredAt: string;
+      readonly abandoned: boolean;
+      readonly foreignHost: boolean;
+      readonly path: string;
+    }
+  | { readonly state: 'unreadable'; readonly path: string };
 
 /**
  * Отказ разбора одного файла очереди проекта: текст, файл и место внутри
@@ -674,6 +693,8 @@ export interface BacklogProjectView {
   readonly failures: readonly BacklogFailure[];
   /** Раскладка колонок доски (`.stepcast/board.yml`); без файла — встроенная. */
   readonly columns: readonly BoardColumnSpec[];
+  /** Блокировка очереди проекта — тем же кадром, что и пункты. */
+  readonly lock: BacklogLockView;
 }
 
 export interface BacklogOverview {
