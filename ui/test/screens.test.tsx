@@ -10,6 +10,7 @@ import shellPlugin, { SCREEN } from '../src/plugins/shell.tsx';
 import screensPlugin from '../src/plugins/screens.tsx';
 import routesPlugin from '../src/plugins/routes.tsx';
 import { bindRouterKernel } from '../src/router';
+import { BUILTIN_SCREENS } from '../src/screens/index';
 import { fakeEventSources } from './support/live';
 import { ROUTE_TARGET } from '@stepcast/slots';
 
@@ -387,5 +388,12 @@ describe('screens: вид цели route.target напрямую, вне мар�
     } finally {
       restoreFetch();
     }
+  });
+});
+
+describe('ui-packages-screen: таблица встроенных экранов', () => {
+  it('половина экрана пакетов зарегистрирована под screen-packages, прежней строки ui-packages в таблице нет', () => {
+    assert.equal(typeof BUILTIN_SCREENS['screen-packages'], 'function');
+    assert.equal(BUILTIN_SCREENS['ui-packages'], undefined);
   });
 });

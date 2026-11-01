@@ -1200,6 +1200,50 @@ export async function fetchSecrets(): Promise<SecretsOverview> {
   return json<SecretsOverview>(await fetch('/api/secrets'));
 }
 
+/**
+ * Пакеты слоёв проекта и home (`ui-packages-screen`): зеркало
+ * `PackageSummary` и `PackageProblem` (`src/parts/packages/summary.ts`) и ответа
+ * `GET /api/packages` (`src/parts/ui/screens/packages/server.ts`).
+ */
+export type PackageResourceKind = 'pipelines' | 'steps' | 'scripts' | 'plugins' | 'widgets' | 'dashboards' | 'routes';
+
+export interface PackageView {
+  readonly name: string;
+  readonly layer: 'project' | 'home';
+  readonly dir: string;
+  readonly status: 'ok' | 'broken' | 'shadowed';
+  readonly reason?: string;
+  readonly shadowedBy?: 'project' | 'home';
+  readonly version?: string;
+  readonly description?: string;
+  readonly provides: readonly PackageResourceKind[];
+  readonly contents: Readonly<Partial<Record<PackageResourceKind, readonly string[]>>>;
+  readonly unmetNeeds?: Readonly<Record<string, readonly string[]>>;
+}
+
+export interface PackageProblemView {
+  readonly layer: 'project' | 'home';
+  /** Один пакет — отказ файла, два и больше — конфликт имени в слое. */
+  readonly packages: readonly string[];
+  readonly kind: PackageResourceKind;
+  readonly id?: string;
+  readonly file?: string;
+  readonly message: string;
+}
+
+export interface PackagesOverview {
+  readonly packages: readonly PackageView[];
+  readonly problems: readonly PackageProblemView[];
+  /** Каталоги слоёв — для пустого слоя; слоя проекта нет, если демон не знает корня проекта. */
+  readonly layers?: { readonly project?: string; readonly home?: string };
+  /** Дерево плагинов не собралось: отказов плагинов в `problems` нет. */
+  readonly pluginsError?: string;
+}
+
+export async function fetchPackages(): Promise<PackagesOverview> {
+  return json<PackagesOverview>(await fetch('/api/packages'));
+}
+
 /** Здоровье установки (`ui-system-health`): зеркало `src/parts/ui/system.ts`. */
 export interface SystemEngine {
   readonly version?: string;

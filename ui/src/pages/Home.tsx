@@ -5,6 +5,7 @@ import { declaration as backlogDeclaration } from '../../../src/parts/ui/screens
 import { declaration as cleanupDeclaration } from '../../../src/parts/ui/screens/cleanup/declaration.ts';
 import { declaration as decisionsDeclaration } from '../../../src/parts/ui/screens/decisions/declaration.ts';
 import { declaration as pipelinesDeclaration } from '../../../src/parts/ui/screens/pipelines/declaration.ts';
+import { declaration as packagesDeclaration } from '../../../src/parts/ui/screens/packages/declaration.ts';
 import { declaration as proposalsDeclaration } from '../../../src/parts/ui/screens/proposals/declaration.ts';
 import { declaration as routesDeclaration } from '../../../src/parts/ui/screens/routes/declaration.ts';
 import { declaration as runsDeclaration } from '../../../src/parts/ui/screens/runs/declaration.ts';
@@ -133,6 +134,11 @@ export const SECTIONS: readonly SectionGroup[] = [
         target: screenTarget(widgetsDeclaration.id),
         title: widgetsDeclaration.title,
         description: 'Small React components rendered on this dashboard: the bundled catalog and what each project installed.',
+      },
+      {
+        target: screenTarget(packagesDeclaration.id),
+        title: packagesDeclaration.title,
+        description: 'Packages of the project and home layers: what each brings, whether it is in effect, and which resources failed.',
       },
       {
         target: screenTarget(routesDeclaration.id),

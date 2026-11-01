@@ -1,7 +1,7 @@
 import { join } from 'node:path';
 
 import { listPluginDirNames, reservedNameFailure } from '../../kernel/tree/discover.js';
-import { directoryOperations, type TreeOperation } from '../../kernel/tree/tree.js';
+import { directoryOperations, type TreeOperation, type TreeRowFailure } from '../../kernel/tree/tree.js';
 import { activePackages, type PackageIndex, type PackageLayer } from './index.js';
 
 /**
@@ -15,6 +15,20 @@ interface PackagePlugin {
   readonly id: string;
   readonly dir: string;
   readonly package: string;
+}
+
+/**
+ * Заведомый отказ конфликта двух пакетов: явный признак `conflict` отличает его
+ * от отказа имени встроенной строки не по тексту (`ui-packages-screen`, Решение 3).
+ * Ядро несёт объект отказа в строку дерева как есть (`applyOperation`).
+ */
+interface PackagePluginConflictFailure extends TreeRowFailure {
+  readonly conflict: readonly [string, string];
+}
+
+/** Пакеты конфликта, если заведомый отказ строки — конфликт пакетов одного слоя. */
+export function packagePluginConflict(failure: TreeRowFailure | undefined): readonly [string, string] | undefined {
+  return failure !== undefined && 'conflict' in failure ? (failure as PackagePluginConflictFailure).conflict : undefined;
 }
 
 /**
@@ -60,6 +74,11 @@ export function packagePluginOperations(
 
     const [first, second] = owners;
     if (first !== undefined && second !== undefined) {
+      const failure: PackagePluginConflictFailure = {
+        message: `Плагин ${plugin.id} приносят два пакета одного слоя — ${first.package} и ${second.package}`,
+        hint: 'Переименуйте каталог плагина в одном из пакетов, уберите один из пакетов либо положите свой плагин в свободный каталог .stepcast/plugins',
+        conflict: [first.package, second.package],
+      };
       operations.push(
         ...directoryOperations(
           [
@@ -67,10 +86,7 @@ export function packagePluginOperations(
               id: plugin.id,
               dir: first.dir,
               supersede: true,
-              failure: {
-                message: `Плагин ${plugin.id} приносят два пакета одного слоя — ${first.package} и ${second.package}`,
-                hint: 'Переименуйте каталог плагина в одном из пакетов, уберите один из пакетов либо положите свой плагин в свободный каталог .stepcast/plugins',
-              },
+              failure,
             },
           ],
           { layer, package: first.package },

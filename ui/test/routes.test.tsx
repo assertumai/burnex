@@ -10,6 +10,7 @@ import screensPlugin from '../src/plugins/screens.tsx';
 import routesPlugin from '../src/plugins/routes.tsx';
 import { bindRouterKernel } from '../src/router';
 import { TargetLink } from '../src/routeLink';
+import { PackageFailureAlert } from '../src/pages/RoutesEditor';
 import { fakeEventSources, type FakeSource } from './support/live';
 import { SCREEN } from '@stepcast/slots';
 
@@ -436,5 +437,27 @@ describe('ui-routes: ссылка на цель без маршрута', () => 
     assert.doesNotMatch(withoutRoute, /<a /);
     assert.match(withoutRoute, /прогон 42/);
     assert.match(withoutRoute, /no active route leads to target screen:screen-run/);
+  });
+});
+
+describe('ui-packages-screen: отказ маршрутов пакета ведёт на экран пакетов', () => {
+  const FAILURE = { packages: ['hello'], message: 'routes.yml не разобран' };
+
+  it('предупреждение packageFailures несёт ссылку на /packages', () => {
+    const kernel = freshKernel();
+    kernel.ctx.routes.set([{ id: 'screen-packages', path: '/packages', target: { kind: 'screen', id: 'screen-packages' } }], undefined);
+
+    const markup = renderToStaticMarkup(<PackageFailureAlert failure={FAILURE} navigate={() => {}} />);
+    assert.match(markup, /routes\.yml не разобран/);
+    assert.match(markup, /<a href="\/packages"/);
+  });
+
+  it('без маршрута на экран пакетов место остаётся и называет причину', () => {
+    const kernel = freshKernel();
+    kernel.ctx.routes.set([RUNS_ROUTE], undefined);
+
+    const markup = renderToStaticMarkup(<PackageFailureAlert failure={FAILURE} navigate={() => {}} />);
+    assert.doesNotMatch(markup, /<a /);
+    assert.match(markup, /no active route leads to target screen:screen-packages/);
   });
 });

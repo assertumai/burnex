@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { resolveConfig, type ResolvedConfig } from '../../pipeline/config/resolve.js';
 import type { RowOutcome } from '../../../kernel/load.js';
 import { loadPlugins } from '../../load.js';
+import { BUILTIN_ROW_IDS } from '../../rows.js';
 import { kernelFromRegistry, type Registry } from '../../../kernel/registry.js';
 import { resolveWithCachedKernel, type KernelCache } from '../pipelines.js';
 import { UI_ROWS, UI_SHELL_ROW } from '../rows.js';
@@ -143,6 +144,16 @@ function screenServices(registry: Registry): { screens: ScreensService; api: Api
   const screens = ctx.screens as ScreensService | undefined;
   const api = ctx.api as ApiService | undefined;
   return screens === undefined || api === undefined ? undefined : { screens, api };
+}
+
+/**
+ * Идентификаторы встроенных строк дерева демона — те же, что `resolveConfig`
+ * получает зарезервированными (`BUILTIN_ROW_IDS` плюс строки поставки витрины):
+ * каталог плагина с таким именем отказывает, а не заменяет строку. Функция, а
+ * не константа: модуль строк поставки импортирует этот модуль по кругу.
+ */
+export function daemonBuiltinRowIds(): readonly string[] {
+  return [...BUILTIN_ROW_IDS, ...UI_ROWS.map((row) => row.id)];
 }
 
 /** Отказ сборки в текст: причина приходит в `GET /api/screens` и показывается на странице. */

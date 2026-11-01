@@ -101,6 +101,7 @@ describe('ui-screens: состав экранов у демона', () => {
       'screen-cleanup',
       'screen-decisions',
       'screen-home',
+      'screen-packages',
       'screen-pipelines',
       'screen-proposals',
       'screen-routes',
@@ -125,6 +126,7 @@ describe('ui-screens: состав экранов у демона', () => {
       'screen-secrets': '/api/secrets',
       'screen-schedule': '/api/schedule',
       'screen-system': '/api/system',
+      'screen-packages': '/api/packages',
     };
     // Настройки принадлежат той же строке, что и перечисление моделей
     // (`ui-agents-settings-merge`): отдельного экрана настроек в составе нет.
@@ -344,7 +346,7 @@ describe('ui-screens: строка каркаса снята патчем', () =
     // `TypeError` мимо всякого разбора отказа и уронило бы демон.
     const rows = ['ui-shell', 'screen-home', 'screen-runs', 'screen-run', 'screen-pipelines', 'screen-widgets',
       'screen-backlog', 'screen-scrum', 'screen-usage', 'screen-cleanup', 'screen-agents', 'screen-secrets', 'screen-schedule', 'screen-system', 'screen-routes',
-      'screen-decisions', 'screen-proposals', 'ui-dashboards', 'ui-packages', 'ui-run-launch'];
+      'screen-decisions', 'screen-proposals', 'ui-dashboards', 'screen-packages', 'ui-run-launch'];
     writePatch(
       home,
       `version: 1\nkind: plugins-patch\nplugins:\n${rows

@@ -27,6 +27,8 @@ import {
   TableHeader,
   TableRow,
 } from '@stepcast/ui';
+import { TargetLink } from '../routeLink';
+import { useRoute } from '../router';
 import './routes.css';
 
 /**
@@ -217,7 +219,32 @@ function MenuCell({ route }: { readonly route: RouteRow }): JSX.Element {
   );
 }
 
+type PackageFailure = NonNullable<RoutesResponse['packageFailures']>[number];
+
+/**
+ * Отказ маршрутов пакета со ссылкой на экран «Packages»: там виден весь
+ * пакет — состав, статус и отказы прочих его ресурсов (`ui-packages-screen`).
+ */
+export function PackageFailureAlert({
+  failure,
+  navigate,
+}: {
+  readonly failure: PackageFailure;
+  readonly navigate: (href: string) => void;
+}): JSX.Element {
+  return (
+    <Alert variant="destructive" className="routes-listing-error">
+      {failure.id === undefined ? `Package ${failure.packages.join(', ')}: routes excluded` : `Route ${failure.id} excluded`}:{' '}
+      {failure.message}{' '}
+      <TargetLink target={{ kind: 'screen', id: 'screen-packages' }} navigate={navigate}>
+        Open Packages
+      </TargetLink>
+    </Alert>
+  );
+}
+
 export function RoutesEditor(): JSX.Element {
+  const { navigate } = useRoute();
   const [state, setState] = useState<LoadState>({ kind: 'loading' });
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
   const [saveError, setSaveError] = useState<string | undefined>(undefined);
@@ -304,9 +331,7 @@ export function RoutesEditor(): JSX.Element {
         </Alert>
       )}
       {packageFailures.map((failure) => (
-        <Alert key={`${failure.packages.join('+')}:${failure.id ?? ''}`} variant="destructive" className="routes-listing-error">
-          {failure.id === undefined ? `Package ${failure.packages.join(', ')}: routes excluded` : `Route ${failure.id} excluded`}: {failure.message}
-        </Alert>
+        <PackageFailureAlert key={`${failure.packages.join('+')}:${failure.id ?? ''}`} failure={failure} navigate={navigate} />
       ))}
       {routes.length === 0 && disabled.length === 0 ? (
         <EmptyState

@@ -100,6 +100,7 @@ describe('package list: перечень', () => {
     ]);
     assert.equal(listed[0]?.version, '0.2.0');
     assert.deepEqual(listed[0]?.provides, ['steps']);
+    assert.deepEqual((listed[0] as { contents?: unknown } | undefined)?.contents, { steps: ['greet'] });
     assert.match(listed[1]?.reason ?? '', /package\.yml/);
     assert.equal(listed[1]?.version, undefined);
   });

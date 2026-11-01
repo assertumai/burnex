@@ -5,6 +5,7 @@ import backlog from './backlog';
 import cleanup from './cleanup';
 import decisions from './decisions';
 import home from './home';
+import packages from './packages';
 import pipelines from './pipelines';
 import proposals from './proposals';
 import routes from './routes';
@@ -33,6 +34,7 @@ export const BUILTIN_SCREENS: Readonly<Record<string, ScreenPlugin>> = {
   'screen-pipelines': pipelines,
   'screen-decisions': decisions,
   'screen-widgets': widgets,
+  'screen-packages': packages,
   'screen-backlog': backlog,
   'screen-scrum': scrum,
   'screen-usage': usage,

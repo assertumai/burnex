@@ -1,0 +1,30 @@
+/*
+ * Экран «Packages»: секции слоёв и карточки пакетов. Цвета статусов — бейджи
+ * библиотеки, здесь только раскладка.
+ */
+.packages-layer { margin-bottom: 1.6rem; }
+.packages-layer-title {
+  font-size: .78rem;
+  font-weight: 600;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color: var(--muted-foreground);
+  margin: 0 0 .6rem;
+}
+.packages-card { margin-bottom: .8rem; }
+.packages-dir { margin: 0 0 .5rem; overflow-wrap: anywhere; font-size: .8rem; }
+.packages-reason { margin: 0 0 .6rem; }
+.packages-contents dl { margin: 0; }
+.packages-contents-row { display: flex; gap: .8rem; padding: .15rem 0; }
+.packages-contents-row dt { min-width: 6rem; color: var(--muted-foreground); font-size: .82rem; }
+.packages-contents-row dd { margin: 0; overflow-wrap: anywhere; font-size: .82rem; }
+/* Состав пакета, не участвующего в поиске, остаётся на виду, но приглушён. */
+.packages-contents-muted { opacity: .55; }
+.packages-contents-note { margin: 0 0 .3rem; font-size: .78rem; }
+.packages-needs { margin: .5rem 0 0; font-size: .82rem; }
+.packages-problems { list-style: none; margin: .7rem 0 0; padding: 0; display: grid; gap: .4rem; }
+.packages-problem-message { overflow-wrap: anywhere; font-size: .85rem; }
+.packages-hint { display: block; margin-top: .15rem; font-size: .78rem; }
+.packages-plugins-error { margin-bottom: 1rem; }
+/* Пока идёт повторное чтение, прежние карточки остаются на месте, но приглушены. */
+.packages-stale { opacity: .55; }

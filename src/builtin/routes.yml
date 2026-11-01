@@ -34,6 +34,13 @@ routes:
     target: { screen: screen-widgets }
     nav: { order: 2, group: extend }
 
+  # Пакеты слоёв проекта и home: состав, статус, отказы ресурсов
+  # (`ui-packages-screen`).
+  - id: screen-packages
+    path: /packages
+    target: { screen: screen-packages }
+    nav: { order: 3, group: extend }
+
   - id: screen-backlog
     path: /backlog
     target: { screen: screen-backlog }

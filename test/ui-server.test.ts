@@ -26,6 +26,11 @@ import { boardLockWait } from '../src/parts/ui/screens/scrum/server.js';
 import { findPackageRoot } from '../src/parts/pipeline/domain/package-schema.js';
 import { resetModelDiscoveryCache } from '../src/parts/pipeline/backend/models.js';
 import { dashboardPath } from '../src/parts/ui/daemon/assets.js';
+import { currentDaemonKernel, daemonBuiltinRowIds } from '../src/parts/ui/daemon/kernel.js';
+import { packagePluginConflict } from '../src/parts/packages/plugins.js';
+import { BUILTIN_ROW_IDS } from '../src/parts/rows.js';
+import { buildPackageIndex } from '../src/parts/packages/index.js';
+import { packageConflicts, summarizePackages } from '../src/parts/packages/summary.js';
 import { createUiServer, LOOPBACK, type UiServer } from '../src/parts/ui/daemon/server.js';
 import {
   createKernelCache,
@@ -5907,6 +5912,232 @@ describe('ui-daemon: пакеты без перезапуска (packages-direct
     assert.deepEqual(
       (pick(listed.json, 'packages') as Array<{ layer: string; status: string; shadowedBy?: string }>).map((p) => [p.layer, p.status, p.shadowedBy]),
       [['project', 'ok', undefined], ['home', 'shadowed', 'project']],
+    );
+  });
+
+  interface ProblemView {
+    readonly layer: string;
+    readonly packages: readonly string[];
+    readonly kind: string;
+    readonly id?: string;
+    readonly file?: string;
+    readonly message: string;
+  }
+
+  it('ответ несёт состав и каталоги слоёв, совпадающие со сводкой тех же корней', async (t) => {
+    const { runsRoot, projectRoot, home } = makeJournalBed();
+    seedRun(runsRoot, projectRoot, { runId: 'a' });
+    writePackage(projectRoot);
+    const watcher = createWatcher({ runsRoot, home, projectRoot, intervalMs: 10_000 });
+    t.after(() => watcher.dispose());
+    const server = await startServer(t, { runsRoot, home, projectRoot, watcher });
+
+    const listed = await fetchJson(server, '/api/packages');
+    const index = buildPackageIndex({ projectRoot, globalPath: join(home, '.stepcast', 'config.yml') });
+    assert.deepEqual(pick(listed.json, 'packages'), JSON.parse(JSON.stringify(summarizePackages(index))));
+    assert.deepEqual(pick(listed.json, 'packages', 0, 'contents'), {
+      widgets: ['clock'],
+      dashboards: ['ops'],
+      routes: ['pkg-ops'],
+    });
+    assert.deepEqual(pick(listed.json, 'layers'), {
+      project: join(projectRoot, '.stepcast', 'packages'),
+      home: join(home, '.stepcast', 'packages'),
+    });
+  });
+
+  it('дашборд пакета, не прошедший схему, — запись problems с файлом и причиной из failures', async (t) => {
+    const { runsRoot, projectRoot, home } = makeJournalBed();
+    seedRun(runsRoot, projectRoot, { runId: 'a' });
+    const dir = writePackage(projectRoot);
+    writeFileSync(join(dir, 'dashboards', 'ops.yml'), 'cells: oops\n');
+    const watcher = createWatcher({ runsRoot, home, projectRoot, intervalMs: 10_000 });
+    t.after(() => watcher.dispose());
+    const server = await startServer(t, { runsRoot, home, projectRoot, watcher });
+
+    const failure = watcher.currentDashboards().failures.find((item) => item.id === 'ops');
+    assert.ok(failure, 'состав дашбордов отказал');
+
+    const response = await fetchJson(server, '/api/packages');
+    const problems = pick(response.json, 'problems') as ProblemView[];
+    assert.deepEqual(problems, [
+      { layer: 'project', packages: ['hello'], kind: 'dashboards', id: 'ops', file: failure.file, message: failure.reason },
+    ]);
+  });
+
+  it('нечитаемый routes.yml пакета — одна запись problems без id; состав при этом пуст', async (t) => {
+    const { runsRoot, projectRoot, home } = makeJournalBed();
+    seedRun(runsRoot, projectRoot, { runId: 'a' });
+    const dir = writePackage(projectRoot);
+    writeFileSync(join(dir, 'routes.yml'), 'routes: [oops\n');
+    const watcher = createWatcher({ runsRoot, home, projectRoot, intervalMs: 10_000 });
+    t.after(() => watcher.dispose());
+    const server = await startServer(t, { runsRoot, home, projectRoot, watcher });
+
+    const response = await fetchJson(server, '/api/packages');
+    const problems = pick(response.json, 'problems') as ProblemView[];
+    assert.equal(problems.length, 1);
+    assert.deepEqual([problems[0]?.layer, problems[0]?.packages, problems[0]?.kind, problems[0]?.id], ['project', ['hello'], 'routes', undefined]);
+    assert.deepEqual(pick(response.json, 'packages', 0, 'provides'), ['widgets', 'dashboards', 'routes']);
+    assert.equal(pick(response.json, 'packages', 0, 'contents', 'routes'), undefined);
+  });
+
+  it('виджет `clock` в двух пакетах слоя — ровно одна запись с обоими пакетами; сломанный пакет конфликта не даёт', async (t) => {
+    const { runsRoot, projectRoot, home } = makeJournalBed();
+    seedRun(runsRoot, projectRoot, { runId: 'a' });
+    const packages = join(projectRoot, '.stepcast', 'packages');
+    for (const name of ['alpha', 'beta']) {
+      mkdirSync(join(packages, name, 'widgets'), { recursive: true });
+      writeFileSync(join(packages, name, 'package.yml'), `version: 1\nkind: package\nname: ${name}\ndescription: x\npackage_version: 0.1.0\n`);
+      writeFileSync(join(packages, name, 'widgets', 'clock.tsx'), WIDGET_SOURCE);
+    }
+    mkdirSync(join(packages, 'gamma', 'widgets'), { recursive: true });
+    writeFileSync(join(packages, 'gamma', 'package.yml'), 'name: [oops\n');
+    writeFileSync(join(packages, 'gamma', 'widgets', 'clock.tsx'), WIDGET_SOURCE);
+    const watcher = createWatcher({ runsRoot, home, projectRoot, intervalMs: 10_000 });
+    t.after(() => watcher.dispose());
+    const server = await startServer(t, { runsRoot, home, projectRoot, watcher });
+
+    const response = await fetchJson(server, '/api/packages');
+    const problems = pick(response.json, 'problems') as ProblemView[];
+    assert.equal(problems.length, 1);
+    assert.deepEqual([problems[0]?.layer, problems[0]?.packages, problems[0]?.kind, problems[0]?.id], ['project', ['alpha', 'beta'], 'widgets', 'clock']);
+    assert.match(problems[0]?.message ?? '', /alpha.*beta/);
+  });
+
+  it('конфликты packageConflicts по виджетам, дашбордам, маршрутам и плагинам совпадают с конфликтами самих составов', async (t) => {
+    const { runsRoot, projectRoot, home } = makeJournalBed();
+    seedRun(runsRoot, projectRoot, { runId: 'a' });
+    // Плагины пакетов собирает ядро демона по слою home, поэтому конфликт
+    // всех четырёх видов поднят там же.
+    const packages = join(home, '.stepcast', 'packages');
+    for (const name of ['alpha', 'beta']) {
+      const dir = join(packages, name);
+      mkdirSync(join(dir, 'widgets'), { recursive: true });
+      mkdirSync(join(dir, 'dashboards'), { recursive: true });
+      mkdirSync(join(dir, 'plugins', 'shared'), { recursive: true });
+      writeFileSync(join(dir, 'package.yml'), `version: 1\nkind: package\nname: ${name}\ndescription: x\npackage_version: 0.1.0\n`);
+      writeFileSync(join(dir, 'widgets', 'clock.tsx'), WIDGET_SOURCE);
+      writeFileSync(join(dir, 'dashboards', 'ops.yml'), CELL_YAML);
+      writeFileSync(join(dir, 'routes.yml'), ROUTES_YAML);
+    }
+    const watcher = createWatcher({ runsRoot, home, projectRoot, intervalMs: 10_000 });
+    t.after(() => watcher.dispose());
+    const kernelCache = createKernelCache();
+    const server = await startServer(t, { runsRoot, home, projectRoot, watcher, kernelCache });
+
+    const key = (kind: string, layer: string, id: string | undefined): string => `${kind}:${layer}:${id}`;
+    const fromComposition = new Set<string>();
+    for (const widget of watcher.currentWidgets().projects.flatMap((project) => project.widgets)) {
+      if (widget.error !== undefined) fromComposition.add(key('widgets', widget.source.layer, widget.id));
+    }
+    for (const failure of watcher.currentDashboards().failures) {
+      if (failure.package !== undefined && /two packages/.test(failure.reason)) fromComposition.add(key('dashboards', failure.layer, failure.id));
+    }
+    for (const failure of watcher.currentRoutes().failures) {
+      if (failure.packages.length >= 2) fromComposition.add(key('routes', failure.layer, failure.id));
+    }
+    const kernel = await currentDaemonKernel(kernelCache, home);
+    for (const outcome of kernel.outcomes) {
+      const { source } = outcome.row;
+      if (outcome.status === 'failed' && source.kind === 'directory' && packagePluginConflict(outcome.row.failure) !== undefined) {
+        fromComposition.add(key('plugins', source.layer, outcome.row.id));
+      }
+    }
+
+    const covered = new Set(['widgets', 'dashboards', 'routes', 'plugins']);
+    const fromFunction = new Set(
+      packageConflicts(watcher.currentPackages(), { reservedPluginIds: daemonBuiltinRowIds() })
+        .filter((conflict) => covered.has(conflict.kind))
+        .map((conflict) => key(conflict.kind, conflict.layer, conflict.id)),
+    );
+    assert.deepEqual([...fromFunction].sort(), [...fromComposition].sort());
+    assert.equal(fromFunction.size, 4);
+
+    // В ответе каждый конфликт — одна запись, без второй копии от состава.
+    const response = await fetchJson(server, '/api/packages');
+    const problems = pick(response.json, 'problems') as ProblemView[];
+    assert.deepEqual(
+      problems.map((problem) => key(problem.kind, problem.layer, problem.id)).sort(),
+      [...fromFunction].sort(),
+    );
+    assert.ok(problems.every((problem) => problem.packages.join() === 'alpha,beta'));
+  });
+
+  it('отказавший плагин пакета home — запись problems с одним пакетом и именем каталога', async (t) => {
+    const { runsRoot, projectRoot, home } = makeJournalBed();
+    seedRun(runsRoot, projectRoot, { runId: 'a' });
+    const dir = join(home, '.stepcast', 'packages', 'solo');
+    mkdirSync(join(dir, 'plugins', 'broken'), { recursive: true });
+    writeFileSync(join(dir, 'package.yml'), 'version: 1\nkind: package\nname: solo\ndescription: x\npackage_version: 0.1.0\n');
+    // Ядро демона собрано по слою home, поэтому плагин пакета проекта в
+    // `problems` не входит (docs/packages.md, «Витрина»).
+    const projectDir = join(projectRoot, '.stepcast', 'packages', 'local');
+    mkdirSync(join(projectDir, 'plugins', 'broken'), { recursive: true });
+    writeFileSync(join(projectDir, 'package.yml'), 'version: 1\nkind: package\nname: local\ndescription: x\npackage_version: 0.1.0\n');
+    const watcher = createWatcher({ runsRoot, home, projectRoot, intervalMs: 10_000 });
+    t.after(() => watcher.dispose());
+    const server = await startServer(t, { runsRoot, home, projectRoot, watcher, kernelCache: createKernelCache() });
+
+    const response = await fetchJson(server, '/api/packages');
+    const problems = pick(response.json, 'problems') as ProblemView[];
+    assert.equal(problems.length, 1, JSON.stringify(problems));
+    assert.deepEqual([problems[0]?.layer, problems[0]?.packages, problems[0]?.kind, problems[0]?.id], ['home', ['solo'], 'plugins', 'broken']);
+    assert.equal(pick(response.json, 'pluginsError'), undefined);
+  });
+
+  it('плагин с именем встроенной строки в двух пакетах слоя — отказ каждого пакета, конфликта нет', async (t) => {
+    const { runsRoot, projectRoot, home } = makeJournalBed();
+    seedRun(runsRoot, projectRoot, { runId: 'a' });
+    const reserved = BUILTIN_ROW_IDS[0] as string;
+    for (const name of ['alpha', 'beta']) {
+      const dir = join(home, '.stepcast', 'packages', name);
+      mkdirSync(join(dir, 'plugins', reserved), { recursive: true });
+      writeFileSync(join(dir, 'package.yml'), `version: 1\nkind: package\nname: ${name}\ndescription: x\npackage_version: 0.1.0\n`);
+    }
+    const watcher = createWatcher({ runsRoot, home, projectRoot, intervalMs: 10_000 });
+    t.after(() => watcher.dispose());
+    const server = await startServer(t, { runsRoot, home, projectRoot, watcher, kernelCache: createKernelCache() });
+
+    // Ядро здесь напрямую не зовётся: сервер держит свою обёртку кеша
+    // (`shareKernelCache`), состояние `currentDaemonKernel` ведётся по объекту
+    // кеша, и сборка через одну обёртку делает вызов через другую попаданием
+    // без прежних итогов строк. Отказы и отсутствие конфликта видны в ответе.
+    const response = await fetchJson(server, '/api/packages');
+    const problems = pick(response.json, 'problems') as ProblemView[];
+    assert.deepEqual(
+      problems.map((problem) => [problem.layer, problem.packages, problem.kind, problem.id]),
+      [
+        ['home', ['alpha'], 'plugins', reserved],
+        ['home', ['beta'], 'plugins', reserved],
+      ],
+    );
+    assert.ok(problems.every((problem) => /встроенной строки/.test(problem.message)));
+
+    assert.deepEqual(packageConflicts(watcher.currentPackages(), { reservedPluginIds: daemonBuiltinRowIds() }), []);
+  });
+
+  it('конфликт плагина двух пакетов не прячет отказ другого плагина того же пакета', async (t) => {
+    const { runsRoot, projectRoot, home } = makeJournalBed();
+    seedRun(runsRoot, projectRoot, { runId: 'a' });
+    for (const name of ['alpha', 'beta']) {
+      const dir = join(home, '.stepcast', 'packages', name);
+      mkdirSync(join(dir, 'plugins', 'shared'), { recursive: true });
+      writeFileSync(join(dir, 'package.yml'), `version: 1\nkind: package\nname: ${name}\ndescription: x\npackage_version: 0.1.0\n`);
+    }
+    mkdirSync(join(home, '.stepcast', 'packages', 'alpha', 'plugins', 'broken'), { recursive: true });
+    const watcher = createWatcher({ runsRoot, home, projectRoot, intervalMs: 10_000 });
+    t.after(() => watcher.dispose());
+    const server = await startServer(t, { runsRoot, home, projectRoot, watcher, kernelCache: createKernelCache() });
+
+    const response = await fetchJson(server, '/api/packages');
+    const problems = pick(response.json, 'problems') as ProblemView[];
+    assert.deepEqual(
+      problems.map((problem) => [problem.packages, problem.kind, problem.id]),
+      [
+        [['alpha'], 'plugins', 'broken'],
+        [['alpha', 'beta'], 'plugins', 'shared'],
+      ],
     );
   });
 });

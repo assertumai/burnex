@@ -660,13 +660,15 @@ claimed_by: run:2026-11-01T08-56-42Z-43b4d0
 
 ## ui-packages-screen
 
-status: todo
+status: done
 title: Экран «Packages»: каталог пакетов, их состав и ошибки слоя
 why: `GET /api/packages` уже отдаёт пакеты (`packages-directory-layer`), но в витрине они видны только предупреждением на «Маршруты»; какие пайплайны, шаги, виджеты и дашборды пришли из пакета и почему пакет исключён — не видно (`docs/ui-proposals.md`, п. 2).
 done_when: экран по слоям home/проект перечисляет пакеты с путём, составом (пайплайны, шаги, плагины, виджеты, дашборды, маршруты) и причинами отказа файлов и конфликтов `id`; маршрут `/packages` в группе `extend`; тесты; `docs/packages.md` ссылается на экран
 group: ui-config
 needs: packages-directory-layer
 source: docs/ui-proposals.md, п. 2
+started_at: 2026-11-01T09:40:45.707Z
+claimed_by: run:2026-11-01T09-40-44Z-e0ff5b
 
 ## ui-backlog-owner-and-lock
 

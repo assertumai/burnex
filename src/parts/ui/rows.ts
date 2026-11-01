@@ -5,6 +5,7 @@ import { row as backlogRow } from './screens/backlog/server.js';
 import { row as cleanupRow } from './screens/cleanup/server.js';
 import { row as decisionsRow } from './screens/decisions/server.js';
 import { row as homeRow } from './screens/home/server.js';
+import { row as packagesRow } from './screens/packages/server.js';
 import { row as pipelinesRow } from './screens/pipelines/server.js';
 import { row as proposalsRow } from './screens/proposals/server.js';
 import { row as routesRow } from './screens/routes/server.js';
@@ -17,7 +18,6 @@ import { row as systemRow } from './screens/system/server.js';
 import { row as usageRow } from './screens/usage/server.js';
 import { row as widgetsRow } from './screens/widgets/server.js';
 import { row as dashboardsRow } from './dashboards/row.js';
-import { row as packagesRow } from './packages/row.js';
 import { row as runLaunchRow } from './runLaunch/row.js';
 import { row as uiShellRow } from './shell/row.js';
 
@@ -48,6 +48,7 @@ export const SCREEN_ROWS: readonly BuiltinRow[] = [
   pipelinesRow,
   decisionsRow,
   widgetsRow,
+  packagesRow,
   backlogRow,
   scrumRow,
   usageRow,
@@ -66,7 +67,7 @@ export const SCREEN_ROWS: readonly BuiltinRow[] = [
  * `route.target`, а не на отдельном экране, поэтому у `ui-dashboards` нет
  * объявления в `ScreensService`.
  */
-export const API_ROWS: readonly BuiltinRow[] = [dashboardsRow, packagesRow, runLaunchRow];
+export const API_ROWS: readonly BuiltinRow[] = [dashboardsRow, runLaunchRow];
 
 /** Строки поставки витрины целиком: каркас, затем экраны, затем строки без экрана. */
 export const UI_ROWS: readonly BuiltinRow[] = [UI_SHELL_ROW, ...SCREEN_ROWS, ...API_ROWS];
