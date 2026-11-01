@@ -73,19 +73,19 @@ describe('ui-routes-file: сборка таблицы трёх слоёв', () =
     assert.equal(cleanup?.sources.navGroup?.layer, 'home');
     assert.equal(cleanup?.definition.nav?.order, 6);
     const agents = result.entries.find((candidate) => candidate.id === 'screen-agents');
-    assert.equal(agents?.definition.nav?.group, 'system');
+    assert.equal(agents?.definition.nav?.group, 'config');
     assert.equal(agents?.sources.navGroup?.layer, 'builtin');
     const secrets = result.entries.find((candidate) => candidate.id === 'screen-secrets');
     assert.equal(secrets?.definition.path, '/secrets');
-    assert.equal(secrets?.definition.nav?.group, 'system');
+    assert.equal(secrets?.definition.nav?.group, 'config');
     assert.equal(secrets?.definition.nav?.order, 8);
     const schedule = result.entries.find((candidate) => candidate.id === 'screen-schedule');
     assert.equal(schedule?.definition.path, '/schedule');
-    assert.equal(schedule?.definition.nav?.group, 'system');
+    assert.equal(schedule?.definition.nav?.group, 'config');
     assert.equal(schedule?.definition.nav?.order, 9);
     const system = result.entries.find((candidate) => candidate.id === 'screen-system');
     assert.equal(system?.definition.path, '/system');
-    assert.equal(system?.definition.nav?.group, 'system');
+    assert.equal(system?.definition.nav?.group, 'config');
     assert.equal(system?.definition.nav?.order, 10);
   });
 

@@ -69,7 +69,7 @@ function useKernelContext(): Context {
 }
 
 /** Порядок групп поставки; незнакомая группа встаёт после них. */
-const NAV_GROUP_ORDER: readonly string[] = ['work', 'extend', 'system'];
+export const NAV_GROUP_ORDER: readonly string[] = ['work', 'extend', 'config', 'system'];
 
 function navGroupLabel(group: string): string {
   return group.charAt(0).toUpperCase() + group.slice(1);

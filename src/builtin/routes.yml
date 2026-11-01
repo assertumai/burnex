@@ -39,7 +39,7 @@ routes:
   - id: screen-packages
     path: /packages
     target: { screen: screen-packages }
-    nav: { order: 3, group: extend }
+    nav: { order: 3, group: config }
 
   - id: screen-backlog
     path: /backlog
@@ -69,7 +69,7 @@ routes:
     path: /agents/:tab?
     target: { screen: screen-agents }
     values: { tab: [default, backends, tiers, policy] }
-    nav: { order: 7, group: system, active_for: [screen-settings] }
+    nav: { order: 7, group: config, active_for: [screen-settings] }
 
   # Прежний адрес настроек — строка-псевдоним с чужой целью, не редирект
   # (design.md Решение 2): `id` сохранён, чтобы перекрытия пользовательских
@@ -84,21 +84,21 @@ routes:
   - id: screen-secrets
     path: /secrets
     target: { screen: screen-secrets }
-    nav: { order: 8, group: system }
+    nav: { order: 8, group: config }
 
   # Расписания пайплайнов: только просмотр, правка — в документе пайплайна
   # (`ui-schedule-view`).
   - id: screen-schedule
     path: /schedule
     target: { screen: screen-schedule }
-    nav: { order: 9, group: system }
+    nav: { order: 9, group: config }
 
   # Здоровье установки: версия и способ установки, демон, автозапуск, бэкенды,
   # модели без цены (`ui-system-health`).
   - id: screen-system
     path: /system
     target: { screen: screen-system }
-    nav: { order: 10, group: system }
+    nav: { order: 10, group: config }
 
   - id: screen-routes
     path: /routes

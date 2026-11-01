@@ -706,7 +706,7 @@ claimed_by: run:2026-11-01T11-33-14Z-14c8fb
 
 ## ui-nav-config-group
 
-status: todo
+status: done
 title: Группа меню `config`: Agents, Secrets, Schedule, Packages, System
 why: После появления экранов конфигурации группа `system` смешает наблюдение (Usage, Cleanup) с настройкой; отдельная группа — одна правка `routes.yml` и порядка групп в каркасе (`docs/ui-proposals.md`, п. 3).
 done_when: `src/builtin/routes.yml` объявляет `nav.group: config` у экранов настроек, каркас знает порядок групп `work, extend, config, system`; `docs/routes.md` перечисляет группы поставки; тест порядка групп
@@ -714,6 +714,8 @@ group: ui-nav
 track: express
 needs: ui-secrets-screen, ui-schedule-view, ui-system-health
 source: docs/ui-proposals.md, п. 3
+started_at: 2026-11-01T12:03:35.685Z
+claimed_by: run:2026-11-01T12-03-34Z-6eb623
 
 ## container-step-isolation
 
