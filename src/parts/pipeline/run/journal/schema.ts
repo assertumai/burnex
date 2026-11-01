@@ -489,6 +489,27 @@ export const RunManifestSchema = z
      * отсюда, собственного флага у него нет.
      */
     mode: z.literal('shadow').optional(),
+    /**
+     * Происхождение прогона (`ui-schedule-view`): запущен по записи
+     * `triggers.schedule` — её номер, выражение и пояс на момент запуска
+     * (документ правят, номера сдвигаются), момент расписания и признак догона
+     * (его выставляет запускающий, а не выводит читатель). `kind` оставлен
+     * закрытым перечислением под будущий вид триггера. Ключа нет у ручного
+     * прогона и у прогона прежней версии; `resume` его не наследует. Манифест
+     * с этим полем прежней версией движка не читается — тот же необратимый
+     * шаг, что у `mode` и `pid`.
+     */
+    trigger: z
+      .object({
+        kind: z.literal('schedule'),
+        entry: z.number().int().min(0),
+        cron: z.string(),
+        timezone: z.string().optional(),
+        moment: z.string(),
+        catchup: z.boolean(),
+      })
+      .strict()
+      .optional(),
     git: z.object({ head: z.string().optional(), dirty_hash: z.string().optional() }).strict(),
     backends: z.record(z.string(), z.object({ command: z.string(), version: z.string().optional() }).strict()),
     started_at: z.string(),

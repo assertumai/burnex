@@ -79,6 +79,13 @@ routes:
     target: { screen: screen-secrets }
     nav: { order: 8, group: system }
 
+  # Расписания пайплайнов: только просмотр, правка — в документе пайплайна
+  # (`ui-schedule-view`).
+  - id: screen-schedule
+    path: /schedule
+    target: { screen: screen-schedule }
+    nav: { order: 9, group: system }
+
   - id: screen-routes
     path: /routes
     target: { screen: screen-routes }

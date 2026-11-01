@@ -9,6 +9,7 @@ import { declaration as proposalsDeclaration } from '../../../src/parts/ui/scree
 import { declaration as routesDeclaration } from '../../../src/parts/ui/screens/routes/declaration.ts';
 import { declaration as runsDeclaration } from '../../../src/parts/ui/screens/runs/declaration.ts';
 import { declaration as scrumDeclaration } from '../../../src/parts/ui/screens/scrum/declaration.ts';
+import { declaration as scheduleDeclaration } from '../../../src/parts/ui/screens/schedule/declaration.ts';
 import { declaration as secretsDeclaration } from '../../../src/parts/ui/screens/secrets/declaration.ts';
 import { declaration as usageDeclaration } from '../../../src/parts/ui/screens/usage/declaration.ts';
 import { declaration as widgetsDeclaration } from '../../../src/parts/ui/screens/widgets/declaration.ts';
@@ -161,6 +162,11 @@ export const SECTIONS: readonly SectionGroup[] = [
         target: screenTarget(secretsDeclaration.id),
         title: secretsDeclaration.title,
         description: 'Which secrets the pipelines and backends expect and whether each one resolves here; values are never shown.',
+      },
+      {
+        target: screenTarget(scheduleDeclaration.id),
+        title: scheduleDeclaration.title,
+        description: 'Which pipelines are declared on a schedule, the next moment and the last scheduled run; read-only.',
       },
     ],
   },

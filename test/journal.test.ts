@@ -43,7 +43,7 @@ import {
   stepDirName,
 } from '../src/parts/pipeline/run/journal/paths.js';
 import { isRunOrAncestor, runOwnerJudge } from '../src/parts/pipeline/run/journal/owner.js';
-import { AttemptRecordSchema, EventSchema, RunStatusSchema, type RunStatus } from '../src/parts/pipeline/run/journal/schema.js';
+import { AttemptRecordSchema, EventSchema, RunManifestSchema, RunStatusSchema, type RunStatus } from '../src/parts/pipeline/run/journal/schema.js';
 import { StepcastError } from '../src/kernel/errors.js';
 import { expandPipeline } from '../src/parts/pipeline/document/expand.js';
 import { runPipeline } from '../src/parts/pipeline/run/runner.js';
@@ -2005,5 +2005,33 @@ describe('shadow-run-mode: журнал', () => {
     const text = readFileSync(path, 'utf8');
     assert.equal(text.includes('s3cr3t-value'), false);
     assert.match(text, /curl -H \*\*\* https/);
+  });
+});
+
+describe('ui-schedule-view: trigger в манифесте', () => {
+  const trigger = {
+    kind: 'schedule' as const,
+    entry: 0,
+    cron: '0 4 * * *',
+    timezone: 'Europe/Berlin',
+    moment: '2026-11-01T03:00:00Z',
+    catchup: true,
+  };
+
+  it('манифест с trigger читается, а без него — trigger не определён', () => {
+    const { runsRoot, projectRoot } = bed();
+    const journal = RunJournal.create({ runsRoot, projectRoot });
+    journal.writeManifest(sampleManifest(journal.paths.runId));
+    assert.equal(readManifest(journal.paths).trigger, undefined);
+
+    journal.writeManifest({ ...sampleManifest(journal.paths.runId), trigger });
+    assert.deepEqual(readManifest(journal.paths).trigger, trigger);
+  });
+
+  it('лишний ключ внутри trigger и неизвестный kind отклоняются', () => {
+    const base = sampleManifest('r');
+    assert.equal(RunManifestSchema.safeParse({ ...base, trigger }).success, true);
+    assert.equal(RunManifestSchema.safeParse({ ...base, trigger: { ...trigger, extra: 1 } }).success, false);
+    assert.equal(RunManifestSchema.safeParse({ ...base, trigger: { ...trigger, kind: 'github' } }).success, false);
   });
 });

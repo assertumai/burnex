@@ -130,6 +130,32 @@ require('node:fs').writeFileSync(process.argv[1] + '.' + (process.argv.includes(
     assert.deepEqual(argvOf('shadow').slice(-3), ['run', 'stepcast.yml', '--shadow']);
   });
 
+  it('scheduled превращается во флаги --scheduled/--schedule-entry, а догон добавляет --catchup', async () => {
+    const { runsRoot, projectRoot } = makeJournalBed();
+    const key = projectKey(projectRoot);
+    const executable = join(projectRoot, 'argv-dump-scheduled');
+    writeFileSync(
+      executable,
+      `#!/usr/bin/env node
+require('node:fs').writeFileSync(process.argv[1] + '.' + (process.argv.includes('--catchup') ? 'catchup' : 'ontime'), JSON.stringify(process.argv.slice(2)));
+`,
+    );
+    chmodSync(executable, 0o700);
+
+    const base = { cwd: projectRoot, pipeline: 'stepcast.yml', runsRoot, projectKey: key, execPath: executable };
+    launchRun({ ...base, scheduled: { entry: 2, moment: '2026-11-01T03:00:00Z', catchup: false } });
+    launchRun({ ...base, scheduled: { entry: 2, moment: '2026-11-01T03:00:00Z', catchup: true } });
+    await waitFor(() => existsSync(`${executable}.ontime`) && existsSync(`${executable}.catchup`));
+
+    const argvOf = (suffix: string): string[] => JSON.parse(readFileSync(`${executable}.${suffix}`, 'utf8'));
+    assert.deepEqual(argvOf('ontime').slice(-6), [
+      'run', 'stepcast.yml', '--scheduled', '2026-11-01T03:00:00Z', '--schedule-entry', '2',
+    ]);
+    assert.deepEqual(argvOf('catchup').slice(-7), [
+      'run', 'stepcast.yml', '--scheduled', '2026-11-01T03:00:00Z', '--schedule-entry', '2', '--catchup',
+    ]);
+  });
+
   it('достраивает терминальный журнал после обрыва посреди восстановления', () => {
     const { runsRoot, projectRoot } = makeJournalBed();
     const key = projectKey(projectRoot);

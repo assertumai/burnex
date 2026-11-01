@@ -38,6 +38,12 @@ export interface LaunchRunOptions {
   readonly env?: Readonly<Record<string, string>>;
   /** Shadow-режим прогона — флагом `--shadow` (`shadow-run-mode`). */
   readonly shadow?: boolean;
+  /**
+   * Прогон по расписанию — флагами `--scheduled`, `--schedule-entry` и
+   * `--catchup` (`ui-schedule-view`). Опция для сервиса в демоне; `POST
+   * /api/run` её от формы не принимает.
+   */
+  readonly scheduled?: { readonly entry: number; readonly moment: string; readonly catchup: boolean };
   readonly execPath?: string;
   /** Куда сказать об отказе самого порождения. По умолчанию — журнал демона (`stderr`). */
   readonly onError?: (error: Error) => void;
@@ -79,6 +85,10 @@ export const launchRun: LaunchRunFn = (options) => {
   for (const [name, value] of Object.entries(options.inputs ?? {})) argv.push('--input', `${name}=${value}`);
   for (const [name, value] of Object.entries(options.env ?? {})) argv.push('--env', `${name}=${value}`);
   if (options.shadow === true) argv.push('--shadow');
+  if (options.scheduled !== undefined) {
+    argv.push('--scheduled', options.scheduled.moment, '--schedule-entry', String(options.scheduled.entry));
+    if (options.scheduled.catchup) argv.push('--catchup');
+  }
 
   const child = spawn(options.execPath ?? process.execPath, argv, {
     cwd: options.cwd,

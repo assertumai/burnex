@@ -119,6 +119,14 @@ export interface RunOverview {
   readonly wakeAt?: string;
   /** Ожидания решения человека, идущие прямо сейчас — тем же полем, что и `wakeAt`. */
   readonly awaiting?: readonly AwaitingDecision[];
+  /** Прогон запущен по записи расписания; у ручного прогона поля нет. */
+  readonly trigger?: {
+    readonly entry: number;
+    readonly cron: string;
+    readonly timezone?: string;
+    readonly moment: string;
+    readonly catchup: boolean;
+  };
   readonly swept: boolean;
   /** У прогона нет каталога вовсе — виден по записи хранилища расхода. Отличимо от `swept`. */
   readonly filesGone: boolean;
@@ -1172,6 +1180,68 @@ export interface SecretsOverview {
 /** Каждый вызов — настоящая проба провайдеров: кеша статусов нет ни здесь, ни у демона. */
 export async function fetchSecrets(): Promise<SecretsOverview> {
   return json<SecretsOverview>(await fetch('/api/secrets'));
+}
+
+export interface LastScheduledRun {
+  readonly runId: string;
+  readonly moment: string;
+  readonly catchup: boolean;
+  readonly status?: string;
+}
+
+export interface ScheduleEntryView {
+  readonly index: number;
+  readonly cron?: string;
+  readonly timezone?: string;
+  /** Пояс не объявлен в записи — это пояс машины демона. */
+  readonly defaultTimezone: boolean;
+  readonly next?: string;
+  readonly error?: string;
+  readonly lastRun?: LastScheduledRun;
+}
+
+export interface SchedulePipelineView {
+  readonly pipeline: string;
+  readonly entries: readonly ScheduleEntryView[];
+}
+
+export interface SchedulePipelineError {
+  readonly pipeline: string;
+  readonly error: string;
+  readonly errorFile?: string;
+  readonly errorAt?: string;
+  readonly errorHint?: string;
+}
+
+export interface ProjectScheduleView {
+  readonly projectKey: string;
+  readonly projectPath: string;
+  readonly error?: string;
+  readonly errorFile?: string;
+  readonly errorAt?: string;
+  readonly errorHint?: string;
+  readonly pipelines: readonly SchedulePipelineView[];
+  readonly pipelineErrors: readonly SchedulePipelineError[];
+}
+
+export type TriggerServiceView =
+  | { readonly present: false }
+  | {
+      readonly present: true;
+      readonly enabled: boolean;
+      readonly keepAwake: boolean;
+      readonly requireNetwork: boolean;
+      readonly maxCatchupHours: number;
+    };
+
+export interface ScheduleOverview {
+  readonly projects: readonly ProjectScheduleView[];
+  readonly service: TriggerServiceView;
+  readonly generatedAt: string;
+}
+
+export async function fetchSchedule(): Promise<ScheduleOverview> {
+  return json<ScheduleOverview>(await fetch('/api/schedule'));
 }
 
 /**

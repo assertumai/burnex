@@ -5024,6 +5024,27 @@ describe('ui-daemon: POST /api/run', () => {
     assert.equal(calls[0]?.pipeline, 'stepcast.yml');
   });
 
+  it('происхождение «по расписанию» от формы не принимается: запрос с scheduled отклонён без пуска', async (t) => {
+    const { runsRoot, projectRoot } = makeJournalBed();
+    seedRun(runsRoot, projectRoot, { runId: 'seed' });
+    writeFileSync(join(projectRoot, 'stepcast.yml'), MINIMAL_PIPELINE_YAML);
+    const { launchRun, calls } = stubLaunch();
+    const server = await createUiServer({ runsRoot, port: 0, launchRun });
+    t.after(() => server.close());
+
+    const written = await sendJson(server, {
+      method: 'POST',
+      path: '/api/run',
+      body: JSON.stringify({
+        project: projectKey(projectRoot),
+        pipeline: 'stepcast.yml',
+        scheduled: { entry: 0, moment: '2026-11-01T03:00:00Z', catchup: false },
+      }),
+    });
+    assert.equal(written.code, 400);
+    assert.equal(calls.length, 0);
+  });
+
   it('неизвестный проект отклонён без единого пуска', async (t) => {
     const { runsRoot } = makeJournalBed();
     const { launchRun, calls } = stubLaunch();
@@ -5858,5 +5879,40 @@ describe('ui-daemon: пакеты без перезапуска (packages-direct
       (pick(listed.json, 'packages') as Array<{ layer: string; status: string; shadowedBy?: string }>).map((p) => [p.layer, p.status, p.shadowedBy]),
       [['project', 'ok', undefined], ['home', 'shadowed', 'project']],
     );
+  });
+});
+
+describe('ui-schedule-view: GET /api/schedule', () => {
+  /** Состав дерева проекта с размерами: любая запись файла проекта меняет снимок. */
+  function snapshot(dir: string): string[] {
+    return readdirSync(dir, { recursive: true, encoding: 'utf8' })
+      .sort()
+      .map((name) => {
+        const path = join(dir, name);
+        return `${name}:${statSync(path).isDirectory() ? 'dir' : statSync(path).size}`;
+      });
+  }
+
+  it('отвечает расписанием проекта и не меняет файлов проекта; других методов нет', async (t) => {
+    const { runsRoot, projectRoot, home } = makeJournalBed();
+    seedRun(runsRoot, projectRoot, { runId: 'a' });
+    mkdirSync(join(projectRoot, '.stepcast', 'pipelines'), { recursive: true });
+    writeFileSync(
+      join(projectRoot, '.stepcast', 'pipelines', 'nightly.yml'),
+      `kind: pipeline\nname: nightly\ntriggers:\n  schedule:\n    - { cron: '0 4 * * *', timezone: Europe/Berlin }\njobs:\n  build:\n    steps:\n      - { id: compile, run: [echo, ok] }\n`,
+    );
+    const { config } = resolveConfig({ cwd: home, home, projectPath: null });
+    const server = await startServer(t, { runsRoot, home, config });
+
+    const before = snapshot(projectRoot);
+    const response = await fetchJson(server, '/api/schedule');
+    assert.equal(response.code, 200);
+    assert.deepEqual(pick(response.json, 'service'), { present: false });
+    assert.equal(pick(response.json, 'projects', 0, 'pipelines', 0, 'entries', 0, 'cron'), '0 4 * * *');
+    assert.deepEqual(snapshot(projectRoot), before);
+
+    const written = await sendJson(server, { method: 'POST', path: '/api/schedule', body: '{}' });
+    assert.notEqual(written.code, 200);
+    assert.deepEqual(snapshot(projectRoot), before);
   });
 });

@@ -498,6 +498,18 @@ const PAGE_TITLE = 'Runs';
 const PAGE_DESCRIPTION =
   'Every run across all projects: filter and sort the table, open a run for its jobs and steps, or tick runs to delete their files.';
 
+/**
+ * Метка прогона, запущенного по расписанию: `schedule` вовремя, `catch-up` —
+ * догон пропущенного момента. Момент расписания — в подсказке. У ручного
+ * прогона метки нет.
+ */
+export function TriggerBadge({ trigger }: { readonly trigger: RunOverview['trigger'] }): JSX.Element | null {
+  if (trigger === undefined) return null;
+  return (
+    <Badge title={`scheduled for ${fmtTime(trigger.moment)}`}>{trigger.catchup ? 'catch-up' : 'schedule'}</Badge>
+  );
+}
+
 export function Runs({
   overview,
   navigate,
@@ -802,6 +814,7 @@ export function Runs({
                       <Badge variant={statusBadgeVariant(run.status)}>{run.status ?? 'unknown'}</Badge>
                       {run.swept ? <Badge>swept</Badge> : null}
                       {run.filesGone ? <Badge>files gone</Badge> : null}
+                      <TriggerBadge trigger={run.trigger} />
                       {run.problem?.kind === 'version-skew' ? (
                         <Badge>reader out of date</Badge>
                       ) : run.problem?.kind === 'legacy-journal' ? (

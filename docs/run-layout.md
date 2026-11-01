@@ -1915,7 +1915,7 @@ stepcast gc --stats [--older-than 1y] [--failed] [--project <ключ>]
 ```
 stepcast init                                    создать stepcast.yml и пример работы
 stepcast lint [pipeline] [--budget] [--resolve]
-stepcast run <pipeline> [--input k=v] [--env KEY=VALUE] [--dry-run] [--shadow] [--quiet]
+stepcast run <pipeline> [--input k=v] [--env KEY=VALUE] [--dry-run] [--shadow] [--scheduled <момент> --schedule-entry <N> [--catchup]] [--quiet]
 stepcast status [--run <id>]
 stepcast resume <run-id> [--from <job|job/step>] [--set k=v]
 stepcast apply <run-id> [--job <job> | --lane <lane>]   наложить результат на текущее дерево
@@ -1953,6 +1953,25 @@ stepcast widgets [--json]                        состав виджетов �
 режим из манифеста исходного прогона и пишет его в новый — флага `--shadow` у
 него нет: возобновление shadow-прогона «по-настоящему» смешало бы в одной
 цепочке неисполненные шаги с исполненными.
+
+### Происхождение прогона: `trigger`
+
+`run --scheduled <момент> --schedule-entry <N> [--catchup]` помечает прогон как
+запущенный по записи `triggers.schedule` (см. [формат
+пайплайна](pipeline-format.md#расписание-triggersschedule)). Метка лежит в
+`run.json` ключом `trigger`: `{ kind: "schedule", entry, cron, timezone?,
+moment, catchup }`. Выражение и пояс скопированы в манифест, а не только номер
+записи: документ правят, номера сдвигаются, и экран «Schedule» ищет «последний
+запуск по записи» по совпадению файла пайплайна, выражения и пояса. `catchup`
+выставляет запускающий — он выбирал момент из пропущенных; читатель его не
+выводит из разницы `started_at` и `moment`. У ручного прогона и у прогона
+прежней версии ключа нет. `resume` его не наследует: возобновление — действие
+человека, и `resumed_from` уже говорит, откуда прогон взялся. Бейдж `schedule`
+или `catch-up` в списке прогонов читается из этого ключа.
+
+Манифест с `trigger` прежняя версия движка не прочтёт: схема манифеста строгая,
+и откат несимметричен — тот же необратимый шаг, что у `mode` и `pid`. Ключ
+появляется только у прогонов, запущенных с этими флагами.
 
 Коды возврата: `0` — успех, `1` — работа завершилась отказом, `2` — ошибка
 конфигурации или линта, `3` — остановлено по бюджету (включая упор в окно

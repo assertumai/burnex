@@ -25,7 +25,7 @@ import {
   rootTracksPart,
   workspacePathNeedsCopy,
 } from '../run/workspace.js';
-import { isKnownTimeZone, isSatisfiable, parseCron } from './trigger/cron.js';
+import { checkScheduleEntry } from './trigger/entry.js';
 import { formatDuration, formatMoney, formatTokens } from '../../../kernel/units.js';
 import type {
   ContextEntry,
@@ -2689,47 +2689,15 @@ function checkTriggers(pipeline: ExpandedPipeline['pipeline'], push: (diagnostic
   const schedule = pipeline.triggers?.schedule ?? [];
 
   for (const [index, entry] of schedule.entries()) {
+    const checked = checkScheduleEntry(entry, index);
+    if (checked.ok) continue;
     const at = `triggers.schedule.${index}`;
-
-    if (entry.cron === undefined || entry.cron.trim() === '') {
-      push({
-        severity: 'error',
-        message: `Запись расписания ${index} не содержит обязательного поля cron`,
-        file: pipeline.file,
-        at: `${at}.cron`,
-      });
-      continue;
-    }
-
-    const parsed = parseCron(entry.cron);
-    if (!parsed.ok) {
-      push({
-        severity: 'error',
-        message: `Запись расписания ${index}: ${parsed.reason}`,
-        file: pipeline.file,
-        at: `${at}.cron`,
-      });
-      continue;
-    }
-
-    if (entry.timezone !== undefined && !isKnownTimeZone(entry.timezone)) {
-      push({
-        severity: 'error',
-        message: `Запись расписания ${index}: неизвестный часовой пояс ${entry.timezone}`,
-        file: pipeline.file,
-        at: `${at}.timezone`,
-      });
-      continue;
-    }
-
-    if (!isSatisfiable(parsed.mask)) {
-      push({
-        severity: 'error',
-        message: `Запись расписания ${index}: расписание невыполнимо — такой день в этом месяце не наступает`,
-        file: pipeline.file,
-        at,
-      });
-    }
+    push({
+      severity: 'error',
+      message: checked.reason,
+      file: pipeline.file,
+      at: checked.at === '' ? at : `${at}.${checked.at}`,
+    });
   }
 }
 

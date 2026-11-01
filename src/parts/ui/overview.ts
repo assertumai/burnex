@@ -58,6 +58,18 @@ export interface RunOverview {
    * из состояния без нового маршрута — экран «Решения» берёт этот же обзор.
    */
   readonly awaiting?: readonly AwaitingDecision[];
+  /**
+   * Прогон запущен по записи расписания (`ui-schedule-view`) — из манифеста,
+   * а не из состояния сервиса: признак принадлежит прогону. Отсутствует у
+   * ручного прогона и у манифеста прежней формы.
+   */
+  readonly trigger?: {
+    readonly entry: number;
+    readonly cron: string;
+    readonly timezone?: string;
+    readonly moment: string;
+    readonly catchup: boolean;
+  };
   /** Прогон после уборки: подробностей на диске уже нет, но каталог остался. */
   readonly swept: boolean;
   /**
@@ -283,6 +295,17 @@ function readRun(
     ...(wakeAt === undefined ? {} : { wakeAt }),
     ...(awaiting === undefined || awaiting.length === 0 ? {} : { awaiting }),
     ...(durationMs === undefined ? {} : { durationMs }),
+    ...(manifest?.trigger === undefined
+      ? {}
+      : {
+          trigger: {
+            entry: manifest.trigger.entry,
+            cron: manifest.trigger.cron,
+            ...(manifest.trigger.timezone === undefined ? {} : { timezone: manifest.trigger.timezone }),
+            moment: manifest.trigger.moment,
+            catchup: manifest.trigger.catchup,
+          },
+        }),
     // Каталог работ исчезает только после уборки: движок создаёт его всегда.
     swept: !existsSync(paths.jobs),
     filesGone: false,

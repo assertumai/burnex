@@ -55,6 +55,31 @@ describe('ui-dashboard: обзор всех проектов и прогонов
     assert.equal(done?.status, 'success');
   });
 
+  // Сценарий: «Прогон по расписанию отличим в списке»
+  it('несёт trigger из манифеста; у ручного прогона и прежнего манифеста его нет', () => {
+    const { runsRoot, projectRoot } = makeJournalBed();
+    const trigger = {
+      kind: 'schedule' as const,
+      entry: 1,
+      cron: '0 4 * * *',
+      timezone: 'Europe/Berlin',
+      moment: '2026-11-01T03:00:00Z',
+      catchup: true,
+    };
+    seedRun(runsRoot, projectRoot, { runId: 'scheduled', manifest: { trigger } });
+    seedRun(runsRoot, projectRoot, { runId: 'manual' });
+
+    const runs = buildOverview(runsRoot).projects[0]?.runs ?? [];
+    assert.deepEqual(runs.find((run) => run.runId === 'scheduled')?.trigger, {
+      entry: 1,
+      cron: '0 4 * * *',
+      timezone: 'Europe/Berlin',
+      moment: '2026-11-01T03:00:00Z',
+      catchup: true,
+    });
+    assert.equal('trigger' in (runs.find((run) => run.runId === 'manual') ?? {}), false);
+  });
+
   // Сценарий: «Проект без записи в указателе»
   it('показывает проект без пути, если его нет в указателе', () => {
     const { runsRoot, projectRoot } = makeJournalBed();

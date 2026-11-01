@@ -156,6 +156,12 @@ export interface RunOptions {
    * берёт режим из манифеста исходного прогона — флага у `resume` нет.
    */
   readonly mode?: 'shadow';
+  /**
+   * Происхождение прогона по расписанию (`run --scheduled`). В отличие от
+   * `mode`, возобновление его не наследует: возобновление — действие человека,
+   * и `resumed_from` уже говорит, откуда прогон взялся.
+   */
+  readonly trigger?: RunManifest['trigger'];
   /** Подмена адаптера бэкенда: тесты подставляют поддельный. */
   readonly adapterFor?: (name: string) => BackendAdapter;
   /**
@@ -386,6 +392,7 @@ export async function runPipeline(options: RunOptions): Promise<RunResult> {
     inputs: pipeline.inputs,
     ...(Object.keys(envOverrides).length === 0 ? {} : { env_overrides: envOverrides }),
     ...(mode === undefined ? {} : { mode }),
+    ...(options.trigger === undefined ? {} : { trigger: options.trigger }),
     git: {},
     backends: Object.fromEntries(
       Object.entries(config.backends).map(([name, backend]) => [name, { command: backend.command }]),

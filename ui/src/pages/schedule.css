@@ -1,0 +1,18 @@
+/*
+ * Экран «Schedule»: по проекту — одна таблица записей расписания. Цвета —
+ * бейджи и предупреждения библиотеки, здесь только раскладка.
+ */
+.schedule-project { margin-bottom: 1.6rem; }
+.schedule-service { margin-bottom: 1.4rem; }
+.schedule-subhead { margin: 0 0 .5rem; font-size: .9rem; }
+.schedule-flags { display: grid; grid-template-columns: max-content 1fr; gap: .2rem 1rem; margin: 0; }
+.schedule-flags dd { margin: 0; }
+.schedule-table { width: 100%; border-collapse: collapse; font-size: .85rem; }
+.schedule-table th,
+.schedule-table td { text-align: left; vertical-align: top; padding: .4rem .6rem; border-bottom: 1px solid var(--border); }
+.schedule-table th { font-weight: 600; color: var(--muted-foreground); font-size: .76rem; }
+.schedule-error { color: var(--destructive); overflow-wrap: anywhere; }
+.schedule-pipeline-error { margin-top: .8rem; }
+@media (max-width: 720px) {
+  .schedule-table { display: block; overflow-x: auto; }
+}

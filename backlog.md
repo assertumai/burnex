@@ -627,12 +627,14 @@ claimed_by: run:2026-11-01T06-59-32Z-368dfc
 
 ## ui-schedule-view
 
-status: todo
+status: done
 title: Экран «Schedule»: триггеры расписания пайплайнов, ближайший момент, догон и флаги
 why: Расписание с догоном, `keep_awake` и `require_network` (`schedule-trigger`, `schedule-catchup-and-keep-awake`) задаётся только в документе пайплайна, а витрина не показывает ни когда что сработает, ни был ли догон; в `Runs.tsx` следов догона нет, вопреки `docs/ui-proposals.md` (`docs/ui-proposals.md`, п. 2).
 done_when: экран перечисляет по проекту пайплайны с `on.schedule`: выражение, ближайший момент, последний запуск по расписанию, признак догона, `keep_awake` и `require_network`; прогон, запущенный расписанием или догоном, помечен в списке прогонов; правка расписания с экрана не делается — документ пайплайна витрина не пишет; тесты; `docs/pipeline-format.md` ссылается на экран
 group: ui-config
 source: docs/ui-proposals.md, п. 2
+started_at: 2026-11-01T07:34:23.834Z
+claimed_by: run:2026-11-01T07-34-22Z-88e6d2
 
 ## ui-system-health
 

@@ -64,6 +64,8 @@ const PostBodySchema = z
      * `external` у шагов проверяет он сам — здесь только форма значения.
      */
     shadow: z.boolean().optional(),
+    // `scheduled` опции `launchRun` здесь нарочно нет: происхождение «по
+    // расписанию» объявляет сервис, а не форма, и `.strict()` отклоняет ключ.
   })
   .strict();
 
