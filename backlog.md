@@ -695,12 +695,14 @@ claimed_by: run:2026-11-01T11-02-13Z-825f78
 
 ## ui-run-graph-loops
 
-status: todo
+status: done
 title: Проходы группы (`loops`) на графе прогона
 why: Группа работ с `loops` (`job-group-loops`) исполняется несколько раз, а граф прогона рисует каждую работу один раз и показывает только попытки шага; сколько проходов было и на каком остановились — не видно (`docs/ui-proposals.md`, п. 2).
 done_when: узел работы в группе с `loops` показывает число проходов и текущий; раскрытие работы даёт выход по каждому проходу; `attempts` шага остаются как есть; тесты снимка и графа
 group: ui-runs
 source: docs/ui-proposals.md, п. 2
+started_at: 2026-11-01T11:33:15.378Z
+claimed_by: run:2026-11-01T11-33-14Z-14c8fb
 
 ## ui-nav-config-group
 

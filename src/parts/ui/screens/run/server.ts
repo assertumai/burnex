@@ -100,6 +100,12 @@ const handleStepOutput: ApiHandler = (req, res, env) => {
     return;
   }
 
+  const pass = readNonNegativeInt(url, 'pass');
+  if (pass === INVALID || pass === 0) {
+    sendJson(res, 400, { error: 'pass must be a positive integer' });
+    return;
+  }
+
   const stdoutOffset = readNonNegativeInt(url, 'stdoutOffset');
   const stderrOffset = readNonNegativeInt(url, 'stderrOffset');
   if (stdoutOffset === INVALID || stderrOffset === INVALID) {
@@ -113,6 +119,7 @@ const handleStepOutput: ApiHandler = (req, res, env) => {
       200,
       readStepOutput(paths, jobId, stepId, {
         ...(attempt === undefined ? {} : { attempt }),
+        ...(pass === undefined ? {} : { pass }),
         ...(stdoutOffset === undefined ? {} : { stdoutOffset }),
         ...(stderrOffset === undefined ? {} : { stderrOffset }),
       }),

@@ -14,7 +14,7 @@ import {
   PageHeader,
   statusBadgeVariant,
 } from '@stepcast/ui';
-import { fetchRun, resumeRun, type JobSnapshot, type JournalProblem, type RunSnapshot, type StepSnapshot } from '../api';
+import { fetchRun, resumeRun, type JobLoop, type JobSnapshot, type JournalProblem, type RunSnapshot, type StepSnapshot } from '../api';
 import { fmtDuration, fmtMoney, fmtSpan, fmtTime, fmtTokens } from '../format';
 import { Cost } from '../components/Cost';
 import { FileView } from '../components/FileView';
@@ -77,16 +77,54 @@ function attemptModelsNote(step: StepSnapshot): string | undefined {
     : `declared ${step.model} · executed with: ${executedLabel}`;
 }
 
+/**
+ * Проход, который показывает карточка работы. `picked` пуст, пока читатель не
+ * выбирал прошлый проход: тогда карточка идёт за последним, и новый проход,
+ * пришедший живым потоком, переключает показ на себя. Выбранный проход, чей
+ * каталог исчез, тоже уступает последнему.
+ */
+export function shownPass(loop: JobLoop, picked: number | undefined): number | undefined {
+  const last = loop.passes.at(-1);
+  return picked !== undefined && loop.passes.includes(picked) ? picked : last;
+}
+
+/**
+ * Проход для запроса вывода шага. Для последнего он не передаётся вовсе:
+ * демон и так отдаёт последний, и поведение идущего прохода остаётся прежним.
+ */
+export function stepPass(loop: JobLoop | undefined, picked: number | undefined): number | undefined {
+  if (loop === undefined) return undefined;
+  const shown = shownPass(loop, picked);
+  return shown === loop.passes.at(-1) ? undefined : shown;
+}
+
+/**
+ * Ключ вывода шага: меняется вместе с показанным проходом, включая последний.
+ * Одного `stepPass` для сброса мало: когда последний проход сменяется новым,
+ * он остаётся пустым, и накопленный вывод и смещения прежнего прохода
+ * дописывались бы файлом нового, а дочитанный опрос не перезапустился бы.
+ */
+export function stepOutputKey(loop: JobLoop | undefined, picked: number | undefined): string {
+  const shown = loop === undefined ? undefined : shownPass(loop, picked);
+  return shown === undefined ? 'last' : `pass-${shown}`;
+}
+
 function Step({
   address,
   jobId,
   step,
+  pass,
+  outputKey,
   asOf,
   navigate,
 }: {
   readonly address: string;
   readonly jobId: string;
   readonly step: StepSnapshot;
+  /** Выбранный не последний проход цикла участника. */
+  readonly pass: number | undefined;
+  /** Ключ вывода шага по показанному проходу — см. `stepOutputKey`. */
+  readonly outputKey: string;
   /** Дата прейскуранта прогона — для подсказки к метке оценки. */
   readonly asOf: string | undefined;
   readonly navigate: (href: string) => void;
@@ -179,13 +217,22 @@ function Step({
       {step.files.length === 0 ? null : (
         <div className="row">
           <span className="label">files</span>
+          {/* Список файлов в снимке — от последнего прохода, а вывод ниже — от выбранного. */}
+          {pass === undefined ? null : <span className="kind dim">last pass</span>}
           {step.files.map((file) => (
             <FileView key={file.path} address={address} file={file} />
           ))}
         </div>
       )}
 
-      <StepOutput address={address} jobId={jobId} stepId={step.id} kind={step.kind} />
+      <StepOutput
+        key={outputKey}
+        address={address}
+        jobId={jobId}
+        stepId={step.id}
+        kind={step.kind}
+        {...(pass === undefined ? {} : { pass })}
+      />
     </div>
   );
 }
@@ -265,6 +312,14 @@ function ProblemNotice({ problem }: { readonly problem: JournalProblem }): JSX.E
   );
 }
 
+function loopSummary(loop: JobLoop): string {
+  const where =
+    loop.current !== undefined
+      ? `pass ${loop.current} of ${loop.maxIterations}`
+      : `${loop.iterations} of ${loop.maxIterations} passes`;
+  return `Loop ${loop.id}: ${where}${loop.verdict === undefined ? '' : `, ${loop.verdict}`}`;
+}
+
 function Job({
   address,
   job,
@@ -276,6 +331,13 @@ function Job({
   readonly asOf: string | undefined;
   readonly navigate: (href: string) => void;
 }): JSX.Element {
+  // undefined — карточка идёт за последним проходом; см. `shownPass`.
+  const [picked, setPicked] = useState<number | undefined>(undefined);
+  const loop = job.loop;
+  const shown = loop === undefined ? undefined : shownPass(loop, picked);
+  const pass = stepPass(loop, picked);
+  const outputKey = stepOutputKey(loop, picked);
+
   return (
     <div className="job">
       <div className="job-head">
@@ -298,6 +360,30 @@ function Job({
       </div>
       {job.description === undefined ? null : <div className="desc">{job.description}</div>}
       {job.reason === undefined ? null : <div className="desc">{job.reason}</div>}
+
+      {loop === undefined ? null : (
+        <div className="row">
+          <span className="label">loop</span>
+          <span className={loop.verdict === 'exhausted' ? 'desc loop-failed' : 'desc'}>{loopSummary(loop)}</span>
+          {/* Переключатель предлагает только проходы с каталогом: прочитать можно лишь их. */}
+          {loop.passes.length < 2 ? null : (
+            <div className="passes">
+              {loop.passes.map((value) => (
+                <Button
+                  key={value}
+                  variant="outline"
+                  size="sm"
+                  className={value === shown ? 'active' : undefined}
+                  disabled={value === shown}
+                  onClick={() => setPicked(value === loop.passes.at(-1) ? undefined : value)}
+                >
+                  pass {value}
+                </Button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       <div className="row">
         <span className="label">input</span>
@@ -329,7 +415,7 @@ function Job({
       {job.data === undefined ? null : <Pairs label="data" pairs={job.data} />}
 
       {job.steps.map((step) => (
-        <Step key={step.id} address={address} jobId={job.id} step={step} asOf={asOf} navigate={navigate} />
+        <Step key={step.id} address={address} jobId={job.id} step={step} pass={pass} outputKey={outputKey} asOf={asOf} navigate={navigate} />
       ))}
     </div>
   );
@@ -553,7 +639,7 @@ export function RunDetail({
         <Card className="run-card">
           <CardContent>
             {current.alive === true || current.filesGone ? null : <ResumeFromJob address={address} jobId={job.id} />}
-            <Job address={address} job={job} asOf={current.costCatalogAsOf} navigate={navigate} />
+            <Job key={job.id} address={address} job={job} asOf={current.costCatalogAsOf} navigate={navigate} />
           </CardContent>
         </Card>
       )}

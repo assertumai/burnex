@@ -1,8 +1,8 @@
 import { closeSync, existsSync, openSync, readdirSync, readSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { findStepDir, isRunAlive } from '../pipeline/run/journal/reader.js';
-import type { RunPaths } from '../pipeline/run/journal/paths.js';
+import { findStepDir, isRunAlive, listLoopPasses } from '../pipeline/run/journal/reader.js';
+import { type RunPaths } from '../pipeline/run/journal/paths.js';
 import { MAX_FILE_BYTES, trimPartialUtf8 } from './file.js';
 
 /**
@@ -21,6 +21,8 @@ export interface StepOutputQuery {
   /** Присутствие поля — сама просьба прочитать поток; смещение — 0 для первого чтения. */
   readonly stdoutOffset?: number;
   readonly stderrOffset?: number;
+  /** Проход цикла; без него берётся последний. Прохода без каталога ответ не подменяет. */
+  readonly pass?: number;
 }
 
 export interface StreamChunk {
@@ -41,6 +43,8 @@ export interface StepOutputResult {
   /** Попытки, чьи файлы вывода есть на диске, по возрастанию. Пусто — каталога шага нет. */
   readonly attempts: readonly number[];
   readonly attempt?: number;
+  /** Прочитанный проход — только у работы с проходовой раскладкой (участник цикла). */
+  readonly pass?: number;
   /**
    * Дописывать больше нечего: шаг уже не пишет — его запись легла в каталог
    * шага, запрошена не последняя попытка либо прогон не жив (design.md,
@@ -173,11 +177,25 @@ export function readStepOutput(
   stepId: string,
   query: StepOutputQuery = {},
 ): StepOutputResult {
-  const dir = findStepDir(paths, jobId, stepId);
-  if (dir === undefined) return { attempts: [], done: !isRunAlive(paths) };
+  const passes = listLoopPasses(paths, jobId);
+  const lastPass = passes.at(-1);
+  // Проход у работы без проходовой раскладки — такого прохода нет: пустой
+  // ответ, а не вывод единственного каталога.
+  if (query.pass !== undefined && lastPass === undefined) {
+    return { attempts: [], done: !isRunAlive(paths) };
+  }
+  const pass = lastPass === undefined ? undefined : (query.pass ?? lastPass);
+  // Прошлый проход дописан по определению: шаг, оборванный посреди (отмена
+  // прохода), step.json не оставил бы, и опрос жил бы, пока жив прогон. Это
+  // верно и для прошлого прохода, где шаг не начинался вовсе.
+  const pastPass = pass !== undefined && lastPass !== undefined && pass < lastPass;
+  const empty = (): StepOutputResult => ({ attempts: [], done: pastPass || !isRunAlive(paths) });
+
+  const dir = findStepDir(paths, jobId, stepId, undefined, undefined, pass);
+  if (dir === undefined) return empty();
 
   const attempts = listAttempts(dir);
-  if (attempts.length === 0) return { attempts: [], done: !isRunAlive(paths) };
+  if (attempts.length === 0) return empty();
 
   const lastAttempt = attempts.at(-1) as number;
   const attempt =
@@ -193,13 +211,15 @@ export function readStepOutput(
       ? undefined
       : readAppended(join(dir, `stderr${suffix}.log`), query.stderrOffset);
 
-  const writing = !isStepFinished(dir) && attempt === lastAttempt && isRunAlive(paths);
+  const writing =
+    !isStepFinished(dir) && attempt === lastAttempt && !pastPass && isRunAlive(paths);
   const unread = (chunk: StreamChunk | undefined): boolean =>
     chunk !== undefined && chunk.offset < chunk.bytes;
 
   return {
     attempts,
     attempt,
+    ...(pass === undefined ? {} : { pass }),
     done: !writing && !unread(stdout) && !unread(stderr),
     ...(stdout === undefined ? {} : { stdout }),
     ...(stderr === undefined ? {} : { stderr }),

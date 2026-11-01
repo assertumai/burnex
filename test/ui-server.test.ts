@@ -3875,6 +3875,148 @@ describe('ui-dashboard: вывод шага', () => {
     assert.equal(finished.json.done, true, 'запись шага этой итерации легла в её каталог');
   });
 
+  describe('проход цикла', () => {
+    /** Каталог шага участника цикла: `jobs/<job>/steps/pass-<n>/01-<step>`. */
+    function makePassDir(
+      runsRoot: string,
+      projectRoot: string,
+      runId: string,
+      pass: number,
+      content: string,
+    ): string {
+      const paths = runPaths(runsRoot, projectKey(projectRoot), runId);
+      const dir = stepDir(paths, 'build', 1, 'compile', undefined, undefined, pass);
+      mkdirSync(dir, { recursive: true });
+      writeFileSync(join(dir, 'stdout.log'), content);
+      return dir;
+    }
+
+    it('читает запрошенный проход, без pass — последний, и называет прочитанный в ответе', async (t) => {
+      const { runsRoot, projectRoot } = makeJournalBed();
+      seedRun(runsRoot, projectRoot, { runId: 'a' });
+      const key = projectKey(projectRoot);
+      makePassDir(runsRoot, projectRoot, 'a', 1, 'проход один\n');
+      makePassDir(runsRoot, projectRoot, 'a', 2, 'проход два\n');
+      const server = await startServer(t, { runsRoot });
+
+      const first = await fetchJson(server, outputPath(key, 'a', 'build', 'compile', { pass: 1, stdoutOffset: 0 }));
+      assert.equal(first.json.pass, 1);
+      assert.equal(pick(first.json, 'stdout', 'content'), 'проход один\n');
+
+      const latest = await fetchJson(server, outputPath(key, 'a', 'build', 'compile', { stdoutOffset: 0 }));
+      assert.equal(latest.json.pass, 2);
+      assert.equal(pick(latest.json, 'stdout', 'content'), 'проход два\n');
+    });
+
+    it('у работы вне цикла поля pass в ответе нет', async (t) => {
+      const { runsRoot, projectRoot } = makeJournalBed();
+      seedRun(runsRoot, projectRoot, { runId: 'a' });
+      const key = projectKey(projectRoot);
+      const dir = makeStepDir(runsRoot, projectRoot, 'a', 'build', 'compile');
+      writeFileSync(join(dir, 'stdout.log'), 'x');
+      const server = await startServer(t, { runsRoot });
+
+      const out = await fetchJson(server, outputPath(key, 'a', 'build', 'compile', { stdoutOffset: 0 }));
+      assert.equal('pass' in out.json, false);
+    });
+
+    it('проход без каталога отвечает пустым списком попыток, а не чужим проходом', async (t) => {
+      const { runsRoot, projectRoot } = makeJournalBed();
+      seedRun(runsRoot, projectRoot, { runId: 'a' });
+      const key = projectKey(projectRoot);
+      makePassDir(runsRoot, projectRoot, 'a', 2, 'проход два\n');
+      const server = await startServer(t, { runsRoot });
+
+      const missing = await fetchJson(server, outputPath(key, 'a', 'build', 'compile', { pass: 1, stdoutOffset: 0 }));
+      assert.deepEqual(missing.json.attempts, []);
+      assert.equal('stdout' in missing.json, false);
+    });
+
+    it('попытки шага перечисляются внутри выбранного прохода', async (t) => {
+      const { runsRoot, projectRoot } = makeJournalBed();
+      seedRun(runsRoot, projectRoot, { runId: 'a' });
+      const key = projectKey(projectRoot);
+      makePassDir(runsRoot, projectRoot, 'a', 1, 'проход один\n');
+      const second = makePassDir(runsRoot, projectRoot, 'a', 2, 'п2 попытка 1\n');
+      writeFileSync(join(second, 'stdout.2.log'), 'п2 попытка 2\n');
+      const server = await startServer(t, { runsRoot });
+
+      const inSecond = await fetchJson(server, outputPath(key, 'a', 'build', 'compile', { pass: 2, stdoutOffset: 0 }));
+      assert.deepEqual(inSecond.json.attempts, [1, 2]);
+      assert.equal(pick(inSecond.json, 'stdout', 'content'), 'п2 попытка 2\n');
+      const inFirst = await fetchJson(server, outputPath(key, 'a', 'build', 'compile', { pass: 1, stdoutOffset: 0 }));
+      assert.deepEqual(inFirst.json.attempts, [1]);
+    });
+
+    it('прошлый проход идущего прогона дописан, даже без записи шага', async (t) => {
+      const { runsRoot, projectRoot } = makeJournalBed();
+      seedRun(runsRoot, projectRoot, {
+        runId: 'a',
+        status: 'running',
+        manifest: { started_at: new Date().toISOString(), pid: process.pid },
+      });
+      const key = projectKey(projectRoot);
+      makePassDir(runsRoot, projectRoot, 'a', 1, 'оборван\n');
+      makePassDir(runsRoot, projectRoot, 'a', 2, 'идёт\n');
+      const server = await startServer(t, { runsRoot });
+
+      const past = await fetchJson(server, outputPath(key, 'a', 'build', 'compile', { pass: 1, stdoutOffset: 0 }));
+      assert.equal(past.json.done, true);
+      const latest = await fetchJson(server, outputPath(key, 'a', 'build', 'compile', { stdoutOffset: 0 }));
+      assert.equal(latest.json.done, false);
+    });
+
+    it('прошлый проход идущего прогона без каталога шага или без логов дописан и не опрашивается', async (t) => {
+      const { runsRoot, projectRoot } = makeJournalBed();
+      seedRun(runsRoot, projectRoot, {
+        runId: 'a',
+        status: 'running',
+        manifest: { started_at: new Date().toISOString(), pid: process.pid },
+      });
+      const key = projectKey(projectRoot);
+      const paths = runPaths(runsRoot, key, 'a');
+      // Проход 1: шаг не начинался — каталога шага нет, только каталог прохода.
+      mkdirSync(join(paths.jobs, 'build', 'steps', 'pass-1'), { recursive: true });
+      // Проход 2: каталог шага есть, логов в нём нет.
+      mkdirSync(stepDir(paths, 'build', 1, 'compile', undefined, undefined, 2), { recursive: true });
+      makePassDir(runsRoot, projectRoot, 'a', 3, 'идёт\n');
+      const server = await startServer(t, { runsRoot });
+
+      for (const pass of [1, 2]) {
+        const out = await fetchJson(server, outputPath(key, 'a', 'build', 'compile', { pass, stdoutOffset: 0 }));
+        assert.deepEqual(out.json.attempts, [], `pass=${pass}`);
+        assert.equal(out.json.done, true, `pass=${pass}`);
+      }
+    });
+
+    it('проход у работы без проходовой раскладки — пустой ответ, а не её единственный вывод', async (t) => {
+      const { runsRoot, projectRoot } = makeJournalBed();
+      seedRun(runsRoot, projectRoot, { runId: 'a' });
+      const key = projectKey(projectRoot);
+      const dir = makeStepDir(runsRoot, projectRoot, 'a', 'build', 'compile');
+      writeFileSync(join(dir, 'stdout.log'), 'вне цикла\n');
+      const server = await startServer(t, { runsRoot });
+
+      const out = await fetchJson(server, outputPath(key, 'a', 'build', 'compile', { pass: 2, stdoutOffset: 0 }));
+      assert.deepEqual(out.json.attempts, []);
+      assert.equal('stdout' in out.json, false);
+      assert.equal('pass' in out.json, false);
+    });
+
+    it('отвечает 400 на pass=0 и на pass, не являющийся числом', async (t) => {
+      const { runsRoot, projectRoot } = makeJournalBed();
+      seedRun(runsRoot, projectRoot, { runId: 'a' });
+      const key = projectKey(projectRoot);
+      const server = await startServer(t, { runsRoot });
+
+      for (const pass of ['0', 'x']) {
+        const out = await fetchJson(server, outputPath(key, 'a', 'build', 'compile', { pass }));
+        assert.equal(out.code, 400, `pass=${pass}`);
+        assert.equal(out.json.error, 'pass must be a positive integer');
+      }
+    });
+  });
+
   it('перечисляет попытку, у которой на диске остался только stderr', async (t) => {
     const { runsRoot, projectRoot } = makeJournalBed();
     seedRun(runsRoot, projectRoot, { runId: 'a' });

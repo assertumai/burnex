@@ -12,6 +12,16 @@ import type { StatusValue } from '../pipeline/run/journal/schema.js';
  * основной граф и в него не входит, поэтому её колонка всегда последняя.
  */
 
+/** Цикл участника в узле графа: то же, что в снимке работы, без перечня проходов. */
+export interface GraphLoop {
+  readonly id: string;
+  readonly iterations: number;
+  readonly maxIterations: number;
+  readonly current?: number;
+  readonly verdict?: 'done' | 'exhausted' | 'canceled';
+  readonly status: StatusValue;
+}
+
 /** Вход раскладки: то немногое из определения работы, что влияет на картину. */
 export interface GraphInput {
   readonly id: string;
@@ -22,6 +32,7 @@ export interface GraphInput {
   readonly status?: StatusValue;
   /** Раскрытая подпись работы: витрина показывает её прямо в узле. */
   readonly display?: Readonly<Record<string, string>>;
+  readonly loop?: GraphLoop;
 }
 
 export interface GraphNode {
@@ -42,6 +53,8 @@ export interface GraphNode {
    * показывает строкой в узле графа; прочие ключи — в карточке работы.
    */
   readonly display?: Readonly<Record<string, string>>;
+  /** Цикл, в который входит работа; раскладка его только переносит. */
+  readonly loop?: GraphLoop;
   /**
    * Предшественники, чей исход отменил эту работу. Заполняется только у
    * пропущенной работы: в разборе неудачного захода это и есть главный вопрос.
@@ -131,6 +144,7 @@ export function layoutJobs(jobs: readonly GraphInput[]): JobGraph {
       conditional: job.if !== undefined || on !== 'success',
       ...(job.status === undefined ? {} : { status: job.status }),
       ...(job.display === undefined ? {} : { display: job.display }),
+      ...(job.loop === undefined ? {} : { loop: job.loop }),
       blockedBy,
     });
   }

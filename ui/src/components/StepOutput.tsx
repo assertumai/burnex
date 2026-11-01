@@ -129,10 +129,16 @@ export function StepOutput({
   jobId,
   stepId,
   kind,
+  pass,
 }: {
   readonly address: string;
   readonly jobId: string;
   readonly stepId: string;
+  /**
+   * Проход цикла участника. Не задан — читается последний, как у работы вне
+   * цикла: RunDetail не передаёт его, пока выбран последний проход.
+   */
+  readonly pass?: number;
   /**
    * Вид шага: разбор ленты агента против сырого текста. Шаг плагинного вида
    * читается как командный — исполнитель вклада пишет `stdout.log` попытки
@@ -179,6 +185,7 @@ export function StepOutput({
         jobId,
         stepId,
         ...(targetAttempt === undefined ? {} : { attempt: targetAttempt }),
+        ...(pass === undefined ? {} : { pass }),
         stdoutOffset: offsetsRef.current.stdout,
         ...(kind !== 'agent' ? { stderrOffset: offsetsRef.current.stderr } : {}),
       });
@@ -226,6 +233,22 @@ export function StepOutput({
     await poll(next);
   };
 
+  // Другой проход — другие файлы: накопленное, смещения и выбранная попытка
+  // прежнего прохода к нему не относятся (номер попытки в другом проходе
+  // означает другую попытку). Первый показ сбросом не считается.
+  const shownPass = useRef(pass);
+  useEffect(() => {
+    if (shownPass.current === pass) return;
+    shownPass.current = pass;
+    resetStreams();
+    setAttempts([]);
+    setAttempt(undefined);
+    setDone(false);
+    setError(undefined);
+    if (open) void poll(undefined);
+    else setLoaded(false);
+  }, [pass]);
+
   // Опрос идёт, пока окно раскрыто и демон не назвал вывод завершённым;
   // сворачивание, размонтирование и признак завершённости снимают его.
   // Таймер перевзводит себя сам — тот же приём, что `follow()` в
@@ -245,7 +268,7 @@ export function StepOutput({
       alive = false;
       clearTimeout(timer);
     };
-  }, [open, done, attempt, address, jobId, stepId, kind]);
+  }, [open, done, attempt, address, jobId, stepId, kind, pass]);
 
   return (
     <div className="step-output">

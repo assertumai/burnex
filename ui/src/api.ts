@@ -152,6 +152,16 @@ export interface Overview {
   readonly generatedAt: string;
 }
 
+/** Цикл участника в узле графа — сверено с `GraphLoop` в `src/parts/ui/graph.ts`. */
+export interface GraphLoop {
+  readonly id: string;
+  readonly iterations: number;
+  readonly maxIterations: number;
+  readonly current?: number;
+  readonly verdict?: 'done' | 'exhausted' | 'canceled';
+  readonly status: StatusValue;
+}
+
 export interface GraphNode {
   readonly id: string;
   readonly column: number;
@@ -163,6 +173,7 @@ export interface GraphNode {
   readonly status?: StatusValue;
   /** Раскрытая подпись работы: ключ `title` показывается строкой в узле. */
   readonly display?: Readonly<Record<string, string>>;
+  readonly loop?: GraphLoop;
   readonly blockedBy: readonly string[];
 }
 
@@ -253,6 +264,12 @@ export interface StepSnapshot {
   readonly usage: UsageSnapshot;
 }
 
+/** Цикл участника — сверено с `JobLoopSnapshot` в `src/parts/ui/snapshot.ts`. */
+export interface JobLoop extends GraphLoop {
+  /** Проходы работы, чьи каталоги есть на диске, по возрастанию. */
+  readonly passes: readonly number[];
+}
+
 export interface JobSnapshot {
   readonly id: string;
   readonly description?: string;
@@ -272,6 +289,8 @@ export interface JobSnapshot {
   readonly inputs: readonly JournalFileRef[];
   readonly output?: JournalFileRef;
   readonly outputDeclared: boolean;
+  /** Цикл, в который входит работа; у работы вне цикла поля нет. */
+  readonly loop?: JobLoop;
   /** Подпись работы, раскрытая демоном против данных прогона. */
   readonly display?: Readonly<Record<string, string>>;
   /** Данные, опубликованные самой работой командой `stepcast data`. */
@@ -796,6 +815,8 @@ export interface StepOutputStream {
 export interface StepOutputResult {
   readonly attempts: readonly number[];
   readonly attempt?: number;
+  /** Прочитанный проход цикла — только у участника цикла. */
+  readonly pass?: number;
   readonly done: boolean;
   readonly stdout?: StepOutputStream;
   readonly stderr?: StepOutputStream;
@@ -1135,6 +1156,8 @@ export async function fetchStepOutput(options: {
   readonly jobId: string;
   readonly stepId: string;
   readonly attempt?: number;
+  /** Проход цикла; без него демон отдаёт последний. */
+  readonly pass?: number;
   readonly stdoutOffset?: number;
   readonly stderrOffset?: number;
 }): Promise<StepOutputResult> {
@@ -1144,6 +1167,7 @@ export async function fetchStepOutput(options: {
     step: options.stepId,
   });
   if (options.attempt !== undefined) query.set('attempt', String(options.attempt));
+  if (options.pass !== undefined) query.set('pass', String(options.pass));
   if (options.stdoutOffset !== undefined) query.set('stdoutOffset', String(options.stdoutOffset));
   if (options.stderrOffset !== undefined) query.set('stderrOffset', String(options.stderrOffset));
   return json<StepOutputResult>(await fetch(`/api/step-output?${query.toString()}`));

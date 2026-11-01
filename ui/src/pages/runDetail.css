@@ -11,6 +11,15 @@
 /* Отказ предстартовой проверки возобновления — рядом с кнопкой, не пропадает. */
 .resume-error { color: var(--sc-destructive, #b00020); }
 
+/* Метка прохода цикла в узле графа: неудача (exhausted) — цветом отказа. */
+.node text.loop-label { fill: var(--muted-foreground); font-size: 10px; font-family: var(--mono); }
+.node text.loop-label.failed { fill: var(--status-failed); }
+
+/* Переключатель проходов в карточке работы — тот же вид, что у попыток шага. */
+.passes { display: flex; gap: .3rem; flex-wrap: wrap; align-items: center; }
+.passes button.active { color: var(--primary); border-color: var(--primary); }
+.loop-failed { color: var(--status-failed); }
+
 /* Короткий идентификатор в заголовке — тем же кеглем, что и в таблице,
    но не крупнее имени пайплайна рядом. */
 .sc-page-title .run-id { font-size: .85rem; font-weight: 500; }

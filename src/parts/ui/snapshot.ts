@@ -4,15 +4,17 @@ import { join, relative } from 'node:path';
 import {
   findStepDir,
   isRunAlive,
+  listLoopPasses,
   readManifestSoft,
   readStatusSoft,
   readUsageSoft,
   type JournalProblem,
   type readStatus,
 } from '../pipeline/run/journal/reader.js';
-import type { RunPaths } from '../pipeline/run/journal/paths.js';
+import { type RunPaths } from '../pipeline/run/journal/paths.js';
 import {
   ContextReportSchema,
+  type LoopRecord,
   type AwaitingDecision,
   type CostSource,
   type DecisionRecord,
@@ -22,7 +24,7 @@ import {
 } from '../pipeline/run/journal/schema.js';
 import { renderDisplay, type DisplayData } from '../pipeline/document/display.js';
 import { readLockJobs, type LockJob, type LockStep } from '../pipeline/document/lockRead.js';
-import { layoutJobs, type JobGraph } from './graph.js';
+import { layoutJobs, type GraphLoop, type JobGraph } from './graph.js';
 import { readJournalJson } from './file.js';
 
 /**
@@ -139,6 +141,31 @@ export interface StepSnapshot {
   readonly usage: UsageSnapshot;
 }
 
+/**
+ * Цикл по группе работ, как его видит участник. Запись работы в `status.json`
+ * описывает её последний проход, поэтому номер прохода и вердикт берутся из
+ * записи цикла (design.md изменения ui-run-graph-loops, Решение 1).
+ */
+export interface JobLoopSnapshot {
+  readonly id: string;
+  /** Проходов начато к этому моменту. */
+  readonly iterations: number;
+  readonly maxIterations: number;
+  /**
+   * Идущий проход — только у цикла в статусе `running`: у законченного «текущий
+   * проход» читатель спутал бы с идущим.
+   */
+  readonly current?: number;
+  readonly verdict?: NonNullable<LoopRecord['verdict']>;
+  readonly status: StatusValue;
+  /**
+   * Проходы работы, чьи каталоги есть на диске, по возрастанию. Отдельно от
+   * `iterations`: проход, не дошедший до шагов, каталога не имеет, а
+   * переключатель предлагает только то, что можно прочитать.
+   */
+  readonly passes: readonly number[];
+}
+
 export interface JobSnapshot {
   readonly id: string;
   readonly description?: string;
@@ -167,6 +194,8 @@ export interface JobSnapshot {
   readonly output?: JournalFileRef;
   /** Работа объявляет выход, но ещё не опубликовала его. */
   readonly outputDeclared: boolean;
+  /** Цикл, в который входит работа; у работы вне цикла ключа нет. */
+  readonly loop?: JobLoopSnapshot;
   /**
    * Подпись работы, раскрытая против данных прогона. Отсутствует и когда
    * подпись не объявлена, и когда ни одно её поле не раскрылось.
@@ -378,6 +407,24 @@ function buildStep(
   };
 }
 
+function buildLoop(
+  paths: RunPaths,
+  jobId: string,
+  loops: readonly LoopRecord[] | undefined,
+): JobLoopSnapshot | undefined {
+  const loop = loops?.find((candidate) => candidate.jobs.includes(jobId));
+  if (loop === undefined) return undefined;
+  return {
+    id: loop.id,
+    iterations: loop.iterations,
+    maxIterations: loop.max_iterations,
+    ...(loop.status === 'running' ? { current: loop.iterations } : {}),
+    ...(loop.verdict === undefined ? {} : { verdict: loop.verdict }),
+    status: loop.status,
+    passes: listLoopPasses(paths, jobId),
+  };
+}
+
 function buildJob(
   paths: RunPaths,
   definition: LockJob | undefined,
@@ -386,8 +433,10 @@ function buildJob(
   summary: UsageReport | undefined,
   data: DisplayData,
   awaiting: readonly AwaitingDecision[] | undefined,
+  loops: readonly LoopRecord[] | undefined,
 ): JobSnapshot {
   const id = definition?.id ?? record?.id ?? '';
+  const loop = buildLoop(paths, id, loops);
   const needs = definition?.needs ?? [];
 
   // Вход работы — выходы её предшественников: тот же источник, из которого
@@ -422,6 +471,7 @@ function buildJob(
     inputs,
     ...(output === undefined ? {} : { output }),
     outputDeclared: definition?.publishesOutput ?? false,
+    ...(loop === undefined ? {} : { loop }),
     // Подпись раскрывается здесь и только здесь — против данных, записанных к
     // этому моменту. Отсюда и работает самоссылка `${jobs.<сам>.data.*}`:
     // движок раскрывает определение работы до её первого шага, а витрина —
@@ -442,6 +492,17 @@ function buildJob(
       ),
     ),
     usage: jobUsage(summary, id),
+  };
+}
+
+function graphLoop(loop: JobLoopSnapshot): GraphLoop {
+  return {
+    id: loop.id,
+    iterations: loop.iterations,
+    maxIterations: loop.maxIterations,
+    ...(loop.current === undefined ? {} : { current: loop.current }),
+    ...(loop.verdict === undefined ? {} : { verdict: loop.verdict }),
+    status: loop.status,
   };
 }
 
@@ -500,6 +561,7 @@ export function buildSnapshot(paths: RunPaths, projectKeyValue: string): RunSnap
       summary,
       data,
       status?.awaiting,
+      status?.loops,
     ),
   );
 
@@ -517,6 +579,8 @@ export function buildSnapshot(paths: RunPaths, projectKeyValue: string): RunSnap
         ...(job.if === undefined ? {} : { if: job.if }),
         ...(job.status === undefined ? {} : { status: job.status }),
         ...(job.display === undefined ? {} : { display: job.display }),
+        // Перечень проходов узлу не нужен: он живёт в карточке работы.
+        ...(job.loop === undefined ? {} : { loop: graphLoop(job.loop) }),
       })),
     ),
     ...(manifest?.mode === undefined ? {} : { mode: manifest.mode }),

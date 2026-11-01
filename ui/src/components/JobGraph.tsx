@@ -1,6 +1,6 @@
 import type { JSX } from 'react';
 
-import type { JobGraph as Graph, GraphNode } from '../api';
+import type { GraphLoop, JobGraph as Graph, GraphNode } from '../api';
 
 /**
  * Граф работ по зависимостям — как стадии в gitlab: колонка на уровень,
@@ -31,6 +31,33 @@ const PADDING = 8;
 function titleOf(node: GraphNode): string | undefined {
   const title = node.display?.title;
   return title === undefined || title.trim() === '' ? undefined : title;
+}
+
+/**
+ * Метка прохода в верхнем правом углу узла участника цикла. Строка короткая и
+ * высоту узла не меняет: полное имя цикла и предел — в подсказке узла.
+ * Законченный цикл называет число проходов и вердикт, но не «текущий проход»:
+ * его читатель спутал бы с идущим.
+ */
+export function loopLabel(loop: GraphLoop): string {
+  if (loop.iterations === 0) return `0/${loop.maxIterations}`;
+  if (loop.current !== undefined) return `pass ${loop.current}/${loop.maxIterations}`;
+  const passes = `${loop.iterations} ${loop.iterations === 1 ? 'pass' : 'passes'}`;
+  return loop.verdict === undefined ? passes : `${passes} · ${loop.verdict}`;
+}
+
+/** Ширина знака метки прохода: моноширинный шрифт 10px, знак ≈ 0.6em. */
+const LOOP_CHAR_WIDTH = 6;
+/** Зазор между обрезанным именем работы и меткой прохода. */
+const LOOP_GAP = 6;
+
+/**
+ * Ширина обрезки имени работы рядом с меткой прохода. Метка стоит в правом
+ * верхнем углу, а имя над подписью поднимается на её высоту: без обрезки
+ * длинное имя и `5 passes · exhausted` наслаивались бы друг на друга.
+ */
+export function idClipWidth(label: string): number {
+  return Math.max(0, NODE_WIDTH - 10 - label.length * LOOP_CHAR_WIDTH - LOOP_GAP);
 }
 
 function x(column: number): number {
@@ -107,13 +134,16 @@ export function JobGraph({ graph, selected, onSelect, subtitle }: JobGraphProps)
           );
         })}
 
-        {graph.nodes.map((node) => {
+        {graph.nodes.map((node, index) => {
           const classes = ['node'];
           if (node.conditional) classes.push('conditional');
           if (node.status !== undefined) classes.push(`status-${node.status}`);
           if (node.id === selected) classes.push('selected');
           const sub = subtitle?.(node);
           const title = titleOf(node);
+          const label = node.loop === undefined ? undefined : loopLabel(node.loop);
+          // Без подписи имя стоит ниже метки и с ней не пересекается.
+          const idClip = label === undefined || sub === undefined ? undefined : `job-node-id-${index}`;
 
           return (
             <g
@@ -123,12 +153,27 @@ export function JobGraph({ graph, selected, onSelect, subtitle }: JobGraphProps)
               onClick={() => onSelect?.(node.id)}
             >
               <rect width={NODE_WIDTH} height={nodeHeight} rx={7} />
-              <text x={10} y={sub === undefined ? 27 : 20} clipPath="url(#job-node-box)">
+              {idClip === undefined || label === undefined ? null : (
+                <clipPath id={idClip}>
+                  <rect width={idClipWidth(label)} height={nodeHeight} />
+                </clipPath>
+              )}
+              <text x={10} y={sub === undefined ? 27 : 20} clipPath={`url(#${idClip ?? 'job-node-box'})`}>
                 {node.id}
               </text>
               {sub === undefined ? null : (
                 <text className="sub" x={10} y={35} clipPath="url(#job-node-box)">
                   {sub}
+                </text>
+              )}
+              {node.loop === undefined || label === undefined ? null : (
+                <text
+                  className={node.loop.verdict === 'exhausted' ? 'loop-label failed' : 'loop-label'}
+                  x={NODE_WIDTH - 10}
+                  y={14}
+                  textAnchor="end"
+                >
+                  {label}
                 </text>
               )}
               {title === undefined ? null : (
@@ -139,6 +184,9 @@ export function JobGraph({ graph, selected, onSelect, subtitle }: JobGraphProps)
               <title>
                 {[
                   title === undefined ? undefined : title,
+                  node.loop === undefined
+                    ? undefined
+                    : `loop ${node.loop.id}: up to ${node.loop.maxIterations} passes`,
                   node.needs.length === 0 ? 'no dependencies' : `needs: ${node.needs.join(', ')}`,
                   node.on === 'success' ? undefined : `on: ${node.on}`,
                   node.if === undefined ? undefined : `if: ${node.if}`,

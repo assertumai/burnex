@@ -64,7 +64,7 @@ Agents (≈560 строк) — уровни (tier), эскалация и бэк
 | ~~Shadow-режим~~ | запуск «насухо» и пометка таких прогонов в списке — сделано в `ui-run-launch-dialog` |
 | ~~`run --env KEY=VALUE`~~ | поля env в диалоге ручного запуска — сделано в `ui-run-launch-dialog` |
 | ~~Бэкенды Cursor и Copilot~~ | действие «подключить» у каждого поставляемого адаптера — сделано в `ui-connect-bundled-backends` |
-| `loops` на работе | проходы группы на графе прогона; `attempts` в `RunDetail`/`StepOutput` уже есть |
+| ~~`loops` на работе~~ | метка прохода в узле графа прогона, переключатель проходов и вывод шага по проходу — сделано в `ui-run-graph-loops` |
 | ~~Очередь: `claimed_by`, lock-файл~~ | владелец взятого пункта и занятая блокировка очереди на «Backlog» и «Scrum» — сделано в `ui-backlog-owner-and-lock` |
 | `backlog add` / `backlog show` | уже есть на «Scrum» через `POST /api/backlog/item` |
 

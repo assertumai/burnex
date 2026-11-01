@@ -628,6 +628,20 @@ export function readExpectReports(
 }
 
 /**
+ * Проходы цикла, чьи каталоги лежат в `jobs/<job>/steps`, по возрастанию.
+ * Пусто — раскладка без уровня прохода (работа вне цикла) или работа ещё не
+ * начиналась.
+ */
+export function listLoopPasses(paths: RunPaths, jobId: string): number[] {
+  const jobSteps = join(paths.jobs, jobId, 'steps');
+  if (!existsSync(jobSteps)) return [];
+  return readdirSync(jobSteps)
+    .map(parsePassDirName)
+    .filter((value): value is number => value !== undefined)
+    .sort((a, b) => a - b);
+}
+
+/**
  * Каталог шага. Проход цикла, попытку работы и итерацию можно не указывать —
  * тогда берутся последние выполненные: чаще всего спрашивают именно про них.
  * Раскладка без уровня прохода или попытки (работа вне цикла, работа без
@@ -644,10 +658,7 @@ export function findStepDir(
   const jobSteps = join(paths.jobs, jobId, 'steps');
   if (!existsSync(jobSteps)) return undefined;
 
-  const passes = readdirSync(jobSteps)
-    .map(parsePassDirName)
-    .filter((value): value is number => value !== undefined)
-    .sort((a, b) => a - b);
+  const passes = listLoopPasses(paths, jobId);
   let root = jobSteps;
   let pass: number | undefined;
   if (passes.length > 0) {

@@ -364,6 +364,93 @@ params:
     assert.equal(readStepOutput(journal.paths, 'consumer', 'check', { stdoutOffset: 0 }).stdout?.content, 'вне цикла');
   });
 
+  describe('цикл по группе работ', () => {
+    function seedLoop(loop: Partial<NonNullable<RunStatus['loops']>[number]>, passes: readonly number[]) {
+      const bed = makeJournalBed();
+      const journal = seedRun(bed.runsRoot, bed.projectRoot, {
+        runId: 'run-loop',
+        jobs: JOBS,
+        lock: lockText(),
+        loops: [
+          {
+            id: 'refine',
+            jobs: ['producer'],
+            iterations: 2,
+            max_iterations: 5,
+            status: 'running',
+            ...loop,
+          },
+        ],
+      });
+      for (const pass of passes) {
+        journal.writeStepFile(
+          journal.prepareStep('producer', 1, 'think', undefined, undefined, pass),
+          'stdout.log',
+          `проход ${pass}`,
+        );
+      }
+      return { journal, key: projectKey(bed.projectRoot) };
+    }
+
+    it('идущий цикл: current равен iterations, узел графа несёт loop без passes', () => {
+      const { journal, key } = seedLoop({}, [1, 2]);
+      const snapshot = buildSnapshot(journal.paths, key);
+
+      const loop = snapshot.jobs.find((j) => j.id === 'producer')?.loop;
+      assert.deepEqual(loop, {
+        id: 'refine',
+        iterations: 2,
+        maxIterations: 5,
+        current: 2,
+        status: 'running',
+        passes: [1, 2],
+      });
+      const node = snapshot.graph.nodes.find((n) => n.id === 'producer');
+      assert.deepEqual(node?.loop, {
+        id: 'refine',
+        iterations: 2,
+        maxIterations: 5,
+        current: 2,
+        status: 'running',
+      });
+    });
+
+    it('законченный цикл: есть verdict, текущего прохода нет', () => {
+      const { journal, key } = seedLoop({ status: 'failed', verdict: 'exhausted', iterations: 5 }, [1, 2, 3, 4, 5]);
+      const loop = buildSnapshot(journal.paths, key).jobs.find((j) => j.id === 'producer')?.loop;
+
+      assert.equal(loop?.verdict, 'exhausted');
+      assert.equal('current' in (loop ?? {}), false);
+      assert.deepEqual(loop?.passes, [1, 2, 3, 4, 5]);
+    });
+
+    it('работа вне цикла не несёт loop ни в снимке, ни в узле', () => {
+      const { journal, key } = seedLoop({}, [1]);
+      const snapshot = buildSnapshot(journal.paths, key);
+
+      assert.equal('loop' in (snapshot.jobs.find((j) => j.id === 'consumer') ?? {}), false);
+      assert.equal('loop' in (snapshot.graph.nodes.find((n) => n.id === 'consumer') ?? {}), false);
+    });
+
+    it('прогон без loops в status.json не несёт loop, даже когда на диске есть каталоги проходов', () => {
+      const { journal, key } = seed();
+      journal.writeStepFile(journal.prepareStep('producer', 1, 'think', undefined, undefined, 1), 'stdout.log', 'x');
+      journal.writeStepFile(journal.prepareStep('producer', 1, 'think', undefined, undefined, 2), 'stdout.log', 'y');
+
+      const snapshot = buildSnapshot(journal.paths, key);
+      assert.equal(snapshot.jobs.some((j) => 'loop' in j), false);
+      assert.equal(snapshot.graph.nodes.some((n) => 'loop' in n), false);
+    });
+
+    it('passes перечисляет только существующие каталоги, а не 1..iterations', () => {
+      const { journal, key } = seedLoop({ iterations: 4 }, [1, 3]);
+      const loop = buildSnapshot(journal.paths, key).jobs.find((j) => j.id === 'producer')?.loop;
+
+      assert.equal(loop?.iterations, 4);
+      assert.deepEqual(loop?.passes, [1, 3]);
+    });
+  });
+
   it('модели попыток берутся из последней попытки работы', () => {
     const { journal, key } = seed();
     const entry = (jobAttempt: number, model: string) => ({

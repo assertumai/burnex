@@ -87,6 +87,30 @@ describe('ui-graph: колонки по зависимостям', () => {
   });
 });
 
+describe('ui-graph: цикл участника', () => {
+  const loop = { id: 'refine', iterations: 2, maxIterations: 5, current: 2, status: 'running' } as const;
+
+  it('переносит loop в узел как есть', () => {
+    const graph = layoutJobs([{ id: 'a', needs: [], loop }, { id: 'b', needs: ['a'] }]);
+
+    assert.deepEqual(graph.nodes[0]?.loop, loop);
+    assert.equal('loop' in (graph.nodes[1] ?? {}), false);
+  });
+
+  it('не меняет колонки и строки графа', () => {
+    const plain = [
+      { id: 'a', needs: [] },
+      { id: 'b', needs: ['a'] },
+      { id: 'c', needs: ['a'] },
+    ];
+    const looped = plain.map((job) => (job.id === 'b' ? { ...job, loop } : job));
+
+    const place = (jobs: readonly GraphInput[]) =>
+      layoutJobs(jobs).nodes.map((node) => [node.id, node.column, node.row]);
+    assert.deepEqual(place(looped), place(plain));
+  });
+});
+
 describe('ui-graph: условные работы и виновник пропуска', () => {
   it('помечает условной работу с if и работу с on, отличным от success', () => {
     const graph = layoutJobs([
