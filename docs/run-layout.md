@@ -1940,6 +1940,7 @@ burnex down                                    остановить витрин
 burnex backlog list|pick|finish                очередь улучшений backlog.md, см. docs/backlog.md
 burnex propose <цель> --from <файл> [--reason]  предложить правку файла кабинета, см. docs/proposals.md
 burnex widgets [--json]                        состав виджетов проекта и их разрешимость, см. docs/widgets.md
+burnex migrate-stepcast [path] [--files|--json] отсылки проекта на прежнее имя движка и что исправить, см. docs/release.md
 ```
 
 `run --env KEY=VALUE` (флаг повторяемый; то же — поле `env` в `POST /api/run`)

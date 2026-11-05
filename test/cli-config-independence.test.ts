@@ -233,12 +233,12 @@ describe('config-error-breaks-every-command: зависимые команды �
 });
 
 describe('config-error-breaks-every-command: граница выводится из объявлений строк (cli-commands-as-rows)', () => {
-  it('независимыми объявлены ровно data, down, init и update', () => {
+  it('независимыми объявлены ровно data, down, init, migrate-stepcast и update', () => {
     // Единственный источник перечня — сами строки (design.md изменения
     // `cli-commands-as-rows`, Решение 5): второго списка имён рядом с ними
     // нет, и опечатка в объявлении строки была бы видна здесь же.
     const independentNames = COMMAND_ROWS.filter((row) => row.independent).map((row) => row.command.name).sort();
-    assert.deepEqual(independentNames, ['data', 'down', 'init', 'update']);
+    assert.deepEqual(independentNames, ['data', 'down', 'init', 'migrate-stepcast', 'update']);
   });
 
   it('каждая встроенная команда вне независимых строк отказывает при сломанной конфигурации', async () => {

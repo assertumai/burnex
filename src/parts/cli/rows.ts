@@ -27,6 +27,7 @@ import { row as data } from '../pipeline/commands/data.js';
 import { row as mergeLanes } from '../pipeline/commands/merge-lanes.js';
 import { row as assertClean } from '../pipeline/commands/assert-clean.js';
 import { row as project } from '../pipeline/commands/project.js';
+import { row as migrateStepcast } from '../pipeline/commands/migrate-stepcast.js';
 
 /**
  * Перечень строк встроенных команд CLI (`plugin-tree`, design.md изменения
@@ -51,7 +52,7 @@ import { row as project } from '../pipeline/commands/project.js';
  * либо ничего доменного (`widgets`, `up`, `down` знают витрину, не пайплайн; `update` — способ установки движка),
  * либо обязаны работать именно тогда, когда состав сломан (`plugins`,
  * `config`, `package` — перечень пакетов нужен как раз для того, чтобы увидеть
- * пакет, сломавший работу). `data`, `down`, `init` и `update` среди ядерных дополнительно независимы
+ * пакет, сломавший работу). `data`, `down`, `init`, `update` и `migrate-stepcast` среди ядерных дополнительно независимы
  * от конфигурации (Решение 4, Решение 5) — граница проводится по порядку
  * исполнения, а не по домену: они исполняются раньше, чем состав существует,
  * и потребителем того, чего ещё нет, быть не могут.
@@ -84,6 +85,7 @@ export const COMMAND_ROWS: readonly CommandRow[] = [
   mergeLanes,
   assertClean,
   project,
+  migrateStepcast,
 ];
 
 /** Id строк команд — то, чем `parts/pipeline/config/resolve.ts` заводит семя дерева наравне с `BUILTIN_ROW_IDS`. */
