@@ -5,7 +5,7 @@ import { pathToFileURL } from 'node:url';
 import { input, output } from './index.js';
 
 /**
- * Обёртка раннера `stepcast:step` (design.md, решение 8; `runners.<имя>.wrapper`
+ * Обёртка раннера `burnex:step` (design.md, решение 8; `runners.<имя>.wrapper`
  * `node`/`node-ts`). Встаёт в argv между командой раннера и путём скрипта:
  * `node <обёртка> <скрипт> <args...>`.
  *
@@ -65,7 +65,7 @@ function moduleFormat(scriptPath: string): 'module' | 'commonjs' {
 async function main(): Promise<void> {
   const [, , scriptPath, ...args] = process.argv;
   if (scriptPath === undefined) {
-    console.error('Обёртка stepcast:step запущена без пути скрипта');
+    console.error('Обёртка burnex:step запущена без пути скрипта');
     process.exitCode = 1;
     return;
   }
@@ -97,7 +97,7 @@ async function main(): Promise<void> {
     return;
   } else if (typeof entry !== 'function') {
     console.error(
-      'Default export модуля не функция: обёртка stepcast:step умеет звать только функцию входа',
+      'Default export модуля не функция: обёртка burnex:step умеет звать только функцию входа',
     );
     process.exitCode = 1;
     return;

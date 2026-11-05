@@ -5,7 +5,7 @@ import type { DecisionEffect, DecisionOutcome, LintSite } from '../../surface.js
 /**
  * Поля вида шага `decision` (design.md изменения `user-decision-steps`,
  * решения 1, 6, 7): вопрос, допустимые исходы, необязательный срок и исход по
- * истечении. Написан только импортами из `stepcast/plugin`, соседей этого
+ * истечении. Написан только импортами из `burnex/plugin`, соседей этого
  * каталога и встроенных модулей Node — та же дистанция, что у плагина Codex.
  */
 

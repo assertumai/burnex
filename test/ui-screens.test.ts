@@ -74,7 +74,7 @@ describe('ui-screens: регистрация и снятие маршрута', 
     const before = await fetchJson(server, '/api/backlog');
     assert.equal(before.code, 200);
 
-    writePatch(home, 'version: 1\nkind: plugins-patch\nplugins:\n  - id: screen-backlog\n    use: stepcast:screen-backlog\n    enabled: false\n');
+    writePatch(home, 'version: 1\nkind: plugins-patch\nplugins:\n  - id: screen-backlog\n    use: burnex:screen-backlog\n    enabled: false\n');
 
     const after = await fetchJson(server, '/api/backlog');
     assert.equal(after.code, 404);
@@ -140,7 +140,7 @@ describe('ui-screens: состав экранов у демона', () => {
 
   it('домашний патч отключает экран: его нет в составе, маршрут отвечает 404, соседние экраны и их маршруты работают', async (t) => {
     const { runsRoot, home } = makeJournalBed();
-    writePatch(home, 'version: 1\nkind: plugins-patch\nplugins:\n  - id: screen-pipelines\n    use: stepcast:screen-pipelines\n    enabled: false\n');
+    writePatch(home, 'version: 1\nkind: plugins-patch\nplugins:\n  - id: screen-pipelines\n    use: burnex:screen-pipelines\n    enabled: false\n');
     const server = await startServer(t, { runsRoot, home });
 
     const screens = await fetchJson(server, '/api/screens');
@@ -231,7 +231,7 @@ describe('ui-screens: владелец маршрута отключён', () =>
     const before = await fetchJson(server, '/api/runs?trait=failed');
     assert.equal(before.code, 200);
 
-    writePatch(home, 'version: 1\nkind: plugins-patch\nplugins:\n  - id: screen-runs\n    use: stepcast:screen-runs\n    enabled: false\n');
+    writePatch(home, 'version: 1\nkind: plugins-patch\nplugins:\n  - id: screen-runs\n    use: burnex:screen-runs\n    enabled: false\n');
 
     const select = await fetchJson(server, '/api/runs?trait=failed');
     assert.equal(select.code, 404);
@@ -350,7 +350,7 @@ describe('ui-screens: строка каркаса снята патчем', () =
     writePatch(
       home,
       `version: 1\nkind: plugins-patch\nplugins:\n${rows
-        .map((id) => `  - id: ${id}\n    use: stepcast:${id}\n    enabled: false\n`)
+        .map((id) => `  - id: ${id}\n    use: burnex:${id}\n    enabled: false\n`)
         .join('')}`,
     );
     const server = await startServer(t, { runsRoot, home });

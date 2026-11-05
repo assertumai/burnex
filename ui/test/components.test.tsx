@@ -7,7 +7,7 @@ import { describe, it } from 'node:test';
 import { renderToStaticMarkup } from 'react-dom/server';
 
 import { SHARED_MODULES } from '../../src/parts/ui/daemon/sharedModules.ts';
-import * as StepcastUi from '@stepcast/ui';
+import * as StepcastUi from '@burnex/ui';
 import {
   Button,
   Card,
@@ -43,10 +43,10 @@ import {
   Separator,
   Switch,
   statusBadgeVariant,
-} from '@stepcast/ui';
+} from '@burnex/ui';
 
 /**
- * Библиотека `@stepcast/ui` (design.md изменения `shared-module-table`,
+ * Библиотека `@burnex/ui` (design.md изменения `shared-module-table`,
  * Решение 6): состав объявлен таблицей общих модулей и сверяется с реальным
  * экспортом индекса (Решение 4); каждый из семи компонентов отрисовывается;
  * ни один файл стилей библиотеки не называет цвет литералом мимо токенов
@@ -67,14 +67,14 @@ const ROOT_UI = join(fileURLToPath(new URL('../../', import.meta.url)), 'ui', 's
 describe('ui-components: состав библиотеки не расходится с таблицей', () => {
   it('каждое объявленное имя действительно экспортируется', () => {
     const mod = StepcastUi as unknown as Record<string, unknown>;
-    const missing = SHARED_MODULES['@stepcast/ui'].names.filter(
+    const missing = SHARED_MODULES['@burnex/ui'].names.filter(
       (name) => !Object.prototype.hasOwnProperty.call(mod, name),
     );
     assert.deepEqual(missing, [], 'перечень записи разошёлся с реальным экспортом ui/src/parts/ui/index.ts');
   });
 
   it('модуль не экспортирует лишнего сверх объявленного перечня', () => {
-    const declared = new Set(SHARED_MODULES['@stepcast/ui'].names);
+    const declared = new Set(SHARED_MODULES['@burnex/ui'].names);
     const extra = Object.keys(StepcastUi).filter((name) => !declared.has(name));
     assert.deepEqual(extra, [], 'модуль экспортирует имя, не названное записью таблицы');
   });

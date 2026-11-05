@@ -19,7 +19,7 @@ import type { RouteTarget } from '../../../src/parts/ui/routes.ts';
 import type { Overview, ProposalsStreamEvent } from '../api';
 import { fmtMoney } from '../format';
 import { TargetLink } from '../routeLink';
-import { PageHeader } from '@stepcast/ui';
+import { PageHeader } from '@burnex/ui';
 import './home.css';
 
 /**

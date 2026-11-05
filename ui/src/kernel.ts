@@ -17,11 +17,11 @@ import {
   translateSlotNameConflict,
   type RejectedContribution,
 } from './slots.ts';
-// Дескриптор — из поверхности `@stepcast/slots`, не копия (design.md
+// Дескриптор — из поверхности `@burnex/slots`, не копия (design.md
 // изменения `shared-module-table`, Решение 5): переходник плагина отдаёт тот
 // же объект. Ре-экспорт ниже сохраняет прежний путь импорта `ROOT` из
 // `./kernel` тем, кто уже на него полагается (`ui/src/slots.tsx`, тесты).
-import { ROOT } from '@stepcast/slots';
+import { ROOT } from '@burnex/slots';
 import { LIVE_SERVICE_NAME, LiveService, type EventSourceFactory } from './services/live';
 import { SCREENS_SERVICE_NAME, ScreensService } from './services/screens';
 import { ROUTES_SERVICE_NAME, RoutesService } from './services/routes';

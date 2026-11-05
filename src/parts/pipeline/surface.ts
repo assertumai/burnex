@@ -4,7 +4,7 @@ import type { PipelineContext } from './contract.js';
 
 /**
  * Публичная поверхность для авторов доменного вклада:
- * `import … from 'stepcast/pipeline'` (`plugin-surface-split`, design.md,
+ * `import … from 'burnex/pipeline'` (`plugin-surface-split`, design.md,
  * Решение 2, Решение 9).
  *
  * Модуль этой строки — `pipeline`, той самой, что заводит служебные сервисы
@@ -13,7 +13,7 @@ import type { PipelineContext } from './contract.js';
  * поверхность.
  *
  * Ядерных имён здесь нет ни одного (`StepcastError`, `parseDuration`,
- * `runProcess` и подобные — подпуть `stepcast/plugin`): домен не публикует
+ * `runProcess` и подобные — подпуть `burnex/plugin`): домен не публикует
  * ядро, иначе вопрос «откуда это имя» перестал бы иметь однозначный ответ
  * (design.md, Решение 9).
  */

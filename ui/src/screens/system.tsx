@@ -2,7 +2,7 @@ import type { Context } from 'cordis';
 
 import { declaration } from '../../../src/parts/ui/screens/system/declaration.ts';
 import { System } from '../pages/System';
-import { SCREEN } from '@stepcast/slots';
+import { SCREEN } from '@burnex/slots';
 
 /**
  * Экран «System»: страница сама читает `GET /api/system` при открытии и после

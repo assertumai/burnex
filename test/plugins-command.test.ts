@@ -39,7 +39,7 @@ function assertCommandRowLines(lines: readonly string[], index: number, place: n
   let cursor = index;
   assert.match(
     lines[cursor] ?? '',
-    new RegExp(`^${place}\\s+command-${name}\\s+встроенный\\s+stepcast:command-${name}\\s+действует$`),
+    new RegExp(`^${place}\\s+command-${name}\\s+встроенный\\s+burnex:command-${name}\\s+действует$`),
   );
   cursor += 1;
   if (DOMAIN_COMMAND_NAMES.has(name)) {
@@ -114,33 +114,33 @@ describe('plugin-tree: burnex plugins печатает дерево со сло�
     // сервисов пайплайна, ни единой команды на корне больше нет — все они
     // строки. Раздел витрины — двумя строками в конце, демон в этом тесте не
     // поднят.
-    assert.match(lines[0] ?? '', /^1\s+pipeline\s+встроенный\s+stepcast:pipeline\s+действует$/);
+    assert.match(lines[0] ?? '', /^1\s+pipeline\s+встроенный\s+burnex:pipeline\s+действует$/);
     assert.equal(lines[1], '    сервисы объявлены: backends, predicates, steps, secretProviders');
-    assert.match(lines[2] ?? '', /^2\s+backend-claude\s+встроенный\s+stepcast:backend-claude\s+действует$/);
+    assert.match(lines[2] ?? '', /^2\s+backend-claude\s+встроенный\s+burnex:backend-claude\s+действует$/);
     assert.equal(lines[3], '    сервисы запрошены: backends (разрешён)');
     assert.equal(lines[4], '    вклады: backends: claude');
-    assert.match(lines[5] ?? '', /^3\s+predicates\s+встроенный\s+stepcast:predicates\s+действует$/);
+    assert.match(lines[5] ?? '', /^3\s+predicates\s+встроенный\s+burnex:predicates\s+действует$/);
     assert.equal(lines[6], '    сервисы запрошены: predicates (разрешён)');
     assert.equal(
       lines[7],
       '    вклады: predicates: exit_code, file_exists, schema, matches, not_matches, changed_only, knowledge_valid, cmd, script, judge',
     );
-    assert.match(lines[8] ?? '', /^4\s+step-run\s+встроенный\s+stepcast:step-run\s+действует$/);
+    assert.match(lines[8] ?? '', /^4\s+step-run\s+встроенный\s+burnex:step-run\s+действует$/);
     assert.equal(lines[9], '    сервисы запрошены: steps (разрешён)');
     assert.equal(lines[10], '    вклады: steps: run');
-    assert.match(lines[11] ?? '', /^5\s+step-uses\s+встроенный\s+stepcast:step-uses\s+действует$/);
+    assert.match(lines[11] ?? '', /^5\s+step-uses\s+встроенный\s+burnex:step-uses\s+действует$/);
     assert.equal(lines[12], '    сервисы запрошены: steps (разрешён)');
     assert.equal(lines[13], '    вклады: steps: uses');
-    assert.match(lines[14] ?? '', /^6\s+step-script\s+встроенный\s+stepcast:step-script\s+действует$/);
+    assert.match(lines[14] ?? '', /^6\s+step-script\s+встроенный\s+burnex:step-script\s+действует$/);
     assert.equal(lines[15], '    сервисы запрошены: steps (разрешён)');
     assert.equal(lines[16], '    вклады: steps: script');
-    assert.match(lines[17] ?? '', /^7\s+step-agent\s+встроенный\s+stepcast:step-agent\s+действует$/);
+    assert.match(lines[17] ?? '', /^7\s+step-agent\s+встроенный\s+burnex:step-agent\s+действует$/);
     assert.equal(lines[18], '    сервисы запрошены: steps (разрешён)');
     assert.equal(lines[19], '    вклады: steps: agent');
-    assert.match(lines[20] ?? '', /^8\s+step-decision\s+встроенный\s+stepcast:step-decision\s+действует$/);
+    assert.match(lines[20] ?? '', /^8\s+step-decision\s+встроенный\s+burnex:step-decision\s+действует$/);
     assert.equal(lines[21], '    сервисы запрошены: steps (разрешён)');
     assert.equal(lines[22], '    вклады: steps: decision');
-    assert.match(lines[23] ?? '', /^9\s+secret-providers\s+встроенный\s+stepcast:secret-providers\s+действует$/);
+    assert.match(lines[23] ?? '', /^9\s+secret-providers\s+встроенный\s+burnex:secret-providers\s+действует$/);
     assert.equal(lines[24], '    сервисы запрошены: secretProviders (разрешён)');
     assert.equal(lines[25], '    вклады: secretProviders: env-file, keychain');
 
@@ -202,7 +202,7 @@ describe('plugin-tree: burnex plugins печатает дерево со сло�
 
   it('отключённая строка видна и называет файл, который её отключил', async () => {
     const project = makeProject({});
-    withProjectPatch(project, 'version: 1\nkind: plugins-patch\nplugins:\n  - id: backend-claude\n    use: stepcast:backend-claude\n    enabled: false\n');
+    withProjectPatch(project, 'version: 1\nkind: plugins-patch\nplugins:\n  - id: backend-claude\n    use: burnex:backend-claude\n    enabled: false\n');
 
     const outcome = await cli(project, ['plugins']);
 
@@ -563,7 +563,7 @@ describe('plugin-introspection: раздел витрины', () => {
     const malformed = {
       version: 1,
       surface: 'daemon',
-      rows: [{ place: 1, id: 'ui-shell', use: 'stepcast:ui-shell' }],
+      rows: [{ place: 1, id: 'ui-shell', use: 'burnex:ui-shell' }],
       builtin: DAEMON_INTROSPECTION.builtin,
       attribution: { available: true },
       browser: { available: false, reason: 'нет отчёта' },
@@ -617,7 +617,7 @@ const DAEMON_INTROSPECTION = {
     {
       place: 1,
       id: 'ui-shell',
-      use: 'stepcast:ui-shell',
+      use: 'burnex:ui-shell',
       layer: { kind: 'builtin' },
       state: { kind: 'active' },
       declaredServices: [],
@@ -673,7 +673,7 @@ describe('plugin-introspection: реестр пришёл готовым', () =>
   it('печать называет причину, по которой вклады и сервисы не разложены по строкам, а не выдаёт пустые перечни', async () => {
     const project = makeProject({});
     const rows: readonly TreeRow[] = [
-      { id: 'backend-claude', use: 'stepcast:backend-claude', enabled: true, source: { kind: 'builtin' } },
+      { id: 'backend-claude', use: 'burnex:backend-claude', enabled: true, source: { kind: 'builtin' } },
     ];
     const stdout: string[] = [];
     const io: CliIo = { out: (line) => stdout.push(line), err: () => {}, cwd: project.root };
@@ -718,7 +718,7 @@ function escapeRegExp(value: string): string {
 function disableAllPipelineRows(): string {
   const ids = [...BUILTIN_ROW_IDS, ...[...DOMAIN_COMMAND_NAMES].map((name) => `command-${name}`)];
   const lines = ['version: 1', 'kind: plugins-patch', 'plugins:'];
-  for (const id of ids) lines.push(`  - id: ${id}`, `    use: stepcast:${id}`, '    enabled: false');
+  for (const id of ids) lines.push(`  - id: ${id}`, `    use: burnex:${id}`, '    enabled: false');
   return `${lines.join('\n')}\n`;
 }
 

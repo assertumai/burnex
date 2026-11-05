@@ -4,7 +4,7 @@ import type { Context } from 'cordis';
 import { declaration } from '../../../src/parts/ui/screens/widgets/declaration.ts';
 import type { Overview, WidgetsOverview } from '../api';
 import { WidgetsWithCatalog } from '../pages/Widgets';
-import { SCREEN } from '@stepcast/slots';
+import { SCREEN } from '@burnex/slots';
 
 function WidgetsScreen({
   overview,

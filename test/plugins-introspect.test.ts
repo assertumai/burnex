@@ -199,7 +199,7 @@ describe('introspect: приписывание вклада строке дер�
     const place = bed();
     writeFileSync(
       join(place.root, '.stepcast', 'plugins.patch.yml'),
-      'version: 1\nkind: plugins-patch\nplugins:\n  - id: backend-claude\n    use: stepcast:backend-claude\n    enabled: false\n',
+      'version: 1\nkind: plugins-patch\nplugins:\n  - id: backend-claude\n    use: burnex:backend-claude\n    enabled: false\n',
     );
     const config = resolved(place, '');
 
@@ -274,7 +274,7 @@ describe('introspect: встроенное вне строк дерева', () =
     const place = bed();
     writeFileSync(
       join(place.root, '.stepcast', 'plugins.patch.yml'),
-      'version: 1\nkind: plugins-patch\nplugins:\n  - id: step-script\n    use: stepcast:step-script\n    enabled: false\n',
+      'version: 1\nkind: plugins-patch\nplugins:\n  - id: step-script\n    use: burnex:step-script\n    enabled: false\n',
     );
     const config = resolved(place, '');
 

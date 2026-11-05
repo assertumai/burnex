@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 
 import { StepcastError } from '../../../kernel/errors.js';
 import { findPackageRoot } from '../../../kernel/packageRoot.js';
+import { PACKAGE_ADDRESS_PREFIX, packagedAddressName } from '../../../kernel/package-name.js';
 import { buildPackageIndex, findPackage, listPackagePipelineNames, packagePipelineFile } from '../../packages/index.js';
 import { describePackageFailure } from '../../packages/manifest.js';
 import { findProjectRoot } from '../run/journal/paths.js';
@@ -33,7 +34,7 @@ export interface SchemaReference {
 }
 
 /**
- * Путь к схеме `<имя>.schema.json`, поставляемой пакетом stepcast —
+ * Путь к схеме `<имя>.schema.json`, поставляемой пакетом burnex —
  * `<корень пакета>/schema/<имя>.schema.json`, от расположения этого модуля, а
  * не от места объявления и не от каталога запуска. Тот же приём, что уже
  * несёт схему вердикта судьи (`judgeVerdictSchemaPath`), — работает
@@ -48,7 +49,7 @@ export function packagedSchemaPath(name: string, reference?: SchemaReference): s
   const at = reference === undefined ? {} : { file: reference.file, at: reference.declaredAt };
 
   if (!KEBAB_CASE.test(name)) {
-    throw new StepcastError(`Имя схемы stepcast:${name} не является слагом в kebab-case`, {
+    throw new StepcastError(`Имя схемы burnex:${name} не является слагом в kebab-case`, {
       ...at,
       hint: 'Слаг — латиница в нижнем регистре, цифры и дефис; путь, точка и .. в имени недопустимы',
     });
@@ -59,12 +60,12 @@ export function packagedSchemaPath(name: string, reference?: SchemaReference): s
   if (existsSync(path)) return path;
 
   const known = packagedSchemaNames(schemaDir);
-  throw new StepcastError(`Схема stepcast:${name} не поставляется пакетом stepcast`, {
+  throw new StepcastError(`Схема burnex:${name} не поставляется пакетом burnex`, {
     ...at,
     hint:
       known.length > 0
         ? `Пакет поставляет: ${known.join(', ')}`
-        : `Каталог ${schemaDir} пуст или недоступен — установка пакета stepcast неполна`,
+        : `Каталог ${schemaDir} пуст или недоступен — установка пакета burnex неполна`,
   });
 }
 
@@ -91,8 +92,8 @@ function packagedSchemaNames(schemaDir: string): string[] {
 
 const PIPELINE_SUFFIX = '.yml';
 
-/** Префикс ссылки на пайплайн поставки — `burnex run stepcast:migrate-widgets` (`pipeline-definition`). */
-export const STEPCAST_PIPELINE_PREFIX = 'stepcast:';
+/** Префикс ссылки на пайплайн поставки — `burnex run burnex:migrate-widgets` (`pipeline-definition`). */
+export const PACKAGED_PIPELINE_PREFIX = PACKAGE_ADDRESS_PREFIX;
 
 /** Каталог встроенных пайплайнов пакета — четвёртый встроенный слой, рядом со `scripts/`, `steps/` и `routes.yml` (`pipeline-definition`, design.md изменения `agent-edits-widgets`, Решение 11). */
 function packagedPipelinesDir(): string {
@@ -114,7 +115,7 @@ export function packagedPipelineNames(): readonly string[] {
 }
 
 /**
- * Путь к файлу пайплайна поставки `stepcast:<имя>` — от расположения этого
+ * Путь к файлу пайплайна поставки `burnex:<имя>` — от расположения этого
  * модуля, той же схемой, что `packagedSchemaPath` (`pipeline-definition`,
  * «Ссылка на поставку называет и пайплайн, а не только схему»): работает
  * одинаково из исходников, из `dist/`, из `node_modules` целевого репозитория
@@ -127,7 +128,7 @@ export function packagedPipelinePath(name: string, reference?: SchemaReference):
   const at = reference === undefined ? {} : { file: reference.file, at: reference.declaredAt };
 
   if (!KEBAB_CASE.test(name)) {
-    throw new StepcastError(`Имя пайплайна поставки stepcast:${name} не является слагом в kebab-case`, {
+    throw new StepcastError(`Имя пайплайна поставки burnex:${name} не является слагом в kebab-case`, {
       ...at,
       hint: 'Слаг — латиница в нижнем регистре, цифры и дефис; путь, точка и .. в имени недопустимы',
     });
@@ -138,12 +139,12 @@ export function packagedPipelinePath(name: string, reference?: SchemaReference):
   if (existsSync(path)) return path;
 
   const known = packagedPipelineNames();
-  throw new StepcastError(`Пайплайн stepcast:${name} не поставляется пакетом stepcast`, {
+  throw new StepcastError(`Пайплайн burnex:${name} не поставляется пакетом burnex`, {
     ...at,
     hint:
       known.length > 0
         ? `Пакет поставляет: ${known.join(', ')}`
-        : `Каталог ${dir} пуст или недоступен — установка пакета stepcast неполна`,
+        : `Каталог ${dir} пуст или недоступен — установка пакета burnex неполна`,
   });
 }
 
@@ -151,7 +152,7 @@ export function packagedPipelinePath(name: string, reference?: SchemaReference):
 export interface ResolvedPipelineTarget {
   readonly pipelinePath: string;
   /**
-   * Пайплайн лежит не в проекте — это поставка (`stepcast:<имя>`) либо пакет
+   * Пайплайн лежит не в проекте — это поставка (`burnex:<имя>`) либо пакет
    * (`<пакет>:<имя>`): слои `script`/`step` ищутся от каталога запуска, а не
    * от каталога, где лежит файл. Пайплайн пакета home, запущенный в проекте,
    * работает с этим проектом — ради этого им и делятся.
@@ -206,7 +207,7 @@ function resolvePackagePipeline(cwd: string, packageName: string, pipelineName: 
 }
 
 /**
- * Цель позиционного аргумента: `stepcast:<имя>` — пайплайн поставки (путь от
+ * Цель позиционного аргумента: `burnex:<имя>` — пайплайн поставки (путь от
  * расположения движка), `<пакет>:<имя>` узкой формы — пайплайн пакета
  * (`packages-directory-layer`, Решение 5), всё остальное — **путь** от каталога
  * запуска (`pipeline-definition`, «Путь остаётся путём»). Правило одно на обе
@@ -222,9 +223,10 @@ export function resolvePipelineTarget(
   target: string,
   options: PipelineTargetOptions = {},
 ): ResolvedPipelineTarget {
-  if (target.startsWith(STEPCAST_PIPELINE_PREFIX)) {
+  const packaged = packagedAddressName(target);
+  if (packaged !== undefined) {
     return {
-      pipelinePath: packagedPipelinePath(target.slice(STEPCAST_PIPELINE_PREFIX.length)),
+      pipelinePath: packagedPipelinePath(packaged),
       outsideProject: true,
     };
   }
@@ -255,7 +257,7 @@ export function packagedWrapperNames(): readonly string[] {
 }
 
 /**
- * Путь к обёртке `stepcast:<имя>`, поставляемой пакетом, — от расположения
+ * Путь к обёртке `burnex:<имя>`, поставляемой пакетом, — от расположения
  * этого модуля, той же схемой, что и `packagedSchemaPath`. Незнакомое имя —
  * отказ с перечнем поставляемых (`stepcast-configuration`, решение о
  * форме `wrapper`).
@@ -264,16 +266,16 @@ export function packagedWrapperPath(name: string, reference?: SchemaReference): 
   const at = reference === undefined ? {} : { file: reference.file, at: reference.declaredAt };
   const relative = PACKAGED_WRAPPERS[name];
   if (relative === undefined) {
-    throw new StepcastError(`Обёртка stepcast:${name} не поставляется пакетом stepcast`, {
+    throw new StepcastError(`Обёртка burnex:${name} не поставляется пакетом burnex`, {
       ...at,
       hint: `Пакет поставляет: ${packagedWrapperNames().join(', ')}`,
     });
   }
   const path = join(findPackageRoot(HERE), relative);
   if (!existsSync(path)) {
-    throw new StepcastError(`Обёртка stepcast:${name} не найдена по пути ${path}`, {
+    throw new StepcastError(`Обёртка burnex:${name} не найдена по пути ${path}`, {
       ...at,
-      hint: 'Установка пакета stepcast неполна — соберите его (npm run build) либо переустановите',
+      hint: 'Установка пакета burnex неполна — соберите его (npm run build) либо переустановите',
     });
   }
   return path;

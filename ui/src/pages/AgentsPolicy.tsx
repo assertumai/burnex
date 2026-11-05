@@ -10,7 +10,7 @@ import {
   CardHeader,
   CardTitle,
   EmptyState,
-} from '@stepcast/ui';
+} from '@burnex/ui';
 import { lastPathSegment, unknownPathLabel } from '../../../src/parts/ui/runsView';
 import {
   savePipelineAgent,

@@ -106,7 +106,7 @@ function expandWith(project: Project, config: Config, file = 'stepcast.yml') {
 
 /**
  * Корни трёх слоёв script, изолированные от машины: `home` и `builtin` —
- * пустые временные каталоги, а не настоящие `homedir()` и пакет stepcast.
+ * пустые временные каталоги, а не настоящие `homedir()` и пакет burnex.
  * Тест, которому нужен непустой слой, дописывает в него файлом.
  */
 function isolatedScriptRoots(project: Project): ScriptRoots {
@@ -3857,7 +3857,7 @@ jobs:
   });
 });
 
-describe('pipeline-definition: отказ раскрытия на ссылке stepcast:<имя>', () => {
+describe('pipeline-definition: отказ раскрытия на ссылке burnex:<имя>', () => {
   it('неизвестное имя схемы роняет раскрытие, называя ссылку, место объявления и перечень имён', () => {
     const project = makeProject({
       'stepcast.yml': `
@@ -3868,7 +3868,7 @@ jobs:
       - id: think
         agent: claude
         prompt: ok
-        output_schema: stepcast:no-such
+        output_schema: burnex:no-such
 `,
     });
 
@@ -4611,7 +4611,7 @@ steps:
 });
 
 describe('pipeline-definition: обёртка раннера в argv шага script', () => {
-  it('node встраивает обёртку stepcast:step между командой и путём скрипта', () => {
+  it('node встраивает обёртку burnex:step между командой и путём скрипта', () => {
     const project = makeProject({
       'stepcast.yml': `
 kind: pipeline

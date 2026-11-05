@@ -10,6 +10,7 @@ import { BUILTIN_ROW_IDS } from '../../rows.js';
 import { discoverPluginDirectories, pluginsDirPath } from '../../../kernel/tree/discover.js';
 import { buildPackageIndex } from '../../packages/index.js';
 import { packagePluginOperations } from '../../packages/plugins.js';
+import { isPackagedAddress, PACKAGE_ADDRESS_PREFIX, packagedAddressName } from '../../../kernel/package-name.js';
 import {
   applyOperations,
   BUILTIN_USE_PREFIX,
@@ -62,7 +63,7 @@ export interface RunnerConfig {
   readonly command: readonly string[];
   readonly extensions: readonly string[];
   /**
-   * Объявленное значение `wrapper` — `stepcast:<имя>` либо путь, ещё не
+   * Объявленное значение `wrapper` — `burnex:<имя>` либо путь, ещё не
    * разрешённый в абсолютный (design.md, решение 7): разрешение бере́т слои
    * script-каталогов, которых у конфигурации на своём этапе нет, и потому
    * дописывается позже, рядом с разрешением скрипта (`expand.ts`).
@@ -158,8 +159,8 @@ export interface Config {
    * врать; файл объявления здесь по той же причине не хранится — он есть в
    * дереве, у каждой строки своей.
    *
-   * Строки встроенного слоя (`use: stepcast:<имя>`) в проекцию не входят:
-   * поле объявлено списком модулей (docs/config.md), а `stepcast:backend-claude`
+   * Строки встроенного слоя (`use: burnex:<имя>`) в проекцию не входят:
+   * поле объявлено списком модулей (docs/config.md), а `burnex:backend-claude`
    * модулем не является и `resolveModulePath` обычным путём не разрешается —
    * такую запись потребитель поля разрешить бы не смог. Состав встроенных
    * строк виден там, где он и должен быть виден целиком, — в дереве и в
@@ -679,26 +680,25 @@ function normalizeModelTiers(raw: unknown): ModelTiers {
  * схемы файлов не проходит вовсе, и эта проверка — единственное, что стоит
  * между его неполной записью и таким запуском.
  */
-const STEPCAST_WRAPPER_PREFIX = 'stepcast:';
-
 /**
  * Объявленный `wrapper` записи, слитой из всех слоёв, в действующее значение:
- * `none` и необъявленное значение — `undefined`, `stepcast:<имя>` —
+ * `none` и необъявленное значение — `undefined`, `burnex:<имя>` —
  * проверяется по перечню поставляемых здесь же (единственная форма, чья
  * корректность не зависит от каталога прогона), путь — переносится как есть
  * для разрешения при раскрытии пайплайна (design.md, решение 7).
  */
 function resolveDeclaredWrapper(name: string, value: string): string | undefined {
   if (value === 'none') return undefined;
-  if (value.startsWith(STEPCAST_WRAPPER_PREFIX)) {
-    const wrapperName = value.slice(STEPCAST_WRAPPER_PREFIX.length);
+  const wrapperName = packagedAddressName(value);
+  if (wrapperName !== undefined) {
     if (!packagedWrapperNames().includes(wrapperName)) {
-      throw new StepcastError(`Обёртка stepcast:${wrapperName} не поставляется пакетом stepcast`, {
+      throw new StepcastError(`Обёртка burnex:${wrapperName} не поставляется пакетом burnex`, {
         at: `runners.${name}.wrapper`,
         hint: `Пакет поставляет: ${packagedWrapperNames().join(', ')}`,
       });
     }
-    return value;
+    // Каноничная форма: прежний `stepcast:<имя>` дальше неотличим от нового.
+    return `${PACKAGE_ADDRESS_PREFIX}${wrapperName}`;
   }
   return value;
 }
@@ -723,7 +723,7 @@ function buildRunners(
     }
     const wrapper = raw.wrapper === undefined ? undefined : resolveDeclaredWrapper(name, raw.wrapper);
     const wrapperSource =
-      wrapper === undefined || wrapper.startsWith(STEPCAST_WRAPPER_PREFIX)
+      wrapper === undefined || isPackagedAddress(wrapper)
         ? undefined
         : provenance.get(`runners.${name}.wrapper`);
     out[name] = {

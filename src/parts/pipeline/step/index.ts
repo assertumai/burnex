@@ -7,7 +7,7 @@ import { mergeJobData } from '../run/journal/data.js';
 import { atomicWrite } from '../run/journal/writer.js';
 
 /**
- * Библиотека шага `stepcast/step`: тонкая обвязка над контрактом файлов
+ * Библиотека шага `burnex/step`: тонкая обвязка над контрактом файлов
  * (`docs/pipeline-format.md`, раздел `script`), а не второй способ его
  * исполнить. Пять функций, ровно то, что контракт уже обещает: `input()`
  * читает `input.json`, `output()` пишет `output.json`, `publish()` зовёт тот
@@ -23,7 +23,7 @@ import { atomicWrite } from '../run/journal/writer.js';
 function requireEnv(suffix: string): string {
   const value = readEngineEnv(process.env, suffix, { warn: false });
   if (value === undefined || value.trim() === '') {
-    throw new StepcastError('Библиотека stepcast/step работает только внутри шага прогона', {
+    throw new StepcastError('Библиотека burnex/step работает только внутри шага прогона', {
       hint: `Переменная ${envName(suffix)} приходит от движка в окружении шага script; вне прогона читать и писать некуда`,
     });
   }

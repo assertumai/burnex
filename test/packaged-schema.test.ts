@@ -109,7 +109,7 @@ describe('package-schema: схема, поставляемая пакетом', 
         // и `instanceof` через границу двух загрузок модуля не работает.
         assert.equal((error as Error).name, 'StepcastError');
         assert.equal((error as { exitCode?: number }).exitCode, 2);
-        assert.match((error as { hint?: string }).hint ?? '', /установка пакета stepcast неполна/);
+        assert.match((error as { hint?: string }).hint ?? '', /установка пакета burnex неполна/);
         return true;
       },
     );

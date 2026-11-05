@@ -2,7 +2,7 @@ import { useEffect, useState, type JSX } from 'react';
 
 import type { BacklogLockView } from '../api';
 import { fmtTime } from '../format';
-import { Alert, AlertDescription, AlertTitle } from '@stepcast/ui';
+import { Alert, AlertDescription, AlertTitle } from '@burnex/ui';
 import '../pages/backlog.css';
 
 /**

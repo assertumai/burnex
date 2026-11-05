@@ -387,7 +387,7 @@ void typeCheckDeclarativePluginWithoutHelper;
 function typeCheckDomainKeyInKernelHelper(): void {
   definePlugin({
     name: 'kernel-only',
-    // @ts-expect-error — `steps` — доменный ключ формы `PipelinePlugin` (`stepcast/pipeline`); ядерный `definePlugin` его не принимает
+    // @ts-expect-error — `steps` — доменный ключ формы `PipelinePlugin` (`burnex/pipeline`); ядерный `definePlugin` его не принимает
     steps: [],
   });
 }

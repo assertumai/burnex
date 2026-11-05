@@ -45,14 +45,14 @@ node examples/acceptance/verify.mjs <каталог-прогона-из-выво
 **`plugins/`** — образцы обеих половин плагина:
 
 - движковая половина (`docs/plugins.md`, «Два подпутя»): `typed/` — доменный
-  вклад (предикат и вид шага) через `stepcast/pipeline`, с хелперами
+  вклад (предикат и вид шага) через `burnex/pipeline`, с хелперами
   `define*` и схемой, выведенной из одной zod-модели; `command/` — плагин,
-  знающий только ядро (`stepcast/plugin`) и вносящий одну команду. Оба входят
+  знающий только ядро (`burnex/plugin`) и вносящий одну команду. Оба входят
   в `npm run typecheck:plugin` — тем же механизмом, каким подпуть разрешится
   у стороннего автора, после `npm run build`.
 - браузерная половина (`docs/ui-plugins.md`): `board/` — на React, с
-  компонентами `@stepcast/ui` (Button, Card, Table, Dialog, Tabs, Select,
-  Input) и вкладом в `SCREEN` дескриптором из `@stepcast/slots`; `element/` —
+  компонентами `@burnex/ui` (Button, Card, Table, Dialog, Tabs, Select,
+  Input) и вкладом в `SCREEN` дескриптором из `@burnex/slots`; `element/` —
   на другом фреймворке (Preact), встаёт в слот пользовательским элементом
   через адаптер `elementSlotComponent`, не импортируя ни React, ни cordis.
   Скопируйте каталог в `~/.stepcast/plugins/<id>/` рядом с `plugin.json` —

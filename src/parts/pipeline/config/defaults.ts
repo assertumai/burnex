@@ -81,11 +81,11 @@ export const BUILTIN_CONFIG: RawConfig = {
   // есть. `python3` и `sh` без неё — пакет поставляет обёртку только для
   // Node (design.md, Non-Goals).
   runners: {
-    node: { command: ['node'], extensions: ['.js', '.mjs', '.cjs'], wrapper: 'stepcast:step' },
+    node: { command: ['node'], extensions: ['.js', '.mjs', '.cjs'], wrapper: 'burnex:step' },
     'node-ts': {
       command: ['node', '--experimental-strip-types'],
       extensions: ['.ts', '.mts'],
-      wrapper: 'stepcast:step',
+      wrapper: 'burnex:step',
     },
     python3: { command: ['python3'], extensions: ['.py'] },
     sh: { command: ['sh'], extensions: ['.sh'] },

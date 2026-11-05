@@ -296,7 +296,7 @@ function withDisabledRowPatch(project: Project, id: string): void {
   mkdirSync(join(project.root, '.stepcast'), { recursive: true });
   writeFileSync(
     join(project.root, '.stepcast', 'plugins.patch.yml'),
-    `version: 1\nkind: plugins-patch\nplugins:\n  - id: ${id}\n    use: stepcast:${id}\n    enabled: false\n`,
+    `version: 1\nkind: plugins-patch\nplugins:\n  - id: ${id}\n    use: burnex:${id}\n    enabled: false\n`,
   );
 }
 
@@ -436,7 +436,7 @@ jobs:
 
   it('раскрывает поставляемый пайплайн, когда файла в проекте нет', async () => {
     const project = makeProject({});
-    const { code, stdout } = await cli(project, ['config', '--pipeline', 'stepcast:migrate-widgets']);
+    const { code, stdout } = await cli(project, ['config', '--pipeline', 'burnex:migrate-widgets']);
     assert.equal(code, ExitCode.ok, stdout);
     assert.match(stdout, /Политика выбора агента:/);
     assert.match(stdout, /migrate\/agent/);

@@ -13,7 +13,7 @@ import {
   EmptyState,
   PageHeader,
   statusBadgeVariant,
-} from '@stepcast/ui';
+} from '@burnex/ui';
 import { groupProjects } from '../../../src/parts/ui/grouping';
 import { lastPathSegment, unknownPathLabel } from '../../../src/parts/ui/runsView';
 import {

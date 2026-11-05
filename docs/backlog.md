@@ -716,12 +716,12 @@ burnex backlog pick --lanes a,b --run-dir путь | burnex project repos [--fil
 `schema/backlog.schema.json` и `schema/backlog-slots.schema.json` —
 порождёнными из тех же моделей, которыми команда проверяет разбор. Работа
 пайплайна, проверяющая выход `pick --lanes` ключом `output.schema`, называет
-схему ссылкой `stepcast:backlog-slots` — движок разрешает её сам, от
+схему ссылкой `burnex:backlog-slots` — движок разрешает её сам, от
 собственного расположения, независимо от того, откуда пакет установлен
 (`node_modules`, ссылка, исходники) и есть ли рядом с работой каталог `schema/`
 вовсе. Указывать путь `node_modules/stepcast/schema/` вручную не нужно. В этом
 репозитории (stepcast и есть проект) работа `slots` ссылается той же формой —
-`stepcast:backlog-slots` — на тот же файл в дереве исходников.
+`burnex:backlog-slots` — на тот же файл в дереве исходников.
 
 ## Правка файла
 

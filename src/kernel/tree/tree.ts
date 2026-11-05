@@ -1,4 +1,5 @@
 import { StepcastError } from '../errors.js';
+import { canonicalAddress, canonicalSpecifier, isPackagedAddress, PACKAGE_ADDRESS_PREFIX } from '../package-name.js';
 import type { PluginPatchRow } from './patch.js';
 
 /**
@@ -40,11 +41,22 @@ export function describeOrigin(origin: TreeOrigin): string {
  * загрузчике: по ней же отличает встроенную строку от модуля и проекция
  * `Config.plugins` (`config/resolve.ts`).
  */
-export const BUILTIN_USE_PREFIX = 'stepcast:';
+export const BUILTIN_USE_PREFIX = PACKAGE_ADDRESS_PREFIX;
 
 /** Строка занята встроенной фабрикой: её `use` — не путь и не пакет, а имя из таблицы `builtin.ts`. */
 export function isBuiltinUse(use: string): boolean {
-  return use.startsWith(BUILTIN_USE_PREFIX);
+  return isPackagedAddress(use);
+}
+
+/**
+ * `use` строки в каноничной форме: прежние `stepcast:<имя>` и
+ * `stepcast/<подпуть>` читаются как `burnex:…` и `burnex/…` один выпуск
+ * переходного периода (`kernel/package-name.ts`). Приводится на входе —
+ * при разборе слоя, — чтобы сравнения тождества строк (`use === burnex:<id>`)
+ * и разрешение модуля дальше знали одно имя.
+ */
+export function canonicalUse(use: string): string {
+  return canonicalSpecifier(canonicalAddress(use));
 }
 
 /**
@@ -122,7 +134,7 @@ export interface TreeOperation {
  * дереве не меняет — см. схлопывание в `applyOperation`.
  */
 export function keyOperations(specs: readonly string[], file: string): TreeOperation[] {
-  return specs.map((spec) => ({ kind: 'key' as const, id: spec, use: spec, enabled: true, file }));
+  return specs.map((spec) => ({ kind: 'key' as const, id: spec, use: canonicalUse(spec), enabled: true, file }));
 }
 
 /**
@@ -175,7 +187,7 @@ export function patchOperations(rows: readonly PluginPatchRow[], file: string): 
     operations.push({
       kind: 'patch',
       id: row.id,
-      use: row.use,
+      use: canonicalUse(row.use),
       enabled: row.enabled ?? true,
       ...(row.before === undefined ? {} : { before: row.before }),
       ...(row.after === undefined ? {} : { after: row.after }),
@@ -295,7 +307,7 @@ export function applyOperations(tree: readonly TreeRow[], operations: readonly T
 }
 
 /**
- * Начальное дерево встроенного слоя: `use` в форме `stepcast:<id>` — тем же
+ * Начальное дерево встроенного слоя: `use` в форме `burnex:<id>` — тем же
  * путём, каким патч называет строку, поставляемую пакетом (design.md,
  * Решение 2, 5). Порядок совпадает с порядком `ids`.
  */

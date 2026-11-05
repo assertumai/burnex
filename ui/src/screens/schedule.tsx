@@ -3,7 +3,7 @@ import type { Context } from 'cordis';
 
 import { declaration } from '../../../src/parts/ui/screens/schedule/declaration.ts';
 import { Schedule } from '../pages/Schedule';
-import { SCREEN } from '@stepcast/slots';
+import { SCREEN } from '@burnex/slots';
 
 /**
  * Экран «Schedule»: страница сама читает `GET /api/schedule` при открытии.

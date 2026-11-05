@@ -6,7 +6,7 @@ import { KernelContext, ROOT } from '../kernel';
 import { HOME_ROUTES_FILE, RoutesListing } from '../pages/Routes';
 import { useRoute, useRoutes, useScreens } from '../router';
 import { Slot } from '../slots.tsx';
-import { Alert } from '@stepcast/ui';
+import { Alert } from '@burnex/ui';
 import { WidgetHost } from '../widgetHost';
 import { GenericNavItem } from './navItem';
 import {
@@ -17,7 +17,7 @@ import {
   SCREEN_FRAME,
   type ChainLinkProps,
   type RouteTargetSlotProps,
-} from '@stepcast/slots';
+} from '@burnex/slots';
 
 /**
  * Каркас витрины — встроенный плагин (design.md `cordis-kernel-browser`,
@@ -37,7 +37,7 @@ import {
  * контексту не обращаются вовсе.
  */
 
-// Дескрипторы — из поверхности `@stepcast/slots` (design.md изменения
+// Дескрипторы — из поверхности `@burnex/slots` (design.md изменения
 // `shared-module-table`, Решение 5), не копии. Ре-экспорт сохраняет прежний
 // путь импорта тем, кто уже на него полагается (`ui/test/shell.test.tsx`).
 export { NAV, SCREEN, SCREEN_FRAME };

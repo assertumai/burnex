@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Button } from '@stepcast/ui';
+import { Button } from '@burnex/ui';
 
 /**
  * A ticking clock with a pause button — the smallest widget that shows state,

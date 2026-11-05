@@ -48,7 +48,7 @@ describe('ui-widgets: каталог поставки', () => {
         const code = (outcome as { readonly code: string }).code;
         const specifiers = [...code.matchAll(/from "([^"]+)"/g)].map((match) => match[1]);
         for (const specifier of specifiers) {
-          assert.ok(['react', 'react/jsx-runtime', '@stepcast/ui', '@stepcast/slots'].includes(specifier as string), `${widget.id}: ${specifier}`);
+          assert.ok(['react', 'react/jsx-runtime', '@burnex/ui', '@burnex/slots'].includes(specifier as string), `${widget.id}: ${specifier}`);
         }
       }
     } finally {

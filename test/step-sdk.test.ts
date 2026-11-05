@@ -9,7 +9,7 @@ import { exec, input, log, output, publish } from '../src/parts/pipeline/step/in
 import { tempDir } from './tmp.js';
 
 /**
- * Библиотека `stepcast/step` работает по одним лишь `BURNEX_*` (design.md,
+ * Библиотека `burnex/step` работает по одним лишь `BURNEX_*` (design.md,
  * решение 10) — тест выставляет их сам, как это делает движок в окружении
  * шага, а не запускает настоящий подпроцесс.
  */

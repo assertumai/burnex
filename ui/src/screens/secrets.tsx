@@ -2,7 +2,7 @@ import type { Context } from 'cordis';
 
 import { declaration } from '../../../src/parts/ui/screens/secrets/declaration.ts';
 import { Secrets } from '../pages/Secrets';
-import { SCREEN } from '@stepcast/slots';
+import { SCREEN } from '@burnex/slots';
 
 /**
  * Экран «Secrets»: страница сама читает `GET /api/secrets` при открытии и по

@@ -3,7 +3,7 @@ import { createCodexAdapter } from './adapter.js';
 import { codexModelDiscovery } from './models.js';
 
 /**
- * Плагин Codex: `plugins: [stepcast/backends/codex]`.
+ * Плагин Codex: `plugins: [burnex/backends/codex]`.
  *
  * Поставляется в пакете, но не встроен: `builtinPlugin()` его не знает, и без
  * объявления бэкенда `codex` не существует. Умолчания — то, что пользователь

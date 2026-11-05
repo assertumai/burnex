@@ -166,7 +166,7 @@ export const RawRunnerSchema = z
     command: z.array(z.string().trim().min(1).regex(/\S/)).min(1).optional(),
     extensions: z.array(z.string().regex(/^\.\S+$/, 'расширение должно начинаться с точки')).optional(),
     /**
-     * Обёртка раннера (`stepcast-configuration`): `stepcast:<имя>` — файл,
+     * Обёртка раннера (`stepcast-configuration`): `burnex:<имя>` — файл,
      * поставляемый пакетом; путь — по правилам значения `script`; `none` —
      * снять унаследованную обёртку. Форма и неизвестное имя проверяются в
      * `buildRunners`, где видны все слои сразу.

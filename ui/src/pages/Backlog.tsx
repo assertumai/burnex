@@ -33,7 +33,7 @@ import {
   TableHeader,
   TableRow,
   statusBadgeVariant,
-} from '@stepcast/ui';
+} from '@burnex/ui';
 import './backlog.css';
 
 /**

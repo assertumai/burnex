@@ -18,7 +18,7 @@ import {
   EmptyState,
   PageHeader,
   type BadgeVariant,
-} from '@stepcast/ui';
+} from '@burnex/ui';
 import './secrets.css';
 
 /**

@@ -33,7 +33,7 @@ import { tempDir } from './tmp.js';
  * Имена `react`, `react-dom`, `react/jsx-runtime` и `cordis` — реальные
  * установленные пакеты, и перечень их реэкспортов сверяется здесь, узловым
  * тестом, с тем, что они действительно экспортируют (design.md, Решение 4).
- * `@stepcast/slots` и `@stepcast/ui` живут в `ui/` и узлу не видны — их
+ * `@burnex/slots` и `@burnex/ui` живут в `ui/` и узлу не видны — их
  * перечень сверяет браузерный тест (`ui/test/sharedSlots.test.tsx`,
  * `ui/test/components.test.tsx`).
  */
@@ -293,6 +293,8 @@ describe('ui-shared-modules: версия таблицы сведена с пе�
     1: '8faab4f53188792a8c9e7dd1ad86da3304085aaa655f3e4059beae28367aa42e',
     // Версия 2 (`ui-overhaul`): добавлены Badge, statusBadgeVariant, Label, Separator, Alert*, Switch, Combobox, PageHeader, EmptyState.
     2: '13fa6661e9e4d422fa7bae261dff780a81fd4f0a5e0b29f5400f831217f40241',
+    // Версия 3 (`rename-package-burnex`): имена те же, спецификаторы `@stepcast/*` → `@burnex/*`.
+    3: '897a93940fa1d426b199390a19e1aea6b99941aff5a43281b0dada6829acb477',
   };
 
   it('перечень имён при действующей версии совпадает с зафиксированным отпечатком', () => {

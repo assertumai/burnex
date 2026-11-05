@@ -6,6 +6,7 @@ import { Ajv2020 } from 'ajv/dist/2020.js';
 import type { Config } from '../config/resolve.js';
 import { validateAgainstSchema } from '../expect/evaluate.js';
 import { describeSchemaFailure } from '../../../kernel/schema-failure.js';
+import { packagedAddressName } from '../../../kernel/package-name.js';
 import { packagedSchemaPath } from '../domain/package-schema.js';
 import {
   DEFERRED_NAMESPACES,
@@ -205,10 +206,8 @@ function resolveWithinStepDir(
   return { ok: true, absolute };
 }
 
-const STEPCAST_SCHEMA_PREFIX = 'stepcast:';
-
 /**
- * Разрешить `output_schema` манифеста: форма `stepcast:<имя>` адресует схему
+ * Разрешить `output_schema` манифеста: форма `burnex:<имя>` адресует схему
  * пакета и границы каталога не касается (design.md, решение 9, то же
  * исключение, что у `output_schema` шага `script`); прочее значение —
  * относительно каталога шага, с той же проверкой границы, что и у `file`.
@@ -217,11 +216,12 @@ function resolveManifestOutputSchema(
   value: string,
   manifest: ReadManifest,
 ): { readonly ok: true; readonly path: string } | { readonly ok: false; readonly detail: string } {
-  if (value.startsWith(STEPCAST_SCHEMA_PREFIX)) {
+  const packaged = packagedAddressName(value);
+  if (packaged !== undefined) {
     try {
       return {
         ok: true,
-        path: packagedSchemaPath(value.slice(STEPCAST_SCHEMA_PREFIX.length), {
+        path: packagedSchemaPath(packaged, {
           file: manifest.manifestPath,
           declaredAt: 'output_schema',
         }),

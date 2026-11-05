@@ -1234,12 +1234,12 @@ describe('stepcast-configuration: таблица раннеров', () => {
     assert.deepEqual(config.runners.node, {
       command: ['node'],
       extensions: ['.js', '.mjs', '.cjs'],
-      wrapper: 'stepcast:step',
+      wrapper: 'burnex:step',
     });
     assert.deepEqual(config.runners['node-ts'], {
       command: ['node', '--experimental-strip-types'],
       extensions: ['.ts', '.mts'],
-      wrapper: 'stepcast:step',
+      wrapper: 'burnex:step',
     });
     assert.deepEqual(config.runners.python3, { command: ['python3'], extensions: ['.py'] });
     assert.deepEqual(config.runners.sh, { command: ['sh'], extensions: ['.sh'] });
@@ -1247,11 +1247,11 @@ describe('stepcast-configuration: таблица раннеров', () => {
   });
 
   // Сценарий: «Встроенные раннеры Node несут обёртку»
-  it('python3 и sh обёртки не несут, node и node-ts несут stepcast:step', () => {
+  it('python3 и sh обёртки не несут, node и node-ts несут burnex:step', () => {
     const box = sandbox({});
     const { config } = resolveIn(box);
-    assert.equal(config.runners.node!.wrapper, 'stepcast:step');
-    assert.equal(config.runners['node-ts']!.wrapper, 'stepcast:step');
+    assert.equal(config.runners.node!.wrapper, 'burnex:step');
+    assert.equal(config.runners['node-ts']!.wrapper, 'burnex:step');
     assert.equal(config.runners.python3!.wrapper, undefined);
     assert.equal(config.runners.sh!.wrapper, undefined);
   });
@@ -1276,14 +1276,14 @@ describe('stepcast-configuration: таблица раннеров', () => {
   });
 
   // Сценарий: «Неизвестная поставляемая обёртка»
-  it('неизвестное имя stepcast:<имя> у wrapper — отказ с перечнем поставляемых', () => {
+  it('неизвестное имя burnex:<имя> у wrapper — отказ с перечнем поставляемых', () => {
     const box = sandbox({
-      project: 'runners:\n  deno:\n    command: [deno, run]\n    wrapper: "stepcast:нет-такой"\n',
+      project: 'runners:\n  deno:\n    command: [deno, run]\n    wrapper: "burnex:нет-такой"\n',
     });
     assert.throws(() => resolveIn(box), (error: unknown) => {
       assert.ok(error instanceof StepcastError);
-      assert.match(error.message, /stepcast:нет-такой/);
-      assert.match(error.message, /step/);
+      assert.match(error.message, /burnex:нет-такой/);
+      assert.match(error.message, /пакетом burnex/);
       assert.equal(error.at, 'runners.deno.wrapper');
       return true;
     });
@@ -1293,7 +1293,7 @@ describe('stepcast-configuration: таблица раннеров', () => {
     const box = sandbox({});
     const lines = renderConfigReport(resolveIn(box));
     const wrapper = lines.find((line) => line.startsWith('runners.node.wrapper'));
-    assert.match(wrapper ?? '', /stepcast:step/);
+    assert.match(wrapper ?? '', /burnex:step/);
     assert.equal(
       lines.find((line) => line.startsWith('runners.python3.wrapper')),
       undefined,

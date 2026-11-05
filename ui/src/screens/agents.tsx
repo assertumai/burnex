@@ -5,7 +5,7 @@ import { declaration } from '../../../src/parts/ui/screens/agents/declaration.ts
 import type { RouteTarget } from '../../../src/parts/ui/routes.ts';
 import { Agents, tabOf, type AgentTab } from '../pages/Agents';
 import { hrefForTarget } from '../router';
-import { SCREEN } from '@stepcast/slots';
+import { SCREEN } from '@burnex/slots';
 
 /** Цель экрана агентов — по ней собираются ссылки на вкладки (`ui-routes`, Решение 8). */
 export const AGENTS_TARGET: RouteTarget = { kind: 'screen', id: declaration.id };

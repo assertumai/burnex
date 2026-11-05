@@ -8,7 +8,7 @@ import { findPackageRoot } from '../domain/package-schema.js';
 /**
  * Переносимая форма ссылок на ресурсы поставки в замке и ключе шага.
  *
- * Схемы `stepcast:<имя>`, обёртка `stepcast:step`, встроенные скрипты, шаги
+ * Схемы `burnex:<имя>`, обёртка `burnex:step`, встроенные скрипты, шаги
  * и пайплайны разрешаются в абсолютные пути от корня пакета — а корень у
  * каждого выпуска свой (`~/.stepcast/releases/<ts>-<sha>/`, `node_modules`
  * другого репозитория). Войди такой путь в `jobLockHash` и `computeStepKey`
@@ -36,7 +36,7 @@ const RESOURCE_DIRS: readonly string[] = ['schema', join('src', 'builtin'), 'dis
 
 const HERE = fileURLToPath(new URL('.', import.meta.url));
 
-/** Корень пакета stepcast, из которого исполняется движок. */
+/** Корень пакета burnex, из которого исполняется движок. */
 export function enginePackageRoot(): string {
   return findPackageRoot(HERE);
 }

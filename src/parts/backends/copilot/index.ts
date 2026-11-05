@@ -2,7 +2,7 @@ import { defineBackend, definePipelinePlugin } from '../../pipeline/surface.js';
 import { createCopilotAdapter } from './adapter.js';
 
 /**
- * Плагин GitHub Copilot: `plugins: [stepcast/backends/copilot]`.
+ * Плагин GitHub Copilot: `plugins: [burnex/backends/copilot]`.
  *
  * Поставляется в пакете, но не встроен: `builtinPlugin()` его не знает, и без
  * объявления бэкенда `copilot` не существует. Умолчания честны: CLI не умеет

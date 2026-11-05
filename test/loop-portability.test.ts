@@ -1233,7 +1233,7 @@ jobs:
  * файла объявления, не должна вести за пределы `.stepcast/` — иначе перенос
  * `.stepcast/jobs/` в чужой репозиторий требует правки внутри скопированных
  * файлов. `slots.yml` был последней ссылкой наружу (`../../schema/...`);
- * форма `stepcast:<имя>` резолвится от расположения движка, а не от файла
+ * форма `burnex:<имя>` резолвится от расположения движка, а не от файла
  * объявления, и на границу репозитория не выходит.
  *
  * `changed_only` и `context` в обход не входят: это не ссылки на файл рядом с
@@ -1368,7 +1368,7 @@ steps:
 kind: job
 name: probe
 output:
-  schema: stepcast:backlog-slots
+  schema: burnex:backlog-slots
 steps:
   - id: think
     agent: claude
@@ -1377,7 +1377,7 @@ steps:
       analyze: почему
       prompt: file:../prompts/analyze.md
     expect:
-      - schema: stepcast:backlog-slots
+      - schema: burnex:backlog-slots
 `);
 
     assert.deepEqual(outsideRefs(document, file), []);
@@ -1386,7 +1386,7 @@ steps:
 
 /**
  * job-schema-path-portable: обход выше доказывает, что ссылка не выходит за
- * `.stepcast/`; он не доказывает, что `stepcast:backlog-slots` в чужом дереве
+ * `.stepcast/`; он не доказывает, что `burnex:backlog-slots` в чужом дереве
  * во что-то разрешается. Здесь — настоящий `slots.yml`, скопированный (не
  * подключённый по абсолютному пути — тот всегда лежит рядом с настоящим
  * `schema/` этого репозитория и ничего бы не доказал) в проект, где каталога

@@ -15,7 +15,7 @@ import { tempDir } from './tmp.js';
 
 /**
  * Корни трёх слоёв script, изолированные от машины: `home` и `builtin` —
- * пустые временные каталоги, а не настоящие `homedir()` и пакет stepcast.
+ * пустые временные каталоги, а не настоящие `homedir()` и пакет burnex.
  */
 function isolatedScriptRoots(project: Project): { project: string; home: string; builtin: string } {
   return { project: project.root, home: tempDir('script-home-'), builtin: tempDir('script-builtin-') };

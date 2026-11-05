@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Badge, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@stepcast/ui';
+import { Badge, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@burnex/ui';
 
 /**
  * Projects the daemon knows about, with their run counts and the time of the

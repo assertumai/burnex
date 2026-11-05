@@ -107,7 +107,7 @@ src/
     fs/  packageRoot.ts       временный каталог, подъём до корня пакета
     errors.ts  schema-failure.ts  units.ts
 
-  plugin/                     ← публичная поверхность `stepcast/plugin`
+  plugin/                     ← публичная поверхность `burnex/plugin`
     index.ts                  типы ядра + definePlugin / definePredicate<T> / defineStepKind<F>
 
   parts/                      ← строки встроенного слоя: пакет их несёт, ядро — нет
@@ -117,7 +117,7 @@ src/
       commands/  plugins.ts     единственная ядерная команда, читающая состав
     pipeline/
       row.ts                  строка: provide('backends' | 'predicates' | 'steps')
-      surface.ts              публичная поверхность `stepcast/pipeline` (доменные типы)
+      surface.ts              публичная поверхность `burnex/pipeline` (доменные типы)
       contract.ts             доменный контракт вклада (было core/plugins/pipeline-contract.ts)
       services.ts             PIPELINE_SERVICES, помощник строки-потребителя
       index.ts                цель подпути `stepcast`
@@ -134,10 +134,10 @@ src/
                               trigger, project, context, expr, graph, lint,
                               text, textDiff, остаток package-schema.ts
       commands/               run, resume, status, lint, diff, usage, logs, gc, … (21)
-      step/                   публикуемая обёртка раннера, цель подпути `stepcast/step`
+      step/                   публикуемая обёртка раннера, цель подпути `burnex/step`
     backends/
       claude/  adapter.ts  row.ts   строка backend-claude
-      codex/   adapter.ts  index.ts  цель подпути `stepcast/backends/codex`
+      codex/   adapter.ts  index.ts  цель подпути `burnex/backends/codex`
     ui/
       shell/                  строка ui-shell: provide('screens' | 'api')
       screens/                14 строк, по каталогу на экран
@@ -200,7 +200,7 @@ zod в контракте касается передачи модели чер�
 Шаги упорядочены так, чтобы каждый был осмыслен сам по себе и оставлял
 `npm run check` зелёным.
 
-1. **Хелперы и один источник схемы** в `stepcast/plugin`. Самостоятельная
+1. **Хелперы и один источник схемы** в `burnex/plugin`. Самостоятельная
    ценность, ничего не ломает, снимает главное неудобство авторства вкладов.
 2. ✅ **Разрыв обратных зависимостей** (`kernel-domain-free-imports`):
    `plugins/kernel.ts` больше не импортирует `pipeline/schema.js` — проверку
@@ -251,7 +251,7 @@ zod в контракте касается передачи модели чер�
    именованный отказ разбора, отличный от «неизвестного ключа». `decision`
    переехал физически (`src/steps/decision/` → `src/parts/pipeline/steps/decision/`),
    оставаясь строкой с прежним `id`; граница линтера «вклад идёт через
-   `stepcast/plugin`» переехала вместе с ним. Прежнего адреса не осталось
+   `burnex/plugin`» переехала вместе с ним. Прежнего адреса не осталось
    вовсе: пустые модули-призраки (`export {}`), которыми тот переезд обошёлся
    вместо удаления, сняты вместе с каталогом `src/steps/` шагом 10. Форма `native` эту привилегию
    не потеряла (см. оговорку в шаге 4) — переезд в строки её не снимает.
@@ -315,16 +315,16 @@ zod в контракте касается передачи модели чер�
    `pipeline` законен, и `burnex plugins`/`burnex config` в нём работают.
 
    Остаток для шага 8: `contract.ts` и `context.ts` по-прежнему доменны по
-   содержанию — их разделение на `stepcast/plugin` (ядро) и `stepcast/pipeline`
+   содержанию — их разделение на `burnex/plugin` (ядро) и `burnex/pipeline`
    (домен) этим шагом не сделано и остаётся его предметом.
 8. ✅ **Разделение публичной поверхности** (`plugin-surface-split`):
-   `stepcast/pipeline` — новый подпуть, чей модуль (`src/parts/pipeline/surface.ts`)
+   `burnex/pipeline` — новый подпуть, чей модуль (`src/parts/pipeline/surface.ts`)
    принадлежит строке `pipeline`, той же, что заводит служебные сервисы шагом 7.
-   `stepcast/plugin` перестаёт публиковать домен: `contract.ts` и `context.ts`
+   `burnex/plugin` перестаёт публиковать домен: `contract.ts` и `context.ts`
    несут только ядерные объявления (`CommandContribution<E>` обобщён по
    окружению с ядерным умолчанием, `Context` публикует только `commands` и
    способности области); `define.ts` — только `definePlugin`. Прежние импорты
-   доменных имён из `stepcast/plugin` ломаются без реэкспорта — таблица
+   доменных имён из `burnex/plugin` ломаются без реэкспорта — таблица
    переезда в `docs/plugins.md` и в заголовке `src/plugin/index.ts`. Плагины
    поставки (`codex`, `decision`) и образец `examples/plugins/typed` переписаны
    новым делением; заведён второй образец, `examples/plugins/command`, — плагин,
@@ -408,7 +408,7 @@ zod в контракте касается передачи модели чер�
     сегмента (`../../run/journal/schema.js` из `steps/decision/`). Дерево в
     правиле стало бы вакуумным, поэтому запрет назван подъёмом выше
     собственного каталога плагина, а разрешены ровно два публичных подпутя
-    (`stepcast/plugin`, `stepcast/pipeline`). Проба линтера в
+    (`burnex/plugin`, `burnex/pipeline`). Проба линтера в
     `test/eslint-config.test.ts` называет настоящие адреса, и отдельная
     проверка требует их существования на диске: проба по снесённому адресу
     прошла бы при любом правиле, и вакуумное правило выглядело бы работающим.
@@ -460,7 +460,7 @@ zod в контракте касается передачи модели чер�
 - **Адаптер `claude` не переписан на публичную поверхность.** Он лежит в
   `parts/backends/claude/adapter.ts` рядом со своей строкой, но написан
   внутренними импортами, как и до переезда; граница «вклад плагина поставки
-  идёт через `stepcast/plugin`» из-за этого названа перечнем каталогов
+  идёт через `burnex/plugin`» из-за этого названа перечнем каталогов
   (`parts/backends/codex/**`, `parts/pipeline/steps/decision/**`), а не деревом
   `parts/backends/**` (`source-tree-microkernel-layout`, design.md, Решение 8).
   Переписывание `claude` сделало бы правило деревом — цена названа, решения

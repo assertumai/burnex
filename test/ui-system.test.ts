@@ -94,7 +94,7 @@ function backendRow(view: SystemView, id: string): SystemView['backends'][number
   return row;
 }
 
-const CODEX = 'plugins:\n  - stepcast/backends/codex\n';
+const CODEX = 'plugins:\n  - burnex/backends/codex\n';
 
 describe('ui-system: версия и способ установки', () => {
   it('managed: ссылка, версия и релиз, на который смотрит current', async () => {

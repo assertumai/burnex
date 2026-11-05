@@ -5,7 +5,7 @@ import { declaration } from '../../../src/parts/ui/screens/decisions/declaration
 import type { RouteTarget } from '../../../src/parts/ui/routes.ts';
 import type { Overview } from '../api';
 import { Decisions } from '../pages/Decisions';
-import { SCREEN } from '@stepcast/slots';
+import { SCREEN } from '@burnex/slots';
 
 /** Цель экрана «Решения» — для ссылок с карточки шага прогона (`RunDetail`). */
 export const DECISIONS_TARGET: RouteTarget = { kind: 'screen', id: declaration.id };

@@ -4,8 +4,8 @@ import * as ReactDomNamespace from 'react-dom';
 import { createRoot } from 'react-dom/client';
 import * as JsxRuntimeNamespace from 'react/jsx-runtime';
 import * as CordisNamespace from 'cordis';
-import * as SharedSlotsNamespace from '@stepcast/slots';
-import * as SharedUiNamespace from '@stepcast/ui';
+import * as SharedSlotsNamespace from '@burnex/slots';
+import * as SharedUiNamespace from '@burnex/ui';
 
 import { WIDGET_RUNTIME_GLOBAL } from '../../src/parts/ui/daemon/sharedModules';
 import { createBrowserKernel } from './kernel';
@@ -33,8 +33,8 @@ import './styles.css';
   'react-dom': ReactDomNamespace,
   'react/jsx-runtime': JsxRuntimeNamespace,
   cordis: CordisNamespace,
-  '@stepcast/slots': SharedSlotsNamespace,
-  '@stepcast/ui': SharedUiNamespace,
+  '@burnex/slots': SharedSlotsNamespace,
+  '@burnex/ui': SharedUiNamespace,
 };
 
 /**

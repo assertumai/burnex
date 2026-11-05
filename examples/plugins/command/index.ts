@@ -1,4 +1,4 @@
-import { definePlugin, StepcastError, type CliIo, type CommandContribution, type ParsedArgs } from 'stepcast/plugin';
+import { definePlugin, StepcastError, type CliIo, type CommandContribution, type ParsedArgs } from 'burnex/plugin';
 
 /**
  * Образец плагина, знающего только ядро (`plugin-surface-split`, design.md,
@@ -6,8 +6,8 @@ import { definePlugin, StepcastError, type CliIo, type CommandContribution, type
  * только ядром, компилируется без доменного подпутя». Вносит одну команду и
  * не называет ни одного объявления пайплайна — ни шага, ни работы, ни
  * бэкенда, ни предиката — ни типом, ни значением. Импорт — только
- * `stepcast/plugin`, наравне с образцом доменного вклада
- * (`examples/plugins/typed`), который берёт `stepcast/pipeline`.
+ * `burnex/plugin`, наравне с образцом доменного вклада
+ * (`examples/plugins/typed`), который берёт `burnex/pipeline`.
  */
 
 const hello: CommandContribution = {

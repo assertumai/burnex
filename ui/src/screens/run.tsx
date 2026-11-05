@@ -5,7 +5,7 @@ import { declaration } from '../../../src/parts/ui/screens/run/declaration.ts';
 import type { RouteTarget } from '../../../src/parts/ui/routes.ts';
 import type { RunSnapshot } from '../api';
 import { RunDetail } from '../pages/RunDetail';
-import { SCREEN } from '@stepcast/slots';
+import { SCREEN } from '@burnex/slots';
 
 /**
  * Цель страницы прогона — то, чем на неё ссылаются прочие экраны

@@ -1,7 +1,7 @@
 import { h, render, type ComponentChild } from 'preact';
 import { useState } from 'preact/hooks';
 import type { Context } from 'cordis';
-import { elementSlotComponent, SCREEN } from '@stepcast/slots';
+import { elementSlotComponent, SCREEN } from '@burnex/slots';
 
 /**
  * Образец плагина на другом фреймворке (design.md изменения

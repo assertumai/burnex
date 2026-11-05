@@ -4,7 +4,7 @@ import type { Context } from 'cordis';
 import { declaration } from '../../../src/parts/ui/screens/pipelines/declaration.ts';
 import type { Overview } from '../api';
 import { Pipelines } from '../pages/Pipelines';
-import { SCREEN } from '@stepcast/slots';
+import { SCREEN } from '@burnex/slots';
 
 function PipelinesScreen({
   overview,

@@ -19,7 +19,7 @@ import {
   SelectTrigger,
   SelectValue,
   Switch,
-} from '@stepcast/ui';
+} from '@burnex/ui';
 import { fetchPipelines, fetchSettings, launchRun, type BackendView, type PipelineView } from '../api';
 import {
   DEFAULT_AGENT,

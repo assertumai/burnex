@@ -22,7 +22,7 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from '@stepcast/ui';
+} from '@burnex/ui';
 import './decisions.css';
 
 /**

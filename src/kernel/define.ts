@@ -9,7 +9,7 @@ import type { StepcastPlugin } from './contract.js';
  * пропускает молча.
  *
  * Доменные хелперы — `definePipelinePlugin`, `defineBackend`,
- * `definePredicate`, `defineStepKind` — публикует подпуть `stepcast/pipeline`
+ * `definePredicate`, `defineStepKind` — публикует подпуть `burnex/pipeline`
  * (`src/parts/pipeline/surface.ts`), тем же основанием, каким объявление
  * пайплайна публикует его вклад (design.md, Решение 8): второй `definePlugin`
  * с тем же именем в двух подпутях читался бы как один экспорт, и первая же

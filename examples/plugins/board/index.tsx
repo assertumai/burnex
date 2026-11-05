@@ -29,8 +29,8 @@ import {
   TabsContent,
   TabsList,
   TabsTrigger,
-} from '@stepcast/ui';
-import { SCREEN } from '@stepcast/slots';
+} from '@burnex/ui';
+import { SCREEN } from '@burnex/slots';
 
 const SAMPLE_TASKS = [
   { id: 't1', title: 'починить сборку', priority: 'высокий' },
@@ -38,11 +38,11 @@ const SAMPLE_TASKS = [
 ] as const;
 
 /**
- * Образец плагина «доска задач»: React на `@stepcast/ui` — Dialog, Tabs и
+ * Образец плагина «доска задач»: React на `@burnex/ui` — Dialog, Tabs и
  * Select, которым иначе негде набрать пользователя среди встроенных экранов
  * (design.md изменения `shared-module-table`, Решение 12), рядом с Button,
  * Card, Table и Input, — и вклад в `SCREEN` дескриптором из
- * `@stepcast/slots`, а не строкой наугад.
+ * `@burnex/slots`, а не строкой наугад.
  *
  * Плагин ничего не импортирует относительным путём и ничего не приносит в
  * бандле, кроме своего кода: React, cordis и компоненты витрины резолвятся

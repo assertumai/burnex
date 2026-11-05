@@ -1,6 +1,6 @@
 import { useState, type JSX } from 'react';
 
-import { Button, Combobox, Input } from '@stepcast/ui';
+import { Button, Combobox, Input } from '@burnex/ui';
 import type {
   AgentEntryView,
   PipelineAgentOrigin,

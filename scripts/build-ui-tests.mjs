@@ -16,7 +16,7 @@ import * as esbuild from 'esbuild';
  * шаблоном оболочки, — переносимо между `sh` и `bash` и не зависит от того,
  * включён ли `globstar`.
  *
- * Примитивы Radix (`@stepcast/ui`, design.md изменения `shared-module-table`,
+ * Примитивы Radix (`@burnex/ui`, design.md изменения `shared-module-table`,
  * Решение 6) — тоже внешние, а не забандленные: их собственные внутренние
  * зависимости (`react-remove-scroll` и подобные) несут код, рассчитанный на
  * CJS-разрешение `require()` в самом Node, и бандл esbuild в ESM даёт на нём
@@ -86,8 +86,8 @@ await esbuild.build({
   // `ui/tsconfig*.json`. Без него браузерный тест был бы единственным местом,
   // пишущим относительный путь вместо имени.
   alias: {
-    '@stepcast/slots': join(ROOT, 'ui', 'src', 'sharedSlots.ts'),
-    '@stepcast/ui': join(ROOT, 'ui', 'src', 'ui', 'index.ts'),
+    '@burnex/slots': join(ROOT, 'ui', 'src', 'sharedSlots.ts'),
+    '@burnex/ui': join(ROOT, 'ui', 'src', 'ui', 'index.ts'),
   },
   jsx: 'automatic',
   logLevel: 'info',

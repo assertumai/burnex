@@ -225,7 +225,7 @@ export const row = commandRow<PipelineCommandEnv>({
       agent: { kind: 'string', description: 'переопределить бэкенд по умолчанию' },
       pipeline: {
         kind: 'string',
-        description: 'раскрыть пайплайн (путь или stepcast:<имя>) и показать агента, модель и effort каждого шага с источником',
+        description: 'раскрыть пайплайн (путь или burnex:<имя>) и показать агента, модель и effort каждого шага с источником',
       },
     },
   },

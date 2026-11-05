@@ -93,10 +93,10 @@ describe('package address: разрешение цели', () => {
     assert.match(error.hint ?? '', /other/);
   });
 
-  it('stepcast:<имя> не перехвачен', () => {
+  it('burnex:<имя> не перехвачен', () => {
     const project = makeProject();
     writePackage(projectPackages(project), 'stepcast-clone', { 'migrate-widgets.yml': PIPELINE });
-    const resolved = resolvePipelineTarget(project.root, 'stepcast:migrate-widgets', options(project));
+    const resolved = resolvePipelineTarget(project.root, 'burnex:migrate-widgets', options(project));
     assert.equal(resolved.pipelinePath, packagedPipelinePath('migrate-widgets'));
     assert.equal(resolved.address, undefined);
   });

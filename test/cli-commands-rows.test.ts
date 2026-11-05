@@ -138,7 +138,7 @@ describe('plugin-tree: патч отключает строку одной ко�
     const project = makeProject({});
     withProjectPatch(
       project,
-      'version: 1\nkind: plugins-patch\nplugins:\n  - id: command-widgets\n    use: stepcast:command-widgets\n    enabled: false\n',
+      'version: 1\nkind: plugins-patch\nplugins:\n  - id: command-widgets\n    use: burnex:command-widgets\n    enabled: false\n',
     );
 
     const outcome = await cli(project, ['widgets']);
@@ -163,7 +163,7 @@ describe('plugin-tree: патч отключает строку одной ко�
     const project = makeProject({});
     withProjectPatch(
       project,
-      'version: 1\nkind: plugins-patch\nplugins:\n  - id: command-diff\n    use: stepcast:command-diff\n    enabled: false\n',
+      'version: 1\nkind: plugins-patch\nplugins:\n  - id: command-diff\n    use: burnex:command-diff\n    enabled: false\n',
     );
 
     const outcome = await cli(project, ['diff', 'a', 'b']);
@@ -235,7 +235,7 @@ describe('cli-commands-as-rows: каталог, названный иденти�
     assert.doesNotMatch(directoryLine, /не распоряжается/);
 
     // Встроенная строка на месте и действует: каталог её не тронул.
-    const builtinLine = lines.find((line) => line.includes('stepcast:command-init'));
+    const builtinLine = lines.find((line) => line.includes('burnex:command-init'));
     assert.ok(builtinLine !== undefined, `встроенная строка обязана остаться: ${outcome.stdout}`);
     assert.match(builtinLine, /встроенный/);
     assert.match(builtinLine, /действует$/);

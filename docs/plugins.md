@@ -13,9 +13,9 @@
 ```yaml
 # .stepcast/config.yml
 plugins:
-  - stepcast/backends/codex      # плагин, поставляемый самим пакетом (раздел «Второй бэкенд»)
-  - stepcast/backends/cursor     # то же для Cursor (раздел «Третий бэкенд»)
-  - stepcast/backends/copilot    # то же для GitHub Copilot (раздел «Четвёртый бэкенд»)
+  - burnex/backends/codex      # плагин, поставляемый самим пакетом (раздел «Второй бэкенд»)
+  - burnex/backends/cursor     # то же для Cursor (раздел «Третий бэкенд»)
+  - burnex/backends/copilot    # то же для GitHub Copilot (раздел «Четвёртый бэкенд»)
   - ./plugins/my-checks.mjs      # путь от файла, в котором объявлен
   - stepcast-plugin-http-checks  # пакет из node_modules проекта
 ```
@@ -32,17 +32,17 @@ plugins:
 
 Объявления, которыми пишется вклад, публикуются **двумя подпутями** пакета, а
 не одним. Критерий деления — знание о пайплайне: объявление уходит в
-`stepcast/pipeline`, если оно называет шаг, работу, прогон, попытку, предикат,
+`burnex/pipeline`, если оно называет шаг, работу, прогон, попытку, предикат,
 бэкенд, журнал или конфигурацию движка (или ссылается на то, что их называет);
-всё прочее остаётся в `stepcast/plugin`, независимо от того, в каком каталоге
+всё прочее остаётся в `burnex/plugin`, независимо от того, в каком каталоге
 исходника оно сегодня лежит.
 
-- **`stepcast/plugin`** — ядро: контекст и его способности области (`effect`,
+- **`burnex/plugin`** — ядро: контекст и его способности области (`effect`,
   `get`, `set`, `provide`, `inject`), сервис команд, каркас CLI (`CliIo`,
   `CommandSpec`, `ParsedArgs`, `FlagSpec`), диагностика (`StepcastError`,
   `ExitCode`), `PluginDiagnostic`, `parseDuration`, `runProcess`,
   `definePlugin`, формы плагина контекста и `LoadedPlugin`.
-- **`stepcast/pipeline`** — домен: `BackendContribution`, `PredicateContribution`,
+- **`burnex/pipeline`** — домен: `BackendContribution`, `PredicateContribution`,
   `StepKindContribution` со всей роднёй (`StepKindInput`, `StepKindOutcome`,
   `StepKindLog`, `StepKindDocumentForm`, `StepKindDecision*`, `DecisionEffect`,
   `DecisionOutcome`, `LintSite`), доменная форма плагина `PipelinePlugin`,
@@ -61,7 +61,7 @@ plugins:
 Модуль доменного подпутя принадлежит строке `pipeline` — той самой, что
 заводит служебные сервисы `backends`/`predicates`/`steps`: заменяя строку
 своей, пользователь заменяет и то, и другое, а не наследует чужую
-поверхность. Домен не реэкспортирует ядро: `stepcast/pipeline` не публикует
+поверхность. Домен не реэкспортирует ядро: `burnex/pipeline` не публикует
 `StepcastError`, `parseDuration` или `runProcess`, хотя доменному автору они
 нужны почти всегда, — иначе граница размылась бы в обратную сторону, и вопрос
 «откуда это имя» перестал бы иметь однозначный ответ. Плагин, вносящий и вклад
@@ -69,17 +69,17 @@ plugins:
 подпутей — два импорта в шапке модуля дешевле стёртой границы.
 
 Оба образца в репозитории показывают эту развилку: `examples/plugins/typed`
-объявляет предикат и вид шага через `stepcast/pipeline`; `examples/plugins/command`
-вносит одну команду и знает только `stepcast/plugin` — их разница и есть
+объявляет предикат и вид шага через `burnex/pipeline`; `examples/plugins/command`
+вносит одну команду и знает только `burnex/plugin` — их разница и есть
 критерий деления, увиденный в двух работающих файлах. Оба входят в
 `npm run typecheck:plugin`, так что признак «плагин, знающий только ядро,
 компилируется без доменного подпутя» — проверка сборки, а не обещание
 документа.
 
 **Переезд ломает прежний импорт; реэкспорта с пометкой об устаревании нет.**
-Прежде вся поверхность была одним подпутём (`stepcast/plugin`), и половина
+Прежде вся поверхность была одним подпутём (`burnex/plugin`), и половина
 переехавших имён — значения (`effectivePermissions`, `emptyUsage`,
-`describeRefusal`, `defineBackend` и другие). Их реэкспорт из `stepcast/plugin`
+`describeRefusal`, `defineBackend` и другие). Их реэкспорт из `burnex/plugin`
 вернул бы доменные модули движка в граф загрузки ядерного подпутя — то есть
 ровно то, ради чего разделение сделано; реэкспорт одних типов дал бы
 половинчатую совместимость, которая переживает проверку типов и рушится в
@@ -88,20 +88,20 @@ plugins:
 подсказка на этот случай, продублированная в заголовке `src/plugin/index.ts`, куда
 попадёт первый же переход к определению переехавшего имени.
 
-| Прежнее имя (было в `stepcast/plugin`)                          | Новый подпуть        |
+| Прежнее имя (было в `burnex/plugin`)                          | Новый подпуть        |
 |-------------------------------------------------------------------|----------------------|
-| `BackendContribution`, `PredicateContribution`                    | `stepcast/pipeline`  |
-| `StepKindContribution` и вся родня (`StepKindInput`, `StepKindOutcome`, `StepKindLog`, `StepKindDocumentForm`) | `stepcast/pipeline`  |
-| `LintSite`, `DecisionEffect`, `DecisionOutcome`, `StepKindDecisionRequest`, `StepKindDecisionResult`, `StepKindDecisions` | `stepcast/pipeline`  |
-| `PredicateRegistrar`, `StepKindRegistrar`                          | `stepcast/pipeline`  |
-| доменные поля контекста (`ctx.backends`, `ctx.predicates`, `ctx.steps`) | `stepcast/pipeline` (`PipelineContext`, `pipelineContext(ctx)`) |
-| `BackendAdapter`, `BackendEvent`, `BackendModel`, `BackendEffort`, `BackendRefusal`, `BackendRefusalClass`, `LaunchSpec`, `AgentInvocation`, `ModelDiscovery`, `ProbeOutput`, `PermissionDenial`, `BackendCapabilities` | `stepcast/pipeline` |
-| `describeRefusal`, `emptyUsage`, `mergeUsage`, `sumUsage`          | `stepcast/pipeline`  |
-| `effectivePermissions`, `Permissions`, `McpServer`, `McpServers`   | `stepcast/pipeline`  |
-| `EvaluationInput`, `PredicateResult`, `Usage`                      | `stepcast/pipeline`  |
-| `Config`, `BackendConfig`, `Registry`                              | `stepcast/pipeline`  |
-| `defineBackend`, `definePredicate`, `defineStepKind`               | `stepcast/pipeline`  |
-| доменные ключи `StepcastPlugin` (`backends`, `predicates`, `steps`) | `stepcast/pipeline` (`definePipelinePlugin`) |
+| `BackendContribution`, `PredicateContribution`                    | `burnex/pipeline`  |
+| `StepKindContribution` и вся родня (`StepKindInput`, `StepKindOutcome`, `StepKindLog`, `StepKindDocumentForm`) | `burnex/pipeline`  |
+| `LintSite`, `DecisionEffect`, `DecisionOutcome`, `StepKindDecisionRequest`, `StepKindDecisionResult`, `StepKindDecisions` | `burnex/pipeline`  |
+| `PredicateRegistrar`, `StepKindRegistrar`                          | `burnex/pipeline`  |
+| доменные поля контекста (`ctx.backends`, `ctx.predicates`, `ctx.steps`) | `burnex/pipeline` (`PipelineContext`, `pipelineContext(ctx)`) |
+| `BackendAdapter`, `BackendEvent`, `BackendModel`, `BackendEffort`, `BackendRefusal`, `BackendRefusalClass`, `LaunchSpec`, `AgentInvocation`, `ModelDiscovery`, `ProbeOutput`, `PermissionDenial`, `BackendCapabilities` | `burnex/pipeline` |
+| `describeRefusal`, `emptyUsage`, `mergeUsage`, `sumUsage`          | `burnex/pipeline`  |
+| `effectivePermissions`, `Permissions`, `McpServer`, `McpServers`   | `burnex/pipeline`  |
+| `EvaluationInput`, `PredicateResult`, `Usage`                      | `burnex/pipeline`  |
+| `Config`, `BackendConfig`, `Registry`                              | `burnex/pipeline`  |
+| `defineBackend`, `definePredicate`, `defineStepKind`               | `burnex/pipeline`  |
+| доменные ключи `StepcastPlugin` (`backends`, `predicates`, `steps`) | `burnex/pipeline` (`definePipelinePlugin`) |
 
 Имена, оставшиеся ядерными — `StepcastError`, `parseDuration`, `runProcess`,
 `definePlugin`, контекст ядра, каркас CLI, — импортируются прежним
@@ -113,7 +113,7 @@ plugins:
 |---|---|
 | `./…`, `../…` | от каталога файла, в котором строка объявлена |
 | абсолютный путь | как есть |
-| `stepcast:<имя>` | строка, поставляемая пакетом (встроенный слой) — по таблице, а не с диска |
+| `burnex:<имя>` | строка, поставляемая пакетом (встроенный слой) — по таблице, а не с диска |
 | имя пакета | от корня проекта, при неудаче — от каталога движка |
 
 Состав плагинов — **дерево именованных строк**, а не плоский список: каждая
@@ -326,8 +326,8 @@ plugins:
 ## Контракт
 
 Модуль экспортирует объект по умолчанию. Типы вклада — в подпути
-`stepcast/pipeline` (раздел «Два подпутя» выше); ядерные типы объявления
-плагина и его контекста — в `stepcast/plugin`. Внутренние пути
+`burnex/pipeline` (раздел «Два подпутя» выше); ядерные типы объявления
+плагина и его контекста — в `burnex/plugin`. Внутренние пути
 `dist/src/kernel/**` и `dist/src/parts/**` импортировать не нужно и не
 следует: что экспортировано подпутём, то и обещано.
 
@@ -411,8 +411,8 @@ export default {
 
 ### Хелперы объявления вклада
 
-Пять функций — `definePlugin` (`stepcast/plugin`), `definePipelinePlugin`,
-`defineBackend`, `definePredicate<T>`, `defineStepKind<F>` (`stepcast/pipeline`)
+Пять функций — `definePlugin` (`burnex/plugin`), `definePipelinePlugin`,
+`defineBackend`, `definePredicate<T>`, `defineStepKind<F>` (`burnex/pipeline`)
 — необязательная надстройка над контрактом выше, каждая публикуется тем же
 подпутём, что и вклад, который объявляет (раздел «Два подпутя»). Плагин на
 JavaScript, приведённый примером чуть выше, пишется ровно так же и без единой
@@ -420,7 +420,7 @@ JavaScript, приведённый примером чуть выше, пише�
 компилятору сигнатуру:
 
 ```ts
-import { defineStepKind, definePipelinePlugin } from 'stepcast/pipeline';
+import { defineStepKind, definePipelinePlugin } from 'burnex/pipeline';
 
 interface HttpCheckFields {
   readonly url: string;
@@ -485,8 +485,8 @@ export default definePipelinePlugin({
 
 Хелперы — шаг 1 плана `docs/microkernel-target.md` («Типизация на границе»):
 граница закрывается типом, а не дисциплиной автора, до того как число
-вкладов вырастет. Разделение самой поверхности на `stepcast/plugin` (ядро) и
-`stepcast/pipeline` (домен) — шаг 8 того же плана, уже сделанный (раздел «Два
+вкладов вырастет. Разделение самой поверхности на `burnex/plugin` (ядро) и
+`burnex/pipeline` (домен) — шаг 8 того же плана, уже сделанный (раздел «Два
 подпутя» выше): хелперы переехали вместе с прочей доменной поверхностью, не
 меняясь сами — `definePipelinePlugin` добавлен рядом как хелпер доменной формы
 плагина, симметричный ядерному `definePlugin`.
@@ -667,7 +667,7 @@ Burnex не использует каталог как allow-list и не отв
 Провайдер отвечает на один вопрос: как по параметрам объявления в `secrets:`
 пайплайна (`docs/pipeline-format.md`, «Секреты») получить значение. Вклад
 называется `secretProviders`, тип — `SecretProviderContribution` подпути
-`stepcast/pipeline`:
+`burnex/pipeline`:
 
 - `name` — слаг; именно его пишет `provider:` в объявлении. Занятое имя
   отклоняется при регистрации — как у любого другого вклада.
@@ -685,7 +685,7 @@ Burnex не использует каталог как allow-list и не отв
 значение секрета**, даже частично: он попадает в вывод запуска, журнал и ответ
 экрана «Secrets» (`docs/config.md`, «Секреты на витрине»). И если провайдер не
 может работать в этом окружении вовсе (не та платформа, нет команды, сервис
-недоступен), он бросает `SecretProviderUnavailableError` из `stepcast/pipeline` —
+недоступен), он бросает `SecretProviderUnavailableError` из `burnex/pipeline` —
 экран покажет `provider-unavailable`, а не `not-found`. Класс аддитивный:
 провайдер, который его не бросает, работает как раньше, его отказы — `not-found`.
 Запуск различия не делает: оба отказа он показывает одним сообщением.
@@ -911,7 +911,7 @@ shadow-режиме (`burnex run --shadow`, см. [формат
 `step-uses`, `step-script`, `step-agent`, наравне с `step-decision`, отключаемы
 и заменяемы патчем состава. Форма `fields` этим не затронута: вклад остаётся
 внутренней формой `native` — типизированным разбором в модель `Step` движка,
-а не публикуемым контрактом `stepcast/pipeline` (design.md изменения
+а не публикуемым контрактом `burnex/pipeline` (design.md изменения
 `builtin-step-kinds-as-rows`, Решение 3), — снятие этой формы в пользу
 `fields`/`execute` для всех четырёх видов сразу целевым документом не
 планируется вовсе: она стоит на размеченном объединении `Step`, которое
@@ -932,7 +932,7 @@ shadow-режиме (`burnex run --shadow`, см. [формат
 
 ```ts
 import { z } from 'zod';
-import { definePipelinePlugin, defineStepKind } from 'stepcast/pipeline';
+import { definePipelinePlugin, defineStepKind } from 'burnex/pipeline';
 
 const Fields = z.object({ url: z.string(), retries: z.number().int() }).strict();
 type Fields = z.infer<typeof Fields>;
@@ -1012,15 +1012,15 @@ export default definePipelinePlugin({
 (`backends`/`predicates`/`commands`/`steps` — ключи объекта), — автору
 декларативного плагина думать об этом не нужно.
 
-Контекст ядра (`stepcast/plugin`) эти три поля не публикует вовсе — они не
+Контекст ядра (`burnex/plugin`) эти три поля не публикует вовсе — они не
 называют пайплайн на ядерном подпути (`docs/plugins.md`, «Два подпутя»).
-Публикует их доменный `PipelineContext` (`stepcast/pipeline`), расширяющий
+Публикует их доменный `PipelineContext` (`burnex/pipeline`), расширяющий
 ядерный: плагину контекста, регистрирующему вклад пайплайна, тело обратного
 вызова `ctx.inject([...], (ctx) => …)` сужает контекст явным вызовом
 `pipelineContext(ctx)`:
 
 ```ts
-import { pipelineContext } from 'stepcast/pipeline';
+import { pipelineContext } from 'burnex/pipeline';
 
 function apply(ctx) {
   ctx.inject(['backends'], (ctx) => {
@@ -1167,7 +1167,7 @@ export default function myConsumer(ctx) {
 
 ### Единственный экземпляр cordis
 
-Тип `Context` публикует тот же подпуть `stepcast/plugin`, и объявлен он
+Тип `Context` публикует тот же подпуть `burnex/plugin`, и объявлен он
 степкастом целиком: в опубликованных объявлениях `cordis` не упоминается
 вовсе. Автору плагина библиотека не нужна ни как зависимость, ни как источник
 типов — ни `npm i cordis`, ни настройки резолвера под её собственные `.d.ts`
@@ -1188,7 +1188,7 @@ export default function myConsumer(ctx) {
 команд, `effect`, `provide`/`set`/`get`, `inject`. Служебные сервисы,
 заведённые строкой `pipeline` (`backends`, `predicates`, `steps`), контракт
 ядра не называет вовсе (раздел «Два подпутя»): их несёт доменный
-`PipelineContext` (`stepcast/pipeline`), расширяющий этот тип, и стык обоих
+`PipelineContext` (`burnex/pipeline`), расширяющий этот тип, и стык обоих
 объявлений с настоящим контекстом проверяет компилятор в двух точках внутри
 движка — ядерной (`kernel/kernel.ts`) и доменной, рядом со строкой,
 заводящей эти сервисы (`src/parts/pipeline/services.ts`), — а совпадение с
@@ -1198,14 +1198,14 @@ export default function myConsumer(ctx) {
 ## Второй бэкенд: Codex
 
 Пакет поставляет адаптер Codex CLI плагином — `src/parts/backends/codex/`, подпуть
-`stepcast/backends/codex`. Он **не встроен**: встроенное ядро
+`burnex/backends/codex`. Он **не встроен**: встроенное ядро
 (`createBuiltinKernel()`) его не знает, и без объявления бэкенда `codex` не
 существует. Подключение:
 
 ```yaml
 # ~/.stepcast/config.yml
 plugins:
-  - stepcast/backends/codex
+  - burnex/backends/codex
 defaults:
   agent: codex
 ```
@@ -1241,7 +1241,7 @@ true`, `strict_permissions: false`, `mcp: true`, `concurrency: 2`,
   его показывал. Прочие команды с собственным разрешением конфигурации
   (`status`, `usage`, `gc`, `up`, …) к бэкендам не обращаются и не правились.
 - Экспорт `effectivePermissions` и типов `Permissions`/`McpServer`/`McpServers`
-  подпутём `stepcast/pipeline`: правила слияния политики шага с политикой
+  подпутём `burnex/pipeline`: правила слияния политики шага с политикой
   бэкенда адаптер иначе переписал бы у себя.
 
 **Чего хватило без правок.** Путь схемы вывода (`outputSchemaPath` — путь,
@@ -1290,13 +1290,13 @@ true`, `strict_permissions: false`, `mcp: true`, `concurrency: 2`,
 ## Третий бэкенд: Cursor
 
 Пакет поставляет адаптер Cursor Agent CLI плагином — `src/parts/backends/cursor/`,
-подпуть `stepcast/backends/cursor`. Как и Codex, он **не встроен**: без объявления
+подпуть `burnex/backends/cursor`. Как и Codex, он **не встроен**: без объявления
 бэкенда `cursor-agent` не существует. Подключение:
 
 ```yaml
 # ~/.stepcast/config.yml
 plugins:
-  - stepcast/backends/cursor
+  - burnex/backends/cursor
 ```
 
 Шаг выбирает его `agent: cursor-agent`.
@@ -1369,13 +1369,13 @@ CLI записью `system`/`init`, продолжение — `--resume`); со
 ## Четвёртый бэкенд: Copilot
 
 Пакет поставляет адаптер GitHub Copilot CLI плагином — `src/parts/backends/copilot/`,
-подпуть `stepcast/backends/copilot`. Он тоже **не встроен**: без объявления
+подпуть `burnex/backends/copilot`. Он тоже **не встроен**: без объявления
 бэкенда `copilot` не существует. Подключение:
 
 ```yaml
 # ~/.stepcast/config.yml
 plugins:
-  - stepcast/backends/copilot
+  - burnex/backends/copilot
 ```
 
 Шаг выбирает его `agent: copilot`.
@@ -1505,7 +1505,7 @@ diff` называет различие в составе плагинов за�
 Браузерная половина плагина (`docs/ui-plugins.md`) и виджет (`docs/widgets.md`)
 самодостаточны, кроме шести имён — таблицы общих модулей витрины
 (`src/parts/ui/daemon/sharedModules.ts`): `react`, `react-dom`, `react/jsx-runtime`,
-`cordis`, `@stepcast/slots`, `@stepcast/ui`. Каждое резолвится картой имён
+`cordis`, `@burnex/slots`, `@burnex/ui`. Каждое резолвится картой имён
 страницы в переходник демона (`/shared/<имя>.js`), реэкспортирующий
 объявленный перечень имён из экземпляра, который опубликовала сама страница
 — тот же самый, а не второй такой же.
@@ -1518,13 +1518,13 @@ diff` называет различие в составе плагинов за�
 | `react-dom` | порталы (`createPortal`), `flushSync` |
 | `react/jsx-runtime` | `jsx`/`jsxs` — то, во что компилируется JSX |
 | `cordis` | `Context`, `Service`, `Fiber` — контекст и сервис плагина |
-| `@stepcast/slots` | `slot()`, дескрипторы встроенных слотов (`ROOT`, `NAV`, `SCREEN`, `SCREEN_FRAME`), адаптер веб-компонента (`docs/ui-plugins.md`) |
-| `@stepcast/ui` | компоненты витрины исходниками — Button, Card, Table, Dialog, Tabs, Select, Input, Badge, Label, Separator, Alert, Switch, Combobox, PageHeader, EmptyState (`docs/ui-plugins.md`) |
+| `@burnex/slots` | `slot()`, дескрипторы встроенных слотов (`ROOT`, `NAV`, `SCREEN`, `SCREEN_FRAME`), адаптер веб-компонента (`docs/ui-plugins.md`) |
+| `@burnex/ui` | компоненты витрины исходниками — Button, Card, Table, Dialog, Tabs, Select, Input, Badge, Label, Separator, Alert, Switch, Combobox, PageHeader, EmptyState (`docs/ui-plugins.md`) |
 
 **Критерий членства — ломается ли поведение от второго экземпляра, а не вес
 или удобство.** Два экземпляра `react` на странице дают «invalid hook call»
 на первом же вкладе; два `cordis` — сервис, заведённый чужим `Service`, не
-тот класс, которого ждёт контекст страницы; два реестра `@stepcast/slots` —
+тот класс, которого ждёт контекст страницы; два реестра `@burnex/slots` —
 дескриптор второго экземпляра оказывается другим объектом с тем же именем.
 Библиотека вроде `zod` или `yaml` в таблицу не входит: второй экземпляр —
 лишний вес, а не сломанное поведение, и плагин волен принести свой.
@@ -1571,7 +1571,7 @@ module specifier», без файла и без причины. Поэтому �
 нет. Автор плагина видит имя таблицы, которое ему назвал отказ сборки, — но
 переименованная копия под этот отказ не подпадает вовсе.
 
-## Библиотека шага: stepcast/step
+## Библиотека шага: burnex/step
 
 Контракт входа и выхода шага `script` (`docs/pipeline-format.md`, раздел
 `script`) — это переменные окружения `BURNEX_INPUT`, `BURNEX_OUTPUT` и
@@ -1590,13 +1590,13 @@ subprocess.run(
 )
 ```
 
-`stepcast/step` — второй публикуемый вход пакета (рядом с `stepcast/plugin`)
+`burnex/step` — второй публикуемый вход пакета (рядом с `burnex/plugin`)
 для кода на TS/JS, тонкая обвязка над тем же контрактом, а не альтернатива
 ему: `output()` пишет тот же файл, что прочтёт движок, а `publish()` зовёт тот
 же писатель данных работы, что и команда `burnex data`.
 
 ```ts
-import { input, log, output, publish } from 'stepcast/step';
+import { input, log, output, publish } from 'burnex/step';
 
 const { slug } = input<{ slug: string }>();
 log('готовлю', slug);
@@ -1628,7 +1628,7 @@ publish('status', 'ok');
 
 ### Обёртка раннера
 
-Раннеры `node` и `node-ts` исполняют скрипт через обёртку `stepcast:step`
+Раннеры `node` и `node-ts` исполняют скрипт через обёртку `burnex:step`
 (`docs/config.md`, поле `wrapper`), поставляемую тем же пакетом. Она не
 альтернативный способ запуска: импортирует файл — чем исполняет его тело, как
 обычный скрипт, — и, только если модуль экспортирует функцию по умолчанию,

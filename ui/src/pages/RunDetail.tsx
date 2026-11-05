@@ -13,7 +13,7 @@ import {
   EmptyState,
   PageHeader,
   statusBadgeVariant,
-} from '@stepcast/ui';
+} from '@burnex/ui';
 import { fetchRun, resumeRun, type JobLoop, type JobSnapshot, type JournalProblem, type RunSnapshot, type StepSnapshot } from '../api';
 import { fmtDuration, fmtMoney, fmtSpan, fmtTime, fmtTokens } from '../format';
 import { Cost } from '../components/Cost';

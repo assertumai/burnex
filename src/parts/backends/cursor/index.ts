@@ -3,7 +3,7 @@ import { createCursorAdapter } from './adapter.js';
 import { cursorModelDiscovery } from './models.js';
 
 /**
- * Плагин Cursor: `plugins: [stepcast/backends/cursor]`.
+ * Плагин Cursor: `plugins: [burnex/backends/cursor]`.
  *
  * Поставляется в пакете, но не встроен: `builtinPlugin()` его не знает, и без
  * объявления бэкенда `cursor-agent` не существует. Умолчания честны: CLI не

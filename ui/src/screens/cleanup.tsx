@@ -4,7 +4,7 @@ import type { Context } from 'cordis';
 import { declaration } from '../../../src/parts/ui/screens/cleanup/declaration.ts';
 import type { Overview } from '../api';
 import { Cleanup } from '../pages/Cleanup';
-import { SCREEN } from '@stepcast/slots';
+import { SCREEN } from '@burnex/slots';
 
 function CleanupScreen({ overview }: { readonly overview: Overview | undefined }): JSX.Element {
   return <Cleanup overview={overview} />;

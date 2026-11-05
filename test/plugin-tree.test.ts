@@ -99,15 +99,15 @@ describe('plugin-tree: свёртка трёх слоёв', () => {
     assert.deepEqual(
       config.pluginTree.map((row) => [row.id, row.use, row.enabled]),
       [
-        ['pipeline', 'stepcast:pipeline', true],
-        ['backend-claude', 'stepcast:backend-claude', true],
-        ['predicates', 'stepcast:predicates', true],
-        ['step-run', 'stepcast:step-run', true],
-        ['step-uses', 'stepcast:step-uses', true],
-        ['step-script', 'stepcast:step-script', true],
-        ['step-agent', 'stepcast:step-agent', true],
-        ['step-decision', 'stepcast:step-decision', true],
-        ['secret-providers', 'stepcast:secret-providers', true],
+        ['pipeline', 'burnex:pipeline', true],
+        ['backend-claude', 'burnex:backend-claude', true],
+        ['predicates', 'burnex:predicates', true],
+        ['step-run', 'burnex:step-run', true],
+        ['step-uses', 'burnex:step-uses', true],
+        ['step-script', 'burnex:step-script', true],
+        ['step-agent', 'burnex:step-agent', true],
+        ['step-decision', 'burnex:step-decision', true],
+        ['secret-providers', 'burnex:secret-providers', true],
         ['home-extra', './home-extra.mjs', true],
         ['project-extra', './project-extra.mjs', true],
       ],
@@ -130,7 +130,7 @@ describe('plugin-tree: свёртка трёх слоёв', () => {
       config.pluginTree.map((row) => row.id),
       ['pipeline', 'backend-claude', 'predicates', 'step-run', 'step-uses', 'step-script', 'step-agent', 'step-decision', 'secret-providers', './g.mjs', './p.mjs'],
     );
-    // `Config.plugins` — модули, и только они: `stepcast:backend-claude`
+    // `Config.plugins` — модули, и только они: `burnex:backend-claude`
     // модулем не является и `resolveModulePath` не разрешается, поэтому в
     // публичную форму поля не попадает (`config/resolve.ts`).
     assert.deepEqual(config.config.plugins, ['./g.mjs', './p.mjs']);
@@ -177,7 +177,7 @@ describe('plugin-tree: две формы набора строк — id в се�
     await assert.rejects(
       () => loadPlugins(config, { projectRoot: place.root }),
       (error: unknown) =>
-        error instanceof StepcastError && /несуществующую встроенную строку stepcast:ui-shell/.test(error.message),
+        error instanceof StepcastError && /несуществующую встроенную строку burnex:ui-shell/.test(error.message),
     );
   });
 
@@ -199,16 +199,16 @@ describe('plugin-tree: строки поставки вызывающего', ()
     );
 
     assert.deepEqual(config.pluginTree.map((row) => [row.id, row.use, row.enabled]), [
-      ['pipeline', 'stepcast:pipeline', true],
-      ['backend-claude', 'stepcast:backend-claude', true],
-      ['predicates', 'stepcast:predicates', true],
-      ['step-run', 'stepcast:step-run', true],
-      ['step-uses', 'stepcast:step-uses', true],
-      ['step-script', 'stepcast:step-script', true],
-      ['step-agent', 'stepcast:step-agent', true],
-      ['step-decision', 'stepcast:step-decision', true],
-      ['secret-providers', 'stepcast:secret-providers', true],
-      ['ui-shell', 'stepcast:ui-shell', true],
+      ['pipeline', 'burnex:pipeline', true],
+      ['backend-claude', 'burnex:backend-claude', true],
+      ['predicates', 'burnex:predicates', true],
+      ['step-run', 'burnex:step-run', true],
+      ['step-uses', 'burnex:step-uses', true],
+      ['step-script', 'burnex:step-script', true],
+      ['step-agent', 'burnex:step-agent', true],
+      ['step-decision', 'burnex:step-decision', true],
+      ['secret-providers', 'burnex:secret-providers', true],
+      ['ui-shell', 'burnex:ui-shell', true],
       ['screen-usage', './my-usage.mjs', true],
       ['screen-widgets', 'irrelevant', false],
     ]);
@@ -439,7 +439,7 @@ describe('plugin-tree: замена встроенной строки', () => {
     // (`plugin-contributions`).
     const config = resolved(place, {
       projectPatch:
-        'version: 1\nkind: plugins-patch\nplugins:\n  - id: mine\n    use: stepcast:backend-claude\n',
+        'version: 1\nkind: plugins-patch\nplugins:\n  - id: mine\n    use: burnex:backend-claude\n',
     });
 
     await assert.rejects(
@@ -510,7 +510,7 @@ describe('plugin-tree: замена встроенной строки', () => {
     const config = resolved(place, {
       projectPatch:
         'version: 1\nkind: plugins-patch\nplugins:\n' +
-        '  - id: predicates\n    use: stepcast:predicates\n    enabled: false\n' +
+        '  - id: predicates\n    use: burnex:predicates\n    enabled: false\n' +
         '  - id: own-exit-code\n    use: ./свой-exit-code.mjs\n',
     });
 
@@ -540,10 +540,10 @@ describe('plugin-tree: фабрики строк поставки при заг�
     assert.deepEqual(availableNames(registry, 'backends'), ['claude']);
   });
 
-  it('неизвестное stepcast:<id> отказывает прежним текстом, перечисляя строки движка, а за ними строки вызывающего', async () => {
+  it('неизвестное burnex:<id> отказывает прежним текстом, перечисляя строки движка, а за ними строки вызывающего', async () => {
     const place = bed();
     const config = resolved(place, {
-      projectPatch: 'version: 1\nkind: plugins-patch\nplugins:\n  - id: mine\n    use: stepcast:screen-usage\n',
+      projectPatch: 'version: 1\nkind: plugins-patch\nplugins:\n  - id: mine\n    use: burnex:screen-usage\n',
     });
 
     await assert.rejects(
@@ -554,16 +554,16 @@ describe('plugin-tree: фабрики строк поставки при заг�
         }),
       (error: unknown) => {
         assert.ok(error instanceof StepcastError);
-        assert.match(error.message, /несуществующую встроенную строку stepcast:screen-usage/);
+        assert.match(error.message, /несуществующую встроенную строку burnex:screen-usage/);
         const hint = error.hint ?? '';
-        assert.match(hint, /stepcast:backend-claude/);
-        assert.match(hint, /stepcast:ui-shell/);
+        assert.match(hint, /burnex:backend-claude/);
+        assert.match(hint, /burnex:ui-shell/);
         // Порядок обязателен (design.md, Решение 3): строки движка
         // (`BUILTIN_ROWS`), затем строки вызывающего, в порядке подстановки
         // `src/parts/load.ts`.
         assert.equal(
           hint,
-          'Пакет поставляет: stepcast:pipeline, stepcast:backend-claude, stepcast:predicates, stepcast:step-run, stepcast:step-uses, stepcast:step-script, stepcast:step-agent, stepcast:step-decision, stepcast:secret-providers, stepcast:ui-shell',
+          'Пакет поставляет: burnex:pipeline, burnex:backend-claude, burnex:predicates, burnex:step-run, burnex:step-uses, burnex:step-script, burnex:step-agent, burnex:step-decision, burnex:secret-providers, burnex:ui-shell',
         );
         return true;
       },
@@ -571,12 +571,12 @@ describe('plugin-tree: фабрики строк поставки при заг�
   });
 
   // Задача 3.7: ядро не несёт собственной таблицы строк поставки — обходу,
-  // которому не подано ни одной, строка `stepcast:<имя>` отказывает как
+  // которому не подано ни одной, строка `burnex:<имя>` отказывает как
   // несуществующая, даже когда речь о встроенной строке движка. `pipeline`
   // стоит в перечне дефолта первой (`pipeline-owns-services`), поэтому именно
   // она — первая строка, до которой доходит обход без поданных builtinRows, и
   // именно её отказ останавливает применение прочих (строка не каталожная).
-  it('walkPluginTree без единой поданной строки поставки отказывает на stepcast:pipeline как на несуществующей', async () => {
+  it('walkPluginTree без единой поданной строки поставки отказывает на burnex:pipeline как на несуществующей', async () => {
     const place = bed();
     const config = resolved(place);
 
@@ -587,13 +587,13 @@ describe('plugin-tree: фабрики строк поставки при заг�
 
     const pipelineRow = outcomes.find((outcome) => outcome.row.id === 'pipeline');
     assert.equal(pipelineRow?.status, 'failed');
-    assert.match(pipelineRow?.error?.message ?? '', /несуществующую встроенную строку stepcast:pipeline/);
+    assert.match(pipelineRow?.error?.message ?? '', /несуществующую встроенную строку burnex:pipeline/);
     // Подсказка на этом пути называет причину, а не вырождается в перечень
     // «Пакет поставляет: » с пустым хвостом: поставки не «нет вовсе» —
     // обходу её не подали.
     assert.equal(
       pipelineRow?.error?.hint,
-      'Обходу не подано ни одной строки поставки: форму stepcast:<имя> разрешают только строки параметра builtinRows',
+      'Обходу не подано ни одной строки поставки: форму burnex:<имя> разрешают только строки параметра builtinRows',
     );
     // Строка-виновница не каталожная — применение остановлено ею целиком, и
     // прочие строки движка помечены «не загружалась».
@@ -607,7 +607,7 @@ describe('plugin-tree: фабрики строк поставки при заг�
       place,
       {
         projectPatch:
-          'version: 1\nkind: plugins-patch\nplugins:\n  - id: ui-shell\n    use: stepcast:ui-shell\n    enabled: false\n',
+          'version: 1\nkind: plugins-patch\nplugins:\n  - id: ui-shell\n    use: burnex:ui-shell\n    enabled: false\n',
       },
       ['ui-shell'],
     );
@@ -908,7 +908,7 @@ describe('plugin-tree: каталожные строки (user-plugins)', () => 
     const config = resolved(place);
 
     const builtin = config.pluginTree.find((row) => row.source.kind === 'builtin' && row.id === 'backend-claude');
-    assert.equal(builtin?.use, 'stepcast:backend-claude', 'встроенная строка своей подмены не получила');
+    assert.equal(builtin?.use, 'burnex:backend-claude', 'встроенная строка своей подмены не получила');
     assert.equal(builtin?.failure, undefined);
     const fromDir = config.pluginTree.find((row) => row.source.kind === 'directory' && row.id === 'backend-claude');
     assert.deepEqual(fromDir?.source, { kind: 'directory', dir, layer: 'home' });
@@ -983,7 +983,7 @@ describe('plugin-tree: отключение строки pipeline при вкл�
   it('загрузка отказывает, называя первую ждущую строку и недостающее имя сервиса', async () => {
     const place = bed();
     const config = resolved(place, {
-      projectPatch: 'version: 1\nkind: plugins-patch\nplugins:\n  - id: pipeline\n    use: stepcast:pipeline\n    enabled: false\n',
+      projectPatch: 'version: 1\nkind: plugins-patch\nplugins:\n  - id: pipeline\n    use: burnex:pipeline\n    enabled: false\n',
     });
 
     await assert.rejects(
@@ -1000,7 +1000,7 @@ describe('plugin-tree: отключение строки pipeline при вкл�
   it('осмотр дерева переживает отказ и печатает состав целиком, показывая отключённую строку-поставщика', async () => {
     const place = bed();
     const config = resolved(place, {
-      projectPatch: 'version: 1\nkind: plugins-patch\nplugins:\n  - id: pipeline\n    use: stepcast:pipeline\n    enabled: false\n',
+      projectPatch: 'version: 1\nkind: plugins-patch\nplugins:\n  - id: pipeline\n    use: burnex:pipeline\n    enabled: false\n',
     });
 
     const { outcomes } = await walkPluginTree(createKernel(), config, {

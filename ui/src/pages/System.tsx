@@ -31,7 +31,7 @@ import {
   EmptyState,
   PageHeader,
   Switch,
-} from '@stepcast/ui';
+} from '@burnex/ui';
 import './system.css';
 
 /**

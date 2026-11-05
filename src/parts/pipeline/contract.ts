@@ -19,7 +19,7 @@ import type { Registry } from '../../kernel/registry.js';
  * Контракт плагина — доменная половина (`plugin-surface-split`, design.md,
  * Решение 3): объявления, которые называют пайплайн — шаг, работу, прогон,
  * попытку, предикат, бэкенд, журнал или конфигурацию движка. Публикуются
- * подпутём `stepcast/pipeline` (`src/parts/pipeline/surface.ts`), чей модуль
+ * подпутём `burnex/pipeline` (`src/parts/pipeline/surface.ts`), чей модуль
  * принадлежит строке `pipeline` — той, что заводит служебные сервисы
  * `backends`/`predicates`/`steps`.
  *
@@ -335,7 +335,7 @@ export interface StepKindDocumentForm {
 
 /**
  * Вклад вида шага — публикуемая форма (design.md, решение 1, решение 2).
- * Единственная, которую видит автор плагина: `stepcast/pipeline` экспортирует
+ * Единственная, которую видит автор плагина: `burnex/pipeline` экспортирует
  * ровно этот тип. Форма полей — JSON Schema, той же причиной, что и у формы
  * значения предиката: у плагина своя версия zod, и модель чужой версии в
  * объединении схем документа даёт неотлаживаемые отказы.
@@ -407,7 +407,7 @@ export interface NativeStepKind {
 
 /**
  * Вид шага в реестре — плагинный либо встроенный (design.md, решение 2). Тип
- * внутренний: `stepcast/pipeline` публикует только `StepKindContribution` —
+ * внутренний: `burnex/pipeline` публикует только `StepKindContribution` —
  * автор плагина внутреннюю форму `native` не видит и завести её не может.
  */
 export type StepKind = StepKindContribution | NativeStepKind;
@@ -465,7 +465,7 @@ export interface NativePredicate {
 
 /**
  * Предикат в реестре — плагинный либо встроенный (design.md, решение 2).
- * Тип внутренний: `stepcast/pipeline` публикует только `PredicateContribution` —
+ * Тип внутренний: `burnex/pipeline` публикует только `PredicateContribution` —
  * автор плагина внутреннюю форму `native` не видит и завести её не может.
  */
 export type PredicateKind = PredicateContribution | NativePredicate;
@@ -740,7 +740,7 @@ export interface SecretProviderRegistrar {
 
 /**
  * Контекст глазами доменного плагина — публикуемая поверхность подпути
- * `stepcast/pipeline`, расширение ядерного `Context` (`plugin-surface-split`,
+ * `burnex/pipeline`, расширение ядерного `Context` (`plugin-surface-split`,
  * design.md, Решение 4). Стык с настоящим контекстом проверяется компилятором
  * в одной точке рядом со строкой, заводящей эти сервисы, — `pluginContext()`
  * в `src/parts/pipeline/services.ts`, а не здесь и не в ядре.

@@ -3,7 +3,7 @@ import { describe, it } from 'node:test';
 
 import { renderToStaticMarkup } from 'react-dom/server';
 
-import { elementSlotComponent } from '@stepcast/slots';
+import { elementSlotComponent } from '@burnex/slots';
 
 /**
  * Адаптер веб-компонента (design.md изменения `shared-module-table`, Решение

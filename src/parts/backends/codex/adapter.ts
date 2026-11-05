@@ -17,7 +17,7 @@ import type {
  * Адаптер Codex CLI (`codex exec`).
  *
  * Плагин пакета, а не встроенный вклад: берёт только публичную поверхность
- * `stepcast/plugin` — это стерегут `test/plugin-surface.test.ts` и правило
+ * `burnex/plugin` — это стерегут `test/plugin-surface.test.ts` и правило
  * линта. Флаги и форма потока сверены с `codex-cli 0.149.0` и записями в
  * `test/fixtures/codex/`; документ изменения — `openspec/changes/
  * codex-backend-adapter/design.md`.

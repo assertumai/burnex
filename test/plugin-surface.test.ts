@@ -48,7 +48,7 @@ const surfaceRoots = [
   join(repoRoot, 'src/parts/pipeline/steps/decision'),
 ];
 const pluginModule = resolve(repoRoot, 'src/plugin/index.ts');
-/** Доменная поверхность `stepcast/pipeline` — второе законное направление рядом с ядерной. */
+/** Доменная поверхность `burnex/pipeline` — второе законное направление рядом с ядерной. */
 const pipelineSurfaceModule = resolve(repoRoot, 'src/parts/pipeline/surface.ts');
 
 function listTsFiles(dir: string): string[] {
@@ -185,7 +185,7 @@ describe('backends и steps/decision: публичная поверхность'
   });
 });
 
-describe('stepcast/pipeline: SecretProviderUnavailableError', () => {
+describe('burnex/pipeline: SecretProviderUnavailableError', () => {
   it('экспортируется значением, а не типом, и является Error', async () => {
     const surface = (await import('../src/parts/pipeline/surface.js')) as Record<string, unknown>;
     const Unavailable = surface.SecretProviderUnavailableError as new (message: string) => Error;

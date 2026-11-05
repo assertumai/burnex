@@ -26,7 +26,7 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from '@stepcast/ui';
+} from '@burnex/ui';
 import { TargetLink } from '../routeLink';
 import { useRoute } from '../router';
 import './routes.css';

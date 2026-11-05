@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type JSX } from 'react';
 
-import { Alert, AlertDescription, Button, EmptyState } from '@stepcast/ui';
+import { Alert, AlertDescription, Button, EmptyState } from '@burnex/ui';
 import { fetchStepOutput, type StepOutputStream } from '../api';
 import { fmtBytes } from '../format';
 import { mergeToolOutcomes, parseTranscript, type TranscriptEntry } from '../transcript';

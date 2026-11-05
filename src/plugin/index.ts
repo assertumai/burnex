@@ -1,5 +1,5 @@
 /**
- * Публичная поверхность для авторов плагинов: `import … from 'stepcast/plugin'`.
+ * Публичная поверхность для авторов плагинов: `import … from 'burnex/plugin'`.
  *
  * Здесь ровно то, без чего вклад не написать, — и ничего сверх. Что
  * экспортировано, то и обещано: остальное ядро остаётся внутренним, и его
@@ -8,7 +8,7 @@
  * Ядерный, а не единственный подпуть (`plugin-surface-split`, design.md,
  * Решение 1): объявления, знающие о пайплайне — шаге, работе, прогоне,
  * попытке, предикате, бэкенде, журнале, конфигурации движка, — переехали в
- * `stepcast/pipeline` (`src/parts/pipeline/surface.ts`). Реэкспорта с
+ * `burnex/pipeline` (`src/parts/pipeline/surface.ts`). Реэкспорта с
  * пометкой об устаревании здесь нет и не будет (design.md, Решение 7):
  * половина переехавших имён — значения, и их реэкспорт вернул бы доменные
  * модули в граф загрузки этого подпутя — то есть ровно то, ради чего шаг
@@ -18,18 +18,18 @@
  *
  * | Прежнее имя (было здесь)                                    | Новый подпуть      |
  * |--------------------------------------------------------------|--------------------|
- * | `BackendContribution`, `PredicateContribution`                | `stepcast/pipeline`|
- * | `StepKindContribution` и вся родня (`StepKindInput`, …)        | `stepcast/pipeline`|
- * | `LintSite`, `DecisionEffect`, `DecisionOutcome`                | `stepcast/pipeline`|
- * | `PredicateRegistrar`, `StepKindRegistrar`                      | `stepcast/pipeline`|
- * | доменные поля контекста (`ctx.backends`, `ctx.predicates`, `ctx.steps`) | `stepcast/pipeline` (`PipelineContext`, `pipelineContext(ctx)`) |
- * | `BackendAdapter`, `BackendEvent`, `BackendModel`, `BackendRefusal*`, `LaunchSpec`, `AgentInvocation`, `ModelDiscovery`, `ProbeOutput`, `PermissionDenial`, `BackendCapabilities` | `stepcast/pipeline` |
- * | `describeRefusal`, `emptyUsage`, `mergeUsage`, `sumUsage`      | `stepcast/pipeline`|
- * | `effectivePermissions`, `Permissions`, `McpServer`, `McpServers`| `stepcast/pipeline`|
- * | `EvaluationInput`, `PredicateResult`, `Usage`                  | `stepcast/pipeline`|
- * | `Config`, `BackendConfig`, `Registry`                          | `stepcast/pipeline`|
- * | `defineBackend`, `definePredicate`, `defineStepKind`           | `stepcast/pipeline`|
- * | доменные ключи `StepcastPlugin` (`backends`, `predicates`, `steps`) — теперь `PipelinePlugin` | `stepcast/pipeline` (`definePipelinePlugin`) |
+ * | `BackendContribution`, `PredicateContribution`                | `burnex/pipeline`|
+ * | `StepKindContribution` и вся родня (`StepKindInput`, …)        | `burnex/pipeline`|
+ * | `LintSite`, `DecisionEffect`, `DecisionOutcome`                | `burnex/pipeline`|
+ * | `PredicateRegistrar`, `StepKindRegistrar`                      | `burnex/pipeline`|
+ * | доменные поля контекста (`ctx.backends`, `ctx.predicates`, `ctx.steps`) | `burnex/pipeline` (`PipelineContext`, `pipelineContext(ctx)`) |
+ * | `BackendAdapter`, `BackendEvent`, `BackendModel`, `BackendRefusal*`, `LaunchSpec`, `AgentInvocation`, `ModelDiscovery`, `ProbeOutput`, `PermissionDenial`, `BackendCapabilities` | `burnex/pipeline` |
+ * | `describeRefusal`, `emptyUsage`, `mergeUsage`, `sumUsage`      | `burnex/pipeline`|
+ * | `effectivePermissions`, `Permissions`, `McpServer`, `McpServers`| `burnex/pipeline`|
+ * | `EvaluationInput`, `PredicateResult`, `Usage`                  | `burnex/pipeline`|
+ * | `Config`, `BackendConfig`, `Registry`                          | `burnex/pipeline`|
+ * | `defineBackend`, `definePredicate`, `defineStepKind`           | `burnex/pipeline`|
+ * | доменные ключи `StepcastPlugin` (`backends`, `predicates`, `steps`) — теперь `PipelinePlugin` | `burnex/pipeline` (`definePipelinePlugin`) |
  *
  * Имена, оставшиеся здесь, импортируются прежним спецификом без единой
  * правки: `StepcastError`, `parseDuration`, `runProcess`, `definePlugin`,
@@ -72,7 +72,7 @@ export type { TreeRow, TreeRowSource } from '../kernel/tree/tree.js';
 /**
  * Контекст ядра: то, без чего плагин контекста не написать. Публикует только
  * сервис команд и способности области — `backends`/`predicates`/`steps`
- * называет доменный подпуть `stepcast/pipeline`, чей `PipelineContext`
+ * называет доменный подпуть `burnex/pipeline`, чей `PipelineContext`
  * расширяет этот тип (`plugin-surface-split`, design.md, Решение 4): плагин,
  * тянущийся к любому из трёх, берёт `pipelineContext(ctx)` оттуда же.
  *

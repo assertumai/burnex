@@ -60,7 +60,7 @@ import {
   SelectTrigger,
   SelectValue,
   statusBadgeVariant,
-} from '@stepcast/ui';
+} from '@burnex/ui';
 import './scrum.css';
 
 /**

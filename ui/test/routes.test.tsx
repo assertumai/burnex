@@ -12,7 +12,7 @@ import { bindRouterKernel } from '../src/router';
 import { TargetLink } from '../src/routeLink';
 import { PackageFailureAlert } from '../src/pages/RoutesEditor';
 import { fakeEventSources, type FakeSource } from './support/live';
-import { SCREEN } from '@stepcast/slots';
+import { SCREEN } from '@burnex/slots';
 
 /**
  * Каркас поверх таблицы маршрутов (`ui-routes`, design.md Решения 12, 13):

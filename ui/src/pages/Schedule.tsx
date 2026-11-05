@@ -11,7 +11,7 @@ import {
 import { fmtTime } from '../format';
 import { TargetLink } from '../routeLink';
 import { RUN_TARGET } from '../screens/run';
-import { Alert, AlertDescription, AlertTitle, Badge, EmptyState, PageHeader } from '@stepcast/ui';
+import { Alert, AlertDescription, AlertTitle, Badge, EmptyState, PageHeader } from '@burnex/ui';
 import './schedule.css';
 
 /**

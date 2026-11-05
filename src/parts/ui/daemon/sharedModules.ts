@@ -52,12 +52,12 @@ export type SharedModuleSpecifier =
   | 'react-dom'
   | 'react/jsx-runtime'
   | 'cordis'
-  | '@stepcast/slots'
-  | '@stepcast/ui';
+  | '@burnex/slots'
+  | '@burnex/ui';
 
 /**
  * Запись таблицы (design.md, Решение 1): сегмент адреса не выводится из имени
- * механически — у `react/jsx-runtime` в имени есть `/`, у `@stepcast/ui` — `@`
+ * механически — у `react/jsx-runtime` в имени есть `/`, у `@burnex/ui` — `@`
  * и `/`, — а объявляется явно и проверяется на безопасность тем же
  * `isSafeSegment`, что и прочие пути витрины (`src/parts/ui/routes.ts`).
  */
@@ -68,8 +68,8 @@ export interface SharedModuleEntry {
    * Реэкспортируемые имена — объявленная поверхность API, а не всё, что
    * экспортирует модуль (design.md, Решение 4): сверяется тестом с тем, что
    * реально экспортирует установленная версия (для `react`, `react-dom`,
-   * `react/jsx-runtime`, `cordis` — узловым тестом; для `@stepcast/slots` и
-   * `@stepcast/ui`, живущих в `ui/`, — браузерным).
+   * `react/jsx-runtime`, `cordis` — узловым тестом; для `@burnex/slots` и
+   * `@burnex/ui`, живущих в `ui/`, — браузерным).
    */
   readonly names: readonly string[];
   /**
@@ -147,9 +147,9 @@ export const SHARED_MODULES: Readonly<Record<SharedModuleSpecifier, SharedModule
     // встроенная половина (`ui/src/kernel.ts`, `ui/src/services/plugins.ts`).
     names: ['Context', 'Service', 'Fiber'],
   },
-  '@stepcast/slots': {
-    specifier: '@stepcast/slots',
-    routeSegment: 'stepcast-slots',
+  '@burnex/slots': {
+    specifier: '@burnex/slots',
+    routeSegment: 'burnex-slots',
     hasDefault: false,
     names: [
       'slot',
@@ -162,9 +162,9 @@ export const SHARED_MODULES: Readonly<Record<SharedModuleSpecifier, SharedModule
       'elementSlotComponent',
     ],
   },
-  '@stepcast/ui': {
-    specifier: '@stepcast/ui',
-    routeSegment: 'stepcast-ui',
+  '@burnex/ui': {
+    specifier: '@burnex/ui',
+    routeSegment: 'burnex-ui',
     hasDefault: false,
     names: [
       'Button',
@@ -221,7 +221,7 @@ export const SHARED_MODULES: Readonly<Record<SharedModuleSpecifier, SharedModule
  * этим числом: правка имён без поднятой версии красит проверку раньше, чем
  * расхождение уедет виджету пользователя карточкой «неразрешённый импорт».
  */
-export const SHARED_MODULE_TABLE_VERSION = 2;
+export const SHARED_MODULE_TABLE_VERSION = 3;
 
 export type SharedModuleChangeKind = 'removed' | 'renamed' | 'replaced';
 
@@ -237,9 +237,12 @@ export interface SharedModuleChangeNote {
 }
 
 /**
- * Записи о смене — пока пусто: таблица версии 1 несёт ровно те шесть имён,
- * что и до этого изменения (`shared-module-table`). Первая правка перечня
- * обязана добавить сюда запись вместе с поднятой версией.
+ * Записи о смене — пока пусто: ни одно имя не ушло и не переименовано.
+ * Версия 3 поднята из-за смены спецификаторов `@stepcast/*` → `@burnex/*`
+ * (отпечаток считается вместе с ними), а не имён; прежние спецификаторы
+ * ведут на те же переходники (`LEGACY_SHARED_SPECIFIERS`), и записи для
+ * агента миграции им не нужно. Первый уход или переименование имени обязан
+ * добавить сюда запись вместе с поднятой версией.
  */
 export const SHARED_MODULE_CHANGE_NOTES: readonly SharedModuleChangeNote[] = [];
 
@@ -267,6 +270,18 @@ export function checkedRouteSegment(entry: SharedModuleEntry): string {
   return entry.routeSegment;
 }
 
+/**
+ * Прежние имена таблицы (`shared-module-table` писалась под именем stepcast):
+ * виджеты и плагины, собранные до переименования, импортируют их, и карта
+ * имён страницы ведёт их на те же переходники один выпуск переходного периода
+ * (`kernel/package-name.ts`, `docs/release.md`, «Переход со stepcast»). В таблицу
+ * они не входят: ни отдельного адреса, ни своих имён у них нет.
+ */
+export const LEGACY_SHARED_SPECIFIERS: Readonly<Record<string, SharedModuleSpecifier>> = {
+  '@stepcast/slots': '@burnex/slots',
+  '@stepcast/ui': '@burnex/ui',
+};
+
 /** Записи таблицы в порядке объявления — порядок карты имён и прочих выведенных мест берётся отсюда. */
 export const SHARED_MODULE_LIST: readonly SharedModuleEntry[] = Object.values(SHARED_MODULES);
 
@@ -284,9 +299,13 @@ export const SHARED_MODULE_BY_SEGMENT: ReadonlyMap<string, SharedModuleEntry> = 
  * (`ui-dashboard`, «Перечень имён в карте... MUST выводиться из одной таблицы
  * и совпадать»).
  */
-export const SHARED_MODULE_IMPORT_MAP: Readonly<Record<string, string>> = Object.fromEntries(
-  SHARED_MODULE_LIST.map((entry) => [entry.specifier, sharedModuleHref(checkedRouteSegment(entry))]),
-);
+export const SHARED_MODULE_IMPORT_MAP: Readonly<Record<string, string>> = Object.fromEntries([
+  ...SHARED_MODULE_LIST.map((entry) => [entry.specifier, sharedModuleHref(checkedRouteSegment(entry))]),
+  ...Object.entries(LEGACY_SHARED_SPECIFIERS).map(([legacy, current]) => [
+    legacy,
+    sharedModuleHref(checkedRouteSegment(SHARED_MODULES[current])),
+  ]),
+]);
 
 /**
  * Текст модуля-переходника: читает опубликованный страницей объект и

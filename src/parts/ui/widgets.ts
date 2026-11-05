@@ -8,7 +8,7 @@ import { buildPackageIndex, lookupInPackages, resourceLayers, type PackageResour
 
 import { listProjects } from '../pipeline/run/journal/reader.js';
 import { isSafeSegment } from './routes.js';
-import { SHARED_MODULE_LIST, WIDGET_ERROR_EXPORT, WIDGET_STYLE_EXPORT } from './daemon/sharedModules.js';
+import { SHARED_MODULE_IMPORT_MAP, SHARED_MODULE_LIST, WIDGET_ERROR_EXPORT, WIDGET_STYLE_EXPORT } from './daemon/sharedModules.js';
 import { parseWidgetImports, unresolvedSharedNames, type UnresolvedSharedKind } from './widgetImports.js';
 
 /**
@@ -516,7 +516,7 @@ function toFailure(file: string, error: unknown): CompileFailure {
   return { file, line: 0, column: 0, text: failure.message ?? String(error) };
 }
 
-/** Имя пакета npm из специфика таблицы: `react/jsx-runtime` → `react`, `@stepcast/slots` → `@stepcast/slots`. */
+/** Имя пакета npm из специфика таблицы: `react/jsx-runtime` → `react`, `@burnex/slots` → `@burnex/slots`. */
 function packageNameFromSpecifier(specifier: string): string {
   const parts = specifier.split('/');
   return specifier.startsWith('@') ? `${parts[0]}/${parts[1]}` : (parts[0] as string);
@@ -610,7 +610,7 @@ function ownSharedModuleCopyFailure(entry: string, copy: OwnSharedModuleCopy): C
 }
 
 /** Специфаки таблицы — множество для проверки точного совпадения, не по имени пакета. */
-const SHARED_SPECIFIERS: ReadonlySet<string> = new Set(SHARED_MODULE_LIST.map((entry) => entry.specifier));
+const SHARED_SPECIFIERS: ReadonlySet<string> = new Set(Object.keys(SHARED_MODULE_IMPORT_MAP));
 
 /**
  * Подпуть пакета таблицы, которого в самой таблице нет: `react-dom/client`,
@@ -803,7 +803,7 @@ export function createWidgetCompiler(options: WidgetCompilerOptions = {}): Widge
           // Внешними остаются ровно имена таблицы общих модулей — второго
           // перечня здесь нет (design.md изменения `shared-module-table`,
           // Решение 1; `ui-dashboard`, «Имена сборки — те же, что у страницы»).
-          external: SHARED_MODULE_LIST.map((sharedEntry) => sharedEntry.specifier),
+          external: Object.keys(SHARED_MODULE_IMPORT_MAP),
           loader: { '.css': 'css' },
           // Входы сборки — чтобы поймать свой экземпляр общего модуля,
           // принесённый мимо голого имени (design.md, Решение 9).

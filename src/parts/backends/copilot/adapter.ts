@@ -12,7 +12,7 @@ import type {
  * Адаптер GitHub Copilot CLI (`copilot -p … -s`).
  *
  * Плагин пакета, а не встроенный вклад: берёт только публичную поверхность
- * `stepcast/plugin` и `stepcast/pipeline` — это стерегут
+ * `burnex/plugin` и `burnex/pipeline` — это стерегут
  * `test/plugin-surface.test.ts` и правило линта. Флаги взяты из документации
  * Copilot CLI, а не сверены с установленной версией (CLI в среде не было):
  * `test/fixtures/copilot/README.md`. Документ изменения —

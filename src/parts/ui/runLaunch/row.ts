@@ -3,7 +3,8 @@ import { join, relative } from 'node:path';
 import { z } from 'zod';
 
 import { listProjects } from '../../pipeline/run/journal/reader.js';
-import { packagedPipelineNames, STEPCAST_PIPELINE_PREFIX } from '../../pipeline/domain/package-schema.js';
+import { packagedAddressName } from '../../../kernel/package-name.js';
+import { packagedPipelineNames } from '../../pipeline/domain/package-schema.js';
 import { listPipelineEntries } from '../../pipeline/domain/project/pipelines.js';
 import { readBody, sendJson } from '../daemon/http.js';
 import { screenRow, type ApiHandler } from '../screens/registry.js';
@@ -20,7 +21,7 @@ import { screenRow, type ApiHandler } from '../screens/registry.js';
  * исполняются оболочкой — дочерний процесс порождается списком argv, — но
  * форма их всё равно проверена: имя входа и одна строка значения.
  *
- * `pipeline` формы `stepcast:<имя>` — пайплайн поставки (`ui-daemon`, «Запуск
+ * `pipeline` формы `burnex:<имя>` — пайплайн поставки (`ui-daemon`, «Запуск
  * прогона принимает пайплайн поставки»): проверяется закрытым перечнем
  * `packagedPipelineNames()`, а не обходом файлов проекта — иначе кнопке
  * «Мигрировать» (`ui-widgets`) нечего было бы запускать.
@@ -110,11 +111,12 @@ const handlePost: ApiHandler = async (req, res, env) => {
     return;
   }
 
-  if (parsed.data.pipeline.startsWith(STEPCAST_PIPELINE_PREFIX)) {
-    const name = parsed.data.pipeline.slice(STEPCAST_PIPELINE_PREFIX.length);
+  const packagedName = packagedAddressName(parsed.data.pipeline);
+  if (packagedName !== undefined) {
+    const name = packagedName;
     const known = packagedPipelineNames();
     if (!known.includes(name)) {
-      sendJson(res, 400, { error: `Pipeline stepcast:${name} is not shipped by the burnex package. The package ships: ${known.join(', ')}` });
+      sendJson(res, 400, { error: `Pipeline burnex:${name} is not shipped by the burnex package. The package ships: ${known.join(', ')}` });
       return;
     }
   } else {

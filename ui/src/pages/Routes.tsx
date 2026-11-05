@@ -1,7 +1,7 @@
 import type { JSX } from 'react';
 
 import type { RouteTable } from '../../../src/parts/ui/routes.ts';
-import { Alert, AlertDescription, AlertTitle, PageHeader } from '@stepcast/ui';
+import { Alert, AlertDescription, AlertTitle, PageHeader } from '@burnex/ui';
 import './routes.css';
 
 /** Файл слоя, в который витрина пишет маршруты по умолчанию, — для подсказок на странице. */

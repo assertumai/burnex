@@ -30,7 +30,7 @@ import { BUILTIN_ROWS } from './rows.js';
  * `src/parts/pipeline/steps/decision/row.ts`), а перечень `BUILTIN_ROWS` (`./rows.js`)
  * только называет эти модули — встроенный слой дерева. Загрузчик
  * (`src/kernel/load.ts`) находит фабрику по имени формы
- * `use: stepcast:<id>` среди строк, поданных ему параметром
+ * `use: burnex:<id>` среди строк, поданных ему параметром
  * (`kernel-domain-free-imports`, Решение 3), а не по диску и не по
  * собственной таблице — единственный, кто эту таблицу знает, это состав
  * дефолта (`src/parts/load.ts`).
@@ -47,7 +47,7 @@ import { BUILTIN_ROWS } from './rows.js';
  */
 
 // Поиска фабрики по имени здесь больше нет (`findBuiltinRow` до
-// `kernel-domain-free-imports`): фабрику строки формы `stepcast:<имя>` ищет
+// `kernel-domain-free-imports`): фабрику строки формы `burnex:<имя>` ищет
 // обход дерева и только среди поданных ему строк (`src/kernel/load.ts`,
 // Решение 3). Отдельный поиск по одному `BUILTIN_ROWS` вёл бы мимо настоящего
 // пути разрешения — мимо строк вызывающего и мимо замены строки патчем.

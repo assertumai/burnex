@@ -669,7 +669,7 @@ describe('ui-plugins: образцы плагинов (design.md изменен�
     assert.match(code, /ClockElement/, 'собственный код образца обязан попасть в бандл');
   });
 
-  it('в бандле образца на чужом фреймворке нет ни одного имени таблицы, кроме @stepcast/slots', async () => {
+  it('в бандле образца на чужом фреймворке нет ни одного имени таблицы, кроме @burnex/slots', async () => {
     const compiler = createWidgetCompiler();
     const outcome = await compiler.compileBundle(ELEMENT_ENTRY, 'v1');
     await compiler.dispose();
@@ -678,8 +678,8 @@ describe('ui-plugins: образцы плагинов (design.md изменен�
     const code = (outcome as { readonly kind: 'ok'; readonly code: string }).code;
 
     for (const entry of SHARED_MODULE_LIST) {
-      if (entry.specifier === '@stepcast/slots') {
-        assert.match(code, /from "@stepcast\/slots"/, 'адаптер веб-компонента обязан прийти именем таблицы');
+      if (entry.specifier === '@burnex/slots') {
+        assert.match(code, /from "@burnex\/slots"/, 'адаптер веб-компонента обязан прийти именем таблицы');
         continue;
       }
       assert.doesNotMatch(

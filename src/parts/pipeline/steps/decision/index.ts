@@ -6,7 +6,7 @@ import { DECISION_FIELDS_SCHEMA, DECISION_OUTPUT_SCHEMA, lintDecisionFields, nor
 
 /**
  * Вид шага `decision` (`user-decision-steps`, design.md решение 1): первый
- * плагинный вид в поставке. Написан только через `stepcast/plugin` и соседей
+ * плагинный вид в поставке. Написан только через `burnex/plugin` и соседей
  * этого каталога — тот же контракт, что видит сторонний автор плагина, и
  * потому проверка контракта настоящим вкладом, а не предположением.
  *

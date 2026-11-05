@@ -30,7 +30,7 @@ import { tempDir } from './tmp.js';
 
 /**
  * `pipeline-definition`, «Ссылка на поставку называет и пайплайн, а не
- * только схему» (`agent-edits-widgets`, Решение 11): `stepcast:<имя>`
+ * только схему» (`agent-edits-widgets`, Решение 11): `burnex:<имя>`
  * раскрывается в файл `src/builtin/pipelines/<имя>.yml` от расположения
  * движка, независимо от каталога запуска.
  */
@@ -82,9 +82,9 @@ describe('package-schema: packagedPipelinePath', () => {
  * (`resolvePipelineTarget`), поэтому и проверяется один раз.
  */
 describe('package-schema: resolvePipelineTarget', () => {
-  it('ссылка stepcast:<имя> ведёт в поставку, а не в каталог запуска', () => {
+  it('ссылка burnex:<имя> ведёт в поставку, а не в каталог запуска', () => {
     const dir = project();
-    const resolved = resolvePipelineTarget(dir, 'stepcast:migrate-widgets');
+    const resolved = resolvePipelineTarget(dir, 'burnex:migrate-widgets');
     assert.equal(resolved.outsideProject, true);
     assert.equal(resolved.pipelinePath, packagedPipelinePath('migrate-widgets'));
   });
@@ -108,7 +108,7 @@ describe('package-schema: resolvePipelineTarget', () => {
   });
 });
 
-describe('builtin pipelines: stepcast:migrate-widgets', () => {
+describe('builtin pipelines: burnex:migrate-widgets', () => {
   it('раскрывается и проходит burnex lint без ошибок', () => {
     const dir = project();
     const pipelinePath = packagedPipelinePath('migrate-widgets');
@@ -212,7 +212,7 @@ describe('builtin pipelines: прогон migrate-widgets с поддельны�
         const scratchDir = invocation.scratchDir;
         assert.ok(scratchDir !== undefined, 'enforce: strict обязан дать шагу каталог черновиков');
         const draft = join(scratchDir, 'gauge.tsx');
-        const fixed = "import { Button } from '@stepcast/ui';\nexport default function G() { return null; }\n";
+        const fixed = "import { Button } from '@burnex/ui';\nexport default function G() { return null; }\n";
         const payload = `${resultLine({ text: 'исправил gauge' })}\n`;
         const script = [
           `require('fs').writeFileSync(${JSON.stringify(draft)}, ${JSON.stringify(fixed)});`,
@@ -306,7 +306,7 @@ describe('builtin pipelines: прогон migrate-widgets с поддельны�
   it('виджет с устаревшим импортом: файл не изменился, в очереди — открытая запись', async () => {
     const proj = makeProject();
     const widgetPath = join(widgetsDirPath(proj.root), 'gauge.tsx');
-    const original = "import { NotAName } from '@stepcast/ui';\nexport default function G() { return null; }\n";
+    const original = "import { NotAName } from '@burnex/ui';\nexport default function G() { return null; }\n";
     proj.write('.stepcast/widgets/gauge.tsx', original);
 
     await withHome(proj.home, () => runMigration(migratingAdapter(), proj));

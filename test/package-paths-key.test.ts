@@ -19,7 +19,7 @@ import { tempDir } from './tmp.js';
 // Ключ шага и хеш работы не должны зависеть от места установки движка:
 // каждый `scripts/release-local.sh` кладёт пакет в новый каталог
 // `~/.stepcast/releases/<ts>-<sha>/`, и абсолютный путь схемы
-// `stepcast:<имя>` в ключе пересчитывал бы весь граф после каждого выпуска.
+// `burnex:<имя>` в ключе пересчитывал бы весь граф после каждого выпуска.
 
 const SCHEMA = join('schema', 'backlog-slots.schema.json');
 
@@ -34,7 +34,7 @@ jobs:
       - id: раскладывает
         agent: fake
         prompt: "разложи"
-        output_schema: stepcast:backlog-slots
+        output_schema: burnex:backlog-slots
         expect: [{ exit_code: 0 }]
 `;
 

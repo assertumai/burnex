@@ -17,9 +17,9 @@ export interface BundledBackend {
 }
 
 export const BUNDLED_BACKENDS: readonly BundledBackend[] = [
-  { specifier: 'stepcast/backends/codex', plugin: codexPlugin },
-  { specifier: 'stepcast/backends/cursor', plugin: cursorPlugin },
-  { specifier: 'stepcast/backends/copilot', plugin: copilotPlugin },
+  { specifier: 'burnex/backends/codex', plugin: codexPlugin },
+  { specifier: 'burnex/backends/cursor', plugin: cursorPlugin },
+  { specifier: 'burnex/backends/copilot', plugin: copilotPlugin },
 ];
 
 /** Имя бэкенда (не плагина) → запись каталога, которая его даёт. */

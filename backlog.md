@@ -738,7 +738,7 @@ source: docs/burnex-after-stepcast.md, раздел 6 «Маркетплейс»
 
 ## rename-package-burnex
 
-status: todo
+status: done
 title: Пакет npm и его подпути называются burnex
 group: rename-burnex
 why: Первый срез переименования (бинарник `burnex`, подсказки CLI, документация, знак и favicon витрины) оставил имя пакета прежним: `exports` `stepcast/plugin|pipeline|step|backends/*`, адрес поставки `stepcast:<имя>`, поиск движка в `node_modules/stepcast`, карта имён страницы `@stepcast/slots|ui` и зарезервированные имена пакетов завязаны на `name` из `package.json` и меняются только все вместе.

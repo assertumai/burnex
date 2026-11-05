@@ -100,14 +100,14 @@ kind: job
 name: probe
 output:
   from: think
-  schema: stepcast:backlog-slots
+  schema: burnex:backlog-slots
 steps:
   - id: think
     agent: claude
     prompt: ok
-    output_schema: stepcast:backlog-slots
+    output_schema: burnex:backlog-slots
     expect:
-      - schema: stepcast:backlog-slots
+      - schema: burnex:backlog-slots
 `;
 
 const BURNEX_SCHEMA_PIPELINE = `
@@ -119,7 +119,7 @@ jobs:
     uses: ./.stepcast/jobs/probe.yml
 `;
 
-describe('pipeline-definition: ссылка stepcast:<имя> в местах объявления схемы', () => {
+describe('pipeline-definition: ссылка burnex:<имя> в местах объявления схемы', () => {
   it('разрешается во всех трёх местах в один и тот же файл схемы пакета', () => {
     const project = makeProject({
       'stepcast.yml': BURNEX_SCHEMA_PIPELINE,
@@ -150,7 +150,7 @@ name: probe
 until:
   max_iterations: 2
   check:
-    - schema: stepcast:backlog-slots
+    - schema: burnex:backlog-slots
 steps:
   - id: think
     agent: claude

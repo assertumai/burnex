@@ -1,6 +1,6 @@
 import type { JSX } from 'react';
 
-import { Badge } from '@stepcast/ui';
+import { Badge } from '@burnex/ui';
 
 /**
  * Метка shadow-прогона: локальные шаги исполнены, а внешние действия записаны,

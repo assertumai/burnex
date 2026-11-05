@@ -37,7 +37,7 @@ export async function runRunCommand(
   resolvedConfig?: Config,
 ): Promise<ExitCodeValue> {
   const target = args.positional[0] ?? 'stepcast.yml';
-  // `stepcast:<имя>` называет пайплайн поставки, а не файл каталога запуска
+  // `burnex:<имя>` называет пайплайн поставки, а не файл каталога запуска
   // (`pipeline-definition`, «Ссылка на поставку называет и пайплайн, а не
   // только схему»), `<пакет>:<имя>` — пайплайн пакета: путь разрешается не от
   // `cwd`, и слои `script`/`step` пайплайна ищутся от `cwd`, а не от каталога,

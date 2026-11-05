@@ -354,7 +354,7 @@ ${AGENT_STEP}`),
     );
   });
 
-  it('ссылка stepcast:<имя> на схему пакета ошибки не даёт', () => {
+  it('ссылка burnex:<имя> на схему пакета ошибки не даёт', () => {
     assert.deepEqual(
       errors(
         lint(`steps:
@@ -362,13 +362,13 @@ ${AGENT_STEP}`),
     agent: claude
     prompt: ok
     expect:
-      - schema: stepcast:backlog-slots`),
+      - schema: burnex:backlog-slots`),
       ),
       [],
     );
   });
 
-  it('uses: stepcast:implement остаётся обычным путём и даёт ошибку ненайденного файла', () => {
+  it('uses: burnex:implement остаётся обычным путём и даёт ошибку ненайденного файла', () => {
     const project = makeProject({
       'stepcast.yml': `
 version: 1
@@ -377,7 +377,7 @@ name: probe
 budget: { tokens: 100k }
 jobs:
   probe:
-    uses: stepcast:implement
+    uses: burnex:implement
 `,
     });
 
@@ -386,13 +386,13 @@ jobs:
       (error: unknown) => {
         assert.ok(error instanceof StepcastError);
         assert.match(error.message, /Файл не найден/);
-        assert.match(error.file ?? '', /stepcast:implement$/);
+        assert.match(error.file ?? '', /burnex:implement$/);
         return true;
       },
     );
   });
 
-  it('prompt: file:stepcast:implement остаётся обычным путём и даёт ошибку ненайденного файла', () => {
+  it('prompt: file:burnex:implement остаётся обычным путём и даёт ошибку ненайденного файла', () => {
     const project = makeProject({
       'stepcast.yml': PIPELINE,
       '.stepcast/jobs/probe.yml': `
@@ -402,7 +402,7 @@ name: probe
 steps:
   - id: think
     agent: claude
-    prompt: file:stepcast:implement
+    prompt: file:burnex:implement
 `,
     });
 
@@ -416,15 +416,15 @@ steps:
     );
   });
 
-  it('context: stepcast:backlog-slots остаётся обычным путём и даёт ошибку ненайденного файла', () => {
+  it('context: burnex:backlog-slots остаётся обычным путём и даёт ошибку ненайденного файла', () => {
     const found = errors(
       lint(`context:
-  - stepcast:backlog-slots
+  - burnex:backlog-slots
 ${AGENT_STEP}`),
     );
 
     assert.equal(found.length, 1);
     assert.match(found[0]?.message ?? '', /Файл контекста не найден/);
-    assert.match(found[0]?.message ?? '', /stepcast:backlog-slots$/);
+    assert.match(found[0]?.message ?? '', /burnex:backlog-slots$/);
   });
 });

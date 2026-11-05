@@ -729,7 +729,7 @@ withOwnService.inject = ['commands'];
  * нет, и что ручное объявление не разошлось с установленной версией.
  */
 describe('plugin-kernel: поверхность плагина не требует cordis', () => {
-  /** Объявления, которые автор плагина читает, импортируя `stepcast/plugin`. */
+  /** Объявления, которые автор плагина читает, импортируя `burnex/plugin`. */
   const PUBLISHED = [
     '../src/plugin/index.d.ts',
     '../src/kernel/context.d.ts',

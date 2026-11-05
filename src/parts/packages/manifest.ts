@@ -4,6 +4,7 @@ import { parse as parseYaml } from 'yaml';
 import { z } from 'zod';
 
 import { describeSchemaFailure } from '../../kernel/schema-failure.js';
+import { LEGACY_PACKAGE_NAME, PACKAGE_NAME } from '../../kernel/package-name.js';
 
 /**
  * Манифест пакета пользователя (`packages-directory-layer`, design.md,
@@ -16,11 +17,11 @@ import { describeSchemaFailure } from '../../kernel/schema-failure.js';
 export const PACKAGE_MANIFEST_FILE = 'package.yml';
 
 /**
- * `stepcast` занят адресом поставки (`stepcast:<имя>`), `builtin` — ключом
+ * `stepcast` занят адресом поставки (`burnex:<имя>`), `builtin` — ключом
  * встроенных виджетов в адресе модуля витрины (`BUILTIN_WIDGETS_KEY`):
  * пакет с таким именем был бы неотличим от них в адресе.
  */
-export const RESERVED_PACKAGE_NAMES: readonly string[] = ['stepcast', 'builtin'];
+export const RESERVED_PACKAGE_NAMES: readonly string[] = [PACKAGE_NAME, LEGACY_PACKAGE_NAME, 'builtin'];
 
 const PACKAGE_NAME_PATTERN = /^[a-z0-9]+(-[a-z0-9]+)*$/;
 

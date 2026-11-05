@@ -23,8 +23,8 @@
     // 6). Те же две записи — в `ui/tsconfig.test.json`, `vite.config.ts` и
     // `scripts/build-ui-tests.mjs`.
     "paths": {
-      "@stepcast/slots": ["./src/sharedSlots.ts"],
-      "@stepcast/ui": ["./src/ui/index.ts"]
+      "@burnex/slots": ["./src/sharedSlots.ts"],
+      "@burnex/ui": ["./src/ui/index.ts"]
     }
   },
   "include": [

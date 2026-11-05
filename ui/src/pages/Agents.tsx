@@ -29,7 +29,7 @@ import {
   TabsList,
   TabsTrigger,
   type ComboboxOption,
-} from '@stepcast/ui';
+} from '@burnex/ui';
 import { AgentsPolicy } from './AgentsPolicy';
 import './agents.css';
 

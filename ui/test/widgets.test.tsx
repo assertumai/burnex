@@ -103,8 +103,8 @@ describe('ui-widgets: запуск миграции', () => {
       return { ok: true };
     });
 
-    assert.deepEqual(calls, [{ project: 'proj', pipeline: 'stepcast:migrate-widgets' }]);
-    assert.equal(MIGRATE_PIPELINE, 'stepcast:migrate-widgets');
+    assert.deepEqual(calls, [{ project: 'proj', pipeline: 'burnex:migrate-widgets' }]);
+    assert.equal(MIGRATE_PIPELINE, 'burnex:migrate-widgets');
     assert.deepEqual(outcome, { status: 'done' });
   });
 

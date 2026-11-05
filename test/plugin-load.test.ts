@@ -442,11 +442,11 @@ export default {
  * (`plugin-surface-split`, design.md, Решение 10): `package.json` с
  * объявленными `exports` и копия собранного движка рядом. Прогон из этого
  * репозитория доказывал бы только его раскладку; чужая установка отвечает на
- * вопрос, разрешится ли подпуть у того, кто поставил `stepcast` пакетом.
+ * вопрос, разрешится ли подпуть у того, кто поставил `burnex` пакетом.
  */
 function fakeInstall(): { readonly root: string; readonly engine: string } {
   const root = realpathSync(tempDir('pkg-plugin-'));
-  const engine = join(root, 'node_modules', 'stepcast');
+  const engine = join(root, 'node_modules', 'burnex');
   mkdirSync(engine, { recursive: true });
   // Пути считаются от скомпилированного теста (`dist/test/`): корневой
   // `package.json` лежит двумя уровнями выше, собранный движок — рядом.
@@ -462,8 +462,8 @@ function fakeInstall(): { readonly root: string; readonly engine: string } {
  * Доменные значения — вторая половина контракта вклада (`emptyUsage`,
  * `mergeUsage`, `sumUsage`, `describeRefusal`, `effectivePermissions`,
  * `defineBackend`, `definePredicate`, `defineStepKind`), переехавшие в
- * `stepcast/pipeline`: до переезда объявлений (задача 1) этот же перечень
- * проверял их присутствие в `stepcast/plugin`, теперь — их отсутствие там же
+ * `burnex/pipeline`: до переезда объявлений (задача 1) этот же перечень
+ * проверял их присутствие в `burnex/plugin`, теперь — их отсутствие там же
  * и присутствие в доменном подпути.
  */
 const DOMAIN_VALUE_NAMES = [
@@ -516,11 +516,11 @@ function walkLoadGraph(entry: string): Set<string> {
   return visited;
 }
 
-describe('plugin-contributions: подпуть stepcast/plugin', () => {
+describe('plugin-contributions: подпуть burnex/plugin', () => {
   it('разрешается у того, кто поставил пакет, и отдаёт контракт', async () => {
     const { root, engine } = fakeInstall();
 
-    const resolvedPath = createRequire(join(root, 'package.json')).resolve('stepcast/plugin');
+    const resolvedPath = createRequire(join(root, 'package.json')).resolve('burnex/plugin');
     assert.equal(resolvedPath, join(engine, 'dist', 'src', 'plugin', 'index.js'));
   });
 
@@ -538,7 +538,7 @@ describe('plugin-contributions: подпуть stepcast/plugin', () => {
     // Внутренние пути ядра подпуть не публикует: что экспортировано, то и обещано.
     assert.equal(plugin.runPipeline, undefined);
     assert.equal(plugin.expandPipeline, undefined);
-    // Доменные значения переехали в stepcast/pipeline (задача 1, задача 6.4):
+    // Доменные значения переехали в burnex/pipeline (задача 1, задача 6.4):
     // ядерный подпуть их больше не отдаёт ни одного.
     for (const name of DOMAIN_VALUE_NAMES) {
       assert.equal(plugin[name], undefined, `${name} доменный — ядерный подпуть его не отдаёт`);
@@ -584,15 +584,15 @@ describe('plugin-contributions: подпуть stepcast/plugin', () => {
   });
 });
 
-describe('plugin-contributions: подпуть stepcast/pipeline', () => {
-  it('разрешается у того, кто поставил пакет, отдельно от stepcast/plugin', async () => {
+describe('plugin-contributions: подпуть burnex/pipeline', () => {
+  it('разрешается у того, кто поставил пакет, отдельно от burnex/plugin', async () => {
     const { root, engine } = fakeInstall();
 
-    const resolvedPath = createRequire(join(root, 'package.json')).resolve('stepcast/pipeline');
+    const resolvedPath = createRequire(join(root, 'package.json')).resolve('burnex/pipeline');
     assert.equal(resolvedPath, join(engine, 'dist', 'src', 'parts', 'pipeline', 'surface.js'));
     // Второй подпуть разрешается независимо от первого — оба объявлены
     // манифестом пакета, и разрешение одного не требуется для другого.
-    const pluginPath = createRequire(join(root, 'package.json')).resolve('stepcast/plugin');
+    const pluginPath = createRequire(join(root, 'package.json')).resolve('burnex/plugin');
     assert.notEqual(resolvedPath, pluginPath);
   });
 
@@ -678,7 +678,7 @@ export default {
 });
 
 describe('codex-backend: загрузка плагина пакета', () => {
-  // Собранный модуль — тот же, что отдаёт подпуть `stepcast/backends/codex`;
+  // Собранный модуль — тот же, что отдаёт подпуть `burnex/backends/codex`;
   // из теста он берётся путём, потому что самоссылка пакета разрешается через
   // `dist/`, а тесты и так исполняются из него.
   const MODULE = fileURLToPath(new URL('../src/parts/backends/codex/index.js', import.meta.url));

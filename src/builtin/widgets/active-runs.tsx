@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Badge } from '@stepcast/ui';
+import { Badge } from '@burnex/ui';
 
 /**
  * Runs in progress right now across all projects, each linking to its run

@@ -110,7 +110,7 @@ describe('ui-widgets: устаревание по голым импортам', 
     const { projectRoot } = makeJournalBed();
     writeFileSync(
       join(widgetsDir(projectRoot), 'clock.tsx'),
-      "import { NotAName } from '@stepcast/ui';\nexport default function Clock() { return null; }\n",
+      "import { NotAName } from '@burnex/ui';\nexport default function Clock() { return null; }\n",
     );
 
     const widgets = buildProjectWidgets(projectRoot);
@@ -173,7 +173,7 @@ describe('ui-widgets: устаревание по голым импортам', 
   it('правка файла снимает признак следующим вычислением', () => {
     const { projectRoot } = makeJournalBed();
     const path = join(widgetsDir(projectRoot), 'clock.tsx');
-    writeFileSync(path, "import { NotAName } from '@stepcast/ui';\nexport default function C() { return null; }\n");
+    writeFileSync(path, "import { NotAName } from '@burnex/ui';\nexport default function C() { return null; }\n");
     assert.notEqual(buildProjectWidgets(projectRoot)[0]?.deprecated, undefined);
 
     writeFileSync(path, HOOK_WIDGET);
@@ -184,7 +184,7 @@ describe('ui-widgets: устаревание по голым импортам', 
     const { projectRoot } = makeJournalBed();
     writeFileSync(
       join(widgetsDir(projectRoot), 'clock.tsx'),
-      "import { NotAName } from '@stepcast/ui';\nexport default function Clock() { return null; }\n",
+      "import { NotAName } from '@burnex/ui';\nexport default function Clock() { return null; }\n",
     );
     const before = readdirSync(join(projectRoot, '.stepcast'));
     buildProjectWidgets(projectRoot);

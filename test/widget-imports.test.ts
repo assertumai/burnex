@@ -10,11 +10,11 @@ describe('widgetImports: разбор голых спецификаторов', 
   });
 
   it('ушедшее имя названо спецификом и именем', () => {
-    const imports = parseWidgetImports("import { Button, NotAName } from '@stepcast/ui';\n");
+    const imports = parseWidgetImports("import { Button, NotAName } from '@burnex/ui';\n");
     const unresolved = unresolvedSharedNames(imports);
     assert.equal(unresolved.length, 1);
     assert.equal(unresolved[0]?.kind, 'name');
-    assert.equal(unresolved[0]?.specifier, '@stepcast/ui');
+    assert.equal(unresolved[0]?.specifier, '@burnex/ui');
     assert.equal(unresolved[0]?.name, 'NotAName');
   });
 

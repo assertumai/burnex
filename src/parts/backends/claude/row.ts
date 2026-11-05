@@ -4,7 +4,7 @@ import { partRow } from '../../pipeline/services.js';
 /**
  * Строка встроенного слоя: бэкенд `claude`. Реализация лежит рядом
  * (`./adapter.ts`, `source-tree-microkernel-layout`, ступень 3) — адаптер
- * написан внутренними импортами и публичной поверхностью (`stepcast/plugin`)
+ * написан внутренними импортами и публичной поверхностью (`burnex/plugin`)
  * не пользуется, поэтому граница плагинов поставки названа перечнем каталогов
  * (`parts/backends/codex/**`, `parts/pipeline/steps/decision/**`), а не деревом
  * `parts/backends/**`: этот каталог в перечне не значится вовсе — ни в `files`,

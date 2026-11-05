@@ -4,7 +4,7 @@ import type { Context } from 'cordis';
 import { declaration } from '../../../src/parts/ui/screens/backlog/declaration.ts';
 import type { BacklogOverview } from '../api';
 import { Backlog } from '../pages/Backlog';
-import { SCREEN } from '@stepcast/slots';
+import { SCREEN } from '@burnex/slots';
 
 function BacklogScreen({
   backlog,

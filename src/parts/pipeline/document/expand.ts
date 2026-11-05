@@ -20,6 +20,7 @@ import type { Config, RunnerConfig } from '../config/resolve.js';
 import { Ajv2020 } from 'ajv/dist/2020.js';
 
 import { StepcastError } from '../../../kernel/errors.js';
+import { packagedAddressName } from '../../../kernel/package-name.js';
 import { assertDataKey } from '../run/journal/data.js';
 import { JOB_OUTPUT_KEY } from '../run/jobOutputs.js';
 import { findProjectRoot } from '../run/journal/paths.js';
@@ -925,22 +926,18 @@ function resolveDeclaredPath(value: string, declaringFile: string): string {
   return isAbsolute(value) ? value : resolvePath(dirname(declaringFile), value);
 }
 
-const STEPCAST_SCHEMA_PREFIX = 'stepcast:';
-
 /**
- * Путь к схеме, объявленной в документе: `stepcast:<имя>` — ссылка на схему,
- * поставляемую пакетом stepcast, разрешается от расположения движка
+ * Путь к схеме, объявленной в документе: `burnex:<имя>` — ссылка на схему,
+ * поставляемую пакетом burnex, разрешается от расположения движка
  * (`packagedSchemaPath`), а не от файла объявления. Прочее значение — путь,
  * разрешаемый как обычно. Ветка применяется только к местам объявления
  * схемы — `uses` и `prompt: file:` остаются на `resolveDeclaredPath`, движок
  * не публикует ни работ, ни промптов.
  */
 function resolveSchemaPath(value: string, declaringFile: string, declaredAt: string): string {
-  if (value.startsWith(STEPCAST_SCHEMA_PREFIX)) {
-    return packagedSchemaPath(value.slice(STEPCAST_SCHEMA_PREFIX.length), {
-      file: declaringFile,
-      declaredAt,
-    });
+  const packaged = packagedAddressName(value);
+  if (packaged !== undefined) {
+    return packagedSchemaPath(packaged, { file: declaringFile, declaredAt });
   }
   return resolveDeclaredPath(value, declaringFile);
 }
@@ -1176,20 +1173,17 @@ export function selectRunner(
   };
 }
 
-const STEPCAST_WRAPPER_PREFIX = 'stepcast:';
-
 /**
  * Разрешить обёртку раннера в абсолютный путь (design.md, решение 7):
- * `stepcast:<имя>` — от расположения движка, путь — по тем же правилам, что
+ * `burnex:<имя>` — от расположения движка, путь — по тем же правилам, что
  * значение `script` (слоями для голого имени, от места объявления —
  * `runner.wrapperFile` — для `./` и `../`). Не объявлена — `undefined`.
  */
 export function resolveWrapper(runner: RunnerConfig, roots: ScriptRoots): string | undefined {
   const value = runner.wrapper;
   if (value === undefined) return undefined;
-  if (value.startsWith(STEPCAST_WRAPPER_PREFIX)) {
-    return packagedWrapperPath(value.slice(STEPCAST_WRAPPER_PREFIX.length));
-  }
+  const packagedWrapper = packagedAddressName(value);
+  if (packagedWrapper !== undefined) return packagedWrapperPath(packagedWrapper);
 
   const declaringFile = runner.wrapperFile ?? roots.builtin;
   if (isAbsolute(value) || value.startsWith('./') || value.startsWith('../')) {

@@ -166,9 +166,9 @@ describe('selectableAgent', () => {
 
 describe('действие «Connect» на вкладке Backends', () => {
   it('есть только у неподключённого бэкенда, адаптер которого поставляется с Burnex', () => {
-    assert.equal(connectOffered({ available: false, plugin: 'stepcast/backends/copilot' }), true);
+    assert.equal(connectOffered({ available: false, plugin: 'burnex/backends/copilot' }), true);
     assert.equal(connectOffered({ available: true }), false, 'claude и подключённые бэкенды plugin не несут');
-    assert.equal(connectOffered({ available: true, plugin: 'stepcast/backends/codex' }), false);
+    assert.equal(connectOffered({ available: true, plugin: 'burnex/backends/codex' }), false);
     assert.equal(connectOffered({ available: false }), false, 'подключить из витрины нечем');
   });
   it('отмеченное подключение уходит полем connect, без connectCodex', () => {

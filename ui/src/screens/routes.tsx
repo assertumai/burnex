@@ -5,7 +5,7 @@ import { declaration } from '../../../src/parts/ui/screens/routes/declaration.ts
 import { HOME_ROUTES_FILE, RoutesNotice } from '../pages/Routes';
 import { RoutesEditor } from '../pages/RoutesEditor';
 import { useRoutes } from '../router';
-import { ROUTES_LISTING_KEY, SCREEN } from '@stepcast/slots';
+import { ROUTES_LISTING_KEY, SCREEN } from '@burnex/slots';
 
 /**
  * Экран «Маршруты» — своя строка состава, своя половина (`ui-routes`,

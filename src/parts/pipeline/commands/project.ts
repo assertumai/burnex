@@ -75,7 +75,7 @@ function parseDocument(text: string): BacklogSlotsResponse {
   if (!parsed.success) {
     const failure = describeSchemaFailure(parsed.error);
     throw new StepcastError(
-      `Документ дорожек не соответствует схеме stepcast:backlog-slots: ${failure.message}`,
+      `Документ дорожек не соответствует схеме burnex:backlog-slots: ${failure.message}`,
       failure.at === undefined ? {} : { at: failure.at },
     );
   }

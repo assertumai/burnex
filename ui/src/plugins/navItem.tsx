@@ -1,6 +1,6 @@
 import type { JSX } from 'react';
 
-import type { NavItemProps } from '@stepcast/slots';
+import type { NavItemProps } from '@burnex/slots';
 
 /**
  * Общий вид пункта меню — один компонент на все маршруты с объявленным

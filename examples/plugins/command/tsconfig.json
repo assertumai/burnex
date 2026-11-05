@@ -1,6 +1,6 @@
 {
   // Конфигурация образца — по образцу `../typed/tsconfig.json`, только
-  // подпуть иной: `stepcast/plugin`, не `stepcast/pipeline`. Никакого `paths`
+  // подпуть иной: `burnex/plugin`, не `burnex/pipeline`. Никакого `paths`
   // здесь нет: подпуть разрешается самоссылкой пакета, приходящей из
   // корневого `package.json` (`exports["./plugin"]`), на `dist/src/plugin.js`
   // и его `.d.ts` рядом — тем же механизмом, каким его разрешит установленный

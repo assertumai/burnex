@@ -4238,7 +4238,7 @@ describe('ui-dashboard: конфигурация агентов и tier', () => 
     assert.equal(pick(saved.json, 'effort', 'value'), 'medium');
     assert.deepEqual(pick(saved.json, 'modelTiers'), ['max', 'deep', 'balance', 'fast', 'mini', 'review']);
     assert.match(readFileSync(file, 'utf8'), /# сохранить комментарий/);
-    assert.match(readFileSync(file, 'utf8'), /stepcast\/backends\/codex/);
+    assert.match(readFileSync(file, 'utf8'), /burnex\/backends\/codex/);
     assert.match(readFileSync(file, 'utf8'), /mini: haiku/);
     assert.match(readFileSync(file, 'utf8'), /effort: high/);
 
@@ -4313,7 +4313,7 @@ describe('ui-dashboard: конфигурация агентов и tier', () => 
     assert.equal(by('claude')?.plugin, undefined);
     for (const [name, plugin] of [['codex', 'codex'], ['cursor-agent', 'cursor'], ['copilot', 'copilot']] as const) {
       assert.equal(by(name)?.available, false, name);
-      assert.equal(by(name)?.plugin, `stepcast/backends/${plugin}`, name);
+      assert.equal(by(name)?.plugin, `burnex/backends/${plugin}`, name);
     }
     assert.equal(by('codex')?.defaultModel, 'gpt-5.6-terra');
     assert.equal(by('codex')?.defaultModelSource, 'plugin:codex');
@@ -4324,7 +4324,7 @@ describe('ui-dashboard: конфигурация агентов и tier', () => 
   it('уже подключённый поставляемый бэкенд не дублируется и не несёт plugin', async (t) => {
     const { runsRoot, home } = makeJournalBed();
     const file = join(home, '.stepcast', 'config.yml');
-    writeFileSync(file, `${readFileSync(file, 'utf8')}\nplugins: [stepcast/backends/cursor]\n`);
+    writeFileSync(file, `${readFileSync(file, 'utf8')}\nplugins: [burnex/backends/cursor]\n`);
     const server = await startServer(t, { runsRoot, home });
     const result = await fetchJson(server, '/api/settings');
     const cursor = (result.json.backends as SettingsBackend[]).filter((b) => b.name === 'cursor-agent');
@@ -4344,7 +4344,7 @@ describe('ui-dashboard: конфигурация агентов и tier', () => 
     assert.equal(saved.code, 200, JSON.stringify(saved.json));
     const text = readFileSync(file, 'utf8');
     assert.match(text, /# сохранить комментарий/);
-    assert.match(text, /stepcast\/backends\/cursor/);
+    assert.match(text, /burnex\/backends\/cursor/);
     assert.equal(pick(saved.json, 'agent', 'value'), 'cursor-agent');
     assert.equal((saved.json.backends as SettingsBackend[]).find((b) => b.name === 'cursor-agent')?.available, true);
 
@@ -4353,8 +4353,8 @@ describe('ui-dashboard: конфигурация агентов и tier', () => 
     });
     assert.equal(again.code, 200, JSON.stringify(again.json));
     const next = readFileSync(file, 'utf8');
-    assert.equal(next.match(/stepcast\/backends\/cursor/g)?.length, 1);
-    assert.equal(next.match(/stepcast\/backends\/copilot/g)?.length, 1);
+    assert.equal(next.match(/burnex\/backends\/cursor/g)?.length, 1);
+    assert.equal(next.match(/burnex\/backends\/copilot/g)?.length, 1);
   });
 
   it('connect отказывает на claude и неизвестном имени, не меняя файл', async (t) => {
@@ -4398,7 +4398,7 @@ describe('ui-dashboard: конфигурация агентов и tier', () => 
     // Сборка состава отказывает (рядом объявлен несуществующий плагин), и
     // демон живёт на прежнем ядре без адаптера, хотя строка в `plugins:` уже есть.
     const file = join(home, '.stepcast', 'config.yml');
-    writeFileSync(file, `${readFileSync(file, 'utf8')}plugins: [stepcast/backends/copilot, ./missing-plugin.js]\n`);
+    writeFileSync(file, `${readFileSync(file, 'utf8')}plugins: [burnex/backends/copilot, ./missing-plugin.js]\n`);
     watcher.poll();
 
     const read = await fetchJson(server, '/api/settings');
@@ -4406,12 +4406,12 @@ describe('ui-dashboard: конфигурация агентов и tier', () => 
     const copilot = (read.json.backends as SettingsBackend[]).find((b) => b.name === 'copilot');
     assert.equal(copilot?.available, false);
     assert.equal(copilot?.plugin, undefined, 'подключать нечего: строка уже объявлена');
-    assert.equal((read.json.backends as SettingsBackend[]).find((b) => b.name === 'cursor-agent')?.plugin, 'stepcast/backends/cursor');
+    assert.equal((read.json.backends as SettingsBackend[]).find((b) => b.name === 'cursor-agent')?.plugin, 'burnex/backends/cursor');
 
     const before = readFileSync(file, 'utf8');
     const result = await sendJson(server, { method: 'PUT', path: '/api/settings', body: JSON.stringify({ connect: ['copilot'] }) });
     assert.equal(result.code, 400);
-    assert.match(String(result.json.error), /Agent copilot is already declared in plugins \(stepcast\/backends\/copilot\) but did not load/);
+    assert.match(String(result.json.error), /Agent copilot is already declared in plugins \(burnex\/backends\/copilot\) but did not load/);
     assert.equal(readFileSync(file, 'utf8'), before);
   });
 
@@ -5271,7 +5271,7 @@ describe('ui-dashboards: GET/POST /api/dashboards', () => {
     mkdirSync(join(home, '.stepcast'), { recursive: true });
     writeFileSync(
       join(home, '.stepcast', 'plugins.patch.yml'),
-      'version: 1\nkind: plugins-patch\nplugins:\n  - id: ui-dashboards\n    use: stepcast:ui-dashboards\n    enabled: false\n',
+      'version: 1\nkind: plugins-patch\nplugins:\n  - id: ui-dashboards\n    use: burnex:ui-dashboards\n    enabled: false\n',
     );
     const server = await startServer(t, { runsRoot, home });
 
@@ -5478,7 +5478,7 @@ describe('ui-daemon: POST /api/run', () => {
     assert.equal(calls.length, 0);
   });
 
-  it('запускает пайплайн поставки stepcast:migrate-widgets наравне с файлом проекта', async (t) => {
+  it('запускает пайплайн поставки burnex:migrate-widgets наравне с файлом проекта', async (t) => {
     const { runsRoot, projectRoot } = makeJournalBed();
     seedRun(runsRoot, projectRoot, { runId: 'seed' });
     const key = projectKey(projectRoot);
@@ -5489,12 +5489,12 @@ describe('ui-daemon: POST /api/run', () => {
     const written = await sendJson(server, {
       method: 'POST',
       path: '/api/run',
-      body: JSON.stringify({ project: key, pipeline: 'stepcast:migrate-widgets' }),
+      body: JSON.stringify({ project: key, pipeline: 'burnex:migrate-widgets' }),
     });
     assert.equal(written.code, 202);
     assert.equal(calls.length, 1);
     assert.equal(calls[0]?.cwd, projectRoot);
-    assert.equal(calls[0]?.pipeline, 'stepcast:migrate-widgets');
+    assert.equal(calls[0]?.pipeline, 'burnex:migrate-widgets');
   });
 
   it('неизвестное имя пайплайна поставки отклонено без единого пуска', async (t) => {
@@ -5508,7 +5508,7 @@ describe('ui-daemon: POST /api/run', () => {
     const written = await sendJson(server, {
       method: 'POST',
       path: '/api/run',
-      body: JSON.stringify({ project: key, pipeline: 'stepcast:no-such-thing' }),
+      body: JSON.stringify({ project: key, pipeline: 'burnex:no-such-thing' }),
     });
     assert.equal(written.code, 400);
     assert.equal(calls.length, 0);
@@ -5558,7 +5558,7 @@ describe('ui-daemon: POST /api/run', () => {
     mkdirSync(join(home, '.stepcast'), { recursive: true });
     writeFileSync(
       join(home, '.stepcast', 'plugins.patch.yml'),
-      'version: 1\nkind: plugins-patch\nplugins:\n  - id: ui-run-launch\n    use: stepcast:ui-run-launch\n    enabled: false\n',
+      'version: 1\nkind: plugins-patch\nplugins:\n  - id: ui-run-launch\n    use: burnex:ui-run-launch\n    enabled: false\n',
     );
     const server = await createUiServer({ runsRoot, home, port: 0 });
     t.after(() => server.close());
@@ -5698,7 +5698,7 @@ describe('ui-daemon: POST /api/run/decision', () => {
     mkdirSync(join(home, '.stepcast'), { recursive: true });
     writeFileSync(
       join(home, '.stepcast', 'plugins.patch.yml'),
-      'version: 1\nkind: plugins-patch\nplugins:\n  - id: screen-decisions\n    use: stepcast:screen-decisions\n    enabled: false\n',
+      'version: 1\nkind: plugins-patch\nplugins:\n  - id: screen-decisions\n    use: burnex:screen-decisions\n    enabled: false\n',
     );
     const server = await createUiServer({ runsRoot, home, port: 0 });
     t.after(() => server.close());

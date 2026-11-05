@@ -4,7 +4,7 @@ import type { Context } from 'cordis';
 import { declaration } from '../../../src/parts/ui/screens/home/declaration.ts';
 import type { Overview, ProposalsStreamEvent } from '../api';
 import { Home } from '../pages/Home';
-import { SCREEN } from '@stepcast/slots';
+import { SCREEN } from '@burnex/slots';
 
 /** Экран «Home» (`ui-home-screen`): стартовая страница — обзор и очередь предложений приходят props каркаса. */
 function HomeScreen({

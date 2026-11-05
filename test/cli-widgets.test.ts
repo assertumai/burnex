@@ -27,7 +27,7 @@ describe('cli widgets: состав виджетов проекта', () => {
     writeFileSync(join(widgetsDir, 'clock.tsx'), "import { useState } from 'react';\nexport default function C() { return null; }\n");
     writeFileSync(
       join(widgetsDir, 'gauge.tsx'),
-      "import { NotAName } from '@stepcast/ui';\nexport default function G() { return null; }\n",
+      "import { NotAName } from '@burnex/ui';\nexport default function G() { return null; }\n",
     );
 
     const { lines, write } = capture();
@@ -45,7 +45,7 @@ describe('cli widgets: состав виджетов проекта', () => {
     const dir = project();
     const widgetsDir = join(dir, '.stepcast', 'widgets');
     mkdirSync(widgetsDir, { recursive: true });
-    writeFileSync(join(widgetsDir, 'clock.tsx'), "import { NotAName } from '@stepcast/ui';\nexport default function C() { return null; }\n");
+    writeFileSync(join(widgetsDir, 'clock.tsx'), "import { NotAName } from '@burnex/ui';\nexport default function C() { return null; }\n");
 
     const { lines, write } = capture();
     const code = runWidgetsCommand({ command: 'widgets', positional: [], flags: { json: true } }, write, dir);

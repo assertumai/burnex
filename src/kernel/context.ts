@@ -1,7 +1,7 @@
 import type { CommandContribution } from './contract.js';
 
 /**
- * Контекст глазами плагина — публикуемая поверхность подпути `stepcast/plugin`.
+ * Контекст глазами плагина — публикуемая поверхность подпути `burnex/plugin`.
  *
  * Объявлен здесь, а не взят из `cordis`, и это не дублирование ради красоты.
  * Собственные `.d.ts` пакета реэкспортируют друг друга относительными путями
@@ -46,7 +46,7 @@ export interface ContributionRegistrar<T> {
  * (`plugin-surface-split`, design.md, Решение 4). Служебные сервисы вклада
  * пайплайна — `backends`, `predicates`, `steps` — заводит строка `pipeline`
  * (`pipeline-owns-services`, Решение 1) и объявляет доменный подпуть
- * `stepcast/pipeline`, расширяющий этот тип (`PipelineContext`,
+ * `burnex/pipeline`, расширяющий этот тип (`PipelineContext`,
  * `pipeline-contract.ts`), а не сам ядерный контекст: поле здесь означало бы,
  * что публикуемый подпуть ядра знает о пайплайне, — то самое, что шаг
  * устраняет.

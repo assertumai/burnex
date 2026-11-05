@@ -4,7 +4,7 @@ import type { Context } from 'cordis';
 import { declaration } from '../../../src/parts/ui/screens/usage/declaration.ts';
 import type { Overview } from '../api';
 import { Usage } from '../pages/Usage';
-import { SCREEN } from '@stepcast/slots';
+import { SCREEN } from '@burnex/slots';
 import { daysForPeriod, useUsagePeriods } from './usagePeriods';
 
 function UsageScreen({

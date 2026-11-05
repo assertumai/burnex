@@ -26,7 +26,7 @@ import {
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from '@stepcast/ui';
+} from '@burnex/ui';
 import './widgets.css';
 
 /**
@@ -46,7 +46,7 @@ export function projectName(path: string | undefined, projectKey: string): strin
 }
 
 /** Пайплайн поставки, запускаемый кнопкой «Migrate» (`widget-migration`, «Пакет поставляет пайплайн миграции виджетов»). */
-export const MIGRATE_PIPELINE = 'stepcast:migrate-widgets';
+export const MIGRATE_PIPELINE = 'burnex:migrate-widgets';
 
 export type MigrateStatus = 'idle' | 'busy' | 'done' | 'error';
 

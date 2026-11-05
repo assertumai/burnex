@@ -1,6 +1,7 @@
 import { relative, isAbsolute, sep } from 'node:path';
 
 import { StepcastError } from '../../kernel/errors.js';
+import { PACKAGE_NAME } from '../../kernel/package-name.js';
 import { parseInstallManifest, type InstallManifest } from './manifest.js';
 
 /**
@@ -35,7 +36,7 @@ function noManifestError(root: string): StepcastError {
  */
 export function inferInstallMethod(root: string, probes: InferProbes): InstallManifest {
   if (root.split(sep).includes('node_modules')) {
-    return { method: 'npm', package: probes.readPackageName(root) ?? 'stepcast' };
+    return { method: 'npm', package: probes.readPackageName(root) ?? PACKAGE_NAME };
   }
   if (isInsideDir(probes.releasesDir, root)) throw noManifestError(root);
   if (probes.isGitTree(root)) return { method: 'checkout', dir: root };

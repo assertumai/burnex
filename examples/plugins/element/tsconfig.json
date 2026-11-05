@@ -25,8 +25,8 @@
     "allowImportingTsExtensions": true,
 
     "paths": {
-      "@stepcast/slots": ["../../../ui/src/sharedSlots.ts"],
-      "@stepcast/ui": ["../../../ui/src/ui/index.ts"]
+      "@burnex/slots": ["../../../ui/src/sharedSlots.ts"],
+      "@burnex/ui": ["../../../ui/src/ui/index.ts"]
     }
   },
   "include": ["index.tsx"]

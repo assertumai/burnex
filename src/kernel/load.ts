@@ -13,7 +13,8 @@ import { readPluginManifest, type PluginManifest } from './tree/manifest.js';
 import { registryFromKernel, type Registry } from './registry.js';
 import { introspect, type Introspection } from './introspect.js';
 import { contributionServices, declaredServices, requestedServices, type RequestedService } from './services.js';
-import { BUILTIN_USE_PREFIX, isBuiltinUse, type TreeRow } from './tree/tree.js';
+import { packagedAddressName } from './package-name.js';
+import { isBuiltinUse, type TreeRow } from './tree/tree.js';
 
 /**
  * Загрузка плагинов.
@@ -123,7 +124,7 @@ export function rowScope(
  * строки поставки витрины и строки команд разом (design.md изменения
  * `cli-commands-as-rows`, Решение 7). Модульное множество, не поле сервиса и
  * не параметр `register`: признак встроенности обязан быть неподделываемым —
- * пометка ставится изнутри загрузчика, до первой регистрации, и `stepcast/plugin`
+ * пометка ставится изнутри загрузчика, до первой регистрации, и `burnex/plugin`
  * её не публикует.
  */
 const builtinRowFibers = new WeakSet<Fiber>();
@@ -169,7 +170,7 @@ export interface LoadOptions {
    * вовсе (`kernel-domain-free-imports`, Решение 3). Состав дефолта
    * (`src/parts/load.ts`) подставляет сюда строки движка (`BUILTIN_ROWS`)
    * впереди строк вызывающего; вызов без поля означает пустой встроенный
-   * слой — строка `stepcast:<имя>` отказывает как несуществующая.
+   * слой — строка `burnex:<имя>` отказывает как несуществующая.
    */
   readonly builtinRows?: readonly BuiltinRow[];
   /**
@@ -200,7 +201,7 @@ export interface LoadOptions {
 
 /**
  * Путь модуля строки: относительный — от файла объявления, иначе — пакет.
- * Форма `stepcast:<имя>` сюда не доходит: её разрешает таблица встроенных
+ * Форма `burnex:<имя>` сюда не доходит: её разрешает таблица встроенных
  * строк (`applyTreeRow`), а не диск.
  */
 export function resolveModulePath(row: TreeRow, options: LoadOptions): string {
@@ -216,7 +217,7 @@ export function resolveModulePath(row: TreeRow, options: LoadOptions): string {
 
   // Пакет — зависимость проекта: разрешается от его корня. Каталог движка —
   // запасной путь для глобальной установки, где плагин лежит рядом с самим
-  // stepcast, а не в репозитории.
+  // движком, а не в репозитории.
   const roots = [options.projectRoot, options.engineRoot ?? findPackageRoot(fileURLToPath(new URL('.', import.meta.url)))];
   const failures: string[] = [];
   for (const root of roots) {
@@ -501,7 +502,7 @@ export function applyContextPlugin(kernel: Kernel, plugin: ContextPlugin, source
 
 /**
  * Отказ: строка называет несуществующую встроенную строку формой
- * `stepcast:<имя>`. Подсказка перечисляет строки в том порядке, в каком они
+ * `burnex:<имя>`. Подсказка перечисляет строки в том порядке, в каком они
  * поданы обходу (`kernel-domain-free-imports`, Решение 3). Обход без единой
  * поданной строки — законный вызов ядерной пары (собственной таблицы у ядра
  * нет), и подсказка о нём говорит прямо: перечень «Пакет поставляет: » с
@@ -510,13 +511,13 @@ export function applyContextPlugin(kernel: Kernel, plugin: ContextPlugin, source
  */
 function unknownBuiltinRow(row: TreeRow, name: string, rows: readonly BuiltinRow[]): StepcastError {
   const names = rows.map((candidate) => candidate.id);
-  return new StepcastError(`Строка ${row.id} называет несуществующую встроенную строку stepcast:${name}`, {
+  return new StepcastError(`Строка ${row.id} называет несуществующую встроенную строку burnex:${name}`, {
     ...fileOption(row),
     at: 'plugins',
     hint:
       names.length === 0
-        ? 'Обходу не подано ни одной строки поставки: форму stepcast:<имя> разрешают только строки параметра builtinRows'
-        : `Пакет поставляет: ${names.map((id) => `stepcast:${id}`).join(', ')}`,
+        ? 'Обходу не подано ни одной строки поставки: форму burnex:<имя> разрешают только строки параметра builtinRows'
+        : `Пакет поставляет: ${names.map((id) => `burnex:${id}`).join(', ')}`,
   });
 }
 
@@ -666,7 +667,7 @@ interface RowApplication {
 
 /**
  * Применить одну строку дерева: встроенная — фабрика из `options.builtinRows`
- * по форме `use: stepcast:<имя>` (единственный источник — ядро своей таблицы
+ * по форме `use: burnex:<имя>` (единственный источник — ядро своей таблицы
  * не несёт, `kernel-domain-free-imports`, Решение 3), каталог с манифестом —
  * каталожный плагин пользователя (`applyDirectoryTreeRow`, `user-plugins`,
  * Решение 2), обычная — прежние `resolveModulePath`, импорт и `applyPlugin`
@@ -699,7 +700,7 @@ async function applyTreeRow(
   if (known !== undefined) throw known;
 
   if (isBuiltinUse(row.use)) {
-    const name = row.use.slice(BUILTIN_USE_PREFIX.length);
+    const name = packagedAddressName(row.use) ?? '';
     const builtinRow = options.builtinRows?.find((candidate) => candidate.id === name);
     if (builtinRow === undefined) throw unknownBuiltinRow(row, name, options.builtinRows ?? []);
     const before = snapshotRoot(kernel);

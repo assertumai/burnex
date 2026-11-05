@@ -32,7 +32,7 @@ import {
   TabsList,
   TabsTrigger,
   statusBadgeVariant,
-} from '@stepcast/ui';
+} from '@burnex/ui';
 import './proposals.css';
 
 /**

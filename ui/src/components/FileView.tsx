@@ -1,6 +1,6 @@
 import { useState, type JSX } from 'react';
 
-import { Alert, AlertDescription, Button } from '@stepcast/ui';
+import { Alert, AlertDescription, Button } from '@burnex/ui';
 import { fetchFile, type FileSide, type JournalFileRef } from '../api';
 import { fmtBytes } from '../format';
 

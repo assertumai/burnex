@@ -2,7 +2,7 @@ import type { Context } from 'cordis';
 
 import { declaration } from '../../../src/parts/ui/screens/packages/declaration.ts';
 import { Packages } from '../pages/Packages';
-import { SCREEN } from '@stepcast/slots';
+import { SCREEN } from '@burnex/slots';
 
 /**
  * Экран «Packages»: страница сама читает `GET /api/packages` при открытии и по

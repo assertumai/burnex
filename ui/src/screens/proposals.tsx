@@ -4,7 +4,7 @@ import type { Context } from 'cordis';
 import { declaration } from '../../../src/parts/ui/screens/proposals/declaration.ts';
 import { fetchProposals, type ProposalsOverview, type ProposalsStreamEvent } from '../api';
 import { Proposals } from '../pages/Proposals';
-import { SCREEN } from '@stepcast/slots';
+import { SCREEN } from '@burnex/slots';
 
 /**
  * Экран не заводит своего маршрута чтения потоком: событие `proposals`

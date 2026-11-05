@@ -34,8 +34,8 @@ const DAEMON = 'http://127.0.0.1:7717';
  * в `ui/tsconfig.json`, `ui/tsconfig.test.json` и `scripts/build-ui-tests.mjs`.
  */
 const SHARED_IN_REPO = {
-  '@stepcast/slots': join(ROOT, 'ui', 'src', 'sharedSlots.ts'),
-  '@stepcast/ui': join(ROOT, 'ui', 'src', 'ui', 'index.ts'),
+  '@burnex/slots': join(ROOT, 'ui', 'src', 'sharedSlots.ts'),
+  '@burnex/ui': join(ROOT, 'ui', 'src', 'ui', 'index.ts'),
 };
 
 export default defineConfig({

@@ -12,7 +12,7 @@ import routesPlugin from '../src/plugins/routes.tsx';
 import { bindRouterKernel } from '../src/router';
 import { BUILTIN_SCREENS } from '../src/screens/index';
 import { fakeEventSources } from './support/live';
-import { ROUTE_TARGET } from '@stepcast/slots';
+import { ROUTE_TARGET } from '@burnex/slots';
 
 /**
  * Плагин `screens` (`ui/src/plugins/screens.tsx`): читает состав у демона и

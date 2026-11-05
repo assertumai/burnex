@@ -15,7 +15,7 @@ import type {
  * Адаптер Cursor Agent CLI (`cursor-agent -p`).
  *
  * Плагин пакета, а не встроенный вклад: берёт только публичную поверхность
- * `stepcast/plugin` и `stepcast/pipeline` — это стерегут
+ * `burnex/plugin` и `burnex/pipeline` — это стерегут
  * `test/plugin-surface.test.ts` и правило линта. Флаги и форма потока взяты
  * из документации Cursor CLI, а не сверены с установленной версией (CLI в
  * среде не было): `test/fixtures/cursor/README.md`. Документ изменения —

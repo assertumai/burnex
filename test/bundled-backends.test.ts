@@ -8,11 +8,12 @@ import { BUNDLED_BACKENDS, bundledByBackend } from '../src/parts/backends/bundle
 describe('каталог поставляемых бэкендов', () => {
   it('совпадает с подпутями ./backends/* из exports пакета', () => {
     const pkg = JSON.parse(readFileSync(fileURLToPath(new URL('../../package.json', import.meta.url)), 'utf8')) as {
+      name: string;
       exports: Record<string, unknown>;
     };
     const exported = Object.keys(pkg.exports)
       .filter((key) => key.startsWith('./backends/'))
-      .map((key) => `stepcast/${key.slice(2)}`)
+      .map((key) => `${pkg.name}/${key.slice(2)}`)
       .sort();
     assert.deepEqual(BUNDLED_BACKENDS.map((entry) => entry.specifier).sort(), exported);
   });
@@ -21,6 +22,6 @@ describe('каталог поставляемых бэкендов', () => {
     const names = BUNDLED_BACKENDS.flatMap((entry) => Object.keys(entry.plugin.backends ?? {}));
     assert.deepEqual(names, ['codex', 'cursor-agent', 'copilot']);
     assert.equal(bundledByBackend('claude'), undefined);
-    assert.equal(bundledByBackend('cursor-agent')?.specifier, 'stepcast/backends/cursor');
+    assert.equal(bundledByBackend('cursor-agent')?.specifier, 'burnex/backends/cursor');
   });
 });
