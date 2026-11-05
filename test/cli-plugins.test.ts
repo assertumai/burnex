@@ -74,9 +74,9 @@ describe('plugin-contributions: команды плагина в CLI', () => {
 
     const outcome = await cli(project, ['help']);
 
-    assert.match(outcome.stderr, /stepcast hello/);
+    assert.match(outcome.stderr, /burnex hello/);
     assert.match(outcome.stderr, /поздороваться/);
-    assert.match(outcome.stderr, /stepcast run/);
+    assert.match(outcome.stderr, /burnex run/);
   });
 
   it('неизвестная команда перечисляет и плагинные', async () => {
@@ -86,7 +86,7 @@ describe('plugin-contributions: команды плагина в CLI', () => {
 
     assert.equal(outcome.code, ExitCode.configError);
     assert.match(outcome.stderr, /Неизвестная команда/);
-    assert.match(outcome.stderr, /stepcast hello/);
+    assert.match(outcome.stderr, /burnex hello/);
   });
 
   it('код возврата команды плагина доезжает до процесса', async () => {
@@ -143,7 +143,7 @@ export default {
     const outcome = await cli(project, ['config']);
 
     assert.equal(outcome.code, ExitCode.ok, outcome.stderr);
-    assert.match(outcome.stdout, /Плагины \(полное дерево со слоями и порядком — stepcast plugins\)/);
+    assert.match(outcome.stdout, /Плагины \(полное дерево со слоями и порядком — burnex plugins\)/);
   });
 
   it('строка, отключённая патчем, не числится в отчёте действующей, но вклад её слоя показан объявленным', async () => {
@@ -198,7 +198,7 @@ export default {
 
 describe('plugin-contributions: предикат плагина через CLI', () => {
   /**
-   * Сквозной путь: `stepcast lint` и `stepcast run` обязаны видеть предикат
+   * Сквозной путь: `burnex lint` и `burnex run` обязаны видеть предикат
    * плагина так же, как программный вызов. Проверка именно через CLI не
    * лишняя: реестр собирает точка входа, и команда, не передавшая его в
    * раскрытие, отклоняла бы валидный документ как опечатку — а тест,
@@ -235,14 +235,14 @@ jobs:
     return box;
   }
 
-  it('stepcast lint принимает документ с предикатом плагина', async () => {
+  it('burnex lint принимает документ с предикатом плагина', async () => {
     const outcome = await cli(project(), ['lint', 'stepcast.yml']);
 
     assert.equal(outcome.code, ExitCode.ok, outcome.stderr);
     assert.match(outcome.stdout, /^ok: /m);
   });
 
-  it('stepcast run исполняет шаг с предикатом плагина', async () => {
+  it('burnex run исполняет шаг с предикатом плагина', async () => {
     const outcome = await cli(project(), ['run', 'stepcast.yml', '--quiet']);
 
     assert.equal(outcome.code, ExitCode.ok, outcome.stderr);
@@ -262,7 +262,7 @@ jobs:
 
 describe('plugin-contributions: умолчания бэкенда плагина через CLI', () => {
   /**
-   * Точка входа разрешает конфигурацию вместе с плагинами, и `stepcast config`
+   * Точка входа разрешает конфигурацию вместе с плагинами, и `burnex config`
    * показывает `backends.<имя>` плагина источником `plugin:<имя>`. Команды,
    * читавшие конфигурацию заново сами, этот слой теряли: `lint` и `run`
    * отказывали «неизвестный бэкенд», хотя плагин загружен, а его умолчания
@@ -304,14 +304,14 @@ jobs:
     return box;
   }
 
-  it('stepcast lint видит бэкенд, объявленный умолчаниями плагина', async () => {
+  it('burnex lint видит бэкенд, объявленный умолчаниями плагина', async () => {
     const outcome = await cli(project(), ['lint', 'stepcast.yml']);
 
     assert.equal(outcome.code, ExitCode.ok, outcome.stdout + outcome.stderr);
     assert.match(outcome.stdout, /^ok: /m);
   });
 
-  it('stepcast run --dry-run доходит до проверки с тем же бэкендом', async () => {
+  it('burnex run --dry-run доходит до проверки с тем же бэкендом', async () => {
     const outcome = await cli(project(), ['run', 'stepcast.yml', '--dry-run']);
 
     assert.equal(outcome.code, ExitCode.ok, outcome.stdout + outcome.stderr);

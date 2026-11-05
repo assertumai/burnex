@@ -26,7 +26,7 @@ import type { ParsedArgs } from '../../../kernel/cli/args.js';
  * Конфигурация приходит из окружения команды, когда точка входа уже разрешила
  * её вместе с плагинами: повторный `resolveConfig({ cwd })` терял бы слой
  * умолчаний плагинных бэкендов, и `backends.<имя>` плагина не существовало бы
- * для команды, хотя `stepcast config` его показывает. Без `config` (прямой
+ * для команды, хотя `burnex config` его показывает. Без `config` (прямой
  * вызов из тестов) команда разрешает конфигурацию сама, как прежде.
  */
 export async function runRunCommand(
@@ -157,7 +157,7 @@ export async function runRunCommand(
       for (const job of isolated) {
         write(`  ${job.id} (${job.workspace?.mode}): ${job.workspace?.path}`);
       }
-      write(`наложить результат на текущее дерево: stepcast apply ${runId}`);
+      write(`наложить результат на текущее дерево: burnex apply ${runId}`);
     }
 
     if (result.restart !== undefined) {

@@ -223,7 +223,7 @@ export function Home({
     <div className="home">
       <PageHeader
         title="burnex"
-        description="The dashboard of the stepcast daemon — a pipeline engine for development with AI agents."
+        description="The dashboard of the Burnex daemon — a pipeline engine for development with AI agents."
       />
 
       <section className="home-intro">
@@ -234,8 +234,8 @@ export function Home({
         </p>
         <p>
           The daemon behind this page watches the run journals of every project it knows about, launches pipelines
-          on request and keeps this dashboard live. The engine and its CLI are called <code>stepcast</code>; burnex is
-          the name of this dashboard.
+          on request and keeps this dashboard live. The engine, its CLI and this dashboard are all called
+          <code>burnex</code>; <code>stepcast</code> is the former name and still works as an alias of the CLI.
         </p>
       </section>
 
@@ -287,15 +287,15 @@ export function Home({
         <h2 className="home-section-title">From the terminal</h2>
         <dl className="home-commands">
           <dt>
-            <code>stepcast run &lt;pipeline.yml&gt;</code>
+            <code>burnex run &lt;pipeline.yml&gt;</code>
           </dt>
           <dd>Start a pipeline in the current project; the run appears in Runs as it goes.</dd>
           <dt>
-            <code>stepcast lint &lt;pipeline.yml&gt;</code>
+            <code>burnex lint &lt;pipeline.yml&gt;</code>
           </dt>
           <dd>Check a pipeline file before running it.</dd>
           <dt>
-            <code>stepcast up</code> · <code>stepcast down</code>
+            <code>burnex up</code> · <code>burnex down</code>
           </dt>
           <dd>Start or stop the daemon that serves this dashboard.</dd>
         </dl>

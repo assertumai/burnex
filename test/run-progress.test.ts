@@ -661,7 +661,7 @@ describe('run-progress: команда run печатает ход', () => {
 });
 
 describe('run-progress: итог изолированного прогона', () => {
-  it('однорепозиторный прогон предлагает stepcast apply', async () => {
+  it('однорепозиторный прогон предлагает burnex apply', async () => {
     const project = makeProject({
       'stepcast.yml': `
 version: 1
@@ -683,13 +683,13 @@ jobs:
 
     assert.equal(exitCode, ExitCode.ok);
     assert.ok(lines.some((line) => line.startsWith('рабочие деревья:')));
-    assert.ok(lines.some((line) => /^наложить результат на текущее дерево: stepcast apply /.test(line)));
+    assert.ok(lines.some((line) => /^наложить результат на текущее дерево: burnex apply /.test(line)));
   });
 
   // Задача 4.3 / 10 (merge-lanes-per-repo): наложение по репозиториям снимает
-  // отказ — составной прогон снова предлагает `stepcast apply`, как и
+  // отказ — составной прогон снова предлагает `burnex apply`, как и
   // однорепозиторный.
-  it('составной прогон предлагает stepcast apply наравне с однорепозиторным', async () => {
+  it('составной прогон предлагает burnex apply наравне с однорепозиторным', async () => {
     const project = makeProject({
       'stepcast.yml': `
 version: 1
@@ -715,7 +715,7 @@ jobs:
 
     assert.equal(exitCode, ExitCode.ok);
     assert.ok(lines.some((line) => line.startsWith('рабочие деревья:')));
-    assert.ok(lines.some((line) => /^наложить результат на текущее дерево: stepcast apply /.test(line)));
+    assert.ok(lines.some((line) => /^наложить результат на текущее дерево: burnex apply /.test(line)));
   });
 });
 

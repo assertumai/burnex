@@ -85,13 +85,13 @@ export interface RequestEnv {
   readonly launchRun: LaunchRunFn;
   /**
    * Приём решения (`user-decision-steps`, design.md решение 5) — отсоединённое
-   * порождение `stepcast decide`, тем же приёмом, что `launchRun`. Маршрут
+   * порождение `burnex decide`, тем же приёмом, что `launchRun`. Маршрут
    * проверяет запрос по состоянию прогона сам и зовёт это поле уже с
    * проверенными значениями; демон в файлы прогонов по-прежнему не пишет.
    */
   readonly launchDecide: LaunchDecideFn;
   /**
-   * Возобновление с выбранной работы — отсоединённый `stepcast resume --from`.
+   * Возобновление с выбранной работы — отсоединённый `burnex resume --from`.
    * Маршрут проверяет запрос до порождения; демон в журнал по-прежнему не пишет.
    */
   readonly launchResume: LaunchResumeFn;

@@ -11,7 +11,7 @@ params:
 
 # `cwd`, а не `worktree`/`copy` (design.md, Решение 12): каталог виджетов
 # часто не отслежен git, и в дереве, ответвлённом от HEAD, его просто не
-# было бы. Дверь одна — `stepcast propose`, остальные закрыты правами, а не
+# было бы. Дверь одна — `burnex propose`, остальные закрыты правами, а не
 # режимом рабочей директории.
 workspace:
   mode: cwd
@@ -22,7 +22,7 @@ steps:
     prompt: file:../prompts/migrate-widgets.md
     permissions:
       # Ни Edit, ни Write над рабочим деревом — правка кабинета идёт только
-      # через `stepcast propose`; `Write` над каталогом черновиков даёт
+      # через `burnex propose`; `Write` над каталогом черновиков даёт
       # положить туда исправленную версию, не касаясь дерева проекта
       # (design.md, Решение 12).
       allow:
@@ -36,5 +36,5 @@ steps:
         # машине с установленным пакетом агент вправе позвать и его, но
         # полагаться на `PATH` промпт не учит.
         - 'Bash(node "$STEPCAST_BIN" propose *)'
-        - "Bash(stepcast propose *)"
+        - "Bash(burnex propose *)"
       enforce: strict

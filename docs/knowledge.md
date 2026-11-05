@@ -209,7 +209,7 @@ Markdown каталога, включая вложенные, — порядко
 `select({ kind: 'index' })`, чей текст уезжает в контекст агентского шага,
 укладывает записи каталогов в `spec_index_max_tokens` и заканчивает список
 строкой, называющей число не показанных записей и каталог, где они лежат.
-Глагол `index` (и `stepcast knowledge index` в терминале) отдаёт список
+Глагол `index` (и `burnex knowledge index` в терминале) отдаёт список
 целиком независимо от предела: он же обслуживает человека, читающего
 `grep`-заменой, а токенов в терминале не считают. Записи единиц знания не
 усекаются нигде и никогда: усечение спрятало бы нарушение дисциплины, ради
@@ -335,13 +335,13 @@ Markdown каталога, включая вложенные, — порядко
 ## Работа вне пайплайна
 
 ```bash
-stepcast knowledge index                    # оглавление заголовками
-stepcast knowledge select --scope 'src/**'  # тела по области
-stepcast knowledge select --id spec:<слаг>  # документы каталога изменения
-stepcast knowledge check                    # код возврата отражает исход
-stepcast knowledge check --record           # + датировать обнаруженные расхождения
-stepcast knowledge check --publish <ключ>   # + true/false — есть ли index-overflow
-stepcast knowledge write --file unit.json   # либо --stdin
+burnex knowledge index                    # оглавление заголовками
+burnex knowledge select --scope 'src/**'  # тела по области
+burnex knowledge select --id spec:<слаг>  # документы каталога изменения
+burnex knowledge check                    # код возврата отражает исход
+burnex knowledge check --record           # + датировать обнаруженные расхождения
+burnex knowledge check --publish <ключ>   # + true/false — есть ли index-overflow
+burnex knowledge write --file unit.json   # либо --stdin
 ```
 
 Половина ценности памяти лежит именно здесь. `check` встаёт гейтом
@@ -397,7 +397,7 @@ stepcast knowledge write --file unit.json   # либо --stdin
 ## Разворачивание
 
 ```bash
-stepcast init --knowledge fs
+burnex init --knowledge fs
 ```
 
 Создаёт каталог знания, единицу-образец, файл правил письма и секцию

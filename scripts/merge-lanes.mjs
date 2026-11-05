@@ -8,6 +8,6 @@
  * прежнюю логику, читалось бы вторым, расходящимся источником правды.
  */
 process.stderr.write(
-  'merge-lanes.mjs: команда заменена `stepcast merge-lanes` — этот скрипт больше не сводит дорожки\n',
+  'merge-lanes.mjs: команда заменена `burnex merge-lanes` — этот скрипт больше не сводит дорожки\n',
 );
 process.exit(1);

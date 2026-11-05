@@ -10,7 +10,7 @@ import { PIPELINE_SERVICES } from '../services.js';
 import type { ParsedArgs } from '../../../kernel/cli/args.js';
 
 /**
- * `stepcast assert-clean [--allow <пути через запятую>]` — проверка чистоты
+ * `burnex assert-clean [--allow <пути через запятую>]` — проверка чистоты
  * рабочего дерева и объявленных вложенных репозиториев (`project.nested_repos`),
  * не изменяя ни одного из них. Существует потому, что состав вложенных
  * репозиториев сознательно не публикуется подстановкой `${project.*}` (см.

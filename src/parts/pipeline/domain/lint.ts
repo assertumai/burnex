@@ -457,14 +457,14 @@ const SCHEMA_TARGETS = [
  * ветшает ровно так же, как врал бы статический файл пакета, — состав
  * плагинов поменялся, а файл остался. Проверка стоит печати схем в память, и
  * только если хотя бы один файл найден: проект, не пользовавшийся командой
- * `stepcast schema`, о ней от линта не узнаёт вовсе.
+ * `burnex schema`, о ней от линта не узнаёт вовсе.
  */
 function checkPublishedSchema(base: string, registry: Registry, push: (diagnostic: Diagnostic) => void): void {
   const dir = join(base, '.stepcast', 'schema');
   const targets = SCHEMA_TARGETS.map((target) => ({ ...target, path: join(dir, target.file) }));
   if (!targets.some((target) => existsSync(target.path))) return;
 
-  // Тот же перечень, каким печатает команда `stepcast schema`: сверка со
+  // Тот же перечень, каким печатает команда `burnex schema`: сверка со
   // «свежим» выводом верна лишь пока сборка перечня у них одна — включая
   // состав видов внутренней формы (`builtin-step-kinds-as-rows`): отключённый
   // встроенный вид шага тоже обязан ловиться этой сверкой, не только плагинный.
@@ -495,7 +495,7 @@ function checkPublishedSchema(base: string, registry: Registry, push: (diagnosti
           ? `Схема проекта устарела: ${target.path} расходится с действующим составом плагинов`
           : `Схема проекта нечитаема: ${target.path} — ${reason}`,
       file: target.path,
-      hint: 'Перегенерируйте: stepcast schema',
+      hint: 'Перегенерируйте: burnex schema',
     });
   }
 }
@@ -756,7 +756,7 @@ export function lintPipeline(expanded: ExpandedPipeline, given: LintOptions): Di
         message: `Работа ${job.id} объявляет lane «${RESERVED_LANE}» — имя зарезервировано`,
         file: pipeline.file,
         at: `${at}.lane`,
-        hint: `${RESERVED_LANE} значит «все дорожки» в --lanes команды stepcast merge-lanes — выберите другую метку`,
+        hint: `${RESERVED_LANE} значит «все дорожки» в --lanes команды burnex merge-lanes — выберите другую метку`,
       });
     }
 
@@ -1149,7 +1149,7 @@ function checkDisplaySubstitutions(
           severity: 'error',
           message: `display работы ${job.id} подставляет ${item.expression} — в подписи доступны только данные работы`,
           ...location,
-          hint: `Допустимо ${'${'}jobs.${other}.data.<ключ>${'}'}: их публикует сама работа командой stepcast data`,
+          hint: `Допустимо ${'${'}jobs.${other}.data.<ключ>${'}'}: их публикует сама работа командой burnex data`,
         });
         continue;
       }

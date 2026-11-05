@@ -338,7 +338,7 @@ describe('self-improvement-loop: работа дорожки не адресуе
 
   /**
    * Цель — аргумент именно вызова `merge-lanes`, а не всякое `--lanes`:
-   * `slots.yml` зовёт `stepcast backlog pick --lanes a` для раздачи слота —
+   * `slots.yml` зовёт `burnex backlog pick --lanes a` для раздачи слота —
    * это не сведение, и проверка не вправе на него сработать.
    */
   it('вызов merge-lanes в файлах петли не набирает перечень дорожек именами', () => {

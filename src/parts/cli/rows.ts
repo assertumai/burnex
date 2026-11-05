@@ -36,7 +36,7 @@ import { row as project } from '../pipeline/commands/project.js';
  * он жил здесь, перечень и каждый из 25 модулей команд образовали бы цикл
  * импорта по значению). Точка входа (`src/parts/cli/main.ts`) подаёт его
  * `resolveConfig` (`COMMAND_ROW_IDS`) и `loadPlugins` (этот перечень) тем же
- * механизмом, каким `stepcast up` подаёт `src/parts/ui/rows.ts`: дерево команд CLI =
+ * механизмом, каким `burnex up` подаёт `src/parts/ui/rows.ts`: дерево команд CLI =
  * перечень движка (`src/parts/rows.ts`) плюс этот перечень.
  *
  * Классификация (design.md, Решение 3, Решение 4): команда числится

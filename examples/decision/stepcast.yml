@@ -2,14 +2,14 @@
 # на которой прогон останавливается и ждёт решения человека. Экран «Решения»
 # витрины (`/decisions`, docs/decisions.md) виден на этом пайплайне вживую.
 #
-#   stepcast lint examples/decision/stepcast.yml
-#   stepcast run  examples/decision/stepcast.yml
+#   burnex lint examples/decision/stepcast.yml
+#   burnex run  examples/decision/stepcast.yml
 #
 # Прогон доходит до работы gate и останавливается. Дальше решает человек:
 #
-#   stepcast decide <run> approve                    # продолжить к apply
-#   stepcast decide <run> deny --reason "рано"        # отклонить, прогон отменён
-#   stepcast decide <run> redo --from check/inspect   # начать заново с проверки
+#   burnex decide <run> approve                    # продолжить к apply
+#   burnex decide <run> deny --reason "рано"        # отклонить, прогон отменён
+#   burnex decide <run> redo --from check/inspect   # начать заново с проверки
 
 version: 1
 kind: pipeline

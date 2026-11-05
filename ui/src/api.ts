@@ -293,7 +293,7 @@ export interface JobSnapshot {
   readonly loop?: JobLoop;
   /** Подпись работы, раскрытая демоном против данных прогона. */
   readonly display?: Readonly<Record<string, string>>;
-  /** Данные, опубликованные самой работой командой `stepcast data`. */
+  /** Данные, опубликованные самой работой командой `burnex data`. */
   readonly data?: Readonly<Record<string, string>>;
   readonly steps: readonly StepSnapshot[];
   readonly usage: UsageSnapshot;
@@ -999,9 +999,9 @@ export async function fetchRun(address: string): Promise<RunSnapshot> {
 /**
  * Приём решения (`user-decision-steps`, design.md решение 5, 11): демон не
  * пишет ничего сам — проверяет запрос по состоянию прогона и порождает
- * `stepcast decide`. `202` здесь — подтверждение приёма, а не применения:
+ * `burnex decide`. `202` здесь — подтверждение приёма, а не применения:
  * отклонение маршрута (400) значит, что запрос сам по себе негоден, а не что
- * решение не применилось (та проверка — уже в `stepcast decide`).
+ * решение не применилось (та проверка — уже в `burnex decide`).
  */
 /**
  * Запуск пайплайна проекта либо пайплайна поставки (`stepcast:<имя>`)

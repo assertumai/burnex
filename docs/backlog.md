@@ -1,7 +1,7 @@
-# Очередь улучшений (`backlog.md`) и команда `stepcast backlog`
+# Очередь улучшений (`backlog.md`) и команда `burnex backlog`
 
 Очередь — список пунктов, которые предстоит сделать, в одном файле
-Markdown. Ведёт её человек в обычном редакторе; `stepcast backlog`
+Markdown. Ведёт её человек в обычном редакторе; `burnex backlog`
 разбирает, отбирает и правит файл, не зная ничего о проекте, в котором он
 лежит, — ни конфигурации, ни `.stepcast/`, ни каталога прогона. Заводится
 очередь в любом репозитории созданием файла в этом формате — второй
@@ -87,7 +87,7 @@ done_when: По чему признаётся выполненным
 символов шаблона глоба и без абсолютной формы; пустое значение, пустой
 элемент перечня и повтор имени — отказ разбора. Разбор не проверяет, что
 названный каталог объявлен составом `nested_repos` — очередь не знает
-устройства проекта, это проверяет `stepcast project repos` (см. ниже).
+устройства проекта, это проверяет `burnex project repos` (см. ниже).
 Пункт без поля означает корень — ровно то же, что `repos: .`.
 
 Значение `needs` — перечень слагов через запятую (`needs: alpha, beta`):
@@ -140,7 +140,7 @@ done_when: По чему признаётся выполненным
 Пункты, доведённые до исхода (`done` либо `failed`), со временем делают
 `backlog.md` нечитаемым — открытая работа тонет в решённом. `archived.md`,
 рядом с `backlog.md` в корне того же проекта, хранит историю таких пунктов в
-том же формате. `stepcast backlog` этого файла не знает вовсе: перенос
+том же формате. `burnex backlog` этого файла не знает вовсе: перенос
 пункта из `backlog.md` в `archived.md` делает человек вручную, тем же
 редактированием, каким ведётся сама очередь.
 
@@ -215,7 +215,7 @@ columns:
 открывает выбор пайплайна, и в работу пункт берёт уже запуск:
 
 ```
-stepcast run <пайплайн> --input item=<слаг>
+burnex run <пайплайн> --input item=<слаг>
 ```
 
 Пайплайн доезжает до пункта тем же путём, каким получает любой вход: объявляет
@@ -362,20 +362,20 @@ sha256 `package-lock.json` разошёлся с записанным в
 - пункт, не доехавший до сведения, получает `failed`, как и в ручном заходе:
   автоматического повтора нет.
 
-## Команда `stepcast backlog`
+## Команда `burnex backlog`
 
 ```
-stepcast backlog list                                     [--file backlog.md]
-stepcast backlog pick    [--slots N | --lanes a,b] [--only слаг] [--owner run:<id>] [--stale-hours 6] [--run-dir путь] [--file backlog.md]
-stepcast backlog finish  <slug> --status done|failed [--reason …] [--owner run:<id>] [--file backlog.md]
-stepcast backlog settle  --run-dir путь                                      [--file backlog.md]
-stepcast backlog add     <slug> --title … --why … --done-when … [--group …] [--track …] [--needs a,b] [--goal путь] [--details пути] [--status todo|postponed] [--after слаг] [--file backlog.md]
-stepcast backlog show    <slug> [--run-dir путь]                             [--file backlog.md]
+burnex backlog list                                     [--file backlog.md]
+burnex backlog pick    [--slots N | --lanes a,b] [--only слаг] [--owner run:<id>] [--stale-hours 6] [--run-dir путь] [--file backlog.md]
+burnex backlog finish  <slug> --status done|failed [--reason …] [--owner run:<id>] [--file backlog.md]
+burnex backlog settle  --run-dir путь                                      [--file backlog.md]
+burnex backlog add     <slug> --title … --why … --done-when … [--group …] [--track …] [--needs a,b] [--goal путь] [--details пути] [--status todo|postponed] [--after слаг] [--file backlog.md]
+burnex backlog show    <slug> [--run-dir путь]                             [--file backlog.md]
 ```
 
 Файл очереди — единственный вход команды: `--file`, по умолчанию
 `backlog.md` в текущем рабочем каталоге. Пайплайн и `.stepcast/` команде не
-нужны — `stepcast backlog list` работает в пустом каталоге, где кроме файла
+нужны — `burnex backlog list` работает в пустом каталоге, где кроме файла
 очереди ничего нет, как и `pick` по очереди без владельцев. Конфигурация
 проекта (корень журнала прогонов) читается лишь там, где нужно судить о
 владельце: `pick` при `in_progress` с `claimed_by`, `finish --owner` и
@@ -466,8 +466,8 @@ stepcast backlog show    <slug> [--run-dir путь]                            
 ### `finish`
 
 ```
-stepcast backlog finish <slug> --status done
-stepcast backlog finish <slug> --status failed --reason "почему"
+burnex backlog finish <slug> --status done
+burnex backlog finish <slug> --status failed --reason "почему"
 ```
 
 Проставляет названному пункту исход. `--status` принимает только `done`
@@ -497,7 +497,7 @@ stderr печатается слаг и владелец, а команда за
 ### `add`
 
 ```
-stepcast backlog add <slug> --title "…" --why "…" --done-when "…" [--after <slug>]
+burnex backlog add <slug> --title "…" --why "…" --done-when "…" [--after <slug>]
 ```
 
 Заводит пункт, чтобы агент петли, нашедший кандидата, мог записать его, не
@@ -518,7 +518,7 @@ stepcast backlog add <slug> --title "…" --why "…" --done-when "…" [--after
 ### `show`
 
 ```
-stepcast backlog show <slug> [--run-dir <каталог>]
+burnex backlog show <slug> [--run-dir <каталог>]
 ```
 
 Печатает запись пункта `backlog.md` в той форме, что и элемент вывода `list`.
@@ -530,7 +530,7 @@ stepcast backlog show <slug> [--run-dir <каталог>]
 ### `settle`
 
 ```
-stepcast backlog settle --run-dir <каталог> [--file backlog.md]
+burnex backlog settle --run-dir <каталог> [--file backlog.md]
 ```
 
 Закрывает заход: каждому пункту, взятому в этот прогон и оставшемуся без
@@ -552,7 +552,7 @@ stepcast backlog settle --run-dir <каталог> [--file backlog.md]
 
 Различимые причины несведения (негодная дорожка, конфликт, красная проверка,
 остановка на более ранней с названным основанием — конфликт наложения либо
-неподтверждённый откат) проставляет сведение дорожек (`stepcast merge-lanes`);
+неподтверждённый откат) проставляет сведение дорожек (`burnex merge-lanes`);
 `settle` остаётся ровно для случая, когда до дорожки дело не дошло вовсе —
 отмена по сигналу, остановка по бюджету, гибель шага.
 
@@ -590,10 +590,10 @@ stepcast backlog settle --run-dir <каталог> [--file backlog.md]
 без слага — отказ с кодом `2`, называющий этот файл. На каждый помеченный
 пункт печатается строка со слагом, дорожкой и причиной.
 
-## Команда `stepcast project repos`
+## Команда `burnex project repos`
 
 ```
-stepcast backlog pick --lanes a,b --run-dir путь | stepcast project repos [--file путь]
+burnex backlog pick --lanes a,b --run-dir путь | burnex project repos [--file путь]
 ```
 
 Дополняет документ дорожек — ответ `pick --lanes` — объявлениями того

@@ -10,7 +10,7 @@ import { atomicWrite } from '../run/journal/writer.js';
  * (`docs/pipeline-format.md`, раздел `script`), а не второй способ его
  * исполнить. Пять функций, ровно то, что контракт уже обещает: `input()`
  * читает `input.json`, `output()` пишет `output.json`, `publish()` зовёт тот
- * же писатель, что и `stepcast data`, `log()` — обычный `console.log`,
+ * же писатель, что и `burnex data`, `log()` — обычный `console.log`,
  * `exec()` — дочерний процесс без оболочки.
  *
  * Работает по одним лишь `STEPCAST_INPUT`, `STEPCAST_OUTPUT` и
@@ -40,7 +40,7 @@ export function output(value: unknown): void {
 }
 
 /**
- * Дописать данные работы. Тот же писатель, что и `stepcast data set|merge`
+ * Дописать данные работы. Тот же писатель, что и `burnex data set|merge`
  * (`mergeJobData`) — второго на `data.json` не заводится: ключ, которого
  * работа не объявляла, отказывает тем же сообщением, что и команда.
  */

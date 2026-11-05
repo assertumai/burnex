@@ -1,6 +1,6 @@
 import { parseDuration, parseMoney, parseTokens } from '../../../kernel/units.js';
 
-/** Откуда пришло значение. Печатается в `stepcast config`. */
+/** Откуда пришло значение. Печатается в `burnex config`. */
 export type Source =
   | { readonly kind: 'builtin' }
   | { readonly kind: 'file'; readonly path: string }

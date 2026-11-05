@@ -39,9 +39,9 @@ function git(dir: string, args: readonly string[], options: GitOptions = {}): st
     env: {
       ...process.env,
       ...(options.indexFile === undefined ? {} : { GIT_INDEX_FILE: options.indexFile }),
-      GIT_AUTHOR_NAME: process.env.GIT_AUTHOR_NAME ?? 'Stepcast',
+      GIT_AUTHOR_NAME: process.env.GIT_AUTHOR_NAME ?? 'Burnex',
       GIT_AUTHOR_EMAIL: process.env.GIT_AUTHOR_EMAIL ?? 'stepcast@localhost',
-      GIT_COMMITTER_NAME: process.env.GIT_COMMITTER_NAME ?? 'Stepcast',
+      GIT_COMMITTER_NAME: process.env.GIT_COMMITTER_NAME ?? 'Burnex',
       GIT_COMMITTER_EMAIL: process.env.GIT_COMMITTER_EMAIL ?? 'stepcast@localhost',
     },
   });
@@ -146,8 +146,8 @@ export function preparePublication(options: {
 
   const stagedTree = withoutPaths(repoDir, source.indexTree, base, exclude, stateDir);
   const visibleTree = withoutPaths(repoDir, source.worktreeTree, base, exclude, stateDir);
-  const stagedCommit = syntheticCommit(repoDir, stagedTree, base, 'stepcast local staged overlay');
-  const visibleCommit = syntheticCommit(repoDir, visibleTree, stagedCommit, 'stepcast local unstaged overlay');
+  const stagedCommit = syntheticCommit(repoDir, stagedTree, base, 'burnex local staged overlay');
+  const visibleCommit = syntheticCommit(repoDir, visibleTree, stagedCommit, 'burnex local unstaged overlay');
   const worktree = join(stateDir, `preflight-${randomUUID()}`);
   addWorktree({ repoDir, path: worktree, ref: target });
 

@@ -40,7 +40,7 @@ const handleUpdate: ApiHandler = (_req, res, env) => {
     sendJson(res, 409, { error: `Another maintenance action is still running: ${busy}` });
     return;
   }
-  // Без способа установки `stepcast update` откажет сам, но в журнале, которого экран не ждёт.
+  // Без способа установки `burnex update` откажет сам, но в журнале, которого экран не ждёт.
   const { error } = describeInstall(env.systemHost);
   if (error !== undefined) {
     sendJson(res, 409, { error });

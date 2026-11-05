@@ -177,7 +177,7 @@ jobs:
     assert.match(lock, /prompt: продолжить\?/);
   });
 
-  it('пайплайн с негодным объявлением decision отвергается stepcast lint без единой исполненной работы', async () => {
+  it('пайплайн с негодным объявлением decision отвергается burnex lint без единой исполненной работы', async () => {
     const project = makeProject({
       'stepcast.yml': `
 version: 1

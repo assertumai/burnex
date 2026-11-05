@@ -18,7 +18,7 @@ import {
  * плодить два места, которые могут разойтись.
  *
  * Обход намеренно мелкий: корневой `stepcast.yml` и `.stepcast/pipelines/*.yml`
- * — раскладка, которую заводит `stepcast init` и которой держится сам проект.
+ * — раскладка, которую заводит `burnex init` и которой держится сам проект.
  * Полный обход дерева проекта стоил бы дорого и находил бы чужие YAML.
  */
 
@@ -72,7 +72,7 @@ export interface PipelineEntriesOptions {
  * Решение 7): сначала файлы проекта — ровно `listPipelineFiles`, — затем
  * пайплайны исправных незатенённых пакетов проекта и home в порядке имён.
  * Сломанный и затенённый пакет в перечень не входят: запустить из него нечего,
- * а причина видна в `stepcast package list`.
+ * а причина видна в `burnex package list`.
  */
 export function listPipelineEntries(projectPath: string, options: PipelineEntriesOptions = {}): PipelineEntry[] {
   const entries: PipelineEntry[] = listPipelineFiles(projectPath).map((path) => ({ path }));

@@ -295,7 +295,7 @@ export function Proposals({
         <>
           Changes an agent proposed to a project’s <code>.stepcast/</code> files — widgets, dashboards, plugins.
           Nothing is written until you accept. Agents queue a change with{' '}
-          <code>stepcast propose &lt;target&gt; --from &lt;file&gt;</code>.
+          <code>burnex propose &lt;target&gt; --from &lt;file&gt;</code>.
         </>
       }
     />

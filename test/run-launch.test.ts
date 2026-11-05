@@ -109,7 +109,7 @@ process.exit(17);
     assert.equal(readEvents(paths).length, events.length);
   });
 
-  it('shadow превращается в флаг --shadow дочернего stepcast run, без него argv прежний', async () => {
+  it('shadow превращается в флаг --shadow дочернего burnex run, без него argv прежний', async () => {
     const { runsRoot, projectRoot } = makeJournalBed();
     const key = projectKey(projectRoot);
     const executable = join(projectRoot, 'argv-dump');

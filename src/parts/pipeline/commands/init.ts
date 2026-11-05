@@ -6,7 +6,7 @@ import { commandRow } from '../../../kernel/cli/commandRow.js';
 import type { ParsedArgs } from '../../../kernel/cli/args.js';
 
 /**
- * Шаблон нарочно без агентского бэкенда: `stepcast init && stepcast run
+ * Шаблон нарочно без агентского бэкенда: `burnex init && burnex run
  * stepcast.yml` должен работать сразу после установки, без Claude Code и без
  * сетевого доступа.
  */
@@ -111,7 +111,7 @@ scope:
 status: active
 ---
 
-Файла оглавления в дереве нет: \`stepcast knowledge index\` собирает его из
+Файла оглавления в дереве нет: \`burnex knowledge index\` собирает его из
 шапок единиц знания при каждом вызове. Поэтому оглавление не может разойтись
 с содержимым каталога, и следить за их согласием не нужно.
 

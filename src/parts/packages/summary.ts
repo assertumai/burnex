@@ -8,7 +8,7 @@ import { describePackageFailure, type PackageNeeds } from './manifest.js';
 
 /**
  * Сводка пакетов для людей и машин (`packages-directory-layer`, design.md,
- * Решение 9): одна модель на `stepcast package list`, его `--json` и
+ * Решение 9): одна модель на `burnex package list`, его `--json` и
  * `GET /api/packages` витрины — им негде разойтись.
  */
 

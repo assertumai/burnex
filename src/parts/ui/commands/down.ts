@@ -5,7 +5,7 @@ import { commandRow } from '../../../kernel/cli/commandRow.js';
 import type { ParsedArgs } from '../../../kernel/cli/args.js';
 
 /**
- * `stepcast down` — остановить витрину.
+ * `burnex down` — остановить витрину.
  *
  * Отсутствие демона не ошибка: человек хотел, чтобы витрина не работала, и
  * она не работает. Отказ здесь заставлял бы писать проверку перед вызовом.

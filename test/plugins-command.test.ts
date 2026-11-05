@@ -52,7 +52,7 @@ function assertCommandRowLines(lines: readonly string[], index: number, place: n
 
 /**
  * Команда осмотра дерева плагинов (`plugin-tree`, design.md, Решение 8):
- * `stepcast plugins` печатает итоговый состав вместе со слоями и переживает
+ * `burnex plugins` печатает итоговый состав вместе со слоями и переживает
  * отказ загрузки одной из строк — единственная команда с этим свойством.
  */
 
@@ -86,7 +86,7 @@ function withProjectPatch(project: Project, body: string): void {
 /** Минимальный плагин без вкладов — достаточен, чтобы модуль загрузился и прошёл контракт. */
 const EMPTY_PLUGIN = (name: string): string => `export default { name: ${JSON.stringify(name)} };\n`;
 
-describe('plugin-tree: stepcast plugins печатает дерево со слоями', () => {
+describe('plugin-tree: burnex plugins печатает дерево со слоями', () => {
   it('называет каждую строку с id, модулем и слоем; файловые слои — путями своих файлов', async () => {
     const project = makeProject({});
     writeFileSync(join(project.home, '.stepcast', 'home-extra.mjs'), EMPTY_PLUGIN('home-extra'));
@@ -351,7 +351,7 @@ describe('plugin-tree: отказ загрузки не заслоняет де�
   });
 });
 
-describe('user-plugins: stepcast plugins печатает каталожные строки', () => {
+describe('user-plugins: burnex plugins печатает каталожные строки', () => {
   it('называет каталог и слой у строк обоих слоёв, а не «встроенный» и не путь файла', async () => {
     const project = makeProject({});
     // Заводим каталоги вручную — project.write ограничен корнем проекта.
@@ -740,7 +740,7 @@ describe('plugin-tree: команды в составе без единого с
     assert.doesNotMatch(outcome.stderr, /неизвестен/);
   });
 
-  it('stepcast plugins и stepcast config работают и печатают дерево целиком', async () => {
+  it('burnex plugins и burnex config работают и печатают дерево целиком', async () => {
     const project = makeProject({});
     withProjectPatch(project, disableAllPipelineRows());
 
@@ -788,7 +788,7 @@ describe('plugin-tree: inject команды плагина проверяетс
     assert.equal(outcome.code, ExitCode.configError);
     assert.match(outcome.stderr, /own-cmd/);
     assert.match(outcome.stderr, /нет-такого-сервиса/);
-    assert.match(outcome.stderr, /stepcast plugins/);
+    assert.match(outcome.stderr, /burnex plugins/);
     assert.equal(outcome.stdout, '', 'тело команды исполняться не должно');
   });
 

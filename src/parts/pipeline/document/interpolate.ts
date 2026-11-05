@@ -305,7 +305,7 @@ export interface ListExpansion {
  *
  * Без этого дорожка не может получить права по репозиторию, который выбрал её
  * пункт очереди: перечень инструментов приезжает из выхода работы `slots`
- * (`stepcast project repos`) и другого пути в элемент `allow`, кроме позднего
+ * (`burnex project repos`) и другого пути в элемент `allow`, кроме позднего
  * раскрытия, у него нет.
  */
 export function resolveListExpansion(

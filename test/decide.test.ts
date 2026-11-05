@@ -267,7 +267,7 @@ describe('decide: приём решения командой', () => {
       runDecideCommand({ command: 'decide', positional: [paths.runId, 'approve'], flags: {} }, write, project.root),
     );
     assert.equal(code, ExitCode.ok);
-    assert.ok(lines.some((line) => /не идёт/.test(line) && /stepcast resume/.test(line)), JSON.stringify(lines));
+    assert.ok(lines.some((line) => /не идёт/.test(line) && /burnex resume/.test(line)), JSON.stringify(lines));
 
     // Решение легло на диск; настоящий процесс (этот тест) всё ещё опрашивает
     // каталог и подхватит его, несмотря на подделанный pid манифеста.
@@ -275,7 +275,7 @@ describe('decide: приём решения командой', () => {
   });
 });
 
-describe('decide: строка ожидания в stepcast status', () => {
+describe('decide: строка ожидания в burnex status', () => {
   it('прогон с непустым awaiting печатается строкой ожидания рядом с местом печати пробуждения', async () => {
     const { project, runsRoot } = projectWithRuns();
     const { promise, paths } = await startAwaiting(project, runsRoot);

@@ -1501,7 +1501,7 @@ describe('ui-dashboard: удаление прогона', () => {
   });
 
   // run-cleanup: удаление через API снимает записи рабочих деревьев тем же
-  // ядром (`removeRun`), что и `stepcast gc` — не отдельной копией логики.
+  // ядром (`removeRun`), что и `burnex gc` — не отдельной копией логики.
   it('снимает записи рабочих деревьев корня и части вместе с прогоном', async (t) => {
     const { runsRoot, projectRoot } = makeJournalBed();
     const partRepo = tempDir('ui-part-');
@@ -2206,9 +2206,9 @@ describe('ui-dashboard: согласие отбора витрины с диск
   });
 
   // Сценарий спеки «Срок в витрине и в терминале» (design.md, Решение 4):
-  // сначала отбор витрины (только смотрит), затем `stepcast gc --older-than`
+  // сначала отбор витрины (только смотрит), затем `burnex gc --older-than`
   // (удаляет) на том же корне — множества обязаны совпасть.
-  it('согласие по сроку: отбор витрины называет тот же набор, что удаляет stepcast gc', async (t) => {
+  it('согласие по сроку: отбор витрины называет тот же набор, что удаляет burnex gc', async (t) => {
     const { runsRoot, projectRoot, home } = makeJournalBed();
     const key = projectKey(projectRoot);
     const old = {
@@ -2248,8 +2248,8 @@ describe('ui-dashboard: согласие отбора витрины с диск
   });
 
   // Сценарий «Записи в витрине и в терминале»: то же согласие, но для цели
-  // «записи хранилища» и `stepcast gc --stats`.
-  it('согласие по записям: отбор витрины называет тот же набор, что снимает stepcast gc --stats', async (t) => {
+  // «записи хранилища» и `burnex gc --stats`.
+  it('согласие по записям: отбор витрины называет тот же набор, что снимает burnex gc --stats', async (t) => {
     const { runsRoot, projectRoot, home } = makeJournalBed();
     const key = projectKey(projectRoot);
     const server = await startServer(t, { runsRoot });
@@ -5603,7 +5603,7 @@ describe('ui-daemon: POST /api/run/decision', () => {
     },
   ];
 
-  it('запрос по проверенному прогону порождает stepcast decide и ничего не пишет в его каталог', async (t) => {
+  it('запрос по проверенному прогону порождает burnex decide и ничего не пишет в его каталог', async (t) => {
     const { runsRoot, projectRoot } = makeJournalBed();
     const journal = seedRun(runsRoot, projectRoot, { runId: 'seed', status: 'running', awaiting: AWAITING });
     const key = projectKey(projectRoot);
@@ -5755,7 +5755,7 @@ describe('ui-daemon: POST /api/run/resume', () => {
     });
   }
 
-  it('проверенный запрос порождает ровно один stepcast resume --from и не пишет в каталог прогона', async (t) => {
+  it('проверенный запрос порождает ровно один burnex resume --from и не пишет в каталог прогона', async (t) => {
     const { runsRoot, projectRoot, key } = seedResumable();
     const { launchResume, calls } = stubResume();
     const server = await createUiServer({ runsRoot, port: 0, launchResume });

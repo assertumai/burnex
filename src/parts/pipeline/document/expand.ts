@@ -1940,7 +1940,7 @@ function checkRawSteps(rawSteps: unknown, file: string, at: string, registry: Re
       if (!kind.native.test(record)) continue;
       throw new StepcastError(`Вид шага ${kind.name} отключён составом: строки, вносящей его, в дереве нет`, {
         ...site,
-        hint: 'Вид шага приносит строка дерева; действующий состав показывает stepcast plugins',
+        hint: 'Вид шага приносит строка дерева; действующий состав показывает burnex plugins',
       });
     }
 
@@ -2011,7 +2011,7 @@ function checkPredicateList(rawList: unknown, file: string, at: string, registry
       throw new StepcastError(`Предикат ${form.name} отключён составом: строки, вносящей его, в дереве нет`, {
         file,
         at: `${at}.${index}`,
-        hint: 'Предикат приносит строка дерева; действующий состав показывает stepcast plugins',
+        hint: 'Предикат приносит строка дерева; действующий состав показывает burnex plugins',
       });
     }
   }

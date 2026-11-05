@@ -92,7 +92,7 @@ function makeRun(
   return journal;
 }
 
-describe('CLI: stepcast gc', () => {
+describe('CLI: burnex gc', () => {
   // Сценарий: «Нет прогонов»
   it('сообщает об отсутствии прогонов и завершается кодом 0', () => {
     const { projectRoot, home } = bed();
@@ -289,7 +289,7 @@ describe('CLI: stepcast gc', () => {
   });
 });
 
-describe('CLI: stepcast gc --stats', () => {
+describe('CLI: burnex gc --stats', () => {
   // Сценарий «Отчёт называет обе величины».
   it('отчёт без ключей называет и каталоги, и число записей хранилища, и способ снять каждое', () => {
     const { runsRoot, projectRoot, home } = bed();

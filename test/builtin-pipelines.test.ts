@@ -78,7 +78,7 @@ describe('package-schema: packagedPipelinePath', () => {
 /**
  * `pipeline-definition`, «Путь остаётся путём»: позиционный аргумент без
  * префикса `stepcast:` — файл каталога запуска, даже когда поставка везёт
- * пайплайн с тем же именем. Правило одно на `stepcast run` и `stepcast lint`
+ * пайплайн с тем же именем. Правило одно на `burnex run` и `burnex lint`
  * (`resolvePipelineTarget`), поэтому и проверяется один раз.
  */
 describe('package-schema: resolvePipelineTarget', () => {
@@ -109,7 +109,7 @@ describe('package-schema: resolvePipelineTarget', () => {
 });
 
 describe('builtin pipelines: stepcast:migrate-widgets', () => {
-  it('раскрывается и проходит stepcast lint без ошибок', () => {
+  it('раскрывается и проходит burnex lint без ошибок', () => {
     const dir = project();
     const pipelinePath = packagedPipelinePath('migrate-widgets');
     const config = resolveConfig({ cwd: dir }).config;

@@ -285,7 +285,7 @@ export async function prepareWorkspace(options: PrepareOptions): Promise<Prepare
    *
    * При успехе область **отпускается**, а не снимается: изолированное дерево
    * обязано пережить прогон (`workspace-modes`), и снять его вправе только
-   * `stepcast gc`.
+   * `burnex gc`.
    */
   const preparation = createScope(options.bookkeeping);
 
@@ -412,7 +412,7 @@ export function checkWorkspaceAvailability(options: {
   const { pipeline, cwd, nestedRepos } = options;
   const workspaces = pipeline.jobs.map((job) => job.workspace);
 
-  // Те же четыре отказа, что и `stepcast lint`: пайплайн, минующий линт,
+  // Те же четыре отказа, что и `burnex lint`: пайплайн, минующий линт,
   // обязан отказать до первой работы, а не посреди прогона.
   const { graph } = buildGraph(pipeline);
   const inheritanceProblem = workspaceInheritanceDiagnostics(pipeline, graph).find(

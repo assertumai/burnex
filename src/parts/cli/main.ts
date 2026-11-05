@@ -90,7 +90,7 @@ function describeCommandRowState(id: string, outcomes: readonly RowOutcome[]): s
 function namedAbsenceError(row: CommandRow, outcomes: readonly RowOutcome[]): StepcastError {
   return new StepcastError(
     `Команда ${row.command.name} объявлена строкой ${row.id}, которой в действующем составе нет — ${describeCommandRowState(row.id, outcomes)}`,
-    { at: 'plugins', hint: 'Действующий состав покажет stepcast plugins' },
+    { at: 'plugins', hint: 'Действующий состав покажет burnex plugins' },
   );
 }
 
@@ -107,7 +107,7 @@ export async function run(argv: readonly string[], io: CliIo): Promise<ExitCodeV
     // Плагины загружаются до разбора аргументов: команда плагина обязана
     // попасть в перечень раньше, чем разбор объявит её неизвестной. Точка
     // входа подаёт `COMMAND_ROW_IDS` разрешению конфигурации и `COMMAND_ROWS`
-    // загрузчику — тем же механизмом, каким `stepcast up` подаёт `UI_ROWS`
+    // загрузчику — тем же механизмом, каким `burnex up` подаёт `UI_ROWS`
     // (`src/parts/ui/daemon/kernel.ts`): дерево команд CLI = перечень движка
     // (`src/parts/rows.ts`) плюс перечень команд, и ни строки витрины, ни её
     // команд в нём нет.
@@ -192,7 +192,7 @@ export async function run(argv: readonly string[], io: CliIo): Promise<ExitCodeV
     if (missingInject.length > 0) {
       throw new StepcastError(
         `Команда ${args.command} ждёт сервис ${missingInject.join(', ')}: в действующем составе его не заводит ни одна строка`,
-        { at: 'plugins', hint: 'Действующий состав покажет stepcast plugins — строку-поставщика отключил патч либо она снята из перечня' },
+        { at: 'plugins', hint: 'Действующий состав покажет burnex plugins — строку-поставщика отключил патч либо она снята из перечня' },
       );
     }
 

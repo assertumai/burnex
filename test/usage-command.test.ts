@@ -111,7 +111,7 @@ const RETRIED_SUMMARY = (runId: string): UsageReport => ({
   },
 });
 
-describe('CLI: stepcast usage — попытки работы', () => {
+describe('CLI: burnex usage — попытки работы', () => {
   it('показывает расход каждой попытки работы и сводит шаги к последней', () => {
     const { runsRoot, projectRoot, home } = makeJournalBed();
     const stamp = '2026-08-01T00:00:00.000Z';
@@ -177,7 +177,7 @@ describe('CLI: stepcast usage — попытки работы', () => {
   });
 });
 
-describe('CLI: stepcast usage', () => {
+describe('CLI: burnex usage', () => {
   // Сценарий: «Шаги, проходящие не с первой попытки»
   it('показывает обе попытки шага с их номерами, моделями и стоимостью', () => {
     const { runsRoot, projectRoot, home } = makeJournalBed();
@@ -821,7 +821,7 @@ describe('CLI: stepcast usage', () => {
   });
 });
 
-describe('CLI: stepcast usage — источник цены', () => {
+describe('CLI: burnex usage — источник цены', () => {
   /** Сводка с ценой на всех уровнях; источник и дата — параметры сценария. */
   function summaryWith(options: {
     readonly source?: 'reported' | 'catalog' | 'mixed';

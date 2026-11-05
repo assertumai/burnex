@@ -79,13 +79,13 @@ function renderValue(path: string, value: unknown): string {
  * настройки», умалчивая о том, кто их принёс.
  *
  * Полного ответа на «что загружено и откуда» этот раздел не обещает: состав
- * строк, их порядок и слой каждой — у `stepcast plugins` (`plugin-tree`,
+ * строк, их порядок и слой каждой — у `burnex plugins` (`plugin-tree`,
  * design.md, Решение 8), а не здесь.
  */
 export function renderPluginsReport(registry: Registry | undefined): string[] {
   if (registry === undefined || registry.plugins.length === 0) return [];
 
-  const lines = ['', 'Плагины (полное дерево со слоями и порядком — stepcast plugins):'];
+  const lines = ['', 'Плагины (полное дерево со слоями и порядком — burnex plugins):'];
   for (const plugin of registry.plugins) {
     const contributions: string[] = [];
     const own = (kind: 'backends' | 'predicates' | 'commands'): string[] =>
@@ -115,7 +115,7 @@ export function renderMissingServicesReport(registry: Registry | undefined): str
   if (registry === undefined || registry.missingServices.length === 0) return [];
   return [
     '',
-    `Сервисы пайплайна не заведены: ${registry.missingServices.join(', ')} — строку, которая их заводит, отключил патч либо она снята из перечня состава (см. stepcast plugins)`,
+    `Сервисы пайплайна не заведены: ${registry.missingServices.join(', ')} — строку, которая их заводит, отключил патч либо она снята из перечня состава (см. burnex plugins)`,
   ];
 }
 

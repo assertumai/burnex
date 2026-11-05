@@ -15,7 +15,7 @@ import { PIPELINE_SERVICES } from '../services.js';
 import type { ParsedArgs } from '../../../kernel/cli/args.js';
 
 /**
- * `stepcast knowledge index|select|check|write` — тот же контракт источника,
+ * `burnex knowledge index|select|check|write` — тот же контракт источника,
  * что читает сборка контекста, доступный человеку и любому агенту вне
  * пайплайна.
  *
@@ -90,7 +90,7 @@ export function runKnowledgeCommand(
 
   if (source === undefined) {
     throw new StepcastError('Практика памяти не объявлена', {
-      hint: 'Объявите project.knowledge в .stepcast/config.yml или разверните её: stepcast init --knowledge fs',
+      hint: 'Объявите project.knowledge в .stepcast/config.yml или разверните её: burnex init --knowledge fs',
     });
   }
 
@@ -130,7 +130,7 @@ function runSelect(
 
   if ((scope === undefined) === (id === undefined)) {
     throw new StepcastError('Отбор требует ровно одного из --scope и --id', {
-      hint: 'stepcast knowledge select --scope "src/**"  ·  stepcast knowledge select --id <id>',
+      hint: 'burnex knowledge select --scope "src/**"  ·  burnex knowledge select --id <id>',
     });
   }
 
@@ -239,7 +239,7 @@ function runWrite(
   // ловушка, а не соглашение.
   if (fromStdin === (file !== undefined)) {
     throw new StepcastError('Запись требует ровно одного из --file и --stdin', {
-      hint: 'stepcast knowledge write --file unit.json  ·  … --stdin',
+      hint: 'burnex knowledge write --file unit.json  ·  … --stdin',
     });
   }
 

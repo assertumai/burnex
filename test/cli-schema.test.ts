@@ -71,7 +71,7 @@ function withPlugin(body: string, config = 'plugins: ["./plugins/probe.mjs"]\n')
   return project;
 }
 
-describe('stepcast schema: без плагинов', () => {
+describe('burnex schema: без плагинов', () => {
   it('пишет .stepcast/schema/*.json, побайтово равные поставляемым пакетом, и печатает оба пути', async () => {
     const project = makeProject({});
 
@@ -134,7 +134,7 @@ describe('stepcast schema: без плагинов', () => {
   });
 });
 
-describe('stepcast schema: проект с плагином', () => {
+describe('burnex schema: проект с плагином', () => {
   it('признаёт ключ плагинного предиката в записанной схеме', async () => {
     const project = withPlugin(PREDICATE_PLUGIN);
 

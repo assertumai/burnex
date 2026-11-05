@@ -13,7 +13,7 @@ import { formatDiagnostic } from './lint.js';
 import type { ParsedArgs } from '../../../kernel/cli/args.js';
 
 /**
- * `stepcast decide` — единственный писатель решения (design.md изменения
+ * `burnex decide` — единственный писатель решения (design.md изменения
  * `user-decision-steps`, решение 5): пишет `decisions/<wait_id>.json`
  * атомарной заменой, а ждущий процесс опрашивает этот каталог. Проверки —
  * общие с демоном и с движком (`parts/pipeline/run/decision.ts`), чтобы обе дороги к
@@ -36,7 +36,7 @@ export async function runDecideCommand(
     const status = readStatus(paths);
     const outcome = args.positional[1];
     if (outcome === undefined) {
-      throw new StepcastError('Не назван исход: stepcast decide <run> <исход>');
+      throw new StepcastError('Не назван исход: burnex decide <run> <исход>');
     }
 
     const step = typeof args.flags.step === 'string' ? args.flags.step : undefined;
@@ -71,7 +71,7 @@ export async function runDecideCommand(
 
     if (!isRunAlive(paths)) {
       write(
-        `прогон ${shortRunId(paths.runId)} не идёт — решение применится при возобновлении: stepcast resume ${shortRunId(paths.runId)} --from ${awaiting.job}/${awaiting.step}`,
+        `прогон ${shortRunId(paths.runId)} не идёт — решение применится при возобновлении: burnex resume ${shortRunId(paths.runId)} --from ${awaiting.job}/${awaiting.step}`,
       );
     }
 
@@ -102,7 +102,7 @@ export const row = commandRow<PipelineCommandEnv>(
   {
     name: 'decide',
     spec: {
-      description: 'принять решение по ожиданию прогона: stepcast decide <run> <исход>',
+      description: 'принять решение по ожиданию прогона: burnex decide <run> <исход>',
       positional: ['run', 'outcome'],
       flags: {
         step: { kind: 'string', description: 'адрес ожидающего шага (job или job/step) — обязателен при нескольких ожиданиях' },

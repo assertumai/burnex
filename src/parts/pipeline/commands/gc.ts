@@ -17,15 +17,15 @@ import { PIPELINE_SERVICES } from '../services.js';
 import type { ParsedArgs } from '../../../kernel/cli/args.js';
 
 /**
- * `stepcast gc` — две отдельные цели, которых один вызов не смешивает
+ * `burnex gc` — две отдельные цели, которых один вызов не смешивает
  * (design.md изменения run-stats-retention, Решение 14): без `--stats` цель —
  * каталоги прогонов (`--older-than` снимает их, как и раньше); со `--stats` —
  * записи хранилища расхода, а файлов вызов не трогает вовсе.
  */
 
-const HINT_REMOVE_FILES = 'удаление файлов: stepcast gc --older-than <длительность>, например 30d';
+const HINT_REMOVE_FILES = 'удаление файлов: burnex gc --older-than <длительность>, например 30d';
 const HINT_REMOVE_STATS =
-  'снятие записей: stepcast gc --stats --older-than <срок> | --stats --failed | --stats --project <ключ> (весь проект)';
+  'снятие записей: burnex gc --stats --older-than <срок> | --stats --failed | --stats --project <ключ> (весь проект)';
 
 function statsTraitsOf(args: ParsedArgs): UsageRecordSelectTraits {
   const olderThan = args.flags['older-than'] as string | undefined;
@@ -43,7 +43,7 @@ function hasTrait(traits: UsageRecordSelectTraits): boolean {
  * Цель «записи хранилища расхода»: файлов прогонов вызов не касается.
  *
  * Область — тот же проект, что и у цели «файлы»: `listCandidates` отбирает
- * каталоги проекта рабочего каталога, и `stepcast gc --stats --older-than 1y`,
+ * каталоги проекта рабочего каталога, и `burnex gc --stats --older-than 1y`,
  * набранная внутри проекта, обязана снимать записи этого же проекта, а не всей
  * установки. Чужой проект адресуется явно — `--project <ключ>`, тем ключом,
  * который называет отчёт; названный явно, он и сам признак отбора: без срока и
@@ -97,7 +97,7 @@ function runGcStats(
 }
 
 /**
- * `stepcast gc` без stdin: без `--older-than` — только отчёт, ничего не
+ * `burnex gc` без stdin: без `--older-than` — только отчёт, ничего не
  * удаляется; с ним — удаляет прогоны старше порога. Никакого диалога.
  */
 export function runGcCommand(

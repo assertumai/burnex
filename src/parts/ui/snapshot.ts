@@ -79,7 +79,7 @@ export interface StepSnapshot {
    * Модели попыток, которыми шаг фактически исполнился, — из `usage.json`.
    * Это факт, а не намерение: ступень эскалации вправе сменить модель между
    * попытками, и объявленная `model` этого не покажет. Живёт рядом с ней, а
-   * не вместо: `usage.json` переживает `stepcast gc`, `pipeline.lock.yml` —
+   * не вместо: `usage.json` переживает `burnex gc`, `pipeline.lock.yml` —
    * нет, и убранный прогон обязан сохранить хотя бы это (design.md, Решение 4).
    */
   readonly attemptModels: readonly AttemptModel[];
@@ -201,7 +201,7 @@ export interface JobSnapshot {
    * подпись не объявлена, и когда ни одно её поле не раскрылось.
    */
   readonly display?: Readonly<Record<string, string>>;
-  /** Данные, опубликованные самой работой (`stepcast data`). */
+  /** Данные, опубликованные самой работой (`burnex data`). */
   readonly data?: Readonly<Record<string, string>>;
   readonly steps: readonly StepSnapshot[];
   readonly usage: UsageSnapshot;

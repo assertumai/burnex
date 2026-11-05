@@ -120,7 +120,15 @@ a { color: inherit; text-decoration: none; }
   padding: 0 .5rem;
   margin-bottom: 1rem;
 }
-.brand-mark { width: 22px; height: 22px; flex: none; color: var(--primary); }
+/* Знак — маскот-уголёк Burnex (`assets/burnex-mark.png`), в CSS, чтобы сборка тестов витрины не училась грузить картинки. */
+.brand-mark {
+  width: 30px;
+  height: 30px;
+  flex: none;
+  border-radius: 8px;
+  /* Плашка в тон акцента: на графитовой колонке меню тёмный уголёк иначе сливается с фоном. */
+  background: url(./assets/burnex-mark.png) center / 82% no-repeat, color-mix(in srgb, var(--primary) 22%, transparent);
+}
 
 /* Группы меню — по `nav.group` маршрута (`ui-overhaul`): подпись группы
    набрана капителью, пункты под ней. */

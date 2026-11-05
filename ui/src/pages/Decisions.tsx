@@ -249,7 +249,7 @@ export function Decisions({
                   <Alert variant="warning" className="decision-abandoned">
                     <AlertDescription>
                       process is not responding — the decision applies on resume:{' '}
-                      <code>stepcast resume {row.run.shortId} --from {row.awaiting.job}/{row.awaiting.step}</code>
+                      <code>burnex resume {row.run.shortId} --from {row.awaiting.job}/{row.awaiting.step}</code>
                     </AlertDescription>
                   </Alert>
                 ) : null}

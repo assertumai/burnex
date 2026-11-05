@@ -6,7 +6,7 @@
 #   curl -fsSL https://raw.githubusercontent.com/assertumai/stepcast/main/scripts/install.sh | bash
 #   bash scripts/install.sh [--repo URL] [--ref REF] [--force]
 #
-# `stepcast update` в режиме managed запускает копию этого скрипта из текущего
+# `burnex update` в режиме managed запускает копию этого скрипта из текущего
 # релиза, поэтому флаги держатся обратно совместимыми. Флаги — в usage() ниже:
 # при `curl … | bash` файла скрипта нет, и справку из комментария не прочесть.
 set -euo pipefail
@@ -165,7 +165,7 @@ cp -R "$SRC/schema" "$STAGE/schema"
 # <корень пакета>/src/builtin — через tsc они не проходят.
 cp -R "$SRC/src/builtin" "$STAGE/src/builtin"
 cp "$SRC/package.json" "$SRC/package-lock.json" "$STAGE/"
-# Исходник лежит в scripts/ (границы правок репозитория), в релизе — в корне. Копия — то, что запускает `stepcast update`.
+# Исходник лежит в scripts/ (границы правок репозитория), в релизе — в корне. Копия — то, что запускает `burnex update`.
 cp "$SRC/scripts/install.sh" "$STAGE/install.sh"
 
 echo "==> npm ci --omit=dev"
@@ -199,11 +199,11 @@ mkdir -p "$BIN_DIR"
 ln -sfn "$RELEASES_DIR/current/dist/src/bin.js" "$LAUNCHER"
 echo "==> лаунчер: $LAUNCHER -> $RELEASES_DIR/current/dist/src/bin.js"
 
-# Паспорт пишется последним и атомарно: по нему `stepcast update` узнаёт
+# Паспорт пишется последним и атомарно: по нему `burnex update` узнаёт
 # способ установки, а полупрозрачный файл хуже отсутствующего.
 mkdir -p "$STEPCAST_HOME"
 PASSPORT_TMP="$STEPCAST_HOME/install.json.tmp-$$"
-# bin_dir нужен `stepcast update`: без него обновление нестандартной установки
+# bin_dir нужен `burnex update`: без него обновление нестандартной установки
 # поставило бы второй лаунчер в ~/.local/bin.
 INSTALL_REPO="$REPO" INSTALL_REF="$REF" INSTALL_VERSION="$SRC_VERSION" INSTALL_RELEASES="$RELEASES_DIR" \
 INSTALL_BIN_DIR="$BIN_DIR" \

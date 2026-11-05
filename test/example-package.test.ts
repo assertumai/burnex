@@ -15,7 +15,7 @@ import { makeProject, withHome, type Project } from './helpers.js';
 /**
  * `examples/packages/hello/` (`packages-directory-layer`, «Пример пакета
  * поставляется и проверяется»): копия в слой пакетов проекта проходит схему,
- * а пайплайн примера — `stepcast lint`. Каждый вид ресурса примера ещё и
+ * а пайплайн примера — `burnex lint`. Каждый вид ресурса примера ещё и
  * находится своим обходом, чтобы пример не отстал от формата молча.
  */
 
@@ -47,7 +47,7 @@ describe('examples/packages/hello', () => {
     assert.deepEqual(item?.provides, ['pipelines', 'steps', 'plugins', 'widgets', 'dashboards', 'routes']);
   });
 
-  it('stepcast lint hello:greet проходит без ошибок', async () => {
+  it('burnex lint hello:greet проходит без ошибок', async () => {
     const project = projectWithExample();
     const outcome = await cli(project, ['lint', 'hello:greet']);
     assert.equal(outcome.code, ExitCode.ok, `${outcome.stdout}\n${outcome.stderr}`);

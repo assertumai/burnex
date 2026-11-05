@@ -28,18 +28,27 @@ export const PERMISSIVE_MODES = ['auto', 'acceptEdits', 'dontAsk', 'bypassPermis
 /**
  * Право на публикацию данных работы, добавляемое неявно в жёстком режиме.
  *
- * Узко на `stepcast data`, а не на `stepcast *`: там `run`, `apply` и `gc` —
+ * Узко на `burnex data`, а не на `burnex *`: там `run`, `apply` и `gc` —
  * команды, меняющие мир за пределами шага. Публикация же не дотягивается до
  * рабочего дерева по устройству: команда не принимает путей и пишет только в
  * каталог своей работы внутри каталога прогона. Без этого права `enforce:
  * strict` означал бы, что подпись узла доступна кому угодно, кроме агента.
  */
-export const DATA_COMMAND_PERMISSION = 'Bash(stepcast data *)';
+export const DATA_COMMAND_PERMISSION = 'Bash(burnex data *)';
+
+/**
+ * То же право под прежним именем бинарника: `stepcast` остаётся псевдонимом
+ * `burnex` на время переименования, и промпт пайплайна вправе звать любой из
+ * них. Снимается вместе с псевдонимом (пункт очереди
+ * `rename-identifiers-and-repo-burnex`).
+ */
+export const DATA_COMMAND_ALIAS_PERMISSION = 'Bash(stepcast data *)';
 
 function withDataCommand(allow: readonly string[] | undefined, strict: boolean): readonly string[] {
   const declared = allow ?? [];
-  if (!strict || declared.includes(DATA_COMMAND_PERMISSION)) return declared;
-  return [...declared, DATA_COMMAND_PERMISSION];
+  if (!strict) return declared;
+  const missing = [DATA_COMMAND_PERMISSION, DATA_COMMAND_ALIAS_PERMISSION].filter((right) => !declared.includes(right));
+  return missing.length === 0 ? declared : [...declared, ...missing];
 }
 
 /**

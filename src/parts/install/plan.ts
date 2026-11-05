@@ -94,7 +94,7 @@ export function planUpdate(method: InstallManifest, inputs: UpdateInputs): Updat
         return {
           kind: 'refuse',
           reason: `В ${method.repo} нет тегов vX.Y.Z, обновляться не до чего`,
-          hint: 'Назовите ссылку явно: stepcast update --ref main',
+          hint: 'Назовите ссылку явно: burnex update --ref main',
         };
       }
       // «Уже стоит» — только если стоит ровно этот тег: `version` у сборки ветки или sha
@@ -133,7 +133,7 @@ export function planUpdate(method: InstallManifest, inputs: UpdateInputs): Updat
         return {
           kind: 'refuse',
           reason: `HEAD в ${method.dir} отцеплен (прежний --ref тегом или sha): git pull тянуть некуда`,
-          hint: 'Назовите ссылку явно: stepcast update --ref <ветка или тег>',
+          hint: 'Назовите ссылку явно: burnex update --ref <ветка или тег>',
         };
       }
       const cwd = method.dir;
@@ -193,7 +193,7 @@ export interface UpdateCheckOptions {
   readonly engineVersion?: string;
   /**
    * Предел времени всей проверки; без него команды ждут сколько нужно — так
-   * ведёт себя `stepcast update` в терминале, где прервать может сам человек.
+   * ведёт себя `burnex update` в терминале, где прервать может сам человек.
    */
   readonly timeoutMs?: number;
   /** Часы для предела; тесты подставляют свои. */
@@ -236,7 +236,7 @@ export async function checkUpdate(
           return {
             status: 'unknown',
             reason: `Не удалось получить список тегов ${manifest.repo}`,
-            hint: 'Проверьте сеть и доступ к репозиторию либо назовите ссылку явно: stepcast update --ref <ссылка>',
+            hint: 'Проверьте сеть и доступ к репозиторию либо назовите ссылку явно: burnex update --ref <ссылка>',
           };
         }
         latestTag = pickLatestTag(listed);

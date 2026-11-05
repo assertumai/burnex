@@ -285,7 +285,7 @@ function ProblemNotice({ problem }: { readonly problem: JournalProblem }): JSX.E
         <AlertTitle>Reader is out of date</AlertTitle>
         <AlertDescription>
           This run was written with {journal}, but this dashboard only knows format {problem.readerFormat} (
-          {place}). Restart the daemon with <code>stepcast down && stepcast up</code>.
+          {place}). Restart the daemon with <code>burnex down && burnex up</code>.
         </AlertDescription>
       </Alert>
     );

@@ -86,7 +86,7 @@ describe('install-restart: выбор перезапуска', () => {
 
     assert.equal(await restartDaemon(host, OPTIONS, (line) => out.push(line)), 'manual');
     assert.equal(calls.includes('stop'), false);
-    assert.equal(out.some((line) => line.includes('stepcast down && stepcast up')), true);
+    assert.equal(out.some((line) => line.includes('burnex down && burnex up')), true);
   });
 
   it('не поднятый демон не поднимается', async () => {

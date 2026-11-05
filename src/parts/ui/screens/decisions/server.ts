@@ -13,12 +13,12 @@ import { declaration } from './declaration.js';
  * `POST /api/run/decision` (`user-decision-steps`, design.md решение 5, 11):
  * демон не пишет ни одного файла прогона — он проверяет запрос по его
  * состоянию (ожидание существует, исход в перечне, `reject` несёт причину,
- * `restart` называет шаг) и порождает `stepcast decide` отсоединённым
- * процессом, тем же приёмом, каким `POST /api/run` порождает `stepcast run`.
+ * `restart` называет шаг) и порождает `burnex decide` отсоединённым
+ * процессом, тем же приёмом, каким `POST /api/run` порождает `burnex run`.
  *
  * Проверка здесь лёгкая: существование названного шага перезапуска в составе
  * пайплайна не проверяется — это значило бы разворачивать пайплайн ради
- * одного маршрута. Настоящая проверка — в `stepcast decide`, которую этот
+ * одного маршрута. Настоящая проверка — в `burnex decide`, которую этот
  * маршрут порождает следом, по свежему состоянию (design.md, риски).
  */
 
@@ -85,7 +85,7 @@ const handlePost: ApiHandler = async (req, res, env) => {
         ...(parsed.data.reason === undefined ? {} : { reason: parsed.data.reason }),
         ...(parsed.data.from === undefined ? {} : { restartFrom: parsed.data.from }),
       },
-      // Без knownSteps: существование шага проверит `stepcast decide`.
+      // Без knownSteps: существование шага проверит `burnex decide`.
       undefined,
     );
   } catch (error) {

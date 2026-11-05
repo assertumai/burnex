@@ -9,7 +9,7 @@ import { commandRow } from '../../../kernel/cli/commandRow.js';
 import type { ParsedArgs } from '../../../kernel/cli/args.js';
 
 /**
- * `stepcast data set|merge|get` — публикация произвольных данных работой по
+ * `burnex data set|merge|get` — публикация произвольных данных работой по
  * ходу её исполнения. Их показывает витрина подписью узла (`display`) и
  * читают работы ниже по графу подстановкой `${jobs.<работа>.data.<ключ>}`.
  *
@@ -80,7 +80,7 @@ function runSet(
   if (key === undefined) throw new StepcastError('set требует ключ первым позиционным аргументом');
   if (value === undefined) {
     throw new StepcastError('set требует значение вторым позиционным аргументом', {
-      hint: 'Пустое значение объявляется явно: stepcast data set ключ ""',
+      hint: 'Пустое значение объявляется явно: burnex data set ключ ""',
     });
   }
   assertDataKey(key);

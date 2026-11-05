@@ -504,7 +504,7 @@ export function writableLayerPath(layer: WritableRouteLayer, options: RouteBuild
   if (layer === 'home') return homeRoutesPath(options.home);
   if (options.projectRoot === undefined) {
     throw new StepcastError('The daemon does not know the project root: there is nowhere to write the project routes layer', {
-      hint: 'Start the dashboard in the project directory (stepcast up) or save the route to the home layer',
+      hint: 'Start the dashboard in the project directory (burnex up) or save the route to the home layer',
     });
   }
   return projectRoutesPath(options.projectRoot);

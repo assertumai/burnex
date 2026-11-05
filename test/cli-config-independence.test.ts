@@ -170,7 +170,7 @@ describe('config-error-breaks-every-command: зависимые команды �
   ];
 
   for (const argv of DEPENDENT_CALLS) {
-    it(`stepcast ${argv.join(' ')} отказывает кодом configError`, async () => {
+    it(`burnex ${argv.join(' ')} отказывает кодом configError`, async () => {
       const project = withBrokenProjectConfig();
 
       const outcome = await cli(project, argv);
@@ -228,7 +228,7 @@ describe('config-error-breaks-every-command: зависимые команды �
 
     const outcome = await cli(project, ['--help']);
 
-    assert.doesNotMatch(outcome.stderr, /stepcast run/);
+    assert.doesNotMatch(outcome.stderr, /burnex run/);
   });
 });
 
@@ -327,7 +327,7 @@ describe('cli-commands-as-rows: составу не принадлежит ст�
     assert.ok(existsSync(project.path('stepcast.yml')));
   });
 
-  it('stepcast plugins печатает дерево целиком, строка-виновница несёт причину', async () => {
+  it('burnex plugins печатает дерево целиком, строка-виновница несёт причину', async () => {
     const project = makeProject({});
     withDisabledRowPatch(project, 'command-init');
 
@@ -360,7 +360,7 @@ describe('cli-commands-as-rows: составу не принадлежит ст�
   });
 });
 
-describe('stepcast config --pipeline: итоговый выбор агента и его источник', () => {
+describe('burnex config --pipeline: итоговый выбор агента и его источник', () => {
   const PIPELINE = `name: p
 jobs:
   implement:

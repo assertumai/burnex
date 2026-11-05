@@ -12,7 +12,7 @@ import { PIPELINE_SERVICES } from '../services.js';
 import type { ParsedArgs } from '../../../kernel/cli/args.js';
 
 /**
- * `stepcast project repos` — дополняет документ дорожек (`backlog pick
+ * `burnex project repos` — дополняет документ дорожек (`backlog pick
  * --lanes`) объявлениями репозитория, который назвал пункт каждой
  * заполненной дорожки. Команда сама читает конфигурацию (design.md, решение
  * 1): `backlog` остаётся переносимой командой, которой устройство проекта не

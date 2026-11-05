@@ -23,13 +23,13 @@ T=$(mktemp -d) && mkdir -p "$T/.stepcast" && printf 'plugins: ["%s/dist/src/part
 ```
 
 ```bash
-cd "$T" && stepcast config | grep copilot
+cd "$T" && burnex config | grep copilot
 ```
 
 Ожидается запись `backends.copilot.*` с источником `plugin:copilot`.
 
 ```bash
-cd "$T" && stepcast lint /путь/к/stepcast/examples/copilot/stepcast.yml && stepcast run /путь/к/stepcast/examples/copilot/stepcast.yml
+cd "$T" && burnex lint /путь/к/stepcast/examples/copilot/stepcast.yml && burnex run /путь/к/stepcast/examples/copilot/stepcast.yml
 ```
 
 ## Что сверить по журналу прогона

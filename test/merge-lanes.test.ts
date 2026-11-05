@@ -2767,7 +2767,7 @@ describe('core: applyRun --lane — отказ повторного наложе
   });
 });
 
-describe('CLI: stepcast merge-lanes', () => {
+describe('CLI: burnex merge-lanes', () => {
   async function cli(cwd: string, home: string, argv: readonly string[]): Promise<{
     code: ExitCodeValue;
     stdout: string;

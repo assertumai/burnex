@@ -291,7 +291,7 @@ export function resolveRun(runsRoot: string, projectRoot: string, runId?: string
     const latest = runs[0];
     if (latest === undefined) {
       throw new StepcastError('Прогонов ещё не было', {
-        hint: 'Запустите пайплайн командой stepcast run',
+        hint: 'Запустите пайплайн командой burnex run',
       });
     }
     return runPaths(runsRoot, key, latest);
@@ -382,7 +382,7 @@ export interface UsageSummaryResult {
  * обязан строиться и на идущем прогоне без `usage.json`, и на прогоне со
  * сводкой прежней формы — `readUsage` для этого слишком строг.
  *
- * `unavailable` остаётся ради команды `stepcast usage`, которой хватает
+ * `unavailable` остаётся ради команды `burnex usage`, которой хватает
  * перечисления, а рядом идёт полный диагноз: `UsageReportSchema` так же
  * строга, как остальные, и так же отвалится от следующего добавленного поля —
  * молчать об этом на фоне вылеченных соседей значило бы оставить прежнюю

@@ -44,7 +44,7 @@ import { PIPELINE_SERVICES } from '../services.js';
 import type { ParsedArgs } from '../../../kernel/cli/args.js';
 
 /**
- * `stepcast backlog list|pick|finish|settle|add|show` — очередь улучшений, не зависящая от
+ * `burnex backlog list|pick|finish|settle|add|show` — очередь улучшений, не зависящая от
  * устройства проекта: ни конфигурация, ни `.stepcast/`, ни каталог прогона ей
  * не нужны, только путь к файлу очереди. Подкоманда разбирается первым
  * позиционным аргументом самой командой: `parseArgs` вложенных команд не
@@ -643,7 +643,7 @@ function runShow(
  * `backlog settle` — закрытие захода: каждому пункту, взятому в прогон
  * (файлы `item-<дорожка>.json` каталога прогона, см. `parts/pipeline/domain/lanes/item.ts`) и
  * оставшемуся без исхода, проставляется `failed` с единой причиной.
- * Различимые причины несведения — забота `stepcast merge-lanes`; `settle`
+ * Различимые причины несведения — забота `burnex merge-lanes`; `settle`
  * закрывает ровно тот случай, когда до неё дело не дошло вовсе.
  */
 function runSettle(

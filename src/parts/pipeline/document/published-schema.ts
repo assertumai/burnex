@@ -11,7 +11,7 @@ import { contributionOwner, type Registry } from '../../../kernel/registry.js';
 /**
  * Печать JSON Schema документов пайплайна и работы — общий код для схемы
  * пакета (пустой перечень, `scripts/generate-schema.ts`) и схемы проекта
- * (перечень предикатов и видов шага действующего реестра, `stepcast schema`).
+ * (перечень предикатов и видов шага действующего реестра, `burnex schema`).
  * Схема значения печатается вложением в уже напечатанный JSON, а не
  * построением: у `z.toJSONSchema` о JSON Schema плагина знания нет
  * (design.md, решение 2). Ветвь вида шага (`user-decision-steps`, design.md
@@ -267,7 +267,7 @@ function printDocument(schema: z.ZodType, title: string): Record<string, unknown
   // расхождение здесь сделало бы схему пакета и схему проекта разными
   // преобразованиями одного документа (design.md, Context).
   const printed = { title, ...z.toJSONSchema(schema, { io: 'input', unrepresentable: 'any' }) };
-  if (title === 'stepcast pipeline') {
+  if (title === 'burnex pipeline') {
     printed['allOf'] = [
       {
         if: {
@@ -327,8 +327,8 @@ function assemble(
   nativePredicates: readonly string[],
 ): Documents {
   const { PipelineDocumentSchema, JobDocumentSchema } = buildDocumentSchemas(predicateNames, stepKinds, nativeStepKinds, nativePredicates);
-  const pipeline = printDocument(PipelineDocumentSchema, 'stepcast pipeline');
-  const job = printDocument(JobDocumentSchema, 'stepcast job');
+  const pipeline = printDocument(PipelineDocumentSchema, 'burnex pipeline');
+  const job = printDocument(JobDocumentSchema, 'burnex job');
   if (predicateNames.length > 0 || stepKinds.length > 0) {
     const predicateNameSet = new Set(predicateNames);
     const stepKindKeysByName = new Map(stepKinds.map((kind) => [kind.name, kind.keys]));
@@ -363,7 +363,7 @@ function documentReason(documents: Documents): string | undefined {
 
 /**
  * Перечень плагинных предикатов действующего реестра — общий для команды
- * `stepcast schema` и для сверки линта. Две копии этой сборки разошлись бы по
+ * `burnex schema` и для сверки линта. Две копии этой сборки разошлись бы по
  * любому полю, и линт либо вечно звал бы перегенерировать свежий файл, либо
  * молчал бы о настоящем устаревании.
  */
@@ -379,7 +379,7 @@ export function pluginPredicateEntries(registry: Registry): PluginPredicateEntry
 
 /**
  * Перечень видов шага действующего реестра, приносящих свою ветвь схемы
- * документа, — общий для команды `stepcast schema` и для сверки линта, тем же
+ * документа, — общий для команды `burnex schema` и для сверки линта, тем же
  * образцом, что и `pluginPredicateEntries`. Виды с внутренней формой (`agent`,
  * `run`, `script`, `uses`) уже описаны публикуемой схемой напрямую и сюда не
  * попадают — `hasStepExecutor` спрашивает именно это, а не происхождение

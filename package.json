@@ -15,6 +15,7 @@
     "node": ">=22"
   },
   "bin": {
+    "burnex": "./dist/src/bin.js",
     "stepcast": "./dist/src/bin.js"
   },
   "exports": {

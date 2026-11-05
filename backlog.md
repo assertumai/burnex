@@ -735,3 +735,37 @@ done_when: Каталог из `marketplace.repo` клонируется в `~/.
 group: packages
 needs: packages-directory-layer
 source: docs/burnex-after-stepcast.md, раздел 6 «Маркетплейс»
+
+## rename-package-burnex
+
+status: todo
+title: Пакет npm и его подпути называются burnex
+group: rename-burnex
+why: Первый срез переименования (бинарник `burnex`, подсказки CLI, документация, знак и favicon витрины) оставил имя пакета прежним: `exports` `stepcast/plugin|pipeline|step|backends/*`, адрес поставки `stepcast:<имя>`, поиск движка в `node_modules/stepcast`, карта имён страницы `@stepcast/slots|ui` и зарезервированные имена пакетов завязаны на `name` из `package.json` и меняются только все вместе.
+done_when: `name` в `package.json` — `burnex`; подпути `burnex/plugin`, `burnex/pipeline`, `burnex/step`, `burnex/backends/*`; адрес поставки `burnex:<имя>` и зарезервированные имена пакетов `burnex`, `builtin`; поиск корня движка по `node_modules/burnex`; карта имён страницы, `tsconfig` витрины, `vite.config.ts`, `scripts/build-ui-tests.mjs` и примеры плагинов — `@burnex/slots`, `@burnex/ui`; паспорт установки и `burnex update` ставят пакет `burnex`; `docs/plugins.md`, `docs/ui-plugins.md`, `docs/release.md` и примеры написаны новыми именами; `npm run check` зелёный; прежние имена нигде не читаются — список переименований сведён в `docs/release.md` одним разделом «Переход со stepcast».
+
+## rename-env-burnex
+
+status: todo
+title: Переменные окружения BURNEX_* с чтением STEPCAST_* на переходный период
+group: rename-burnex
+why: Шаги, плагины, `install.sh` и пайплайны пользователей читают `STEPCAST_HOME`, `STEPCAST_BIN`, `STEPCAST_JOB_DIR` и ещё три десятка имён; переименование без переходного периода сломало бы чужие пайплайны первым же прогоном.
+done_when: Движок выставляет шагам и дочерним процессам `BURNEX_*` и, на один выпуск, те же значения под `STEPCAST_*`; свои настройки (`BURNEX_HOME`, `BURNEX_BIN_DIR`, `BURNEX_TOKEN`, `BURNEX_TEST_KEEP` и прочие входные) читает по новому имени, при его отсутствии — по старому с предупреждением в stderr один раз за процесс; `install.sh` и `scripts/self-improve-loop.sh` принимают оба имени; `docs/pipeline-format.md`, `docs/run-layout.md`, `docs/config.md`, README и описания схем называют `BURNEX_*`, а переходное чтение описано одним абзацем с версией, в которой `STEPCAST_*` перестанут читаться; тесты на оба имени и на предупреждение.
+
+## rename-dirs-burnex
+
+status: todo
+title: Каталоги .burnex/ и ~/.burnex, файл burnex.yml, лаунчер burnex
+group: rename-burnex
+needs: rename-env-burnex
+why: Проектный кабинет `.stepcast/`, домашний `~/.stepcast` с прогонами, релизами и паспортом установки, пайплайн по умолчанию `stepcast.yml`, lock-файлы `stepcast-backlog.lock` и `stepcast-loop-engine` и лаунчер `~/.local/bin/stepcast` носят прежнее имя; это самая заметная пользователю часть переименования и единственная, где нужна миграция данных.
+done_when: Корень проекта и кабинет ищутся как `.burnex/` (`config.yml`, `pipelines/`, `jobs/`, `steps/`, `packages/`, `widgets/`, `routes.yml`, `board.yml`, `schema/`), при его отсутствии читается `.stepcast/` с предупреждением линта и `burnex up`; домашний каталог — `~/.burnex`: при первом запуске без него и с `~/.stepcast` каталог переносится переименованием, а `install.sh` и `burnex update` кладут релизы и паспорт туда же; пайплайн по умолчанию — `burnex.yml`, `stepcast.yml` читается как запасной; lock-файлы и каталог движка петли — `burnex-backlog.lock`, `burnex-loop-engine`; лаунчер — `burnex`, рядом симлинк `stepcast`; собственные `.stepcast/` репозитория, `examples/` и `src/builtin` переименованы; `docs/run-layout.md`, `docs/config.md`, `docs/packages.md`, `docs/routes.md`, README описывают новые пути; тесты на запасное чтение и на перенос домашнего каталога.
+
+## rename-identifiers-and-repo-burnex
+
+status: todo
+title: Идентификаторы кода, репозиторий и рабочее пространство под именем burnex
+group: rename-burnex
+needs: rename-package-burnex,rename-env-burnex,rename-dirs-burnex
+why: После смены пакета, переменных и каталогов прежнее имя остаётся в коде (`StepcastError`, `stepcastHome`, `StepcastPlugin`), в адресе репозитория `assertumai/stepcast`, в имени каталога `stepcast/` рабочего пространства Assertum, его `repos.yml`, `CLAUDE.md`, скиллах и пайплайнах, которые зовут `stepcast backlog add`; пока оно там, у проекта два имени.
+done_when: Типы и функции с `Stepcast` в имени переименованы в `Burnex*` без изменения поведения; `repository.url` в `package.json`, `install.sh` и README указывают на новый адрес репозитория, который переименован на GitHub с редиректом; каталог репозитория в рабочем пространстве Assertum — `burnex/`, `repos.yml`, `CLAUDE.md`, `.agents/skills`, `.stepcast/pipelines` и `scripts/` пространства зовут `burnex`; собственные пайплайны и `scripts/self-improve-loop.sh` зовут `burnex`; псевдоним бинарника `stepcast` снят из `package.json` и `install.sh`, что отмечено в `docs/release.md` как последний шаг перехода; `docs/burnex-after-stepcast.md` получает абзац о том, что stepcast переименован и чем различаются два burnex; `npm run check` зелёный.

@@ -29,7 +29,7 @@ import { row as uiShellRow } from './shell/row.js';
  * выше `screens/`, `dashboards/`, `runLaunch/`, потому что называет не только
  * экраны.
  *
- * `stepcast up` передаёт эти строки `resolveWithCachedKernel`
+ * `burnex up` передаёт эти строки `resolveWithCachedKernel`
  * (`src/parts/ui/daemon/kernel.ts`) — только он: команды CLI не передают ничего и не видят
  * ни `ui-shell`, ни один из `screen-*` в своём дереве (design.md, Решение 2).
  */

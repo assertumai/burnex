@@ -91,7 +91,7 @@ function packagedSchemaNames(schemaDir: string): string[] {
 
 const PIPELINE_SUFFIX = '.yml';
 
-/** Префикс ссылки на пайплайн поставки — `stepcast run stepcast:migrate-widgets` (`pipeline-definition`). */
+/** Префикс ссылки на пайплайн поставки — `burnex run stepcast:migrate-widgets` (`pipeline-definition`). */
 export const STEPCAST_PIPELINE_PREFIX = 'stepcast:';
 
 /** Каталог встроенных пайплайнов пакета — четвёртый встроенный слой, рядом со `scripts/`, `steps/` и `routes.yml` (`pipeline-definition`, design.md изменения `agent-edits-widgets`, Решение 11). */
@@ -147,7 +147,7 @@ export function packagedPipelinePath(name: string, reference?: SchemaReference):
   });
 }
 
-/** Разобранная цель `stepcast run`/`stepcast lint`: файл каталога запуска, пайплайн поставки либо пайплайн пакета. */
+/** Разобранная цель `burnex run`/`burnex lint`: файл каталога запуска, пайплайн поставки либо пайплайн пакета. */
 export interface ResolvedPipelineTarget {
   readonly pipelinePath: string;
   /**
@@ -191,7 +191,7 @@ function resolvePackagePipeline(cwd: string, packageName: string, pipelineName: 
   if ('broken' in found) {
     throw new StepcastError(`Пакет ${packageName} сломан: ${describePackageFailure(found.broken.failure!)}`, {
       file: found.broken.failure!.file,
-      hint: 'Исправьте package.yml пакета — stepcast package list покажет все пакеты и их состояние',
+      hint: 'Исправьте package.yml пакета — burnex package list покажет все пакеты и их состояние',
     });
   }
 
@@ -210,11 +210,11 @@ function resolvePackagePipeline(cwd: string, packageName: string, pipelineName: 
  * расположения движка), `<пакет>:<имя>` узкой формы — пайплайн пакета
  * (`packages-directory-layer`, Решение 5), всё остальное — **путь** от каталога
  * запуска (`pipeline-definition`, «Путь остаётся путём»). Правило одно на обе
- * команды (`stepcast run`, `stepcast lint`): написанное дважды, оно разъехалось
+ * команды (`burnex run`, `burnex lint`): написанное дважды, оно разъехалось
  * бы — и `run` с `lint` расходились бы в том, какой файл они вообще смотрят.
  *
  * Голое имя, совпавшее с именем поставки (`migrate-widgets.yml` в каталоге
- * запуска), остаётся файлом проекта: позиционный аргумент `stepcast run`
+ * запуска), остаётся файлом проекта: позиционный аргумент `burnex run`
  * сегодня путь, и поставка его смысла не отнимает.
  */
 export function resolvePipelineTarget(

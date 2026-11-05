@@ -972,7 +972,7 @@ async function mergeLanesIsolated(
   if (rootBase === undefined) {
     throw new StepcastError('Манифест прогона не содержит исходный коммит корня', {
       file: paths.manifest,
-      hint: 'Повторите прогон новой версией Stepcast',
+      hint: 'Повторите прогон новой версией Burnex',
     });
   }
   addWorktree({ repoDir: cwd, path: integrationRoot, ref: rootBase });
@@ -984,7 +984,7 @@ async function mergeLanesIsolated(
       if (base === undefined) {
         throw new StepcastError(`Манифест прогона не содержит исходный коммит репозитория ${repo}`, {
           file: paths.manifest,
-          hint: 'Повторите прогон новой версией Stepcast',
+          hint: 'Повторите прогон новой версией Burnex',
         });
       }
       addWorktree({ repoDir: join(cwd, repo), path: join(integrationRoot, repo), ref: base });

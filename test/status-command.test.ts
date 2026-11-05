@@ -17,7 +17,7 @@ function capture(): { lines: string[]; write: (line: string) => void } {
   return { lines, write: (line) => lines.push(line) };
 }
 
-describe('CLI: stepcast status — попытки работы', () => {
+describe('CLI: burnex status — попытки работы', () => {
   it('называет число израсходованных попыток работы', () => {
     const { runsRoot, projectRoot, home } = makeJournalBed();
     const journal = seedRun(runsRoot, projectRoot, {
@@ -32,7 +32,7 @@ describe('CLI: stepcast status — попытки работы', () => {
   });
 });
 
-describe('CLI: stepcast status', () => {
+describe('CLI: burnex status', () => {
   // Спека stepcast-configuration: «Денежный расход и объявленный потолок»
   it('печатает потраченное и объявленный денежный потолок рядом с токенами', () => {
     const { runsRoot, projectRoot, home } = makeJournalBed();
@@ -131,12 +131,12 @@ describe('CLI: stepcast status', () => {
     const text = lines.join('\n');
     assert.match(text, /отказ аутентификации бэкенда/);
     assert.match(text, /Failed to authenticate: OAuth session expired/);
-    assert.match(text, /возобновите прогон командой stepcast resume/);
+    assert.match(text, /возобновите прогон командой burnex resume/);
     assert.doesNotMatch(text, /stdout\.log/);
   });
 });
 
-describe('CLI: stepcast status — движок прогона', () => {
+describe('CLI: burnex status — движок прогона', () => {
   it('прогон со снимком называет корень исходного пакета, точку входа снимка и признак снимка', () => {
     const { runsRoot, projectRoot, home } = makeJournalBed();
     const journal = seedRun(runsRoot, projectRoot, {
@@ -203,7 +203,7 @@ describe('CLI: stepcast status — движок прогона', () => {
   });
 });
 
-describe('CLI: stepcast status — перейдённый потолок', () => {
+describe('CLI: burnex status — перейдённый потолок', () => {
   // Спека run-journal: «Причина остановки читается из состояния»
   it('называет область, измерение и адрес шага, на которых потолок сработал впервые', () => {
     const { runsRoot, projectRoot, home } = makeJournalBed();
@@ -233,7 +233,7 @@ describe('CLI: stepcast status — перейдённый потолок', () =>
   });
 });
 
-describe('CLI: stepcast status — исход сведения дорожек', () => {
+describe('CLI: burnex status — исход сведения дорожек', () => {
   // Спека lane-merge: «Исход сведения дорожек читается из состояния прогона»
   // — различает по выводу прогон со сведённой дорожкой и прогон, где до
   // сведения дело не дошло, читая только каталог прогона, не git log.
@@ -314,7 +314,7 @@ describe('CLI: stepcast status — исход сведения дорожек', 
   });
 });
 
-describe('CLI: stepcast status — источник цены', () => {
+describe('CLI: burnex status — источник цены', () => {
   function render(budget: Record<string, unknown>): string {
     const { runsRoot, projectRoot, home } = makeJournalBed();
     const journal = seedRun(runsRoot, projectRoot, {
@@ -339,7 +339,7 @@ describe('CLI: stepcast status — источник цены', () => {
   });
 });
 
-describe('CLI: stepcast status — циклы по группам работ', () => {
+describe('CLI: burnex status — циклы по группам работ', () => {
   it('называет проход, вердикт и причину цикла; без циклов строк цикла нет', () => {
     const { runsRoot, projectRoot, home } = makeJournalBed();
     const journal = seedRun(runsRoot, projectRoot, {

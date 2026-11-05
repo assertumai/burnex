@@ -15,7 +15,7 @@ import { contributionOwner, kernelFromRegistry, type Registry } from '../kernel/
  *
  * Файлы читаются дважды; это два небольших YAML, и цена измеряется
  * миллисекундами. Взамен происхождение каждого значения остаётся честным:
- * умолчание плагина видно в `stepcast config` источником `plugin:<имя>`, а не
+ * умолчание плагина видно в `burnex config` источником `plugin:<имя>`, а не
  * притворяется встроенным и не подмешивается в уже слитую карту задним числом.
  */
 export interface ResolvedWithPlugins {
@@ -27,7 +27,7 @@ export interface ResolvedWithPlugins {
    * Итог каждой строки дерева (`RowOutcome`, design.md, Решение 10) —
    * `undefined`, когда реестр пришёл готовым (`registry`, второй вариант
    * `ResolveWithPluginsOptions`), а не собран здесь: тогда `loadPlugins` не
-   * звался, и итогов ниоткуда взять. `stepcast plugins --dump` в этом случае
+   * звался, и итогов ниоткуда взять. `burnex plugins --dump` в этом случае
    * читает дерево напрямую (`runPluginsCommand`), не через это поле.
    */
   readonly outcomes: readonly RowOutcome[] | undefined;

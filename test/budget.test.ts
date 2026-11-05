@@ -1507,7 +1507,7 @@ jobs:
     const attempt = step?.attempts.at(-1);
     for (const reason of [first?.reason, step?.reason, attempt?.reason]) {
       assert.match(reason ?? '', /Failed to authenticate/);
-      assert.match(reason ?? '', /возобновите прогон командой stepcast resume/);
+      assert.match(reason ?? '', /возобновите прогон командой burnex resume/);
     }
   });
 });

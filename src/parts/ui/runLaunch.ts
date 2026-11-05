@@ -9,7 +9,7 @@ const RECOVERY_RETRY_DELAYS_MS = [0, 100, 1_000] as const;
 
 /**
  * Запуск прогона отсоединённым дочерним процессом (`ui-daemon`, design.md
- * Решение 13). Демон сам прогон не исполняет: `stepcast run` порождается тем
+ * Решение 13). Демон сам прогон не исполняет: `burnex run` порождается тем
  * же приёмом, что и отсоединённый подъём демона (`startDetached`,
  * `src/parts/ui/daemon/daemon.ts`), но без pid-файла и без своего лога — журналом прогона
  * распоряжается сам дочерний процесс, как и при запуске из терминала.
@@ -79,7 +79,7 @@ export async function retryInterruptedRunRecovery(
 }
 
 /**
- * Породить `stepcast run <pipeline>` отсоединённым процессом. Вывод никуда не
+ * Породить `burnex run <pipeline>` отсоединённым процессом. Вывод никуда не
  * читается демоном (`stdio: 'ignore'`): прогон пишет свой журнал сам, а
  * дочерний процесс не должен держать открытым ни файловый дескриптор демона,
  * ни его собственный.
@@ -105,7 +105,7 @@ export const launchRun: LaunchRunFn = (options) => {
   // /api/run` ответил 202. Без слушателя это необработанное исключение, и оно
   // роняет демон целиком: витрина гасла бы от одной неудачной кнопки запуска.
   child.on('error', (error) => {
-    const report = options.onError ?? ((cause: Error) => process.stderr.write(`stepcast run не запустился: ${cause.message}\n`));
+    const report = options.onError ?? ((cause: Error) => process.stderr.write(`burnex run не запустился: ${cause.message}\n`));
     report(error);
   });
   // Демон остаётся жить после отсоединённого runner и потому является
@@ -141,7 +141,7 @@ export interface LaunchResumeOptions {
 export type LaunchResumeFn = (options: LaunchResumeOptions) => void;
 
 /**
- * Породить `stepcast resume <run> --from <job>` отсоединённым процессом тем же
+ * Породить `burnex resume <run> --from <job>` отсоединённым процессом тем же
  * приёмом, что `launchDecide`: новый прогон с `resumed_from` создаёт сама
  * команда, демон журнал не пишет. Предстартовая проверка — в маршруте демона.
  */
@@ -155,7 +155,7 @@ export const launchResume: LaunchResumeFn = (options) => {
   });
   child.on('error', (error) => {
     const report =
-      options.onError ?? ((cause: Error) => process.stderr.write(`stepcast resume не запустился: ${cause.message}\n`));
+      options.onError ?? ((cause: Error) => process.stderr.write(`burnex resume не запустился: ${cause.message}\n`));
     report(error);
   });
   child.unref();
@@ -176,7 +176,7 @@ export interface LaunchDecideOptions {
 export type LaunchDecideFn = (options: LaunchDecideOptions) => void;
 
 /**
- * Породить `stepcast decide <run> <outcome>` отсоединённым процессом — тем же
+ * Породить `burnex decide <run> <outcome>` отсоединённым процессом — тем же
  * приёмом, что `launchRun` (design.md изменения `user-decision-steps`,
  * решение 5): демон в файлы прогонов не пишет, единственный писатель решения
  * — бинарь. Проверка запроса — до порождения, в маршруте демона; здесь
@@ -195,7 +195,7 @@ export const launchDecide: LaunchDecideFn = (options) => {
   });
   child.on('error', (error) => {
     const report =
-      options.onError ?? ((cause: Error) => process.stderr.write(`stepcast decide не запустился: ${cause.message}\n`));
+      options.onError ?? ((cause: Error) => process.stderr.write(`burnex decide не запустился: ${cause.message}\n`));
     report(error);
   });
   child.unref();

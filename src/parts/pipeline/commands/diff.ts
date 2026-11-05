@@ -17,7 +17,7 @@ export function runDiffCommand(
 ): ExitCodeValue {
   const [first, second] = args.positional;
   if (first === undefined || second === undefined) {
-    throw new StepcastError('Нужно указать два прогона', { hint: 'stepcast diff <run-a> <run-b>' });
+    throw new StepcastError('Нужно указать два прогона', { hint: 'burnex diff <run-a> <run-b>' });
   }
 
   const { config } = resolveConfig({ cwd });

@@ -127,7 +127,7 @@ function VersionSkewBanner({ overview }: { readonly overview: Overview }): JSX.E
       <AlertTitle>Reader is out of date</AlertTitle>
       <AlertDescription>
         {affectedRuns(summary.count)} with {journal}, but this dashboard only knows format{' '}
-        {summary.readerFormat}. Restart the daemon with <code>stepcast down && stepcast up</code>.
+        {summary.readerFormat}. Restart the daemon with <code>burnex down && burnex up</code>.
       </AlertDescription>
     </Alert>
   );
@@ -589,7 +589,7 @@ export function Runs({
           title="No runs yet"
           description={
             <>
-              Start one with <code>stepcast run</code> — it appears here as soon as the daemon sees it.
+              Start one with <code>burnex run</code> — it appears here as soon as the daemon sees it.
             </>
           }
         />

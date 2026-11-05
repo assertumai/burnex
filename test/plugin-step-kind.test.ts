@@ -752,7 +752,7 @@ describe('step-kinds-registry: исполнение', () => {
     assert.equal(step?.kind, 'plugin');
 
     // Имя файла — то же, что у командного шага: первая попытка пишет
-    // `stdout.log` (его читают `stepcast logs` и витрина), а не `stdout.1.log`.
+    // `stdout.log` (его читают `burnex logs` и витрина), а не `stdout.1.log`.
     const stepDir = findStepDir(result.journal.paths, 'build', 'probe');
     const stdout = readFileSync(join(stepDir as string, 'stdout.log'), 'utf8');
     assert.equal(stdout, 'ответ получен');

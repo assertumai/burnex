@@ -103,12 +103,12 @@ export interface UiServerOptions {
   readonly launchRun?: LaunchRunFn;
   /**
    * Приём решения по `POST /api/run/decision`. По умолчанию — настоящий
-   * отсоединённый процесс `stepcast decide` (`src/parts/ui/runLaunch.ts`); подмена
+   * отсоединённый процесс `burnex decide` (`src/parts/ui/runLaunch.ts`); подмена
    * нужна проверкам по той же причине, что и у `launchRun`.
    */
   readonly launchDecide?: LaunchDecideFn;
   /**
-   * Возобновление по `POST /api/run/resume` — отсоединённый `stepcast resume`;
+   * Возобновление по `POST /api/run/resume` — отсоединённый `burnex resume`;
    * подмена нужна проверкам по той же причине, что и у `launchRun`.
    */
   readonly launchResume?: LaunchResumeFn;
@@ -591,7 +591,7 @@ export function createUiServer(options: UiServerOptions): Promise<UiServer> {
         port,
         close: async () => {
           if (ownsWatcher) watcher.dispose();
-          // Служебный процесс esbuild переживает `stepcast down` и вешает
+          // Служебный процесс esbuild переживает `burnex down` и вешает
           // `node --test`, если его не остановить (design.md, Решение 12);
           // компилятор, полученный снаружи, останавливает тот, кто его поднял.
           if (ownsWidgetCompiler) await widgetCompiler.dispose();

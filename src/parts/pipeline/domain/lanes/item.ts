@@ -5,7 +5,7 @@ import { StepcastError } from '../../../../kernel/errors.js';
 
 /**
  * Чтение `item-<дорожка>.json` каталога прогона — файла, который пишет
- * `stepcast backlog pick --lanes --run-dir`. Модуль общий для сведения
+ * `burnex backlog pick --lanes --run-dir`. Модуль общий для сведения
  * дорожек и `backlog settle`: второго разбора того же формата в коде нет.
  */
 

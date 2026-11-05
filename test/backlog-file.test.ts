@@ -9,7 +9,7 @@ import { tempDir } from './tmp.js';
 
 /**
  * Файловая сторона очереди (`src/parts/pipeline/domain/backlog/file.ts`): её пользуются и
- * `stepcast backlog`, и сведение дорожек, поэтому проверяется она здесь один
+ * `burnex backlog`, и сведение дорожек, поэтому проверяется она здесь один
  * раз — временными файлами, в отличие от чистого ядра в `test/backlog.test.ts`.
  */
 

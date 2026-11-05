@@ -15,7 +15,7 @@ import { gitCommit, gitInit, withHome } from './helpers.js';
 import { tempDir } from './tmp.js';
 
 /**
- * `stepcast backlog` не требует ни `stepcast.yml`, ни `.stepcast/`, ни
+ * `burnex backlog` не требует ни `stepcast.yml`, ни `.stepcast/`, ни
  * конфигурации — проверки идут `run(argv, io)` в обычном временном каталоге,
  * без каркаса `makeProject`, который заводит их специально для команд,
  * зависящих от проекта.
@@ -86,7 +86,7 @@ function fieldOf(text: string, slug: string, name: string): string | undefined {
   return new RegExp(`^${name}:\\s*(.*)$`, 'm').exec(section)?.[1];
 }
 
-describe('CLI: stepcast backlog list', () => {
+describe('CLI: burnex backlog list', () => {
   it('печатает пункты и не правит файл', async () => {
     const dir = bed(item('an-item', COMPLETE));
     const before = readFileSync(join(dir, 'backlog.md'), 'utf8');
@@ -117,7 +117,7 @@ describe('CLI: stepcast backlog list', () => {
   });
 });
 
-describe('CLI: stepcast backlog pick', () => {
+describe('CLI: burnex backlog pick', () => {
   it('берёт пункт и проставляет status и started_at', async () => {
     const dir = bed(item('an-item', COMPLETE));
 
@@ -277,7 +277,7 @@ describe('CLI: stepcast backlog pick', () => {
   });
 });
 
-describe('CLI: stepcast backlog pick --only', () => {
+describe('CLI: burnex backlog pick --only', () => {
   it('берёт названный пункт, а не первый свободный', async () => {
     const dir = bed(item('first-item', COMPLETE), item('named-item', COMPLETE));
 
@@ -498,7 +498,7 @@ describe('CLI: материалы пункта goal и details', () => {
   });
 });
 
-describe('CLI: stepcast backlog pick публикует данные работы', () => {
+describe('CLI: burnex backlog pick публикует данные работы', () => {
   /** Каталог работы с объявлением — тот же вид, что заводит движок до первого шага. */
   function jobDirWithDeclaration(declared: readonly string[]): string {
     const dir = tempDir('backlog-jobdir-');
@@ -563,7 +563,7 @@ describe('CLI: stepcast backlog pick публикует данные работ�
   });
 });
 
-describe('CLI: stepcast backlog finish', () => {
+describe('CLI: burnex backlog finish', () => {
   it('finish done проставляет исход', async () => {
     const dir = bed(item('an-item', { ...COMPLETE, status: 'in_progress' }));
 
@@ -654,7 +654,7 @@ describe('CLI: stepcast backlog finish', () => {
   });
 });
 
-describe('CLI: stepcast backlog settle', () => {
+describe('CLI: burnex backlog settle', () => {
   function itemFile(runDir: string, lane: string, slug: string): void {
     writeFileSync(join(runDir, `item-${lane}.json`), JSON.stringify({ slug, title: `Улучшение ${slug}` }));
   }
@@ -1110,7 +1110,7 @@ describe('CLI: очередь под lock-файлом', () => {
   });
 });
 
-describe('CLI: stepcast backlog add', () => {
+describe('CLI: burnex backlog add', () => {
   const NEW = ['--title', 'Новый', '--why', 'Затем', '--done-when', 'Готово'];
 
   function queue(dir: string): string {
@@ -1222,7 +1222,7 @@ describe('CLI: stepcast backlog add', () => {
   });
 });
 
-describe('CLI: stepcast backlog show', () => {
+describe('CLI: burnex backlog show', () => {
   it('печатает запись пункта и не правит файл', async () => {
     const dir = bed(item('first-item', COMPLETE), item('second-item', { ...COMPLETE, track: 'express' }));
     const before = readFileSync(join(dir, 'backlog.md'), 'utf8');

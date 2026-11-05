@@ -173,7 +173,7 @@ jobs:
     assert.match(messages(diagnostics, 'warning').join('\n'), /Секрет gh-token объявлен, но ни один шаг его не называет/);
   });
 
-  it('stepcast lint завершается успехом на чистом документе с секретом', async () => {
+  it('burnex lint завершается успехом на чистом документе с секретом', async () => {
     const project = makeProject({ 'stepcast.yml': pipeline({ secrets: TOKEN, steps: USING }) });
     const { code, out } = await cli(project, ['lint']);
     assert.equal(code, ExitCode.ok, out);

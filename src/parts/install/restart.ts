@@ -22,7 +22,7 @@ export interface RestartHost extends LaunchdHost {
   readonly runningDaemon: () => DaemonRecord | undefined;
   /** Остановить его и дождаться выхода: порт нужен новому демону сразу. */
   readonly stopDaemon: () => Promise<void>;
-  /** `stepcast up` по пути входа в каталоге `cwd`; `false` — не поднялся. */
+  /** `burnex up` по пути входа в каталоге `cwd`; `false` — не поднялся. */
   readonly spawnUp: (entry: string, cwd: string) => boolean;
   /** Текст plist агента, если он есть. */
   readonly readAgentPlist: () => string | undefined;
@@ -61,7 +61,7 @@ export async function restartDaemon(
     }
     write('демон витрины перезапущен через launchd');
     if (options.stableEntry && host.readAgentPlist()?.includes(STABLE_ENTRY) !== true) {
-      write('агент смотрит в конкретный релиз, а не в current: stepcast up --install закрепит путь');
+      write('агент смотрит в конкретный релиз, а не в current: burnex up --install закрепит путь');
     }
     return 'kickstarted';
   }
@@ -72,7 +72,7 @@ export async function restartDaemon(
   if (daemon.cwd === undefined) {
     // Поднят прежней версией: каталога проекта в записи нет, а остановленный демон некуда вернуть.
     write('демон витрины поднят прежней версией и работает на старом коде');
-    write('перезапустите витрину: stepcast down && stepcast up в каталоге проекта');
+    write('перезапустите витрину: burnex down && burnex up в каталоге проекта');
     return 'manual';
   }
 
@@ -80,7 +80,7 @@ export async function restartDaemon(
   if (!host.spawnUp(options.newEntry, daemon.cwd)) {
     throw new StepcastError('Обновление прошло, но витрина не поднялась заново', {
       exitCode: ExitCode.jobFailed,
-      hint: `Поднимите её сами: stepcast up в ${daemon.cwd}`,
+      hint: `Поднимите её сами: burnex up в ${daemon.cwd}`,
     });
   }
   write(`демон витрины перезапущен в ${daemon.cwd}`);
@@ -90,7 +90,7 @@ export async function restartDaemon(
 const EXIT_POLL_MS = 100;
 const EXIT_WAIT_MS = 5000;
 
-/** Настоящий хозяин: launchd, `ui.pid` и порождение `stepcast up`. */
+/** Настоящий хозяин: launchd, `ui.pid` и порождение `burnex up`. */
 export function systemRestartHost(): RestartHost {
   const base = systemHost();
   const paths = daemonPaths(base.home);

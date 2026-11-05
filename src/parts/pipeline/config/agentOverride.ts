@@ -21,7 +21,7 @@ export function pluginDefaultsOf(registry: Registry | undefined): {
 
 /**
  * Конфигурация со слоем флага `defaults.agent` (`run --agent`, `resume` по
- * `agent_override` манифеста). Слой тот же, что у `stepcast config --agent`:
+ * `agent_override` манифеста). Слой тот же, что у `burnex config --agent`:
  * агент шага и работы документа, `pipeline_agents` и `step_agents` его
  * сильнее, поэтому шаги с явным агентом остаются при своём. Агент корня
  * документа сильнее только под `agent_policy: force`: под `fallback` он

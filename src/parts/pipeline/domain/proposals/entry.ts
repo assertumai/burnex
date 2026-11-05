@@ -2,7 +2,7 @@ import { isSafeSegment } from '../../../ui/routes.js';
 
 /**
  * Модель записи очереди предложений и разбор её цели — чистый модуль без
- * `node:*`, общий команде (`stepcast propose`), демону (`src/parts/ui/screens/
+ * `node:*`, общий команде (`burnex propose`), демону (`src/parts/ui/screens/
  * proposals/server.ts`) и браузеру (`ui/src/screens/proposals.tsx`)
  * (`ui-proposals`, design.md Решение 1, 3).
  *

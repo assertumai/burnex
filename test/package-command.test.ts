@@ -8,7 +8,7 @@ import { run as runCli } from '../src/parts/cli/main.js';
 import { ExitCode, type ExitCodeValue } from '../src/kernel/errors.js';
 import { makeProject, withHome, type Project } from './helpers.js';
 
-/** `stepcast package list|new` (`packages-directory-layer`, Решение 9). */
+/** `burnex package list|new` (`packages-directory-layer`, Решение 9). */
 
 interface Outcome {
   readonly code: ExitCodeValue;

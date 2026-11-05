@@ -170,7 +170,7 @@ export const BACKEND_REFUSAL_PREDICATE = 'backend_refusal';
  */
 export function describeRefusal(refusal: BackendRefusal): string {
   if (refusal.class === 'unauthenticated') {
-    return `отказ аутентификации бэкенда: ${refusal.message}. Обновите аутентификацию бэкенда и возобновите прогон командой stepcast resume.`;
+    return `отказ аутентификации бэкенда: ${refusal.message}. Обновите аутентификацию бэкенда и возобновите прогон командой burnex resume.`;
   }
   const resets =
     refusal.resetAt === undefined ? '' : `; окно сбросится ${new Date(refusal.resetAt).toISOString()}`;

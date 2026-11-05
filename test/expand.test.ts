@@ -4961,7 +4961,7 @@ jobs:
 
     assert.match(error.message, /Вид шага run отключён составом/);
     assert.match(error.hint ?? '', /строка дерева/);
-    assert.match(error.hint ?? '', /stepcast plugins/);
+    assert.match(error.hint ?? '', /burnex plugins/);
     // Имя строки (`step-run`) в тексте отказа не звучит: соответствие «вид →
     // строка» знает только перечень дефолта, а разбор документа о нём не
     // спрашивает (design.md, Решение 5).
@@ -5006,7 +5006,7 @@ jobs:
 
     assert.match(error.message, /Вид шага script отключён составом/);
     assert.doesNotMatch(error.message, /неизвестен/);
-    assert.match(error.hint ?? '', /stepcast plugins/);
+    assert.match(error.hint ?? '', /burnex plugins/);
   });
 
   // Тот же ключ `script` при живом `step-script`, но снятом `step-uses`:
@@ -5095,7 +5095,7 @@ jobs:
     assert.match(error.message, /Предикат exit_code отключён составом/);
     assert.match(error.at ?? '', /jobs\.build\.steps\.0\.expect\.0/);
     assert.match(error.hint ?? '', /строка дерева/);
-    assert.match(error.hint ?? '', /stepcast plugins/);
+    assert.match(error.hint ?? '', /burnex plugins/);
     // Имя строки (`predicates`) в тексте отказа не звучит.
     assert.doesNotMatch(error.message, /predicates/);
     assert.doesNotMatch(error.hint ?? '', /predicates/);

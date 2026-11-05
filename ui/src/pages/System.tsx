@@ -53,8 +53,8 @@ const AUTH_NOTE =
 
 /** Что набрать в терминале, если действие с экрана не довело дело до конца. */
 export const TERMINAL_COMMAND: Readonly<Record<SystemActionKind, string>> = {
-  update: 'stepcast update',
-  autostart: 'stepcast up --install',
+  update: 'burnex update',
+  autostart: 'burnex up --install',
 };
 
 function Row({ label, children }: { readonly label: string; readonly children: ReactNode }): JSX.Element {
@@ -198,15 +198,15 @@ export function AutostartCard({ autostart, engineMethod, busy, onToggle }: Autos
         ) : null}
         {autostart.supported && autostart.plist && !autostart.loaded ? (
           <p className="dim small system-hint" data-hint="not-loaded">
-            The agent is installed but not loaded (for example after <span className="mono">stepcast down</span>). Run{' '}
-            <span className="mono">stepcast up --install</span> or switch autostart on to load it.
+            The agent is installed but not loaded (for example after <span className="mono">burnex down</span>). Run{' '}
+            <span className="mono">burnex up --install</span> or switch autostart on to load it.
           </p>
         ) : null}
         {autostart.supported && autostart.loaded && autostart.entryStable === false && engineMethod === 'managed' ? (
           <p className="dim small system-hint" data-hint="pinned-release">
             The agent points at a specific release (<span className="mono">{autostart.entry}</span>), not at{' '}
             <span className="mono">current</span>: an update would leave it on the old code. Switch autostart off and on
-            again, or run <span className="mono">stepcast up --install</span>, to pin it to <span className="mono">current</span>.
+            again, or run <span className="mono">burnex up --install</span>, to pin it to <span className="mono">current</span>.
           </p>
         ) : null}
         {autostart.supported && autostart.loaded && !autostart.thisDaemon ? (
@@ -255,7 +255,7 @@ export function updateDisabledReason(engine: SystemEngine, update: SystemUpdate 
       return check.reason;
     case 'available':
     case 'unknown':
-      // `unknown` — решает человек: сеть могла моргнуть, а `stepcast update` повторит проверку сам.
+      // `unknown` — решает человек: сеть могла моргнуть, а `burnex update` повторит проверку сам.
       return undefined;
   }
 }
@@ -286,7 +286,7 @@ export function UpdateCard({ engine, update, checking, action, onCheck, onUpdate
     <Card className="system-card">
       <CardHeader>
         <CardTitle>Update</CardTitle>
-        <CardDescription>The same check and the same command as stepcast update</CardDescription>
+        <CardDescription>The same check and the same command as burnex update</CardDescription>
       </CardHeader>
       <CardContent>
         <div className="system-buttons">
@@ -371,7 +371,7 @@ export function ActionStatus({ action }: { readonly action: ActionState }): JSX.
         {action.kind === 'autostart' ? (
           <>
             {' '}
-            (to switch off: <span className="mono">stepcast down --uninstall && stepcast up</span>)
+            (to switch off: <span className="mono">burnex down --uninstall && burnex up</span>)
           </>
         ) : null}
       </AlertDescription>

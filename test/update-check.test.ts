@@ -76,7 +76,7 @@ describe('update-check: checkUpdate', async () => {
     assert.deepEqual(host.timeouts, [CHECK_TIMEOUT_MS]);
   });
 
-  it('без timeoutMs команды идут без предела — так проверяет stepcast update', async () => {
+  it('без timeoutMs команды идут без предела — так проверяет burnex update', async () => {
     const host = probe({ tags: ['v0.3.0'] });
     await checkUpdate(managed, host);
     assert.deepEqual(host.timeouts, [undefined]);

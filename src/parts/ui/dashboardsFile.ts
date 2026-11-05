@@ -331,7 +331,7 @@ export function writableDashboardPath(
   if (layer === 'home' && !fromPackage) return dashboardPath(homeDashboardsDirPath(options.home), id);
   if (options.projectRoot === undefined) {
     throw new StepcastError('The daemon does not know the project root: there is nowhere to write the project dashboards layer', {
-      hint: 'Start the dashboard in the project directory (stepcast up) or save the dashboard to the home layer',
+      hint: 'Start the dashboard in the project directory (burnex up) or save the dashboard to the home layer',
     });
   }
   return dashboardPath(projectDashboardsDirPath(options.projectRoot), id);

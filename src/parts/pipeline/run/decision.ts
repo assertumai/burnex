@@ -82,7 +82,7 @@ export function selectAwaiting(
 ): AwaitingDecision {
   if (awaiting.length === 0) {
     throw new StepcastError('Прогон не ждёт решения', {
-      hint: 'stepcast status покажет, идёт ли прогон и чего он ждёт',
+      hint: 'burnex status покажет, идёт ли прогон и чего он ждёт',
     });
   }
 
@@ -128,7 +128,7 @@ function listSteps(awaiting: readonly AwaitingDecision[]): string {
  *
  * Опущенный `knownSteps` — лёгкая проверка демона (design.md, решение 5):
  * `POST /api/run/decision` не разворачивает пайплайн ради одной проверки, а
- * настоящая проверка по составу шагов идёт в `stepcast decide`, которую
+ * настоящая проверка по составу шагов идёт в `burnex decide`, которую
  * маршрут порождает следом. Команда и ждущий процесс всегда передают состав,
  * потому что перезапуск с несуществующего шага обязан отказать им, а не
  * начать возобновление вслепую.

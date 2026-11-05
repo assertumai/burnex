@@ -169,7 +169,7 @@ jobs:
   });
 });
 
-describe('job-display-data: команда stepcast data', () => {
+describe('job-display-data: команда burnex data', () => {
   // Сценарий: «Работа публикует значение по ключу»
   it('записывает значение с двоеточиями двумя позиционными аргументами', () => {
     const dir = jobDir(['title']);

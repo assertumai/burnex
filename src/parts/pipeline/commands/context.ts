@@ -25,7 +25,7 @@ const LEVEL_LABEL: Record<Origin, string> = {
 };
 
 /**
- * `stepcast context` вычисляет состав и размер контекста агентского шага без
+ * `burnex context` вычисляет состав и размер контекста агентского шага без
  * запуска пайплайна и без обращения к бэкенду — тот же `assembleContext`, что
  * формирует `context.json` при живом прогоне.
  */
@@ -39,7 +39,7 @@ export function runContextCommand(
   const stepId = args.flags.step as string | undefined;
   if (jobId === undefined || stepId === undefined) {
     throw new StepcastError('Команда context требует --job и --step', {
-      hint: 'stepcast context --job <job> --step <step>',
+      hint: 'burnex context --job <job> --step <step>',
     });
   }
 

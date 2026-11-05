@@ -13,7 +13,7 @@ import { PACKAGE_MANIFEST_FILE, checkPackageName } from '../manifest.js';
 import { summarizePackages, type NeedsContext, type PackageSummary } from '../summary.js';
 
 /**
- * `stepcast package list|new` (`packages-directory-layer`, design.md, Решение 9).
+ * `burnex package list|new` (`packages-directory-layer`, design.md, Решение 9).
  *
  * Строка команды ядерная, без `inject`: она обязана работать, когда пакет или
  * плагин сломал состав, — `list` для того и нужен, чтобы увидеть, какой пакет
@@ -110,7 +110,7 @@ package_version: 0.1.0
 function runNew(args: ParsedArgs, io: CliIo, options: PackageCommandOptions): ExitCodeValue {
   const name = args.positional[1];
   if (name === undefined) {
-    throw new StepcastError('Не назван пакет: stepcast package new <имя> [--home]', { exitCode: ExitCode.configError });
+    throw new StepcastError('Не назван пакет: burnex package new <имя> [--home]', { exitCode: ExitCode.configError });
   }
   const problem = checkPackageName(name);
   if (problem !== undefined) {
@@ -146,7 +146,7 @@ export function runPackageCommand(args: ParsedArgs, io: CliIo, options: PackageC
   if (action === 'list') return runList(args, io, options);
   if (action === 'new') return runNew(args, io, options);
   throw new StepcastError(
-    action === undefined ? 'Не указано действие: stepcast package list|new' : `Неизвестное действие пакета: ${action}`,
+    action === undefined ? 'Не указано действие: burnex package list|new' : `Неизвестное действие пакета: ${action}`,
     { exitCode: ExitCode.configError, hint: `Действия: ${ACTIONS.join(', ')}` },
   );
 }

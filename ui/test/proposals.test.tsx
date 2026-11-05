@@ -87,7 +87,7 @@ describe('ui-proposals: экран — статический рендер', () 
 
   it('шапка объясняет, что это и как сюда попадают записи', () => {
     const html = renderToStaticMarkup(<Proposals overview={overviewWith([record()])} navigate={() => {}} />);
-    assert.match(html, /stepcast propose/);
+    assert.match(html, /burnex propose/);
     assert.match(html, /Nothing is written until you accept/);
   });
 

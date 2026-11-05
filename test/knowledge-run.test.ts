@@ -215,7 +215,7 @@ jobs:
   }
 
   // Задача 4.11, первая половина
-  it('stepcast knowledge check --record правит шапку единицы в дереве работы', async () => {
+  it('burnex knowledge check --record правит шапку единицы в дереве работы', async () => {
     const { result, anchorText } = await runOn(staleProject(true));
 
     assert.equal(result.status, 'success');
@@ -223,7 +223,7 @@ jobs:
   });
 
   // Задача 4.11, вторая половина
-  it('stepcast knowledge check без --record дерево работы не трогает', async () => {
+  it('burnex knowledge check без --record дерево работы не трогает', async () => {
     const { result, anchorText } = await runOn(staleProject(false));
 
     assert.equal(result.status, 'success');

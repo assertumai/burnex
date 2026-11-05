@@ -836,7 +836,7 @@ export interface TypedStepKindContribution<F> extends Omit<StepKindContribution,
   /**
    * Первый параметр — `unknown`, не `F` (design.md, Решение 5): поле с
    * отложенной подстановкой (`${jobs.*}`) при разборе схемой вклада ещё не
-   * проверено — `stepcast lint` работает именно по этому, непроверенному
+   * проверено — `burnex lint` работает именно по этому, непроверенному
    * значению, и обещание `F` было бы здесь ложью.
    */
   readonly lint?: (fields: unknown, site: LintSite) => readonly PluginDiagnostic[];

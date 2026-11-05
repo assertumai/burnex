@@ -181,7 +181,7 @@ class FsKnowledgeSource implements KnowledgeSource {
   select(selector: KnowledgeSelector): readonly KnowledgeEntry[] {
     if (selector.kind === 'index') {
       // Глагол `index` (выше) отдаёт список целиком: он обслуживает
-      // `stepcast knowledge index`, и человеку в терминале токенов не платят.
+      // `burnex knowledge index`, и человеку в терминале токенов не платят.
       // Здесь же текст уезжает в контекст агентского шага, и производная
       // часть укладывается в свой предел (design.md, решение 3).
       const text = this.renderContextIndex();
@@ -234,7 +234,7 @@ class FsKnowledgeSource implements KnowledgeSource {
         const documents = this.specDocumentEntries(id, (specIndex ??= this.specEntries()));
         if (documents.length === 0) {
           throw new StepcastError(`Единица знания не найдена: ${id}`, {
-            hint: 'Проверьте идентификатор по оглавлению: stepcast knowledge index',
+            hint: 'Проверьте идентификатор по оглавлению: burnex knowledge index',
           });
         }
         picked.push(...documents);
@@ -808,7 +808,7 @@ class FsKnowledgeSource implements KnowledgeSource {
 
   /** Хвост усечённой производной части: чего в списке нет и где лежит полный. */
   private specTailLine(hidden: number): string {
-    return `… не показано ещё ${hidden} записей каталогов практики спецификации в ${this.options.specDir ?? ''} — полный список: stepcast knowledge index`;
+    return `… не показано ещё ${hidden} записей каталогов практики спецификации в ${this.options.specDir ?? ''} — полный список: burnex knowledge index`;
   }
 
   /**

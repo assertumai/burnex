@@ -11,7 +11,7 @@ import { PIPELINE_SERVICES } from '../services.js';
 import type { ParsedArgs } from '../../../kernel/cli/args.js';
 
 /**
- * Печатает схемы документов проекта: `stepcast schema`.
+ * Печатает схемы документов проекта: `burnex schema`.
  *
  * Отказ загрузки объявленного плагина достаётся общим ходом точки входа
  * (`resolveWithPlugins`, `src/parts/cli/main.ts`) — до этой функции дело не
@@ -26,7 +26,7 @@ export function runSchemaCommand(
 ): ExitCodeValue {
   const outDir = resolvePath(cwd, typeof args.flags.out === 'string' ? args.flags.out : join('.stepcast', 'schema'));
 
-  // Тот же перечень, с каким сверяет записанный файл `stepcast lint`.
+  // Тот же перечень, с каким сверяет записанный файл `burnex lint`.
   const predicates = pluginPredicateEntries(registry);
   const stepKinds = pluginStepKindEntries(registry);
   const nativeStepKinds = nativeStepKindNames(registry);

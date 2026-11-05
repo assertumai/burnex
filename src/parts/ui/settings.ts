@@ -24,7 +24,7 @@ export interface BackendView {
   readonly enabled: boolean;
   /** Есть адаптер; настройки неподключённого поставляемого бэкенда можно заполнить заранее. */
   readonly available: boolean;
-  /** Строка для `plugins:`, если бэкенд поставляется со Stepcast и ещё не подключён. */
+  /** Строка для `plugins:`, если бэкенд поставляется с Burnex и ещё не подключён. */
   readonly plugin?: string;
   readonly defaultModel: string | undefined;
   readonly defaultModelSource: string;
@@ -74,7 +74,7 @@ export function globalConfigPath(home: string = homedir()): string {
 
 /**
  * Происхождение значения словами витрины — по-английски, в отличие от
- * `describeSource`, чей текст печатает CLI (`stepcast config`) и держат его
+ * `describeSource`, чей текст печатает CLI (`burnex config`) и держат его
  * тесты: файл и плагин называются так же, встроенное умолчание и флаг — своими
  * словами.
  */

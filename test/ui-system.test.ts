@@ -550,7 +550,7 @@ describe('ui-system: маршруты', () => {
     assert.equal(calls.length, 2);
   });
 
-  it('POST /api/system/update порождает stepcast update той же точки входа в корне проекта', async (t) => {
+  it('POST /api/system/update порождает burnex update той же точки входа в корне проекта', async (t) => {
     const bench = await startServer(t, fakeHost());
 
     const { code, json } = await call(bench.server, 'POST', '/api/system/update');
@@ -590,7 +590,7 @@ describe('ui-system: маршруты', () => {
     assert.equal((await call(bench.server, 'POST', '/api/system/update')).code, 202);
   });
 
-  it('автозапуск включается stepcast up --install', async (t) => {
+  it('автозапуск включается burnex up --install', async (t) => {
     const bench = await startServer(t, fakeHost());
 
     const { code, json } = await call(bench.server, 'POST', '/api/system/autostart', { body: '{"enabled":true}' });

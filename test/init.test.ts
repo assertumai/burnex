@@ -20,7 +20,7 @@ function args(flags: ParsedArgs['flags'] = {}): ParsedArgs {
   return { command: 'init', positional: [], flags };
 }
 
-describe('CLI: stepcast init', () => {
+describe('CLI: burnex init', () => {
   // Сценарий: «Файлы созданы»
   it('создаёт stepcast.yml и файл примера работы', () => {
     const project = makeProject();
@@ -76,7 +76,7 @@ describe('CLI: stepcast init', () => {
   });
 });
 
-describe('CLI: stepcast init — очередь предложений не грязнит дерево', () => {
+describe('CLI: burnex init — очередь предложений не грязнит дерево', () => {
   // Сценарий: «Заведённый проект игнорирует очередь»
   it('вносит .stepcast/proposals/ в .gitignore проекта', () => {
     const project = makeProject();
@@ -131,7 +131,7 @@ describe('CLI: stepcast init — очередь предложений не гр
   });
 });
 
-describe('CLI: stepcast init --knowledge fs', () => {
+describe('CLI: burnex init --knowledge fs', () => {
   // Задача 7.3 / Сценарий: «Разворачивание встроенного источника»
   it('создаёт каталог знания, файл правил, единицу-образец и конфигурацию', () => {
     const project = makeProject();

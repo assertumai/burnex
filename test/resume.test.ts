@@ -91,7 +91,7 @@ async function firstRun(
   });
 }
 
-/** Построить план так же, как это делает команда `stepcast resume`. */
+/** Построить план так же, как это делает команда `burnex resume`. */
 function planFor(b: Bed, source: RunResult, from?: string): ResumePlan {
   const expanded = expandPipeline({
     pipelinePath: b.project.path('stepcast.yml'),
@@ -2229,7 +2229,7 @@ jobs:
 
   // Задача 10 / Сценарий: правка внутри объявленной части, входящая в
   // область шага, обесценивает его — причина называет путь с префиксом
-  // каталога части (тот же путь, что печатает `stepcast resume --dry-run`).
+  // каталога части (тот же путь, что печатает `burnex resume --dry-run`).
   it('правка во вложенном репозитории, входящая в область шага, обесценивает шаг', async () => {
     const b = bed(
       { 'public-site/src/api.ts': 'исходное', 'stepcast.yml': NESTED_INPUT_PIPELINE },

@@ -8,9 +8,9 @@ import { gitCommit, gitInit, makeProject } from './helpers.js';
 
 /**
  * `scripts/merge-lanes.mjs` и `scripts/finalize.mjs` больше не несут логику
- * сведения/расчистки (см. `stepcast merge-lanes` и `stepcast backlog settle`,
+ * сведения/расчистки (см. `burnex merge-lanes` и `burnex backlog settle`,
  * покрытые соответственно `test/merge-lanes.test.ts` и
- * `describe('CLI: stepcast backlog settle', …)` в `test/cli-backlog.test.ts`)
+ * `describe('CLI: burnex backlog settle', …)` в `test/cli-backlog.test.ts`)
  * — прямой запуск обязан немедленно отказывать, не подменяя их собой.
  */
 
@@ -27,7 +27,7 @@ describe('scripts/merge-lanes.mjs — заглушка', () => {
     const result = spawnSync(process.execPath, [MERGE_LANES_SCRIPT], { cwd: project.root, encoding: 'utf8' });
 
     assert.notEqual(result.status, 0);
-    assert.match(result.stderr, /stepcast merge-lanes/);
+    assert.match(result.stderr, /burnex merge-lanes/);
     assert.equal(readFileSync(project.path('файл.txt'), 'utf8'), 'исходное\n');
     assert.equal(
       spawnSync('git', ['-C', project.root, 'rev-parse', 'HEAD'], { encoding: 'utf8' }).stdout.trim(),
@@ -47,7 +47,7 @@ describe('scripts/finalize.mjs — заглушка', () => {
     const result = spawnSync(process.execPath, [FINALIZE_SCRIPT], { cwd: project.root, encoding: 'utf8' });
 
     assert.notEqual(result.status, 0);
-    assert.match(result.stderr, /stepcast backlog settle/);
+    assert.match(result.stderr, /burnex backlog settle/);
     assert.equal(readFileSync(project.path('backlog.md'), 'utf8'), '# Очередь\n');
     assert.equal(
       spawnSync('git', ['-C', project.root, 'rev-parse', 'HEAD'], { encoding: 'utf8' }).stdout.trim(),

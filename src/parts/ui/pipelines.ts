@@ -149,7 +149,7 @@ export interface PipelineView {
   readonly projectKey: string;
   readonly projectPath: string;
   /**
-   * Путь файла относительно корня проекта: он же адрес для `stepcast run`. У
+   * Путь файла относительно корня проекта: он же адрес для `burnex run`. У
    * пайплайна пакета — адрес `<пакет>:<имя>` (`packages-directory-layer`): путь
    * пакета home лежит вне проекта, и запуск путём отказал бы как «путь наружу».
    */
@@ -250,7 +250,7 @@ function toModelOriginView(
   modelConfigFile: string | undefined,
   at: string,
 ): PipelineModelOrigin {
-  const hint = 'This is an inconsistency inside the daemon: restart `stepcast up` and report it';
+  const hint = 'This is an inconsistency inside the daemon: restart `burnex up` and report it';
   if (origin === undefined) {
     throw new StepcastError('Resolution did not name the layer that supplied the step model', { at, hint });
   }
@@ -269,7 +269,7 @@ function toEffortOriginView(
   effortConfigFile: string | undefined,
   at: string,
 ): PipelineEffortOrigin {
-  const hint = 'This is an inconsistency inside the daemon: restart `stepcast up` and report it';
+  const hint = 'This is an inconsistency inside the daemon: restart `burnex up` and report it';
   if (origin === undefined) {
     throw new StepcastError('Resolution did not name the layer that supplied the step effort', { at, hint });
   }
@@ -442,7 +442,7 @@ function toView(
   // Запись пайплайна не действует, если раскрытие назвало её среди записей без
   // действия: на уровне пайплайна «хотя бы на одном шаге» — единственный честный
   // счёт. Причина различает «проиграла документу» и «шагов, которым она могла бы
-  // достаться, нет»: та же, что печатает `stepcast config --pipeline`.
+  // достаться, нет»: та же, что печатает `burnex config --pipeline`.
   const pipelineKey = `pipeline_agents.${name ?? ''}`;
   const unused = ctx.unusedAgentEntries.find((entry) => entry.key === pipelineKey);
   const pipelineEntry = name !== undefined && Object.hasOwn(ctx.config.pipelineAgents, name)
@@ -804,7 +804,7 @@ export async function resolveWithCachedKernel(
  * пайплайн раскрывается.
  *
  * Витрина смотрит на все проекты корня прогонов сразу, а конфигурация у неё
- * одна — резолвнутая по каталогу, из которого подняли `stepcast up`. Раньше
+ * одна — резолвнутая по каталогу, из которого подняли `burnex up`. Раньше
  * подмена ограничивалась секцией `project`: `defaults.model` и `backends`
  * влияли только на то, чем шаг исполнится, а не на то, разбирается ли
  * документ, — и разбор оставался верным при чужих умолчаниях. Теперь карточка

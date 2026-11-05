@@ -139,7 +139,7 @@ function call(b: Bed, flags: ParsedArgs['flags'] = {}): { code: number; lines: s
   return { code, lines };
 }
 
-describe('CLI: stepcast context', () => {
+describe('CLI: burnex context', () => {
   // Сценарии: «Отчёт без прогона» и «Прогонов ещё не было»
   it('без предварительного прогона помечает выходы предшественников неизвестными', () => {
     const b = bed();
@@ -703,7 +703,7 @@ describe('assembleContext: запись item_refs', () => {
   });
 });
 
-describe('CLI: stepcast context — item_refs', () => {
+describe('CLI: burnex context — item_refs', () => {
   const PIPELINE_REFS = `
 version: 1
 kind: pipeline

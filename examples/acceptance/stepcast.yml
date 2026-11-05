@@ -1,7 +1,7 @@
 # Приёмка цикла `until` на живом бэкенде.
 #
-#   stepcast lint examples/acceptance/stepcast.yml
-#   stepcast run  examples/acceptance/stepcast.yml
+#   burnex lint examples/acceptance/stepcast.yml
+#   burnex run  examples/acceptance/stepcast.yml
 #   node examples/acceptance/verify.mjs <каталог-прогона-из-вывода>
 #
 # Пайплайн намеренно дёшев: один агентский вызов на итерацию, промпт в одну

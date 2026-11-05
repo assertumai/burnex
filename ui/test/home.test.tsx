@@ -100,7 +100,7 @@ describe('home: разметка', () => {
     assert.match(markup, /no route: no active route leads to target screen:screen-pipelines/);
     assert.match(markup, /awaiting a decision/);
     assert.match(markup, /\$1\.50/);
-    assert.match(markup, /stepcast run/);
+    assert.match(markup, /burnex run/);
   });
 
   it('до прихода обзора числа — многоточие, а не нули', () => {

@@ -12,7 +12,7 @@ import { PIPELINE_SERVICES } from '../services.js';
 import type { ParsedArgs } from '../../../kernel/cli/args.js';
 
 /**
- * `stepcast merge-lanes [<run-id>] --lanes a,b --check "<команда>" [--file
+ * `burnex merge-lanes [<run-id>] --lanes a,b --check "<команда>" [--file
  * backlog.md]` — сведение дорожек командой бинаря: разбор ключей и печать
  * здесь, обход дорожек — в `src/parts/pipeline/domain/lanes/merge.ts`.
  */

@@ -351,7 +351,7 @@ export async function runPluginStep(
       const outcome = raced.outcome ?? {};
       if (outcome.text !== undefined) {
         // То же имя файла, что у командного шага: первая попытка — `stdout.log`,
-        // дальше `stdout.<n>.log` (`exec/runStep.ts`). `stepcast logs` и
+        // дальше `stdout.<n>.log` (`exec/runStep.ts`). `burnex logs` и
         // витрина читают именно его.
         const suffix = plan.attempt === 1 ? '' : `.${plan.attempt}`;
         journal.writeStepFile(stepDirPath, `stdout${suffix}.log`, outcome.text);

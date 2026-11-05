@@ -14,9 +14,9 @@ import { formatDiagnostic } from './lint.js';
 import type { ParsedArgs } from '../../../kernel/cli/args.js';
 
 /**
- * `stepcast propose <цель> --from <файл>` — единственный писатель очереди
+ * `burnex propose <цель> --from <файл>` — единственный писатель очереди
  * предложений (`ui-proposals`, design.md Решение 2, 4, 7), тем же приёмом,
- * каким `stepcast decide` — единственный писатель решения. Пайплайн зовёт её
+ * каким `burnex decide` — единственный писатель решения. Пайплайн зовёт её
  * командным шагом через `$STEPCAST_BIN`, агент — из своего `Bash`, если шаг
  * это право ему дал.
  */
@@ -50,7 +50,7 @@ async function resolveContent(
   const text = (await readStdin?.()) ?? '';
   if (text === '') {
     throw new StepcastError('Содержимого нет: назовите файл --from <файл> либо подайте его на стандартный ввод', {
-      hint: 'stepcast propose <цель> --from <файл> — или конвейером на стандартный ввод',
+      hint: 'burnex propose <цель> --from <файл> — или конвейером на стандартный ввод',
     });
   }
   return text;
@@ -96,7 +96,7 @@ export async function runProposeCommand(
   try {
     const target = args.positional[0];
     if (target === undefined) {
-      throw new StepcastError('Не названа цель: stepcast propose <цель> --from <файл>');
+      throw new StepcastError('Не названа цель: burnex propose <цель> --from <файл>');
     }
 
     const content = await resolveContent(cwd, stringFlag(args.flags, 'from'), readStdin);
@@ -146,7 +146,7 @@ export const row = commandRow<PipelineCommandEnv>(
     name: 'propose',
     spec: {
       description:
-        'предложить правку файла кабинета проекта: stepcast propose <цель> --from <файл> — единственный писатель очереди',
+        'предложить правку файла кабинета проекта: burnex propose <цель> --from <файл> — единственный писатель очереди',
       positional: ['target'],
       flags: {
         from: { kind: 'string', description: 'файл с содержимым предложения — без него читается стандартный ввод' },

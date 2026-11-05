@@ -160,7 +160,7 @@ describe('System: автозапуск', () => {
 
     assert.ok(/aria-checked="false"/.test(html));
     assert.ok(html.includes('data-hint="not-loaded"'));
-    assert.ok(html.includes('stepcast up --install'));
+    assert.ok(html.includes('burnex up --install'));
   });
 
   it('путь в конкретный релиз: подсказка называет путь и current', () => {
@@ -260,7 +260,7 @@ describe('System: обновление', () => {
 
     const timeout = render({ action: { kind: 'update', phase: 'timeout', log: ['--- update', 'npm ERR! boom'] } });
     assert.ok(timeout.includes('did not come back'));
-    assert.ok(timeout.includes('stepcast update'));
+    assert.ok(timeout.includes('burnex update'));
     assert.ok(timeout.includes('npm ERR! boom'));
   });
 
@@ -272,7 +272,7 @@ describe('System: обновление', () => {
 
     const failed = render({ action: { kind: 'update', phase: 'finished', exitCode: 1, log: ['Не удалось получить список тегов'] } });
     assert.ok(failed.includes('exit code 1'));
-    assert.ok(failed.includes('stepcast update'));
+    assert.ok(failed.includes('burnex update'));
     assert.ok(failed.includes('список тегов'));
 
     assert.ok(render({ action: { kind: 'autostart', phase: 'finished', exitCode: null } }).includes('killed or not started'));

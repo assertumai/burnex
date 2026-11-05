@@ -80,7 +80,7 @@ export class ContributionService<T> extends Service implements ContributionRegis
    * `ownerFiber` рядом с `owner` (design.md, Решение 3) — осмотр (`introspect.ts`)
    * приписывает вклад строке по области, а имя владельца одно на все строки
    * плагина не различило бы их. `Registry.owners` этим полем не пользуется и
-   * не расширяется: его читает `stepcast config`, которому фибер не нужен.
+   * не расширяется: его читает `burnex config`, которому фибер не нужен.
    */
   private readonly entries = new Map<string, { readonly value: T; readonly owner: string; readonly ownerFiber: Fiber }>();
   /** Слово для текстов отказа («бэкенда», «вида шага», …) — не имя сервиса, которое ушло бы в текст сырым. */
@@ -116,7 +116,7 @@ export class ContributionService<T> extends Service implements ContributionRegis
   /**
    * Вклады вида с фибером их области — то, чем осмотр (`introspect.ts`)
    * приписывает вклад строке дерева (design.md, Решение 3). Не заменяет
-   * `contributions`/`owner`: `stepcast config` и текст отказов фибер не
+   * `contributions`/`owner`: `burnex config` и текст отказов фибер не
    * читают, а `Registry.owners` им не расширяется.
    */
   entriesWithFiber(): readonly { readonly name: string; readonly value: T; readonly owner: string; readonly ownerFiber: Fiber }[] {

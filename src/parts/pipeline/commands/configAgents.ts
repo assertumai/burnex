@@ -13,7 +13,7 @@ import { backendsKnowingModel } from '../run/budget/priceCatalog.js';
 import { formatColumns } from '../../../kernel/cli/output.js';
 
 /**
- * Часть отчёта `stepcast config --pipeline`: итоговый выбор агента, модели и
+ * Часть отчёта `burnex config --pipeline`: итоговый выбор агента, модели и
  * effort каждого агентского шага с источником каждого значения и список
  * записей пользователя, не повлиявших ни на один шаг
  * (`agent-policy-and-pipeline-agents`, design.md, решение 7).

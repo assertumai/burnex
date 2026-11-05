@@ -9,7 +9,7 @@ import { declaration } from './declaration.js';
 
 /**
  * `GET /api/packages` (`packages-directory-layer`, design.md, Решение 8;
- * `ui-packages-screen`). `packages` — та же сводка, что и `stepcast package list
+ * `ui-packages-screen`). `packages` — та же сводка, что и `burnex package list
  * --json`; `problems` — отказы ресурсов, которые видит только демон со
  * собранными составами; `layers` — каталоги слоёв, чтобы пустой слой подсказал,
  * куда класть пакет. Только чтение — витрина в каталог пакета не пишет.

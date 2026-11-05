@@ -4,8 +4,8 @@
 # и on_exceed: wait. Запускаемый пример лежит в examples/minimal/.
 # архивация. Отказ уводит в разбор.
 #
-#   stepcast lint --budget examples/openspec-change.yml
-#   stepcast run examples/openspec-change.yml --input change=add-oauth-e2e-tests
+#   burnex lint --budget examples/openspec-change.yml
+#   burnex run examples/openspec-change.yml --input change=add-oauth-e2e-tests
 
 version: 1
 kind: pipeline

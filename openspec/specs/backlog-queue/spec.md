@@ -1,6 +1,6 @@
 ## Purpose
 
-Формат файла очереди улучшений, отбор пунктов в работу и команда `stepcast backlog`. Раздел заведён сведением изменения `express-track` и на этот момент описывает только вес пункта: требования формата и отбора придут со сведением изменений `portable-backlog-format`, `backlog-groups` и `backlog-item-names-repo`.
+Формат файла очереди улучшений, отбор пунктов в работу и команда `burnex backlog`. Раздел заведён сведением изменения `express-track` и на этот момент описывает только вес пункта: требования формата и отбора придут со сведением изменений `portable-backlog-format`, `backlog-groups` и `backlog-item-names-repo`.
 
 ## Requirements
 

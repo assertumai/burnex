@@ -3,7 +3,7 @@
 **`minimal/`** — запускается текущим срезом целиком:
 
 ```bash
-stepcast run examples/minimal/stepcast.yml --input topic=сессии
+burnex run examples/minimal/stepcast.yml --input topic=сессии
 ```
 
 Показывает общую сессию агентских шагов, структурированный выход работы,
@@ -13,7 +13,7 @@ stepcast run examples/minimal/stepcast.yml --input topic=сессии
 **`acceptance/`** — приёмка цикла `until` на живом бэкенде:
 
 ```bash
-stepcast run examples/acceptance/stepcast.yml
+burnex run examples/acceptance/stepcast.yml
 node examples/acceptance/verify.mjs <каталог-прогона-из-вывода>
 ```
 
@@ -38,7 +38,7 @@ node examples/acceptance/verify.mjs <каталог-прогона-из-выво
 **`packages/hello/`** — образец пакета: пайплайн, шаг, виджет, дашборд, маршрут
 и каталожный плагин в одном каталоге с манифестом `package.yml`. Скопируйте его
 в `<проект>/.stepcast/packages/hello/` (или в `~/.stepcast/packages/hello/`) и
-выполните `stepcast package list`, затем `stepcast run hello:greet` —
+выполните `burnex package list`, затем `burnex run hello:greet` —
 подробности в [`docs/packages.md`](../docs/packages.md). Проверяется тестом
 `test/example-package.test.ts`.
 

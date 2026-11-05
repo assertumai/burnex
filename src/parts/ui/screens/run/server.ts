@@ -141,7 +141,7 @@ const ResumeBodySchema = z.object({ run: z.string().min(1), from: z.string().min
  * `POST /api/run/resume`: возобновление с выбранной работы. Демон проверяет
  * запрос до порождения — отказ должен оказаться на кнопке, а `202` приходит
  * раньше исполнения, — но файлов прогона не пишет: новый прогон с
- * `resumed_from` создаёт порождённый `stepcast resume`, который перепроверит
+ * `resumed_from` создаёт порождённый `burnex resume`, который перепроверит
  * запрос по свежему состоянию.
  */
 const handleResume: ApiHandler = async (req, res, env) => {

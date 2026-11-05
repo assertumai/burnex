@@ -21,7 +21,7 @@ import { BUILTIN_ROWS } from './rows.js';
  * Наборы входов различаются только строками вызывающего: команды CLI
  * (`src/parts/cli/main.ts`) зовут `loadPlugins`/`inspectPluginTree` без
  * `builtinRows` и состава у себя не называют — им достаётся перечень дефолта
- * `src/parts/rows.ts` и ничего сверх него; `stepcast up` (`src/parts/ui/daemon/kernel.ts`)
+ * `src/parts/rows.ts` и ничего сверх него; `burnex up` (`src/parts/ui/daemon/kernel.ts`)
  * подаёт поверх него `UI_ROWS` параметром. Поэтому строки витрины не попадают
  * в дерево команд CLI, а добавление и изъятие строки дефолта — правка
  * `src/parts/rows.ts`, и только её: ни этот модуль, ни обход

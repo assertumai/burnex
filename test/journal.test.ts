@@ -118,7 +118,7 @@ function sampleStatus(runId: string, overrides: Partial<RunStatus> = {}): RunSta
       },
     ],
     budget: { tokens_used: 1200, tokens_limit: 100000, wallclock_ms: 5000 },
-    resume: { command: `stepcast resume ${shortRunId(runId)} --from build`, blocked_by: 'build' },
+    resume: { command: `burnex resume ${shortRunId(runId)} --from build`, blocked_by: 'build' },
     updated_at: '2026-08-16T10:00:01.000Z',
     ...overrides,
   };
@@ -290,7 +290,7 @@ describe('run-journal: раскладка и состояние', () => {
     assert.ok(failed !== undefined);
     assert.equal(failed.steps[0]?.id, 'compile');
     assert.equal(failed.steps[0]?.attempts[0]?.exit_code, 2);
-    assert.match(status.resume?.command ?? '', /stepcast resume/);
+    assert.match(status.resume?.command ?? '', /burnex resume/);
   });
 
   it('состояние проходит собственную схему', () => {

@@ -235,7 +235,7 @@ export interface RunResult {
   /**
    * Просьба о перезапуске — эффект `restart` решения человека (design.md
    * изменения `user-decision-steps`, решение 4). Цепочку ведёт вызывающая
-   * команда (`stepcast run`/`stepcast resume`), а не сам `runPipeline`: она
+   * команда (`burnex run`/`burnex resume`), а не сам `runPipeline`: она
    * планирует возобновление с этого места и исполняет его тем же процессом.
    */
   readonly restart?: { readonly from: string };
@@ -271,7 +271,7 @@ export async function runPipeline(options: RunOptions): Promise<RunResult> {
   const { config } = options;
 
   const envOverrides = options.envOverrides ?? options.resume?.source.manifest.env_overrides ?? {};
-  // Библиотечный вызов обходит `stepcast run`, а молча проигнорированное
+  // Библиотечный вызов обходит `burnex run`, а молча проигнорированное
   // переопределение хуже отказа.
   validateEnvOverrides(envOverrides, pipeline.env);
 
@@ -304,7 +304,7 @@ export async function runPipeline(options: RunOptions): Promise<RunResult> {
 
   // Секреты разрешаются до `RunJournal.create`, как и предстартовая проверка:
   // прогон без секрета не начинается и не оставляет за собой каталога. Путь
-  // возобновления — этот же: `stepcast resume` приходит сюда с планом, а
+  // возобновления — этот же: `burnex resume` приходит сюда с планом, а
   // значения берутся заново, поэтому ротация токена ключ шага не меняет.
   //
   // Без названных секретов ожидания нет вовсе: журнал по-прежнему создаётся
@@ -759,13 +759,13 @@ export async function runPipeline(options: RunOptions): Promise<RunResult> {
           decisionLatch.value.record.restart_from !== undefined
           ? {
               resume: {
-                command: `stepcast resume ${shortRunId(journal.paths.runId)} --from ${decisionLatch.value.record.restart_from}`,
+                command: `burnex resume ${shortRunId(journal.paths.runId)} --from ${decisionLatch.value.record.restart_from}`,
               },
             }
           : {}
         : {
             resume: {
-              command: `stepcast resume ${shortRunId(journal.paths.runId)} --from ${resumeTarget(pipeline, graph, blocked.id)}`,
+              command: `burnex resume ${shortRunId(journal.paths.runId)} --from ${resumeTarget(pipeline, graph, blocked.id)}`,
               blocked_by: blocked.id,
             },
           }),
@@ -1117,7 +1117,7 @@ export interface RunContext extends RunOptions {
   ) => Promise<StepKindDecisionResult>;
   /**
    * Переписать `status.json` по текущим записям работ. Файлом владеет движок и
-   * только он: подпроцесс `stepcast data` пишет свой `data.json`, а состояние
+   * только он: подпроцесс `burnex data` пишет свой `data.json`, а состояние
    * прогона переписывается здесь — конкурентная запись двух процессов в один
    * файл была бы гонкой.
    */
@@ -2529,7 +2529,7 @@ async function runJobSteps(
       // оставить ниже переиспользованным то, что опиралось на её отсутствие.
       return {
         status: 'failed',
-        reason: `план возобновления считал работу ${job.id} пропущенной условием, как в прошлом прогоне, а условие выполнилось — возобновите без переноса пропуска: stepcast resume --from ${job.id}`,
+        reason: `план возобновления считал работу ${job.id} пропущенной условием, как в прошлом прогоне, а условие выполнилось — возобновите без переноса пропуска: burnex resume --from ${job.id}`,
         terminal: true,
       };
     }
@@ -4212,7 +4212,7 @@ function transferStepOutput(
  * Сложить данные, опубликованные работой, в её запись и переписать состояние.
  *
  * Зовётся после каждого шага — и исполненного, и переиспользованного. Файл
- * `data.json` пишет подпроцесс `stepcast data`, состояние прогона —
+ * `data.json` пишет подпроцесс `burnex data`, состояние прогона —
  * исключительно движок: два процесса, пишущих один `status.json`, наступали
  * бы друг на друга. Отсюда же и живость витрины: она опрашивает корень
  * прогонов по mtime состояния, и данные доезжают до подписи узла ровно тем же
@@ -4225,7 +4225,7 @@ function transferStepOutput(
  * определением, которым движок её исполняет, а не файлом `resolved.json` на
  * диске: иначе шаг, которому доступна файловая система работы, расширял бы
  * себе объявление правкой этого файла. Необъявленный ключ — это `data.json`,
- * написанный в обход команды (`stepcast data` сама такого не допустит), и
+ * написанный в обход команды (`burnex data` сама такого не допустит), и
  * возвращённая причина роняет работу без повторных попыток: файл остался на
  * месте, повтор упёрся бы в то же самое. Объявленные соседи необъявленного
  * ключа в запись всё равно попадают — они и правда опубликованы.

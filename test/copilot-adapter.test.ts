@@ -389,7 +389,7 @@ process.stdout.write(fs.readFileSync(path.join(${JSON.stringify(FIXTURES)}, 'ans
     }
   });
 
-  // Тот же отказ обязан прийти от `stepcast lint`, раньше прогона, — и даже
+  // Тот же отказ обязан прийти от `burnex lint`, раньше прогона, — и даже
   // при флагах конфигурации, включённых вопреки адаптеру.
   it('линт отклоняет output_schema, mcp, enforce: strict и судью на copilot', async () => {
     const { project, calls } = fakeCopilotProject(

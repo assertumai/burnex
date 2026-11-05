@@ -76,7 +76,7 @@ const RelativePathSchema = z
  * очереди, `.` называет корень рабочего дерева. Разбор MUST NOT проверять,
  * что названный каталог объявлен составом: очередь не читает конфигурацию
  * проекта, это проверяет тот, кто разрешает имя в объявление
- * (`stepcast project repos`, `src/parts/pipeline/domain/project/repos.ts`).
+ * (`burnex project repos`, `src/parts/pipeline/domain/project/repos.ts`).
  */
 const RepoListSchema = commaList('repos', { nominative: 'имя', genitive: 'имени' }, RelativePathSchema);
 
@@ -197,7 +197,7 @@ export const BacklogRecordSchema = z
 export type BacklogRecord = z.infer<typeof BacklogRecordSchema>;
 
 /**
- * Объявления репозитория, которые команда `stepcast project repos`
+ * Объявления репозитория, которые команда `burnex project repos`
  * проставляет заполненной дорожке: каталог репозитория и его команда
  * проверки и практика спецификации, пути которой уже склеены от корня
  * рабочего дерева. `pick` этот блок не заполняет — он появляется, только

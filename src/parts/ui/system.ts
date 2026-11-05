@@ -89,7 +89,7 @@ export function systemSystemHost(): SystemHost {
   const home = homedir();
   const engineRoot = enginePackageRoot();
   const manifestPath = installManifestPath(process.env, home);
-  // Местная и быстрая проба способа установки — синхронно, как в `stepcast update`.
+  // Местная и быстрая проба способа установки — синхронно, как в `burnex update`.
   const captureLocal = (step: UpdateStep): string | undefined => {
     const result = spawnSync(step.cmd, [...step.args], { cwd: step.cwd, encoding: 'utf8' });
     return result.status === 0 ? result.stdout : undefined;
@@ -499,7 +499,7 @@ export function createUpdateHold(): UpdateHold {
 }
 
 /**
- * Проверка обновления тем же правилом, что и `stepcast update` (`checkUpdate`).
+ * Проверка обновления тем же правилом, что и `burnex update` (`checkUpdate`).
  * Единственное место витрины, которое ходит в сеть, — по явному запросу,
  * асинхронно и с пределом `CHECK_TIMEOUT_MS` на всю проверку, а не на команду.
  */

@@ -95,7 +95,7 @@ export interface RunPaths {
   readonly anchors: string;
   /**
    * Записи решений (`user-decision-steps`, design.md решение 5): по одному
-   * файлу `<wait_id>.json` на ожидание, пишет только `stepcast decide`.
+   * файлу `<wait_id>.json` на ожидание, пишет только `burnex decide`.
    * Каталог заводится лениво, при первой записи, — большинство прогонов
    * решения не ждут вовсе.
    */

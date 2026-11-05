@@ -64,7 +64,7 @@ export function finalizeInterruptedRun(
         ? {}
         : {
             resume: {
-              command: `stepcast resume ${shortRunId(runId)} --from ${blocked.id}`,
+              command: `burnex resume ${shortRunId(runId)} --from ${blocked.id}`,
               blocked_by: blocked.id,
             },
           }),

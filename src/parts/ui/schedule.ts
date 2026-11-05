@@ -43,7 +43,7 @@ export interface ScheduleEntryView {
   readonly defaultTimezone: boolean;
   /** Ближайший момент срабатывания, ISO в UTC. Нет, если запись не прошла проверку. */
   readonly next?: string;
-  /** Причина отказа теми же словами, что у `stepcast lint`. */
+  /** Причина отказа теми же словами, что у `burnex lint`. */
   readonly error?: string;
   readonly lastRun?: LastScheduledRun;
 }
@@ -117,7 +117,7 @@ type ScheduledManifest = RunManifest & { readonly trigger: NonNullable<RunManife
  */
 /**
  * Путь, по которому сравнивается файл пайплайна. `pipeline_file` записан
- * процессом `stepcast run` из его рабочего каталога, а демон раскрывает
+ * процессом `burnex run` из его рабочего каталога, а демон раскрывает
  * документ от `project.path` журнала: через симлинк или `/var` против
  * `/private/var` на macOS один файл пишется по-разному. Исчезнувший файл
  * остаётся как есть — сравнить его можно только по написанию.

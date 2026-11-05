@@ -32,7 +32,7 @@ export interface RunScope {
 export interface JobScopeEntry {
   readonly status: string;
   readonly output?: unknown;
-  /** Данные, опубликованные работой по ходу исполнения (`stepcast data`). */
+  /** Данные, опубликованные работой по ходу исполнения (`burnex data`). */
   readonly data?: Readonly<Record<string, string>>;
 }
 
@@ -91,7 +91,7 @@ function explain(scope: LateScope) {
     if (path.split('.')[1] === 'data') {
       const published = Object.keys(entry.data ?? {});
       return published.length === 0
-        ? `Работа ${jobId} данных не публиковала: их пишет сама работа командой stepcast data`
+        ? `Работа ${jobId} данных не публиковала: их пишет сама работа командой burnex data`
         : `Работа ${jobId} опубликовала данные ${published.join(', ')}`;
     }
 

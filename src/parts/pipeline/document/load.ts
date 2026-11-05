@@ -185,7 +185,7 @@ function checkSecretDeclarations(rawSecrets: unknown, file: string): void {
       throw new StepcastError(`Секрет ${name} не называет провайдера`, {
         file,
         at: `${at}.provider`,
-        hint: 'Например, provider: env-file; доступные провайдеры показывает stepcast plugins',
+        hint: 'Например, provider: env-file; доступные провайдеры показывает burnex plugins',
       });
     }
     const env = declaration.env;

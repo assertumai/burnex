@@ -195,8 +195,8 @@ function describeCommits(commits: Readonly<Record<string, string>> | undefined):
 }
 
 /**
- * Исход сведения дорожки для `stepcast status` — та же запись, которую пишет
- * `stepcast merge-lanes` (`src/parts/pipeline/domain/lanes/mergeRecord.ts`). Дорожка без
+ * Исход сведения дорожки для `burnex status` — та же запись, которую пишет
+ * `burnex merge-lanes` (`src/parts/pipeline/domain/lanes/mergeRecord.ts`). Дорожка без
  * записи называется дорожкой, сведение которой не выполнялось: молчание об
  * этом читалось бы как «неизвестно», а не как факт прогона.
  */

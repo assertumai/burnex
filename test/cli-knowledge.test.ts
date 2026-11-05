@@ -58,7 +58,7 @@ function unit(id: string, title: string, extra = ''): string {
   return `---\nid: ${id}\ntitle: ${title}\nscope:\n  - src/**\n${extra}status: active\n---\n\nТело ${id}.\n`;
 }
 
-describe('CLI: stepcast knowledge', () => {
+describe('CLI: burnex knowledge', () => {
   // Задача 5.3 / Сценарий: «Оглавление в терминале»
   it('index печатает заголовки без тел', async () => {
     const box = sandbox({ 'knowledge/a.md': unit('a', 'Первая') });
@@ -235,7 +235,7 @@ describe('CLI: stepcast knowledge', () => {
   });
 });
 
-describe('CLI: stepcast knowledge check --publish', () => {
+describe('CLI: burnex knowledge check --publish', () => {
   const OVERFLOWING_CONFIG =
     'project:\n  knowledge:\n    provider: fs\n    dir: knowledge\n    index_max_tokens: 10\n';
 
@@ -325,7 +325,7 @@ describe('CLI: stepcast knowledge check --publish', () => {
   });
 });
 
-describe('CLI: stepcast knowledge check --record', () => {
+describe('CLI: burnex knowledge check --record', () => {
   /** Дерево с одним расхождением по якорю: содержимое пути правлено после закрепления. */
   function staleSandbox(): { box: { root: string; home: string }; anchorFile: string } {
     const box = sandbox({ 'src/a.ts': 'export const a = 1;\n' });

@@ -12,12 +12,12 @@ import { definePlugin, StepcastError, type CliIo, type CommandContribution, type
 
 const hello: CommandContribution = {
   name: 'hello',
-  spec: { description: 'поздороваться с именем: stepcast hello <имя>', positional: ['name'] },
+  spec: { description: 'поздороваться с именем: burnex hello <имя>', positional: ['name'] },
   run(args: ParsedArgs, io: CliIo) {
     const name = args.positional[0];
     if (name === undefined) {
-      throw new StepcastError('Команда hello ждёт имя: stepcast hello <имя>', {
-        hint: 'stepcast hello <имя>',
+      throw new StepcastError('Команда hello ждёт имя: burnex hello <имя>', {
+        hint: 'burnex hello <имя>',
       });
     }
     io.out(`Привет, ${name}!`);

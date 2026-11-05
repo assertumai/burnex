@@ -66,7 +66,7 @@ describe('step-sdk: input/output/publish/log/exec по переменным ок
     assert.deepEqual(JSON.parse(readFileSync(outputPath, 'utf8')), { ok: true, n: 2 });
   });
 
-  it('publish(ключ, значение) неотличим от stepcast data set: та же проверка объявленного состава', async () => {
+  it('publish(ключ, значение) неотличим от burnex data set: та же проверка объявленного состава', async () => {
     const dir = jobDir(['slug']);
 
     await withStepEnv({ STEPCAST_JOB_DIR: dir }, () => {

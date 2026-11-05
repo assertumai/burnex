@@ -26,7 +26,7 @@ function binPath(): string {
 }
 
 /**
- * `stepcast up` — поднять витрину.
+ * `burnex up` — поднять витрину.
  *
  * По умолчанию отсоединяется: смысл наблюдательного пункта в том, что он
  * поднят всегда, а команда, занимающая терминал, этому противоречит — её
@@ -83,7 +83,7 @@ export async function runUpCommand(
     });
     write(`автозапуск установлен: ${plist}`);
     write(`витрина: http://127.0.0.1:${port}`);
-    write('убрать автозапуск: stepcast down --uninstall');
+    write('убрать автозапуск: burnex down --uninstall');
     return ExitCode.ok;
   }
 
@@ -101,7 +101,7 @@ export async function runUpCommand(
 
   write(`витрина: http://127.0.0.1:${port}`);
   write(`процесс: ${pid}`);
-  write('остановить: stepcast down');
+  write('остановить: burnex down');
   return ExitCode.ok;
 }
 

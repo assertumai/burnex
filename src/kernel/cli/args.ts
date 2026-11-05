@@ -113,7 +113,7 @@ export function usage(
   for (const [name, spec] of Object.entries(commands)) {
     if (only !== undefined && only !== name) continue;
     const args = (spec.positional ?? []).map((item) => `<${item}>`).join(' ');
-    lines.push(`  stepcast ${name}${args === '' ? '' : ` ${args}`} — ${spec.description}`);
+    lines.push(`  burnex ${name}${args === '' ? '' : ` ${args}`} — ${spec.description}`);
     for (const [flag, flagSpec] of Object.entries(spec.flags ?? {})) {
       lines.push(`      --${flag} — ${flagSpec.description}`);
     }

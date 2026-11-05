@@ -78,7 +78,7 @@ async function helpLines(project: Project): Promise<readonly string[]> {
 
 /** Тот же перечень без блока одной команды: её строка и следующие за ней строки флагов. */
 function withoutCommandBlock(lines: readonly string[], command: string): readonly string[] {
-  const start = lines.findIndex((line) => line === `stepcast ${command}` || line.startsWith(`stepcast ${command} `));
+  const start = lines.findIndex((line) => line === `burnex ${command}` || line.startsWith(`burnex ${command} `));
   assert.notEqual(start, -1, `команда ${command} обязана быть в справке дефолтного состава`);
   let end = start + 1;
   while (end < lines.length && lines[end]?.startsWith('--') === true) end += 1;
@@ -108,7 +108,7 @@ describe('plugin-tree: патч заменяет строку встроенно
     // пользователя, а не прежнее описание встроенной команды.
     const lines = await helpLines(project);
     assert.ok(
-      lines.includes('stepcast widgets — свой состав виджетов'),
+      lines.includes('burnex widgets — свой состав виджетов'),
       `справка обязана называть команду пользователя: ${lines.join(' | ')}`,
     );
   });
@@ -127,7 +127,7 @@ describe('plugin-tree: патч заменяет строку встроенно
     assert.match(outcome.stderr, /widgets/);
     assert.match(outcome.stderr, /command-widgets/);
     assert.match(outcome.stderr, /заменена патчем состава, не принёсшим этой команды/);
-    assert.match(outcome.stderr, /stepcast plugins/);
+    assert.match(outcome.stderr, /burnex plugins/);
     // Не общая справка: отказ называет строку, а не перечисляет команды.
     assert.doesNotMatch(outcome.stderr, /Неизвестная команда/);
   });
@@ -199,7 +199,7 @@ describe('plugin-tree: строка плагина вставлена перед
     const patched = await helpLines(project);
     const plain = await helpLines(makeProject({}));
 
-    const inserted = 'stepcast own-first — своя команда впереди всех';
+    const inserted = 'burnex own-first — своя команда впереди всех';
     const at = patched.indexOf(inserted);
     assert.notEqual(at, -1, `команда плагина обязана быть в справке: ${patched.join(' | ')}`);
     assert.equal(patched[at + 1], plain[0], 'вставленная строка стоит прямо перед первой командой дефолта');

@@ -73,7 +73,7 @@ function formatProblemLine(runId: string, problem: JournalProblem): string {
   const journalFormat = problem.journalFormat === undefined ? 'нет' : String(problem.journalFormat);
   const remedy =
     problem.kind === 'version-skew'
-      ? '; перезапустите демон: stepcast down && stepcast up'
+      ? '; перезапустите демон: burnex down && burnex up'
       : problem.kind === 'legacy-journal'
         ? '; прогон записан прежней формой журнала — перезапуск не поможет'
         : '';
@@ -165,7 +165,7 @@ interface Fingerprint {
  *
  * Отпечаток обязан покрывать всё, что показывает обзор, иначе изменение
  * останется невидимым навсегда. Признак уборки входит сюда именно поэтому:
- * `stepcast gc` сносит содержимое прогона, не трогая `status.json`, и по
+ * `burnex gc` сносит содержимое прогона, не трогая `status.json`, и по
  * одному лишь mtime состояния уборка неотличима от её отсутствия.
  *
  * По той же причине сюда входит и хранилище расхода: прогон без файлов живёт в

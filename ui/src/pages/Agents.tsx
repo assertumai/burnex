@@ -114,7 +114,7 @@ export function selectableAgent(
   return backend.enabled && (backend.available || connect.has(backend.name));
 }
 
-/** У карточки есть действие «Connect»: бэкенд не подключён, а его адаптер поставляется со Stepcast. */
+/** У карточки есть действие «Connect»: бэкенд не подключён, а его адаптер поставляется с Burnex. */
 export function connectOffered(backend: { readonly available: boolean; readonly plugin?: string }): boolean {
   return !backend.available && backend.plugin !== undefined;
 }
@@ -398,7 +398,7 @@ export function Agents({
   // `refresh` — не украшение: демон держит ответ пробы, пока жив, и держит его
   // одинаково для списка и для отказа. Без явного «перечислить заново»
   // пользователь, починивший причину (поставил агента, поправил `command`,
-  // авторизовался), видел бы прежний отказ до перезапуска `stepcast up`.
+  // авторизовался), видел бы прежний отказ до перезапуска `burnex up`.
   const loadModels = (refresh = false): void => {
     setModelsBusy(true);
     setModelsError(undefined);
@@ -646,7 +646,7 @@ export function Agents({
                 <label className="check agent-connect">
                   <input type="checkbox" checked={connect.has(backend.name)} onChange={(event) => toggleConnect(backend.name, event.target.checked)} />
                   {' '}Connect {backend.name}
-                  <span className="small dim">— adds the adapter shipped with Stepcast; the CLI (<code>{backend.command}</code>) must be installed and signed in separately</span>
+                  <span className="small dim">— adds the adapter shipped with Burnex; the CLI (<code>{backend.command}</code>) must be installed and signed in separately</span>
                 </label>
               ) : null}
             </CardContent>

@@ -208,7 +208,7 @@ describe('user-decision-steps: экран «Решения» — статиче�
     const html = renderToStaticMarkup(<Decisions overview={overview} navigate={() => {}} />);
 
     assert.match(html, /process is not responding/);
-    assert.match(html, /stepcast resume/);
+    assert.match(html, /burnex resume/);
     assert.match(html, /--from apply\/gate/);
   });
 });

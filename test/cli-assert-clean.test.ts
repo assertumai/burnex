@@ -10,7 +10,7 @@ import { gitCommit, gitInit, withHome } from './helpers.js';
 import { tempDir } from './tmp.js';
 
 /**
- * `stepcast assert-clean` не зависит от каталога прогона и ничего не
+ * `burnex assert-clean` не зависит от каталога прогона и ничего не
  * коммитит — проверки идут `run(argv, io)` на настоящем git-дереве, с
  * фальшивым `HOME` (`withHome`), чтобы не подхватить настоящий
  * `~/.stepcast/config.yml` гоняющей машины.
@@ -78,7 +78,7 @@ function headOf(dir: string): string {
   return execFileSync('git', ['-C', dir, 'rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
 }
 
-describe('CLI: stepcast assert-clean', () => {
+describe('CLI: burnex assert-clean', () => {
   it('чистое дерево — код 0', async () => {
     const dir = makeRepo();
     const out = await assertClean(dir, makeHome());

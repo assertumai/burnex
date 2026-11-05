@@ -30,8 +30,8 @@ import { BUILTIN_USE_PREFIX, isBuiltinUse, type TreeRow } from './tree/tree.js';
  *
  * Отказ загрузки прекращает команду целиком, а не пропускает строку молча:
  * пайплайн, объявивший предикат плагина, без него разбирается неверно, а
- * `stepcast config` без него печатает конфигурацию, которой не будет.
- * Исключение — команда осмотра дерева (`stepcast plugins`, `plugin-tree`):
+ * `burnex config` без него печатает конфигурацию, которой не будет.
+ * Исключение — команда осмотра дерева (`burnex plugins`, `plugin-tree`):
  * она переживает отказ загрузки одной из строк (`walkPluginTree` ниже).
  *
  * Плагин применяется областью контекста (`kernel.ctx.plugin`), а не полем
@@ -238,7 +238,7 @@ export function resolveModulePath(row: TreeRow, options: LoadOptions): string {
  * Отказ строки, известный до всякой загрузки (`TreeRow.failure`), — или
  * `undefined`, если такого отказа за строкой не числится. Общий для применения
  * строки (`applyTreeRow`) и для тех, кто показывает состояние строк, не
- * загружая их (`stepcast plugins` с готовым реестром): текст отказа обязан быть
+ * загружая их (`burnex plugins` с готовым реестром): текст отказа обязан быть
  * один и тот же.
  */
 export function rowFailureError(row: TreeRow): StepcastError | undefined {
@@ -897,7 +897,7 @@ export interface LoadResult {
   /**
    * Итог каждой строки дерева, в его порядке (design.md, Решение 10):
    * `resolveWithPlugins`, точка входа CLI и `currentDaemonKernel` доносят их
-   * до `stepcast plugins`/`config` и до состава плагинов витрины, не
+   * до `burnex plugins`/`config` и до состава плагинов витрины, не
    * пересобирая дерево заново.
    */
   readonly outcomes: readonly RowOutcome[];
@@ -961,7 +961,7 @@ export async function applyPluginTree(kernel: Kernel, resolved: PluginTreeSource
 
 /**
  * Пройти дерево, как это делает `applyPluginTree`, но не бросая исключение на
- * первом отказе: команда осмотра (`stepcast plugins`) обязана напечатать
+ * первом отказе: команда осмотра (`burnex plugins`) обязана напечатать
  * дерево целиком и тогда, когда одна из строк не загрузилась (design.md,
  * Решение 8). Отказ строки, найденной обходом каталога плагинов, — её
  * состояние: соседние строки, включая идущие следом, применяются как обычно

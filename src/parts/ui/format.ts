@@ -8,7 +8,7 @@
  * по которому здесь же живут `routes.ts` и `grouping.ts`.
  *
  * Прочерк вместо нуля на месте несообщённого значения — то же правило, что и
- * в `stepcast usage` (`src/parts/pipeline/commands/usage.ts`): несообщённая бэкендом
+ * в `burnex usage` (`src/parts/pipeline/commands/usage.ts`): несообщённая бэкендом
  * цена, показанная как `$0.00`, врёт о расходе, а прочерк — честно говорит
  * «неизвестно».
  */
@@ -85,7 +85,7 @@ export function fmtMoney(usd: number | null | undefined): string {
 
 /**
  * Сумма с пометкой источника: оценка по каталогу и смесь с ней печатаются
- * с `≈` — тем же знаком, что в `stepcast usage`. Без источника (прогон
+ * с `≈` — тем же знаком, что в `burnex usage`. Без источника (прогон
  * прежней формы) цена сообщённая.
  */
 export function fmtCost(usd: number | null | undefined, source?: string): string {

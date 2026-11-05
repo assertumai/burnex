@@ -10,7 +10,7 @@ import { gitCommit, gitInit, withHome } from './helpers.js';
 import { tempDir } from './tmp.js';
 
 /**
- * `stepcast project repos` — как `assert-clean` (`test/cli-assert-clean.test.ts`):
+ * `burnex project repos` — как `assert-clean` (`test/cli-assert-clean.test.ts`):
  * настоящее git-дерево, фальшивый `HOME`. В отличие от неё, команда асинхронна
  * и читает стандартный ввод — `CliIo.readStdin` подменяется фиктивным
  * читателем, а не настоящим процессом.
@@ -87,7 +87,7 @@ function filledLane(slug: string, repos: readonly string[] = []): unknown {
 
 const EMPTY_LANE = { filled: false, slug: '', title: '', group: '', track: '', item: null };
 
-describe('CLI: stepcast project repos', () => {
+describe('CLI: burnex project repos', () => {
   it('дорожка с вложенным репозиторием получает его объявления', async () => {
     const dir = makeRepo(WITH_BACKEND);
     const document = { lanes: { a: filledLane('an-item', ['backend']) } };

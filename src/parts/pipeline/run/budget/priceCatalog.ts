@@ -168,7 +168,7 @@ const catalogBackendsByModel = new Map<string, Map<string, Set<string>>>();
  * Нужен раскрытию пайплайна как статическое знание «чья эта модель»
  * (`agent-policy-and-pipeline-agents`, решение 4): процессов CLI он не
  * запускает, а каталог читает один раз на путь — раскрытие зовут линт,
- * витрина и `stepcast config`, и перечитывать файл на каждом шаге незачем.
+ * витрина и `burnex config`, и перечитывать файл на каждом шаге незачем.
  */
 export function backendsKnowingModel(model: string, path: string = priceCatalogPath()): ReadonlySet<string> {
   let index = catalogBackendsByModel.get(path);

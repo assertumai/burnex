@@ -124,7 +124,7 @@ export async function runResumeCommand(
       return ExitCode.ok;
     }
 
-    // Отмена — тем же приёмом, что у `stepcast run`: возобновлённый прогон
+    // Отмена — тем же приёмом, что у `burnex run`: возобновлённый прогон
     // останавливается на шаге решения так же, как первый, и выйти из него
     // Ctrl-C обязан так же.
     const controller = new AbortController();

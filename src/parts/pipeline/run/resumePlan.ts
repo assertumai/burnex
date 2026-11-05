@@ -1346,7 +1346,7 @@ export interface ResumePlanResult {
 /**
  * Собрать план возобновления от исходного прогона до готового `ResumePlan`.
  *
- * Общий путь для `stepcast resume` и `stepcast status --explain`: раскрытие
+ * Общий путь для `burnex resume` и `burnex status --explain`: раскрытие
  * пайплайна, снятие якоря дерева и вычисление изменений, вызов
  * `buildResumePlan` — один и тот же код, чтобы объяснение и решение не могли
  * разойтись.

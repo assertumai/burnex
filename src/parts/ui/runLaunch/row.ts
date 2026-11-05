@@ -15,7 +15,7 @@ import { screenRow, type ApiHandler } from '../screens/registry.js';
  * принимает ничего сверх ключа проекта и имени файла, и запустить
  * произвольную команду через него нельзя.
  *
- * Необязательные `inputs` доезжают до `stepcast run` ключами `--input`: так
+ * Необязательные `inputs` доезжают до `burnex run` ключами `--input`: так
  * доска запускает пайплайн для названного пункта очереди. Значения не
  * исполняются оболочкой — дочерний процесс порождается списком argv, — но
  * форма их всё равно проверена: имя входа и одна строка значения.
@@ -55,17 +55,17 @@ const PostBodySchema = z
     inputs: InputsSchema.optional(),
     /**
      * Переопределения объявленного `env:` пайплайна на этот прогон. Допустимость
-     * ключа проверяет дочерний `stepcast run` — у него есть раскрытый
+     * ключа проверяет дочерний `burnex run` — у него есть раскрытый
      * пайплайн; здесь — только форма: имя переменной и одна строка.
      */
     env: EnvSchema.optional(),
     /**
-     * Shadow-режим: дочерний `stepcast run` получает `--shadow`. Наличие
+     * Shadow-режим: дочерний `burnex run` получает `--shadow`. Наличие
      * `external` у шагов проверяет он сам — здесь только форма значения.
      */
     shadow: z.boolean().optional(),
     /**
-     * Агент на один прогон: дочерний `stepcast run` получает `--agent`. Имя
+     * Агент на один прогон: дочерний `burnex run` получает `--agent`. Имя
      * бэкенда он проверяет сам; здесь — только форма, и ведущий дефис в неё не
      * входит: `--shadow` не должен стать значением, которое разбор флагов
      * прочтёт как следующий флаг.
@@ -114,7 +114,7 @@ const handlePost: ApiHandler = async (req, res, env) => {
     const name = parsed.data.pipeline.slice(STEPCAST_PIPELINE_PREFIX.length);
     const known = packagedPipelineNames();
     if (!known.includes(name)) {
-      sendJson(res, 400, { error: `Pipeline stepcast:${name} is not shipped by the stepcast package. The package ships: ${known.join(', ')}` });
+      sendJson(res, 400, { error: `Pipeline stepcast:${name} is not shipped by the burnex package. The package ships: ${known.join(', ')}` });
       return;
     }
   } else {

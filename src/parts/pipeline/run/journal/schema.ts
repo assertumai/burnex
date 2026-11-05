@@ -141,12 +141,12 @@ export const DecisionRecordSchema = z
 export type DecisionRecord = z.infer<typeof DecisionRecordSchema>;
 
 /**
- * Форма файла `decisions/<wait_id>.json`, которым `stepcast decide` пишет
+ * Форма файла `decisions/<wait_id>.json`, которым `burnex decide` пишет
  * решение (design.md, решение 5): исход, причина отклонения, шаг перезапуска.
  * Автор — всегда человек; поле `by` в записи шага пишет читающая сторона, не
  * файл. Не входит в отпечаток формата журнала (`journal/format.ts`): каталог
  * `decisions/` — не файл прогона, который читают посторонние инструменты
- * версией движка, а канал ровно между `stepcast decide` и ждущим процессом.
+ * версией движка, а канал ровно между `burnex decide` и ждущим процессом.
  */
 export const DecisionRequestFileSchema = z
   .object({
@@ -368,7 +368,7 @@ export const JobRecordSchema = z
     /** Метка обвязки, объявленная на месте подключения работы. У работы без lane отсутствует. */
     lane: z.string().optional(),
     /**
-     * Данные, опубликованные работой по ходу исполнения (`stepcast data`).
+     * Данные, опубликованные работой по ходу исполнения (`burnex data`).
      * Складываются сюда движком после каждого шага: файл `data.json` пишет
      * подпроцесс, а `status.json` принадлежит движку и переписывается им на
      * каждом событии журнала — конкурентная запись была бы гонкой.

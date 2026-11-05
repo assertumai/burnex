@@ -10,7 +10,7 @@
 `.stepcast/config.yml` этого репозитория он **не объявляется**: движок петли
 саморазвития зафиксирован снимком, модуль лежит в `dist/` рабочего дерева и до
 сборки не существует, а отказ загрузки плагина прекращает любую команду — в том
-числе `stepcast data`, которую агент зовёт внутри шага. Поэтому приёмка идёт из
+числе `burnex data`, которую агент зовёт внутри шага. Поэтому приёмка идёт из
 отдельного каталога с собственной конфигурацией.
 
 ## Как запускать
@@ -24,14 +24,14 @@ T=$(mktemp -d) && mkdir -p "$T/.stepcast" && printf 'plugins: ["%s/dist/src/back
 ```
 
 ```bash
-cd "$T" && stepcast config | grep codex
+cd "$T" && burnex config | grep codex
 ```
 
 Ожидается запись `backends.codex.*` с источником `plugin:codex` и сам плагин в
 перечне загруженных.
 
 ```bash
-cd "$T" && stepcast lint /путь/к/stepcast/examples/codex/stepcast.yml && stepcast run /путь/к/stepcast/examples/codex/stepcast.yml
+cd "$T" && burnex lint /путь/к/stepcast/examples/codex/stepcast.yml && burnex run /путь/к/stepcast/examples/codex/stepcast.yml
 ```
 
 ## Что сверить по журналу прогона

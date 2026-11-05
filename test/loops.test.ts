@@ -422,7 +422,7 @@ jobs:
 });
 
 describe('job-group-loops: читатели журнала', () => {
-  it('stepcast status и usage читают прогон с проходами', async () => {
+  it('burnex status и usage читают прогон с проходами', async () => {
     const project = makeProject({ 'counter.txt': '0\n', 'stepcast.yml': checkFix({ threshold: 1, max: 3 }) });
     // Корень прогонов остаётся умолчанием конфигурации проекта: команды ищут прогон по нему.
     const result = await runPipeline({

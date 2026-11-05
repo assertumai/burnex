@@ -282,7 +282,7 @@ function PipelineCard({
               fail_fast <b>{pipeline.failFast ? 'yes' : 'no'}</b>
             </span>
           )}
-          <span className="mono">stepcast run {pipeline.file}</span>
+          <span className="mono">burnex run {pipeline.file}</span>
         </div>
 
         {pipeline.graph === undefined ? null : (

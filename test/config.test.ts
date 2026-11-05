@@ -153,7 +153,7 @@ describe('stepcast-configuration', () => {
     assert.equal(resolveIn(aboveBuiltin).config.limits.costMicroUsd, 100_000_000);
   });
 
-  it('печатает limits.cost в отчёте stepcast config', () => {
+  it('печатает limits.cost в отчёте burnex config', () => {
     const resolved = resolveIn(sandbox({}));
     const lines = renderConfigReport(resolved);
     assert.ok(lines.some((line) => line.includes('limits.cost') && line.includes('$100.00')));
@@ -358,7 +358,7 @@ describe('stepcast-configuration', () => {
     assert.doesNotThrow(() => resolveIn(box));
   });
 
-  it('печатает project.check в отчёте stepcast config с файлом-источником', () => {
+  it('печатает project.check в отчёте burnex config с файлом-источником', () => {
     const box = sandbox({ project: 'project:\n  check: npm run check\n' });
     const lines = renderConfigReport(resolveIn(box));
     const line = lines.find((item) => item.startsWith('project.check'));
@@ -493,7 +493,7 @@ describe('stepcast-configuration', () => {
     );
   });
 
-  it('печатает project.spec.check в отчёте stepcast config рядом с spec.tool', () => {
+  it('печатает project.spec.check в отчёте burnex config рядом с spec.tool', () => {
     const box = sandbox({
       project: 'project:\n  spec:\n    tool: openspec\n    check: openspec validate "$SPEC_CHANGE" --strict\n',
     });
@@ -584,7 +584,7 @@ describe('stepcast-configuration', () => {
   });
 
   // Задача 1.8 / Сценарий: «Отчёт печатает имена, а не счётчик»
-  it('печатает project.tools в отчёте stepcast config именами инструментов', () => {
+  it('печатает project.tools в отчёте burnex config именами инструментов', () => {
     const box = sandbox({ project: 'project:\n  tools: [npm, npx, node]\n' });
     const lines = renderConfigReport(resolveIn(box));
     const line = lines.find((item) => item.startsWith('project.tools'));
@@ -701,7 +701,7 @@ describe('stepcast-configuration', () => {
   });
 
   // Задача 1.8 / Сценарий: «Отчёт печатает пути, а не счётчик»
-  it('печатает project.edit_paths в отчёте stepcast config составом путей', () => {
+  it('печатает project.edit_paths в отчёте burnex config составом путей', () => {
     const box = sandbox({ project: 'project:\n  edit_paths: [src/**, test/**, package.json]\n' });
     const lines = renderConfigReport(resolveIn(box));
     const line = lines.find((item) => item.startsWith('project.edit_paths'));
@@ -848,7 +848,7 @@ describe('stepcast-configuration', () => {
   });
 
   // Задача 1.9 / Сценарий: «Отчёт печатает имена, а не счётчик»
-  it('печатает project.nested_repos в отчёте stepcast config именами каталогов', () => {
+  it('печатает project.nested_repos в отчёте burnex config именами каталогов', () => {
     const box = sandbox({ project: 'project:\n  nested_repos: [public-site, vendor/sdk]\n' });
     const lines = renderConfigReport(resolveIn(box));
     const line = lines.find((item) => item.startsWith('project.nested_repos'));
@@ -967,7 +967,7 @@ describe('stepcast-configuration: объектная форма project.nested_r
     );
   });
 
-  it('печатает объявление вложенного репозитория в отчёте stepcast config', () => {
+  it('печатает объявление вложенного репозитория в отчёте burnex config', () => {
     const box = sandbox({ project: OBJECT_ITEM });
     const lines = renderConfigReport(resolveIn(box));
     const line = lines.find((item) => item.startsWith('project.nested_repos'));
@@ -1289,7 +1289,7 @@ describe('stepcast-configuration: таблица раннеров', () => {
     });
   });
 
-  it('stepcast config печатает действующий wrapper значением', () => {
+  it('burnex config печатает действующий wrapper значением', () => {
     const box = sandbox({});
     const lines = renderConfigReport(resolveIn(box));
     const wrapper = lines.find((line) => line.startsWith('runners.node.wrapper'));
@@ -1374,7 +1374,7 @@ describe('stepcast-configuration: таблица раннеров', () => {
   // называет действующую команду и расширения, а не их количество: иначе
   // единственная команда, отвечающая на вопрос «чем исполнится .py», ответа
   // не даёт, и происхождение перехваченного расширения не с чем сверить.
-  it('stepcast config печатает команду раннера и его расширения значениями', () => {
+  it('burnex config печатает команду раннера и его расширения значениями', () => {
     const box = sandbox({
       project: 'runners:\n  uv:\n    command: [uv, run, --script]\n    extensions: [".py"]\n',
     });

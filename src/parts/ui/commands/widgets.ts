@@ -9,7 +9,7 @@ import { commandRow } from '../../../kernel/cli/commandRow.js';
 import type { ParsedArgs } from '../../../kernel/cli/args.js';
 
 /**
- * `stepcast widgets [--json]` — состав виджетов проекта: имя, файл, голые
+ * `burnex widgets [--json]` — состав виджетов проекта: имя, файл, голые
  * спецификаторы и то, какие имена среди них действующая таблица не несёт
  * (`widget-migration`, «Команда печатает состав виджетов проекта и их
  * разрешимость»). Тот же разбор, что видит демон (`src/parts/ui/widgets.ts`,
