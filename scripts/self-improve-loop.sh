@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Ведёт петлю саморазвития без человека: собирает движок из последнего коммита
-# ветки копии, запускает заход .stepcast/pipelines/self-improve.yml и
+# ветки копии, запускает заход .burnex/pipelines/self-improve.yml и
 # повторяет, пока заходы что-то коммитят в ветку.
 #
 # Запуск (на macOS — под caffeinate, иначе машина уснёт посреди ночи):
@@ -10,7 +10,7 @@
 # Переменные:
 #   MAX_RUNS                  потолок итераций, по умолчанию 20
 #   BURNEX_LOOP_ENGINE_DIR  каталог worktree движка; по умолчанию
-#                             <git common dir>/stepcast-loop-engine;
+#                             <git common dir>/burnex-loop-engine;
 #                             относительный путь считается от текущего каталога
 #
 # Каждая итерация идёт на движке, собранном из коммита, а не из рабочего
@@ -75,9 +75,9 @@ if [ -n "$BURNEX_LOOP_ENGINE_DIR" ]; then
     *) ENGINE_DIR="$PWD/$BURNEX_LOOP_ENGINE_DIR" ;;
   esac
 else
-  ENGINE_DIR="$(git -C "$REPO_DIR" rev-parse --path-format=absolute --git-common-dir)/stepcast-loop-engine"
+  ENGINE_DIR="$(git -C "$REPO_DIR" rev-parse --path-format=absolute --git-common-dir)/burnex-loop-engine"
 fi
-LOCK_SHA_FILE="$ENGINE_DIR/.stepcast-loop-lock.sha"
+LOCK_SHA_FILE="$ENGINE_DIR/.burnex-loop-lock.sha"
 
 branch_tip() { git -C "$REPO_DIR" rev-parse --verify --quiet "refs/heads/$BRANCH"; }
 
@@ -122,7 +122,7 @@ for ((i = 1; i <= MAX_RUNS; i++)); do
 
   # Код прогона нужен значением, а не падением скрипта.
   run_code=0
-  (cd "$REPO_DIR" && node "$ENGINE_DIR/dist/src/bin.js" run .stepcast/pipelines/self-improve.yml --input "onto=$BRANCH") \
+  (cd "$REPO_DIR" && node "$ENGINE_DIR/dist/src/bin.js" run .burnex/pipelines/self-improve.yml --input "onto=$BRANCH") \
     || run_code=$?
   ITERATIONS=$i
 

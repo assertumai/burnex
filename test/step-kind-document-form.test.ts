@@ -72,7 +72,7 @@ async function run(
   const runsRoot = tempDir('runs-');
   const config = project.config;
   return runPipeline({
-    expanded: expandPipeline({ pipelinePath: project.path('stepcast.yml'), config, registry }),
+    expanded: expandPipeline({ pipelinePath: project.path('burnex.yml'), config, registry }),
     config: { ...config, runs: { ...config.runs, root: runsRoot } },
     projectRoot: project.root,
     cwd: project.root,
@@ -84,7 +84,7 @@ describe('step-kind-document-form: узнавание и разбор', () => {
   it('шаг узнан по занятым ключам, поля — результат parse, исполнитель получает их input.fields', async () => {
     const seen: unknown[] = [];
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 version: 1
 kind: pipeline
 name: форма-документа
@@ -103,7 +103,7 @@ jobs:
       },
     });
 
-    const { pipeline } = expandPipeline({ pipelinePath: project.path('stepcast.yml'), config: project.config, registry });
+    const { pipeline } = expandPipeline({ pipelinePath: project.path('burnex.yml'), config: project.config, registry });
     const step = pipeline.jobs[0]?.steps[0];
     assert.ok(step !== undefined && step.kind === 'plugin');
     assert.equal(step.name, 'deploy-kind');
@@ -122,7 +122,7 @@ jobs:
     // Диагностика неизвестного вида: другой, по-настоящему нераспознанный шаг
     // в том же реестре обязана назвать deploy-kind среди доступных.
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 version: 1
 kind: pipeline
 name: форма-документа
@@ -134,7 +134,7 @@ jobs:
 `,
     });
     assert.throws(
-      () => expandPipeline({ pipelinePath: project.path('stepcast.yml'), config: project.config, registry }),
+      () => expandPipeline({ pipelinePath: project.path('burnex.yml'), config: project.config, registry }),
       (error: unknown) => {
         assert.ok(error instanceof StepcastError);
         assert.match(error.hint ?? '', /deploy-kind/);
@@ -146,9 +146,9 @@ jobs:
     // хотя это имя нигде в документе не написано.
     const bed = makeJournalBed();
     seedRun(bed.runsRoot, bed.projectRoot, { runId: 'a' });
-    mkdirSync(join(bed.projectRoot, '.stepcast', 'plugins'), { recursive: true });
+    mkdirSync(join(bed.projectRoot, '.burnex', 'plugins'), { recursive: true });
     writeFileSync(
-      join(bed.projectRoot, '.stepcast', 'plugins', 'deploy.mjs'),
+      join(bed.projectRoot, '.burnex', 'plugins', 'deploy.mjs'),
       `
 export default {
   name: 'deploy-steps',
@@ -169,9 +169,9 @@ export default {
 };
 `,
     );
-    writeFileSync(join(bed.projectRoot, '.stepcast', 'config.yml'), 'plugins: ["./plugins/deploy.mjs"]\n');
+    writeFileSync(join(bed.projectRoot, '.burnex', 'config.yml'), 'plugins: ["./plugins/deploy.mjs"]\n');
     writeFileSync(
-      join(bed.projectRoot, 'stepcast.yml'),
+      join(bed.projectRoot, 'burnex.yml'),
       `
 version: 1
 kind: pipeline
@@ -197,7 +197,7 @@ jobs:
 
   it('шаг, узнанный test, но не отвечающий document.schema, — отказ называет вид, поле, адрес шага и владельца', async () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 version: 1
 kind: pipeline
 name: форма-документа
@@ -212,7 +212,7 @@ jobs:
     const registry = await documentStepKindRegistry();
 
     assert.throws(
-      () => expandPipeline({ pipelinePath: project.path('stepcast.yml'), config: project.config, registry }),
+      () => expandPipeline({ pipelinePath: project.path('burnex.yml'), config: project.config, registry }),
       (error: unknown) => {
         assert.ok(error instanceof StepcastError);
         assert.match(error.message, /deploy-kind/);
@@ -226,7 +226,7 @@ jobs:
 
   it('parse, бросивший исключение, даёт отказ разбора с тем же составом, а не необработанное исключение', async () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 version: 1
 kind: pipeline
 name: форма-документа
@@ -256,7 +256,7 @@ jobs:
     });
 
     assert.throws(
-      () => expandPipeline({ pipelinePath: project.path('stepcast.yml'), config: project.config, registry }),
+      () => expandPipeline({ pipelinePath: project.path('burnex.yml'), config: project.config, registry }),
       (error: unknown) => {
         assert.ok(error instanceof StepcastError);
         assert.match(error.message, /deploy-kind/);
@@ -270,7 +270,7 @@ jobs:
 
   it('подстановка параметра в занятом ключе раскрыта до parse — тип сохранён, а не строка', async () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 version: 1
 kind: pipeline
 name: форма-документа
@@ -286,7 +286,7 @@ jobs:
     });
     const registry = await documentStepKindRegistry();
 
-    const { pipeline } = expandPipeline({ pipelinePath: project.path('stepcast.yml'), config: project.config, registry });
+    const { pipeline } = expandPipeline({ pipelinePath: project.path('burnex.yml'), config: project.config, registry });
     const step = pipeline.jobs[0]?.steps[0];
     assert.ok(step !== undefined && step.kind === 'plugin');
     // Общий проход подстановок вернул бы строку «42» — типизированный проход
@@ -296,7 +296,7 @@ jobs:
 
   it('отложенная подстановка откладывает проверку схемами до попытки: шаг есть в модели, отказ приходит от exec/pluginStep.ts', async () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 version: 1
 kind: pipeline
 name: форма-документа
@@ -312,7 +312,7 @@ jobs:
 
     // Схема не проверена статически (значение ещё содержит подстановку) — шаг
     // тем не менее существует в модели, а `parse` уже вызван.
-    const { pipeline } = expandPipeline({ pipelinePath: project.path('stepcast.yml'), config: project.config, registry });
+    const { pipeline } = expandPipeline({ pipelinePath: project.path('burnex.yml'), config: project.config, registry });
     const step = pipeline.jobs[0]?.steps[0];
     assert.ok(step !== undefined && step.kind === 'plugin');
 
@@ -333,7 +333,7 @@ jobs:
 
   it('отложенная подстановка, чьё окончательное значение не проходит схему fields, отказывает при попытке — с адресом ключа и составом, как у прежней проверки', async () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 version: 1
 kind: pipeline
 name: форма-документа-отложенная
@@ -377,7 +377,7 @@ jobs:
     // Имя вида в документе не звучит: `jobs.build.steps.0.deploy-kind` назвал
     // бы путь, которого в файле нет (Решение 6).
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 version: 1
 kind: pipeline
 name: форма-документа
@@ -390,7 +390,7 @@ jobs:
 `,
     });
     const registry = await documentStepKindRegistry();
-    const { pipeline } = expandPipeline({ pipelinePath: project.path('stepcast.yml'), config: project.config, registry });
+    const { pipeline } = expandPipeline({ pipelinePath: project.path('burnex.yml'), config: project.config, registry });
 
     assert.throws(
       () =>
@@ -443,7 +443,7 @@ describe('step-kind-document-form: занятые ключи и обязател
 
   it('ключ-спутник необязателен: шаг без него разбирается схемой документа, а не отклоняется ветвью', async () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 version: 1
 kind: pipeline
 name: ключ-спутник
@@ -456,7 +456,7 @@ jobs:
     });
     const registry = await documentStepKindRegistry(companionKind());
 
-    const { pipeline } = expandPipeline({ pipelinePath: project.path('stepcast.yml'), config: project.config, registry });
+    const { pipeline } = expandPipeline({ pipelinePath: project.path('burnex.yml'), config: project.config, registry });
     const step = pipeline.jobs[0]?.steps[0];
     assert.ok(step !== undefined && step.kind === 'plugin');
     assert.deepEqual(step.fields, { target: 'prod' });
@@ -464,7 +464,7 @@ jobs:
 
   it('оба ключа на месте — разбираются оба', async () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 version: 1
 kind: pipeline
 name: ключ-спутник
@@ -478,7 +478,7 @@ jobs:
     });
     const registry = await documentStepKindRegistry(companionKind());
 
-    const { pipeline } = expandPipeline({ pipelinePath: project.path('stepcast.yml'), config: project.config, registry });
+    const { pipeline } = expandPipeline({ pipelinePath: project.path('burnex.yml'), config: project.config, registry });
     const step = pipeline.jobs[0]?.steps[0];
     assert.ok(step !== undefined && step.kind === 'plugin');
     assert.deepEqual(step.fields, { target: 'prod', to: 'staging' });
@@ -488,7 +488,7 @@ jobs:
     // Тот же вид, но `to` объявлен обязательным: отказ обязан звучать словами
     // вклада, а не дампом объединения ветвей шага (Решение 6).
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 version: 1
 kind: pipeline
 name: ключ-спутник
@@ -502,7 +502,7 @@ jobs:
     const registry = await documentStepKindRegistry();
 
     assert.throws(
-      () => expandPipeline({ pipelinePath: project.path('stepcast.yml'), config: project.config, registry }),
+      () => expandPipeline({ pipelinePath: project.path('burnex.yml'), config: project.config, registry }),
       (error: unknown) => {
         assert.ok(error instanceof StepcastError);
         assert.match(error.message, /Шаг вида deploy-kind не соответствует его форме/);
@@ -515,7 +515,7 @@ jobs:
 
   it('ключ рядом с занятыми, которого вид не объявлял, отклонён разбором документа', async () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 version: 1
 kind: pipeline
 name: ключ-спутник
@@ -531,7 +531,7 @@ jobs:
     const registry = await documentStepKindRegistry();
 
     assert.throws(
-      () => expandPipeline({ pipelinePath: project.path('stepcast.yml'), config: project.config, registry }),
+      () => expandPipeline({ pipelinePath: project.path('burnex.yml'), config: project.config, registry }),
       (error: unknown) => {
         assert.ok(error instanceof StepcastError);
         assert.match(error.message, /unknown_key/);
@@ -566,7 +566,7 @@ describe('step-kind-document-form: узнавание не спрашивает 
     );
 
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 version: 1
 kind: pipeline
 name: самозванец
@@ -579,7 +579,7 @@ jobs:
 `,
     });
 
-    const { pipeline } = expandPipeline({ pipelinePath: project.path('stepcast.yml'), config: project.config, registry });
+    const { pipeline } = expandPipeline({ pipelinePath: project.path('burnex.yml'), config: project.config, registry });
     const step = pipeline.jobs[0]?.steps[0];
     assert.ok(step !== undefined && step.kind === 'plugin');
     assert.deepEqual(step.fields, { target: 'prod', to: 'staging' });

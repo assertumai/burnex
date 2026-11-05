@@ -154,7 +154,7 @@ function explainProject(pipelinePath: string) {
     if (!PROJECT_NAMES.includes(path)) {
       return `Пространство project содержит только ${PROJECT_NAMES.join(', ')}`;
     }
-    return `Объявите project.${path} верхним ключом пайплайна (${pipelinePath}) либо в .stepcast/config.yml`;
+    return `Объявите project.${path} верхним ключом пайплайна (${pipelinePath}) либо в .burnex/config.yml`;
   };
 }
 
@@ -280,11 +280,11 @@ function resolveKnowledge(
 
 /** Корни трёх слоёв разрешения шага `script` (design.md, решение 3). */
 export interface ScriptRoots {
-  /** `<project>/.stepcast/scripts/` ищется от этого каталога. */
+  /** `<project>/.burnex/scripts/` ищется от этого каталога. */
   readonly project: string;
-  /** `<home>/.stepcast/scripts/` ищется от этого каталога. */
+  /** `<home>/.burnex/scripts/` ищется от этого каталога. */
   readonly home: string;
-  /** Встроенный каталог пакета целиком — без `.stepcast/scripts/` внутри него. */
+  /** Встроенный каталог пакета целиком — без `.burnex/scripts/` внутри него. */
   readonly builtin: string;
   /**
    * Указатель пакетов, построенный один раз на раскрытие (`expandPipeline`).

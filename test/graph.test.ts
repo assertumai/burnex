@@ -13,8 +13,8 @@ import type { Pipeline } from '../src/parts/pipeline/document/model.js';
 import { makeProject } from './helpers.js';
 
 function pipelineOf(yaml: string): Pipeline {
-  const project = makeProject({ 'stepcast.yml': yaml });
-  return expandPipeline({ pipelinePath: project.path('stepcast.yml'), config: project.config }).pipeline;
+  const project = makeProject({ 'burnex.yml': yaml });
+  return expandPipeline({ pipelinePath: project.path('burnex.yml'), config: project.config }).pipeline;
 }
 
 const STEP = '{ id: c, run: [echo, ok] }';

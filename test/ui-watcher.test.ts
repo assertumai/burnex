@@ -236,7 +236,7 @@ describe('ui-dashboard: наблюдатель за корнем прогоно�
   /**
    * Найдено ревью: между записью манифеста и первой записью состояния лежат
    * секунды, а опрос идёт раз в секунду. Строка «status.json — файл не
-   * найден» о здоровом прогоне легла бы в `~/.stepcast/ui.log` навсегда и
+   * найден» о здоровом прогоне легла бы в `~/.burnex/ui.log` навсегда и
    * обесценила бы правило «одна строка на беду».
    */
   it('не печатает в лог ещё не записанные файлы начинающегося прогона', () => {
@@ -602,7 +602,7 @@ describe('ui-dashboard: наблюдатель за корнем прогоно�
       let calls = 0;
       watcher.subscribe(() => (calls += 1));
 
-      proposeEntry(projectRoot, { target: '.stepcast/widgets/clock.tsx', content: 'export default 1;\n' });
+      proposeEntry(projectRoot, { target: '.burnex/widgets/clock.tsx', content: 'export default 1;\n' });
       watcher.poll();
 
       assert.equal(calls, 1, 'новая запись обязана разбудить подписчика');
@@ -613,7 +613,7 @@ describe('ui-dashboard: наблюдатель за корнем прогоно�
     it('такт без изменений в каталоге очереди предложений не порождает события', () => {
       const { runsRoot, projectRoot } = makeJournalBed();
       seedRun(runsRoot, projectRoot, { runId: 'a' });
-      proposeEntry(projectRoot, { target: '.stepcast/widgets/clock.tsx', content: 'export default 1;\n' });
+      proposeEntry(projectRoot, { target: '.burnex/widgets/clock.tsx', content: 'export default 1;\n' });
 
       const watcher = createWatcher({ runsRoot, intervalMs: 10_000 });
       const before = watcher.currentProposals();
@@ -630,7 +630,7 @@ describe('ui-dashboard: наблюдатель за корнем прогоно�
     it('такт по каталогу очереди не пишет ни одного файла проекта', () => {
       const { runsRoot, projectRoot } = makeJournalBed();
       seedRun(runsRoot, projectRoot, { runId: 'a' });
-      proposeEntry(projectRoot, { target: '.stepcast/widgets/clock.tsx', content: 'export default 1;\n' });
+      proposeEntry(projectRoot, { target: '.burnex/widgets/clock.tsx', content: 'export default 1;\n' });
 
       const before = readProposalsDir(projectRoot);
       const watcher = createWatcher({ runsRoot, intervalMs: 10_000 });
@@ -638,7 +638,7 @@ describe('ui-dashboard: наблюдатель за корнем прогоно�
       const after = readProposalsDir(projectRoot);
 
       assert.deepEqual(after.records, before.records);
-      assert.equal(existsSync(join(projectRoot, '.stepcast', 'widgets', 'clock.tsx')), false);
+      assert.equal(existsSync(join(projectRoot, '.burnex', 'widgets', 'clock.tsx')), false);
       watcher.dispose();
     });
 
@@ -662,7 +662,7 @@ describe('ui-dashboard: наблюдатель за корнем прогоно�
     it('такт, на котором сдвинулся только идущий прогон, оставляет тот же объект очереди предложений', () => {
       const { runsRoot, projectRoot } = makeJournalBed();
       const journal = seedRun(runsRoot, projectRoot, { runId: 'a', status: 'running' });
-      proposeEntry(projectRoot, { target: '.stepcast/widgets/clock.tsx', content: 'export default 1;\n' });
+      proposeEntry(projectRoot, { target: '.burnex/widgets/clock.tsx', content: 'export default 1;\n' });
 
       const watcher = createWatcher({ runsRoot, intervalMs: 10_000 });
       const before = watcher.currentProposals();
@@ -692,12 +692,12 @@ describe('ui-dashboard: наблюдатель за корнем прогоно�
 
 describe('ui-routes: часть отпечатка наблюдателя', () => {
   function writeHomeRoutes(home: string, content: string): void {
-    mkdirSync(join(home, '.stepcast'), { recursive: true });
+    mkdirSync(join(home, '.burnex'), { recursive: true });
     writeFileSync(homeRoutesPath(home), content);
   }
 
   function writeProjectRoutes(projectRoot: string, content: string): void {
-    mkdirSync(join(projectRoot, '.stepcast'), { recursive: true });
+    mkdirSync(join(projectRoot, '.burnex'), { recursive: true });
     writeFileSync(projectRoutesPath(projectRoot), content);
   }
 

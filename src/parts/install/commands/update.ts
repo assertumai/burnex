@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import { commandRow } from '../../../kernel/cli/commandRow.js';
 import type { ParsedArgs } from '../../../kernel/cli/args.js';
 import { ExitCode, StepcastError, type ExitCodeValue } from '../../../kernel/errors.js';
+import { migrateHomeRoot } from '../../../kernel/dirs.js';
 import { enginePackageRoot } from '../../pipeline/document/packagePaths.js';
 import { resolveInstallMethod, type InferProbes } from '../infer.js';
 import { installManifestPath, stepcastHome, type InstallManifest } from '../manifest.js';
@@ -98,6 +99,12 @@ export async function runUpdateCommand(
 
 function systemUpdateHost(): UpdateHost {
   const home = homedir();
+  // Перенос ~/.stepcast → ~/.burnex — здесь, у настоящего домашнего каталога
+  // (`kernel/dirs.ts`): паспорт и релизы ниже читаются уже с нового места.
+  const migrated = migrateHomeRoot(home);
+  if (migrated !== undefined) {
+    process.stderr.write(`burnex: домашний каталог ${migrated.from} переименован в ${migrated.to}; на прежнем месте оставлена ссылка для установленного релиза\n`);
+  }
   const root = enginePackageRoot();
   const releasesDir = join(stepcastHome(process.env, home), 'releases');
   const manifestPath = installManifestPath(process.env, home);

@@ -25,13 +25,13 @@ function bed(): Bed {
   const base = tempDir('plugins-');
   const root = join(base, 'work');
   const home = join(base, 'home');
-  mkdirSync(join(root, '.stepcast'), { recursive: true });
-  mkdirSync(join(home, '.stepcast'), { recursive: true });
+  mkdirSync(join(root, '.burnex'), { recursive: true });
+  mkdirSync(join(home, '.burnex'), { recursive: true });
   return {
     root,
     home,
-    globalPath: join(home, '.stepcast', 'config.yml'),
-    projectPath: join(root, '.stepcast', 'config.yml'),
+    globalPath: join(home, '.burnex', 'config.yml'),
+    projectPath: join(root, '.burnex', 'config.yml'),
   };
 }
 
@@ -70,7 +70,7 @@ export default {
 describe('plugin-contributions: загрузка плагинов', () => {
   it('разрешает путь от файла, в котором он объявлен', async () => {
     const place = bed();
-    writeModule(join(place.root, '.stepcast', 'plugins', 'local.mjs'), PLUGIN_BODY);
+    writeModule(join(place.root, '.burnex', 'plugins', 'local.mjs'), PLUGIN_BODY);
     const config = resolved(place, { project: 'plugins: ["./plugins/local.mjs"]\n' });
 
     const { registry } = await loadPlugins(config, { projectRoot: place.root });
@@ -80,7 +80,7 @@ describe('plugin-contributions: загрузка плагинов', () => {
     assert.equal(registry.plugins.length, 1);
     assert.equal(registry.plugins[0]?.name, 'example');
     assert.equal(registry.plugins[0]?.version, '1.2.0');
-    assert.equal(registry.plugins[0]?.source, join(place.root, '.stepcast', 'plugins', 'local.mjs'));
+    assert.equal(registry.plugins[0]?.source, join(place.root, '.burnex', 'plugins', 'local.mjs'));
   });
 
   it('разрешает пакет из node_modules проекта', async () => {
@@ -101,7 +101,7 @@ describe('plugin-contributions: загрузка плагинов', () => {
 
   it('объединяет слои и загружает повторённый модуль один раз', async () => {
     const place = bed();
-    writeModule(join(place.root, '.stepcast', 'plugins', 'local.mjs'), PLUGIN_BODY);
+    writeModule(join(place.root, '.burnex', 'plugins', 'local.mjs'), PLUGIN_BODY);
     const config = resolved(place, {
       global: 'plugins: ["./plugins/местный"]\n',
       project: 'plugins: ["./plugins/local.mjs", "./plugins/местный"]\n',
@@ -159,7 +159,7 @@ describe('plugin-contributions: загрузка плагинов', () => {
 
   it('модуль без экспорта по умолчанию отказывает', async () => {
     const place = bed();
-    writeModule(join(place.root, '.stepcast', 'plugins', 'пусто.mjs'), 'export const name = "example";\n');
+    writeModule(join(place.root, '.burnex', 'plugins', 'пусто.mjs'), 'export const name = "example";\n');
     const config = resolved(place, { project: 'plugins: ["./plugins/пусто.mjs"]\n' });
 
     await assert.rejects(
@@ -171,7 +171,7 @@ describe('plugin-contributions: загрузка плагинов', () => {
 
   it('объект без имени отказывает, называя поле', async () => {
     const place = bed();
-    writeModule(join(place.root, '.stepcast', 'plugins', 'безымянный.mjs'), 'export default { version: "1" };\n');
+    writeModule(join(place.root, '.burnex', 'plugins', 'безымянный.mjs'), 'export default { version: "1" };\n');
     const config = resolved(place, { project: 'plugins: ["./plugins/безымянный.mjs"]\n' });
 
     await assert.rejects(
@@ -188,7 +188,7 @@ describe('plugin-contributions: загрузка плагинов', () => {
   it('вклад неверной формы отказывает, называя путь поля', async () => {
     const place = bed();
     writeModule(
-      join(place.root, '.stepcast', 'plugins', 'кривой.mjs'),
+      join(place.root, '.burnex', 'plugins', 'кривой.mjs'),
       'export default { name: "broken", predicates: [{ name: "http_ok", schema: {} }] };\n',
     );
     const config = resolved(place, { project: 'plugins: ["./plugins/кривой.mjs"]\n' });
@@ -206,7 +206,7 @@ describe('plugin-contributions: загрузка плагинов', () => {
   it('вклад предиката не вправе нести поле внутренней формы native', async () => {
     const place = bed();
     writeModule(
-      join(place.root, '.stepcast', 'plugins', 'предикат-самозванец.mjs'),
+      join(place.root, '.burnex', 'plugins', 'предикат-самозванец.mjs'),
       'export default { name: "checks-impostor", predicates: [{ name: "http_ok", schema: {}, evaluate: () => ({ predicate: "http_ok", passed: true, hard: true }), native: { test: () => true, parse: () => ({}) } }] };\n',
     );
     const config = resolved(place, { project: 'plugins: ["./plugins/предикат-самозванец.mjs"]\n' });
@@ -225,7 +225,7 @@ describe('plugin-contributions: загрузка плагинов', () => {
   it('вид шага без исполнителя отказывает при загрузке, называя плагин и поле', async () => {
     const place = bed();
     writeModule(
-      join(place.root, '.stepcast', 'plugins', 'без-исполнителя.mjs'),
+      join(place.root, '.burnex', 'plugins', 'без-исполнителя.mjs'),
       'export default { name: "steps-broken", steps: [{ name: "http", title: "HTTP", fields: { type: "object" } }] };\n',
     );
     const config = resolved(place, { project: 'plugins: ["./plugins/без-исполнителя.mjs"]\n' });
@@ -244,7 +244,7 @@ describe('plugin-contributions: загрузка плагинов', () => {
   it('схема полей вида шага, не являющаяся объектом, отказывает при загрузке', async () => {
     const place = bed();
     writeModule(
-      join(place.root, '.stepcast', 'plugins', 'кривые-поля.mjs'),
+      join(place.root, '.burnex', 'plugins', 'кривые-поля.mjs'),
       'export default { name: "steps-broken", steps: [{ name: "http", title: "HTTP", fields: "объект", execute: () => ({}) }] };\n',
     );
     const config = resolved(place, { project: 'plugins: ["./plugins/кривые-поля.mjs"]\n' });
@@ -266,7 +266,7 @@ describe('plugin-contributions: загрузка плагинов', () => {
     // встроенный вид, чей разбор отдаёт типизированную модель шага.
     const place = bed();
     writeModule(
-      join(place.root, '.stepcast', 'plugins', 'самозванец.mjs'),
+      join(place.root, '.burnex', 'plugins', 'самозванец.mjs'),
       'export default { name: "steps-impostor", steps: [{ name: "http", title: "HTTP", fields: { type: "object" }, execute: () => ({}), native: { test: () => true, parse: () => ({}) } }] };\n',
     );
     const config = resolved(place, { project: 'plugins: ["./plugins/самозванец.mjs"]\n' });
@@ -302,7 +302,7 @@ describe('plugin-contributions: загрузка плагинов', () => {
     ];
 
     for (const [name, source, expected] of cases) {
-      writeModule(join(place.root, '.stepcast', 'plugins', `${name}.mjs`), source);
+      writeModule(join(place.root, '.burnex', 'plugins', `${name}.mjs`), source);
       const config = resolved(place, { project: `plugins: ["./plugins/${name}.mjs"]\n` });
 
       await assert.rejects(
@@ -326,7 +326,7 @@ describe('plugin-contributions: загрузка плагинов', () => {
     // уверенности, что он сроком распорядился.
     const place = bed();
     writeModule(
-      join(place.root, '.stepcast', 'plugins', 'мнимое-ожидание.mjs'),
+      join(place.root, '.burnex', 'plugins', 'мнимое-ожидание.mjs'),
       'export default { name: "steps-waits", steps: [{ name: "http", title: "HTTP", fields: { type: "object" }, waits: false, execute: () => ({}) }] };\n',
     );
     const config = resolved(place, { project: 'plugins: ["./plugins/мнимое-ожидание.mjs"]\n' });
@@ -381,7 +381,7 @@ export default {
 `;
 
   function withAdapter(place: Bed, project: string): Promise<ResolvedWithPlugins> {
-    writeModule(join(place.root, '.stepcast', 'plugins', 'codex.mjs'), ADAPTER);
+    writeModule(join(place.root, '.burnex', 'plugins', 'codex.mjs'), ADAPTER);
     writeFileSync(place.projectPath, project);
     return resolveWithPlugins(
       {
@@ -644,7 +644,7 @@ export default {
 
   it('вклад, объявивший models с probe и parse, загружается', async () => {
     const place = bed();
-    writeModule(join(place.root, '.stepcast', 'plugins', 'models.mjs'), WITH_MODELS);
+    writeModule(join(place.root, '.burnex', 'plugins', 'models.mjs'), WITH_MODELS);
     const config = resolved(place, { project: 'plugins: ["./plugins/models.mjs"]\n' });
 
     const { registry } = await loadPlugins(config, { projectRoot: place.root });
@@ -654,7 +654,7 @@ export default {
 
   it('вклад, где probe не функция, отклоняется отказом с именем бэкенда и поля', async () => {
     const place = bed();
-    writeModule(join(place.root, '.stepcast', 'plugins', 'broken.mjs'), BROKEN_PROBE);
+    writeModule(join(place.root, '.burnex', 'plugins', 'broken.mjs'), BROKEN_PROBE);
     const config = resolved(place, { project: 'plugins: ["./plugins/broken.mjs"]\n' });
 
     await assert.rejects(
@@ -668,7 +668,7 @@ export default {
 
   it('вклад без models загружается как прежде', async () => {
     const place = bed();
-    writeModule(join(place.root, '.stepcast', 'plugins', 'local.mjs'), PLUGIN_BODY);
+    writeModule(join(place.root, '.burnex', 'plugins', 'local.mjs'), PLUGIN_BODY);
     const config = resolved(place, { project: 'plugins: ["./plugins/local.mjs"]\n' });
 
     const { registry } = await loadPlugins(config, { projectRoot: place.root });

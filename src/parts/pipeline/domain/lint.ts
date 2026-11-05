@@ -38,6 +38,7 @@ import type {
   Substitution,
 } from '../document/model.js';
 import type { Graph } from './graph.js';
+import { cabinetDir } from '../../../kernel/dirs.js';
 
 /**
  * Статическая проверка раскрытого пайплайна.
@@ -63,7 +64,7 @@ export interface LintOptions {
   /**
    * Корень рабочей директории: от него отсчитываются пути контекста. Каталог
    * файла пайплайна основанием не годится — пайплайн живёт и в
-   * `.stepcast/pipelines/`, а контекст всё равно считается от корня проекта.
+   * `.burnex/pipelines/`, а контекст всё равно считается от корня проекта.
    */
   readonly cwd?: string;
   /** Проверять ли существование путей, зависящих от рабочей директории. */
@@ -180,7 +181,7 @@ function checkContext(
         message: 'Запись контекста knowledge объявлена, но практика памяти не объявлена',
         file,
         at: `${prefix}.${index}`,
-        hint: 'Объявите project.knowledge в .stepcast/config.yml или уберите запись',
+        hint: 'Объявите project.knowledge в .burnex/config.yml или уберите запись',
       });
       continue;
     }
@@ -453,14 +454,14 @@ const SCHEMA_TARGETS = [
 ];
 
 /**
- * Устаревшая схема проекта (design.md, решение 6): `.stepcast/schema/*.json`
+ * Устаревшая схема проекта (design.md, решение 6): `.burnex/schema/*.json`
  * ветшает ровно так же, как врал бы статический файл пакета, — состав
  * плагинов поменялся, а файл остался. Проверка стоит печати схем в память, и
  * только если хотя бы один файл найден: проект, не пользовавшийся командой
  * `burnex schema`, о ней от линта не узнаёт вовсе.
  */
 function checkPublishedSchema(base: string, registry: Registry, push: (diagnostic: Diagnostic) => void): void {
-  const dir = join(base, '.stepcast', 'schema');
+  const dir = join(cabinetDir(base), 'schema');
   const targets = SCHEMA_TARGETS.map((target) => ({ ...target, path: join(dir, target.file) }));
   if (!targets.some((target) => existsSync(target.path))) return;
 
@@ -1688,7 +1689,7 @@ function checkStep(
         message: 'Предикат knowledge_valid объявлен, но практика памяти не объявлена',
         file: job.source,
         at: `${at}.expect.${index}.knowledge_valid`,
-        hint: 'Объявите project.knowledge в .stepcast/config.yml или уберите предикат',
+        hint: 'Объявите project.knowledge в .burnex/config.yml или уберите предикат',
       });
     }
     if (predicate.kind === 'schema') {
@@ -1828,7 +1829,7 @@ function checkScriptStep(
         message: `Шаг ${job.id}/${step.id}: ${describeResourceConflict(unresolved)}`,
         file: job.source,
         at: unresolved.resource === 'step' ? `${at}.uses` : `${at}.script`,
-        hint: 'Переименуйте ресурс в одном из пакетов, уберите один из пакетов либо положите свою копию в свободный каталог .stepcast/',
+        hint: 'Переименуйте ресурс в одном из пакетов, уберите один из пакетов либо положите свою копию в свободный каталог .burnex/',
       });
       return;
     }

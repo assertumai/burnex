@@ -65,7 +65,7 @@ import './scrum.css';
 
 /**
  * Доска очереди: встроенные колонки плюс заведённые проектом
- * (`.stepcast/board.yml`), карточки перетаскиваются.
+ * (`.burnex/board.yml`), карточки перетаскиваются.
  *
  * Пункт со статусом, под который колонки нет, доску не ломает и в чужую
  * колонку не подкладывается: он показан полосой над доской с предложением
@@ -276,7 +276,7 @@ function AddColumnDialog({
             {intent === undefined ? null : (
               <>
                 For status <span className="mono">{intent.status}</span>. The layout is written to the project’s{' '}
-                <span className="mono">.stepcast/board.yml</span>.
+                <span className="mono">.burnex/board.yml</span>.
               </>
             )}
           </DialogDescription>

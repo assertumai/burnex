@@ -19,7 +19,7 @@ async function run(project: Project): Promise<RunResult> {
 async function runWithConfig(project: Project, config: Config): Promise<RunResult> {
   const runsRoot = tempDir('runs-');
   return runPipeline({
-    expanded: expandPipeline({ pipelinePath: project.path('stepcast.yml'), config }),
+    expanded: expandPipeline({ pipelinePath: project.path('burnex.yml'), config }),
     config: { ...config, runs: { ...config.runs, root: runsRoot } },
     projectRoot: project.root,
     cwd: project.root,
@@ -46,7 +46,7 @@ jobs:
 describe('result-contract: предикат границ изменений', () => {
   // Сценарий: «Изменения в границах»
   it('проходит, когда все изменения попали под шаблоны', async () => {
-    const project = makeProject({ 'stepcast.yml': bounded('mkdir -p src && echo код > src/a.ts', '["src/**"]') });
+    const project = makeProject({ 'burnex.yml': bounded('mkdir -p src && echo код > src/a.ts', '["src/**"]') });
     const result = await run(project);
 
     assert.equal(result.status, 'success');
@@ -55,7 +55,7 @@ describe('result-contract: предикат границ изменений', ()
   // Сценарий: «Изменение за границей»
   it('не проходит и перечисляет вышедшие за границу пути', async () => {
     const project = makeProject({
-      'stepcast.yml': bounded('mkdir -p src && echo код > src/a.ts && echo лишнее > package.json', '["src/**"]'),
+      'burnex.yml': bounded('mkdir -p src && echo код > src/a.ts && echo лишнее > package.json', '["src/**"]'),
     });
     const result = await run(project);
 
@@ -72,7 +72,7 @@ describe('result-contract: предикат границ изменений', ()
   // в отказе быть не должно — черновики в якорь не входят.
   it('черновики в $BURNEX_JOB_DIR/scratch не идут против changed_only', async () => {
     const project = makeProject({
-      'stepcast.yml': bounded(
+      'burnex.yml': bounded(
         'mkdir -p src && echo код > src/a.ts && echo черновик > "$BURNEX_JOB_DIR/scratch/verify.log"',
         '["src/**"]',
       ),
@@ -90,7 +90,7 @@ describe('result-contract: предикат границ изменений', ()
   // предиката списком исключений.
   it('тот же черновик внутри рабочего дерева по-прежнему проваливает предикат', async () => {
     const project = makeProject({
-      'stepcast.yml': bounded(
+      'burnex.yml': bounded(
         'mkdir -p src .verify-scratch && echo код > src/a.ts && echo черновик > .verify-scratch/verify.log',
         '["src/**"]',
       ),
@@ -104,7 +104,7 @@ describe('result-contract: предикат границ изменений', ()
 
   // Сценарий: «Шаг ничего не изменил»
   it('проходит для шага, не изменившего дерево', async () => {
-    const project = makeProject({ 'stepcast.yml': bounded('true', '["src/**"]') });
+    const project = makeProject({ 'burnex.yml': bounded('true', '["src/**"]') });
     const result = await run(project);
 
     assert.equal(result.status, 'success');
@@ -114,7 +114,7 @@ describe('result-contract: предикат границ изменений', ()
   it('не учитывает пути, невидимые для правил игнорирования', async () => {
     const project = makeProject({
       '.gitignore': 'мусор/\n',
-      'stepcast.yml': bounded('mkdir -p мусор && echo шум > мусор/файл.txt', '["src/**"]'),
+      'burnex.yml': bounded('mkdir -p мусор && echo шум > мусор/файл.txt', '["src/**"]'),
     });
     const result = await run(project);
 
@@ -193,7 +193,7 @@ jobs:
     const project = makeProject({
       '.gitignore': 'public-site/\n',
       'public-site/src/api.ts': 'исходное\n',
-      'stepcast.yml': nestedBounded(globs),
+      'burnex.yml': nestedBounded(globs),
     });
     // Часть коммитится раньше корня — иначе `add -A` корня откажет на
     // вложенном репозитории без единого коммита.

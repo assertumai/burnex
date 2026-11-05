@@ -36,7 +36,7 @@ async function run(project: Project): Promise<RunResult> {
 /** То же, что `run`, но с конфигурацией, объявляющей состав вложенных репозиториев. */
 async function runWithConfig(project: Project, config: Config): Promise<RunResult> {
   const runsRoot = tempDir('runs-');
-  const expanded = expandPipeline({ pipelinePath: project.path('stepcast.yml'), config });
+  const expanded = expandPipeline({ pipelinePath: project.path('burnex.yml'), config });
   return runPipeline({
     expanded,
     config: { ...config, runs: { ...config.runs, root: runsRoot } },
@@ -45,7 +45,7 @@ async function runWithConfig(project: Project, config: Config): Promise<RunResul
   });
 }
 
-/** Тот же проект, но с объявленным составом `project.nested_repos`, будто он объявлен в `.stepcast/config.yml`. */
+/** Тот же проект, но с объявленным составом `project.nested_repos`, будто он объявлен в `.burnex/config.yml`. */
 function withNestedRepos(project: Project, nestedRepos: readonly string[]): Config {
   return { ...project.config, project: { ...project.config.project, nestedRepos } };
 }
@@ -82,8 +82,8 @@ function workspacesDir(result: RunResult): string {
 }
 
 function graphOf(yaml: string) {
-  const project = makeProject({ 'stepcast.yml': yaml });
-  const { pipeline } = expandPipeline({ pipelinePath: project.path('stepcast.yml'), config: project.config });
+  const project = makeProject({ 'burnex.yml': yaml });
+  const { pipeline } = expandPipeline({ pipelinePath: project.path('burnex.yml'), config: project.config });
   return buildGraph(pipeline).graph;
 }
 
@@ -257,7 +257,7 @@ describe('workspace-modes: режим объявляется и переопре
   // Сценарий: «Умолчание»
   it('исполняет работы в каталоге запуска, когда режим не объявлен', async () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 version: 1
 kind: pipeline
 name: умолчание
@@ -280,7 +280,7 @@ jobs:
   it('позволяет работе переопределить режим пайплайна', async () => {
     const project = makeProject({
       'исходный.txt': 'содержимое',
-      'stepcast.yml': `
+      'burnex.yml': `
 version: 1
 kind: pipeline
 name: переопределение
@@ -314,7 +314,7 @@ describe('workspace-modes: режим copy', () => {
   it('переносит незакоммиченные изменения в копию', async () => {
     const project = makeProject({
       'исходный.txt': 'изменено, но не закоммичено',
-      'stepcast.yml': pipelineWriting('copy'),
+      'burnex.yml': pipelineWriting('copy'),
     });
     gitInit(project);
     project.write('исходный.txt', 'изменено, но не закоммичено');
@@ -334,7 +334,7 @@ describe('workspace-modes: режим copy', () => {
       '.gitignore': 'мусор/\n',
       'мусор/файл.txt': 'не нужен',
       'нужный.txt': 'нужен',
-      'stepcast.yml': pipelineWriting('copy'),
+      'burnex.yml': pipelineWriting('copy'),
     });
     gitInit(project);
 
@@ -347,7 +347,7 @@ describe('workspace-modes: режим copy', () => {
 
   // Сценарий: «Копия вне git»
   it('работает вне репозитория git', async () => {
-    const project = makeProject({ 'нужный.txt': 'а', 'stepcast.yml': pipelineWriting('copy') });
+    const project = makeProject({ 'нужный.txt': 'а', 'burnex.yml': pipelineWriting('copy') });
 
     const result = await run(project);
     assert.equal(result.status, 'success');
@@ -356,7 +356,7 @@ describe('workspace-modes: режим copy', () => {
 
   // Сценарий: «Результат остаётся в стороне»
   it('оставляет исходное дерево нетронутым', async () => {
-    const project = makeProject({ 'stepcast.yml': pipelineWriting('copy') });
+    const project = makeProject({ 'burnex.yml': pipelineWriting('copy') });
 
     const result = await run(project);
     assert.equal(
@@ -370,7 +370,7 @@ describe('workspace-modes: режим copy', () => {
   // Сценарий: «Явный путь размещения копий»
   it('размещает копии по объявленному пути', async () => {
     const base = tempDir('копии-');
-    const project = makeProject({ 'stepcast.yml': pipelineWriting('copy', `, path: ${base}`) });
+    const project = makeProject({ 'burnex.yml': pipelineWriting('copy', `, path: ${base}`) });
 
     const result = await run(project);
     assert.equal(workspaceOfJob(result, 'build').path, join(base, 'build'));
@@ -378,7 +378,7 @@ describe('workspace-modes: режим copy', () => {
 
   // Сценарий: «Журнал не попадает в дерево»
   it('не включает журнал прогона в состояние рабочего дерева', async () => {
-    const project = makeProject({ 'stepcast.yml': pipelineWriting('copy') });
+    const project = makeProject({ 'burnex.yml': pipelineWriting('copy') });
     const result = await run(project);
 
     const dir = workspaceOfJob(result, 'build').path;
@@ -392,7 +392,7 @@ describe('workspace-modes: режим worktree', () => {
   it('ответвляется от HEAD без незакоммиченных изменений', async () => {
     const project = makeProject({
       'исходный.txt': 'закоммичено',
-      'stepcast.yml': pipelineWriting('worktree'),
+      'burnex.yml': pipelineWriting('worktree'),
     });
     gitInit(project);
     commit(project, 'первый');
@@ -422,7 +422,7 @@ describe('workspace-modes: режим worktree', () => {
   it('не показывает работам изменения друг друга', async () => {
     const project = makeProject({
       'общий.txt': 'начало',
-      'stepcast.yml': `
+      'burnex.yml': `
 version: 1
 kind: pipeline
 name: изоляция
@@ -456,7 +456,7 @@ jobs:
 
   // Сценарий: «Проект не под git»
   it('отклоняется вне репозитория git до запуска работ и предлагает copy', async () => {
-    const project = makeProject({ 'stepcast.yml': pipelineWriting('worktree') });
+    const project = makeProject({ 'burnex.yml': pipelineWriting('worktree') });
 
     await assert.rejects(
       () => run(project),
@@ -484,7 +484,7 @@ function gitHead(dir: string): string {
 describe('workspace-modes: материализация объявленных частей', () => {
   it('исполняет commit-backed код, подкладывает live-файл и возвращает только его', async () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 workspace:
   mode: worktree
@@ -516,11 +516,11 @@ jobs:
 
   it('не перезаписывает live-файл, изменённый параллельно исполнению job', async () => {
     const project = makeProject({
-      'stepcast.yml': '',
+      'burnex.yml': '',
       'backlog.md': 'base',
     });
     project.write(
-      'stepcast.yml',
+      'burnex.yml',
       `
 kind: pipeline
 workspace:
@@ -548,7 +548,7 @@ jobs:
 
   it('заводит позднее рабочее дерево из коммита начала прогона, а не из сдвинувшегося HEAD', async () => {
     const project = makeProject({
-      'stepcast.yml': pipelineWriting('worktree'),
+      'burnex.yml': pipelineWriting('worktree'),
       'версия.txt': 'первая',
     });
     gitInit(project);
@@ -558,7 +558,7 @@ jobs:
     project.write('версия.txt', 'вторая');
     commit(project, 'вторая');
 
-    const { pipeline } = expandPipeline({ pipelinePath: project.path('stepcast.yml'), config: project.config });
+    const { pipeline } = expandPipeline({ pipelinePath: project.path('burnex.yml'), config: project.config });
     const job = pipeline.jobs.find((item) => item.id === 'build')!;
     const runsRoot = tempDir('runs-');
     const prepared = await prepareWorkspace({
@@ -575,7 +575,7 @@ jobs:
 
   it('использует отдельный записанный коммит для каждой объявленной части', async () => {
     const project = makeProject({
-      'stepcast.yml': pipelineWriting('worktree'),
+      'burnex.yml': pipelineWriting('worktree'),
       '.gitignore': 'part/\n',
       'part/версия.txt': 'первая',
     });
@@ -589,7 +589,7 @@ jobs:
     project.write('part/версия.txt', 'вторая');
     gitCommit(project.path('part'), 'вторая часть');
 
-    const { pipeline } = expandPipeline({ pipelinePath: project.path('stepcast.yml'), config: project.config });
+    const { pipeline } = expandPipeline({ pipelinePath: project.path('burnex.yml'), config: project.config });
     const job = pipeline.jobs.find((item) => item.id === 'build')!;
     const runsRoot = tempDir('runs-');
     const prepared = await prepareWorkspace({
@@ -607,7 +607,7 @@ jobs:
 
   it('часть материализована и является рабочим деревом собственного репозитория', async () => {
     const project = makeProject({
-      'stepcast.yml': pipelineWriting('worktree'),
+      'burnex.yml': pipelineWriting('worktree'),
       'public-site/.gitkeep': '',
     });
     gitInit(project);
@@ -630,7 +630,7 @@ jobs:
 
   it('незакоммиченная правка части в дерево дорожки не попадает', async () => {
     const project = makeProject({
-      'stepcast.yml': pipelineWriting('worktree'),
+      'burnex.yml': pipelineWriting('worktree'),
       'public-site/.gitkeep': '',
     });
     gitInit(project);
@@ -655,7 +655,7 @@ jobs:
 
   it('рабочее дерево части в проекте и корневое дерево проекта не изменяются подготовкой', async () => {
     const project = makeProject({
-      'stepcast.yml': pipelineWriting('worktree'),
+      'burnex.yml': pipelineWriting('worktree'),
       'public-site/.gitkeep': '',
     });
     gitInit(project);
@@ -684,7 +684,7 @@ jobs:
   // работы, а здесь нужен именно отказ самой подготовки.
   it('отказ на второй части не оставляет ни каталогов, ни учётных записей', async () => {
     const project = makeProject({
-      'stepcast.yml': pipelineWriting('worktree'),
+      'burnex.yml': pipelineWriting('worktree'),
       // part-b игнорируется корнем: иначе его же add -A отказал бы на
       // «does not have a commit checked out» ещё до подготовки дерева.
       '.gitignore': 'part-b/\n',
@@ -698,7 +698,7 @@ jobs:
     gitInitDir(project.path('part-b'));
     commit(project, 'первый');
 
-    const { pipeline } = expandPipeline({ pipelinePath: project.path('stepcast.yml'), config: project.config });
+    const { pipeline } = expandPipeline({ pipelinePath: project.path('burnex.yml'), config: project.config });
     const job = pipeline.jobs.find((item) => item.id === 'build')!;
     const runsRoot = tempDir('runs-');
 
@@ -730,7 +730,7 @@ jobs:
   // directory», заведись раньше вложенная.
   it('порядок объявления состава не влияет на заведение вложенных друг в друга частей', async () => {
     const project = makeProject({
-      'stepcast.yml': pipelineWriting('worktree'),
+      'burnex.yml': pipelineWriting('worktree'),
       '.gitignore': 'a/\n',
       'a/.gitkeep': '',
       'a/b/.gitkeep': '',
@@ -742,7 +742,7 @@ jobs:
     gitCommit(project.path('a'), 'начало объемлющей части');
     commit(project, 'первый');
 
-    const { pipeline } = expandPipeline({ pipelinePath: project.path('stepcast.yml'), config: project.config });
+    const { pipeline } = expandPipeline({ pipelinePath: project.path('burnex.yml'), config: project.config });
     const job = pipeline.jobs.find((item) => item.id === 'build')!;
     const runsRoot = tempDir('runs-');
 
@@ -771,7 +771,7 @@ jobs:
 
   it('режим cwd при том же составе ведёт себя как прежде — части не заводятся', async () => {
     const project = makeProject({
-      'stepcast.yml': pipelineWriting('cwd'),
+      'burnex.yml': pipelineWriting('cwd'),
       'public-site/.gitkeep': '',
     });
     gitInit(project);
@@ -793,7 +793,7 @@ describe('dependent-job-workspace: наследование под тестом 
     const project = makeProject({
       'изменяемый.txt': 'старое',
       'удаляемый.txt': 'есть',
-      'stepcast.yml': `
+      'burnex.yml': `
 version: 1
 kind: pipeline
 workspace: { mode: worktree }
@@ -828,7 +828,7 @@ jobs:
     const project = makeProject({
       'изменяемый.txt': 'старое',
       'удаляемый.txt': 'есть',
-      'stepcast.yml': `
+      'burnex.yml': `
 version: 1
 kind: pipeline
 workspace: { mode: copy }
@@ -870,7 +870,7 @@ jobs:
   it('копия внутри репозитория фиксируется якорями, и развилка получает дерево источника', async () => {
     const project = makeProject({
       'изменяемый.txt': 'старое',
-      'stepcast.yml': `
+      'burnex.yml': `
 version: 1
 kind: pipeline
 workspace: { mode: copy }
@@ -915,7 +915,7 @@ jobs:
   // до первого шага, а не подготовкой директории посреди прогона.
   it('отклоняет развилку в режиме copy вне репозитория git до первой работы', async () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 version: 1
 kind: pipeline
 workspace: { mode: copy }
@@ -949,7 +949,7 @@ jobs:
   // оставляет за собой ни исполненных шагов, ни заведённого каталога.
   it('отказ приведения к якорю источника даёт spawn_failed без единого шага', async () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 version: 1
 kind: pipeline
 workspace: { mode: worktree }
@@ -970,7 +970,7 @@ jobs:
 
     const runsRoot = tempDir('runs-');
     const expanded = expandPipeline({
-      pipelinePath: project.path('stepcast.yml'),
+      pipelinePath: project.path('burnex.yml'),
       config: project.config,
     });
     const result = await runPipeline({
@@ -1030,7 +1030,7 @@ jobs:
   // `worktree remove` отказывает — каталог всё равно обязан уйти.
   it('убирает каталог развилки, даже когда git worktree remove отказал', async () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 version: 1
 kind: pipeline
 workspace: { mode: worktree }
@@ -1051,7 +1051,7 @@ jobs:
 
     const runsRoot = tempDir('runs-');
     const expanded = expandPipeline({
-      pipelinePath: project.path('stepcast.yml'),
+      pipelinePath: project.path('burnex.yml'),
       config: project.config,
     });
     const result = await runPipeline({
@@ -1092,7 +1092,7 @@ jobs:
   it('цепочка из трёх работ делит один каталог, и игнорируемый файл переходит по ней', async () => {
     const project = makeProject({
       '.gitignore': 'игнор.txt\n',
-      'stepcast.yml': `
+      'burnex.yml': `
 version: 1
 kind: pipeline
 workspace: { mode: worktree }
@@ -1125,7 +1125,7 @@ jobs:
   it('развилка даёт по каталогу на потомка, и игнорируемый файл источника в них не попадает', async () => {
     const project = makeProject({
       '.gitignore': 'игнор.txt\n',
-      'stepcast.yml': `
+      'burnex.yml': `
 version: 1
 kind: pipeline
 workspace: { mode: worktree }
@@ -1167,7 +1167,7 @@ jobs:
   // Сценарий: «Пропуск потомка цепочку не открывает»
   it('пропуск одного из двух потомков не открывает цепочку исполненному', async () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 version: 1
 kind: pipeline
 workspace: { mode: worktree }
@@ -1199,7 +1199,7 @@ jobs:
   // Сценарий: «Явно выбранный источник» / «Отказ от наследования»
   it('явный inherit выбирает дерево названной работы, а none — исходное состояние', async () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 version: 1
 kind: pipeline
 workspace: { mode: worktree }
@@ -1244,7 +1244,7 @@ jobs:
   // среди двух зависимостей называется явно.
   it('пропущенный источник переходит к своему источнику', async () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 version: 1
 kind: pipeline
 workspace: { mode: worktree }
@@ -1283,7 +1283,7 @@ jobs:
   it('исчерпанная цепочка источников даёт исходное состояние, работа исполняется', async () => {
     const project = makeProject({
       'исходный.txt': 'из проекта',
-      'stepcast.yml': `
+      'burnex.yml': `
 version: 1
 kind: pipeline
 workspace: { mode: worktree }
@@ -1313,7 +1313,7 @@ jobs:
   // Сценарий: «Стыковка якорей»
   it('tree_before первого шага зависимой работы равен tree_id последнего шага источника', async () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 version: 1
 kind: pipeline
 workspace: { mode: worktree }
@@ -1349,7 +1349,7 @@ describe('workspace-modes: пригодность проверяется зар�
   // Сценарий: «Путь копии при неподходящем режиме»
   it('отклоняет путь размещения копии при режиме, отличном от copy', async () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 version: 1
 kind: pipeline
 name: путь-не-туда
@@ -1379,7 +1379,7 @@ describe('workspace-modes: отказ подготовки не вводит н�
   // запустить, а это `spawn_failed` из закрытого перечня.
   it('даёт работе отказ с причиной из перечня, называя режим', async () => {
     const project = makeProject({
-      'stepcast.yml': pipelineWriting('copy', ', path: /несуществующий-корень/куда-нельзя'),
+      'burnex.yml': pipelineWriting('copy', ', path: /несуществующий-корень/куда-нельзя'),
     });
 
     // Предстартовая проверка ловит это раньше исполнения — что и требуется.
@@ -1403,7 +1403,7 @@ describe('runner-disposers: откат подготовки рабочей ди�
   // причина отказа подготовки, а не жалоба уборки.
   it('отказ снятия заведённого записывается в журнал, а наружу уходит причина заведения', async () => {
     const project = makeProject({
-      'stepcast.yml': pipelineWriting('worktree'),
+      'burnex.yml': pipelineWriting('worktree'),
       '.gitignore': 'part-b/\n',
       'part-a/.gitkeep': '',
       'part-b/.gitkeep': '',
@@ -1415,7 +1415,7 @@ describe('runner-disposers: откат подготовки рабочей ди�
     gitInitDir(project.path('part-b'));
     commit(project, 'первый');
 
-    const { pipeline } = expandPipeline({ pipelinePath: project.path('stepcast.yml'), config: project.config });
+    const { pipeline } = expandPipeline({ pipelinePath: project.path('burnex.yml'), config: project.config });
     const job = pipeline.jobs.find((item) => item.id === 'build')!;
     const runsRoot = tempDir('runs-');
     const journal = RunJournal.create({ runsRoot, projectRoot: project.root });
@@ -1453,7 +1453,7 @@ describe('runner-disposers: откат подготовки рабочей ди�
   // дерево обязано пережить прогон, включая прогон, окончившийся отказом.
   it('успешная подготовка оставляет дерево на месте после отказа работы', async () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 version: 1
 kind: pipeline
 name: отказ
@@ -1492,7 +1492,7 @@ describe('workspace-modes: возврат результата', () => {
   it('переносит изменения изолированного прогона в текущее дерево', async () => {
     const project = makeProject({
       'исходный.txt': 'начало\n',
-      'stepcast.yml': `
+      'burnex.yml': `
 version: 1
 kind: pipeline
 name: возврат
@@ -1523,7 +1523,7 @@ jobs:
   // Сценарий: «Наложение одной работы»
   it('накладывает только указанную работу', async () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 version: 1
 kind: pipeline
 name: выборочно
@@ -1557,7 +1557,7 @@ jobs:
   it('оставляет дерево нетронутым при конфликте и называет пути', async () => {
     const project = makeProject({
       'спорный.txt': 'строка один\nстрока два\nстрока три\n',
-      'stepcast.yml': `
+      'burnex.yml': `
 version: 1
 kind: pipeline
 name: конфликт
@@ -1600,7 +1600,7 @@ jobs:
   // Сценарий: «Наложение в режиме cwd»
   it('сообщает, что результат уже на месте, для прогона в каталоге запуска', async () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 version: 1
 kind: pipeline
 name: на-месте
@@ -1624,7 +1624,7 @@ jobs:
 
   // Сценарий: «Прогон снят вне git»
   it('отклоняет наложение для прогона вне git и печатает путь дерева', async () => {
-    const project = makeProject({ 'stepcast.yml': pipelineWriting('copy') });
+    const project = makeProject({ 'burnex.yml': pipelineWriting('copy') });
 
     const result = await run(project);
 
@@ -1643,7 +1643,7 @@ jobs:
   // репозиториям — правки корня и части ложатся каждая в свой репозиторий.
   it('переносит вклад составного прогона в корень и в объявленный вложенный репозиторий', async () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 version: 1
 kind: pipeline
 name: составной-возврат
@@ -1674,7 +1674,7 @@ jobs:
 
   it('конфликт в части откатывает и её, и уже наложенный корень, называя конфликтующие пути', async () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 version: 1
 kind: pipeline
 name: составной-конфликт
@@ -1731,7 +1731,7 @@ jobs:
 
   it('состояние чужого состава отказывает, называя расхождение, и не трогает дерева', async () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 version: 1
 kind: pipeline
 name: составной-чужой-состав
@@ -1778,7 +1778,7 @@ jobs:
   // такое состояние движок не порождает, и наложение обязано его назвать.
   it('патч, двигающий gitlink объявленного каталога, отказывает названной причиной', async () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 version: 1
 kind: pipeline
 name: составной-gitlink
@@ -1852,7 +1852,7 @@ jobs:
 `;
 
   it('накладывает цепочку дорожки одним диффом, не трогая соседнюю', async () => {
-    const project = makeProject({ 'stepcast.yml': LANES_PIPELINE });
+    const project = makeProject({ 'burnex.yml': LANES_PIPELINE });
     gitInit(project);
     project.write('затравка.txt', 'нужен хотя бы один коммит\n');
     commit(project, 'первый');
@@ -1873,7 +1873,7 @@ jobs:
   });
 
   it('дорожка без изолированных работ с якорями даёт nothing-to-apply', async () => {
-    const project = makeProject({ 'stepcast.yml': LANES_PIPELINE });
+    const project = makeProject({ 'burnex.yml': LANES_PIPELINE });
     gitInit(project);
     project.write('затравка.txt', 'нужен хотя бы один коммит\n');
     commit(project, 'первый');
@@ -1886,7 +1886,7 @@ jobs:
   it('конфликт наложения дорожки откатывает дерево и называет пути', async () => {
     const project = makeProject({
       'спорный.txt': 'строка один\nстрока два\nстрока три\n',
-      'stepcast.yml': `
+      'burnex.yml': `
 version: 1
 kind: pipeline
 name: конфликт-дорожки
@@ -1925,7 +1925,7 @@ jobs:
   // помощник наложения по репозиториям, что и наложение прогона целиком.
   it('накладывает составную дорожку по репозиториям — правки корня и части ложатся каждая в свой', async () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 version: 1
 kind: pipeline
 name: составная-дорожка
@@ -1965,7 +1965,7 @@ describe('dependent-job-workspace: наложение цепочки', () => {
   // Сценарий: «Наложение цепочки»
   it('applyRun без --job даёт итоговое состояние цепочки без пропусков и двойного применения', async () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 version: 1
 kind: pipeline
 workspace: { mode: worktree }
@@ -1997,7 +1997,7 @@ jobs:
   // Сценарий: «Наложение до конца прогона»
   it('наложение работает на незавершённом прогоне по уже записавшим исход работам', async () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 version: 1
 kind: pipeline
 workspace: { mode: worktree }
@@ -2013,7 +2013,7 @@ jobs:
     commit(project, 'первый');
 
     const runsRoot = tempDir('runs-');
-    const expanded = expandPipeline({ pipelinePath: project.path('stepcast.yml'), config: project.config });
+    const expanded = expandPipeline({ pipelinePath: project.path('burnex.yml'), config: project.config });
     const pending = runPipeline({
       expanded,
       config: { ...project.config, runs: { ...project.config.runs, root: runsRoot } },
@@ -2037,7 +2037,7 @@ jobs:
   // Сценарий: «Наложение одной работы» на работе из середины цепочки
   it('--job на работе из середины цепочки: конфликт с деревом без вклада предшественника', async () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 version: 1
 kind: pipeline
 workspace: { mode: worktree }
@@ -2077,7 +2077,7 @@ jobs:
 
 describe('workspace-modes: адресация прогона', () => {
   it('отклоняет неизвестный идентификатор, перечисляя последние прогоны', async () => {
-    const project = makeProject({ 'stepcast.yml': pipelineWriting('copy') });
+    const project = makeProject({ 'burnex.yml': pipelineWriting('copy') });
     const result = await run(project);
     const runsRoot = join(result.journal.paths.projectDir, '..');
 
@@ -2093,7 +2093,7 @@ describe('workspace-modes: адресация прогона', () => {
   });
 
   it('разрешает короткий идентификатор и указатель на последний прогон', async () => {
-    const project = makeProject({ 'stepcast.yml': pipelineWriting('copy') });
+    const project = makeProject({ 'burnex.yml': pipelineWriting('copy') });
     const result = await run(project);
     const runsRoot = join(result.journal.paths.projectDir, '..');
     const full = result.journal.paths.runId;
@@ -2110,7 +2110,7 @@ describe('workspace-modes: журнал вне рабочего дерева', (
   // сама выглядела бы изменением дерева.
   it('отклоняет каталог прогонов внутри рабочего дерева до первой работы', async () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 version: 1
 kind: pipeline
 name: журнал-внутри
@@ -2124,7 +2124,7 @@ jobs:
     });
 
     const expanded = expandPipeline({
-      pipelinePath: project.path('stepcast.yml'),
+      pipelinePath: project.path('burnex.yml'),
       config: project.config,
     });
 
@@ -2134,7 +2134,7 @@ jobs:
           expanded,
           config: {
             ...project.config,
-            runs: { ...project.config.runs, root: join(project.root, '.stepcast', 'runs') },
+            runs: { ...project.config.runs, root: join(project.root, '.burnex', 'runs') },
           },
           projectRoot: project.root,
           cwd: project.root,
@@ -2150,7 +2150,7 @@ jobs:
 
   it('находит нарушение, даже если путь к каталогу прогонов литерально другой из-за символической ссылки', async () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 version: 1
 kind: pipeline
 name: журнал-через-ссылку
@@ -2170,7 +2170,7 @@ jobs:
     symlinkSync(project.root, linkedRoot, 'dir');
 
     const expanded = expandPipeline({
-      pipelinePath: project.path('stepcast.yml'),
+      pipelinePath: project.path('burnex.yml'),
       config: project.config,
     });
 
@@ -2180,7 +2180,7 @@ jobs:
           expanded,
           config: {
             ...project.config,
-            runs: { ...project.config.runs, root: join(linkedRoot, '.stepcast', 'runs') },
+            runs: { ...project.config.runs, root: join(linkedRoot, '.burnex', 'runs') },
           },
           projectRoot: project.root,
           cwd: project.root,
@@ -2199,7 +2199,7 @@ jobs:
 // файла.
 describe('workspace-modes: состав вложенных репозиториев проверяется заранее', () => {
   it('отклоняет объявленный каталог, которого не существует', async () => {
-    const project = makeProject({ 'stepcast.yml': pipelineWriting('cwd') });
+    const project = makeProject({ 'burnex.yml': pipelineWriting('cwd') });
     gitInit(project);
     commit(project, 'первый');
 
@@ -2216,7 +2216,7 @@ describe('workspace-modes: состав вложенных репозитори�
 
   it('отклоняет объявленный каталог, который не является рабочим деревом git', async () => {
     const project = makeProject({
-      'stepcast.yml': pipelineWriting('cwd'),
+      'burnex.yml': pipelineWriting('cwd'),
       // Файл, а не каталог: существует, но рабочим деревом git быть не может.
       'public-site': 'не каталог\n',
     });
@@ -2236,7 +2236,7 @@ describe('workspace-modes: состав вложенных репозитори�
 
   it('отклоняет объявленный каталог, принадлежащий корневому репозиторию, а не собственному', async () => {
     const project = makeProject({
-      'stepcast.yml': pipelineWriting('cwd'),
+      'burnex.yml': pipelineWriting('cwd'),
       'public-site/.gitkeep': '',
     });
     gitInit(project);
@@ -2256,7 +2256,7 @@ describe('workspace-modes: состав вложенных репозитори�
 
   it('отклоняет состав, если корень рабочего дерева сам не является репозиторием git', async () => {
     const project = makeProject({
-      'stepcast.yml': pipelineWriting('cwd'),
+      'burnex.yml': pipelineWriting('cwd'),
       'public-site/.gitkeep': '',
     });
     // Корень нарочно не инициализирован как git — только вложенный каталог.
@@ -2278,7 +2278,7 @@ describe('workspace-modes: состав вложенных репозитори�
   // правок после этого просто не оцениваются. Значит, это предстартовый отказ.
   it('отклоняет объявленный каталог без единого коммита, который корень не игнорирует', async () => {
     const project = makeProject({
-      'stepcast.yml': pipelineWriting('cwd'),
+      'burnex.yml': pipelineWriting('cwd'),
       'public-site/index.html': 'сайт\n',
     });
     gitInit(project);
@@ -2303,7 +2303,7 @@ describe('workspace-modes: состав вложенных репозитори�
   // отказывать здесь значило бы запретить рабочее дерево.
   it('пропускает объявленный каталог без коммита, если корень его игнорирует', async () => {
     const project = makeProject({
-      'stepcast.yml': pipelineWriting('cwd'),
+      'burnex.yml': pipelineWriting('cwd'),
       '.gitignore': 'public-site/\n',
       'public-site/index.html': 'сайт\n',
     });
@@ -2320,7 +2320,7 @@ describe('workspace-modes: состав вложенных репозитори�
   // рабочим деревом, и якорь остаётся составным.
   it('пригодный состав в режиме worktree не мешает прогону', async () => {
     const project = makeProject({
-      'stepcast.yml': pipelineWriting('worktree'),
+      'burnex.yml': pipelineWriting('worktree'),
       'public-site/.gitkeep': '',
     });
     gitInit(project);
@@ -2337,7 +2337,7 @@ describe('workspace-modes: состав вложенных репозитори�
   // части не распространяется: такой репозиторий вывести из HEAD невозможно.
   it('отклоняет часть без коммита в режиме worktree, даже если корень её игнорирует', async () => {
     const project = makeProject({
-      'stepcast.yml': pipelineWriting('worktree'),
+      'burnex.yml': pipelineWriting('worktree'),
       '.gitignore': 'public-site/\n',
       'public-site/index.html': 'сайт\n',
     });
@@ -2363,7 +2363,7 @@ describe('workspace-modes: состав вложенных репозитори�
   // add` части отказал бы диагностикой git посреди подготовки.
   it('отклоняет часть, чьи файлы отслеживает корень, в режиме worktree', async () => {
     const project = makeProject({
-      'stepcast.yml': pipelineWriting('worktree'),
+      'burnex.yml': pipelineWriting('worktree'),
       'public-site/index.html': 'сайт\n',
     });
     gitInit(project);
@@ -2385,7 +2385,7 @@ describe('workspace-modes: состав вложенных репозитори�
 
   it('отклоняет работу в режиме copy при объявленном составе', async () => {
     const project = makeProject({
-      'stepcast.yml': pipelineWriting('copy'),
+      'burnex.yml': pipelineWriting('copy'),
       'public-site/.gitkeep': '',
     });
     gitInit(project);
@@ -2405,7 +2405,7 @@ describe('workspace-modes: состав вложенных репозитори�
 
   it('пригодный состав в режиме каталога запуска прогону не мешает', async () => {
     const project = makeProject({
-      'stepcast.yml': pipelineWriting('cwd'),
+      'burnex.yml': pipelineWriting('cwd'),
       'public-site/.gitkeep': '',
     });
     gitInit(project);
@@ -2418,7 +2418,7 @@ describe('workspace-modes: состав вложенных репозитори�
   });
 
   it('без объявленного состава worktree и copy доступны как прежде', async () => {
-    const project = makeProject({ 'stepcast.yml': pipelineWriting('worktree') });
+    const project = makeProject({ 'burnex.yml': pipelineWriting('worktree') });
     gitInit(project);
     commit(project, 'первый');
 

@@ -13,7 +13,7 @@ function probes(overrides: Partial<InferProbes> = {}): InferProbes {
   return {
     isGitTree: () => false,
     readPackageName: () => undefined,
-    releasesDir: '/home/u/.stepcast/releases',
+    releasesDir: '/home/u/.burnex/releases',
     ...overrides,
   };
 }
@@ -34,7 +34,7 @@ describe('install-infer: вывод способа без паспорта', () 
 
   it('каталог релизов — отказ с подсказкой install.sh, даже внутри git-дерева', () => {
     assert.throws(
-      () => inferInstallMethod('/home/u/.stepcast/releases/0.3.0', probes({ isGitTree: () => true })),
+      () => inferInstallMethod('/home/u/.burnex/releases/0.3.0', probes({ isGitTree: () => true })),
       (error: unknown) => error instanceof StepcastError && /install\.sh/.test(error.hint ?? ''),
     );
   });

@@ -32,7 +32,7 @@
 4. Поставь исправленную версию в очередь — ровно этой формой вызова:
 
    ```
-   node "$BURNEX_BIN" propose .stepcast/widgets/<id>.tsx --from "$BURNEX_SCRATCH/<id>.tsx" --reason "<что изменилось и почему>"
+   node "$BURNEX_BIN" propose .burnex/widgets/<id>.tsx --from "$BURNEX_SCRATCH/<id>.tsx" --reason "<что изменилось и почему>"
    ```
 
    Движок зовётся через `node "$BURNEX_BIN"`, а не голым `stepcast`: у

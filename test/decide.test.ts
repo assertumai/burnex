@@ -73,7 +73,7 @@ async function waitUntil(predicate: () => boolean, timeoutMs = 5000): Promise<vo
 function projectWithRuns(): { readonly project: Project; readonly runsRoot: string } {
   const project = makeProject({});
   const runsRoot = tempDir('runs-');
-  writeFileSync(join(project.home, '.stepcast', 'config.yml'), `runs:\n  root: ${runsRoot}\n`);
+  writeFileSync(join(project.home, '.burnex', 'config.yml'), `runs:\n  root: ${runsRoot}\n`);
   return { project, runsRoot };
 }
 
@@ -83,8 +83,8 @@ async function startAwaiting(
   runsRoot: string,
   pipeline = PIPELINE,
 ): Promise<{ readonly promise: Promise<RunResult>; readonly paths: RunPaths }> {
-  project.write('stepcast.yml', pipeline);
-  const expanded = expandPipeline({ pipelinePath: project.path('stepcast.yml'), config: project.config });
+  project.write('burnex.yml', pipeline);
+  const expanded = expandPipeline({ pipelinePath: project.path('burnex.yml'), config: project.config });
   const promise = runPipeline({
     expanded,
     config: { ...project.config, runs: { ...project.config.runs, root: runsRoot } },
@@ -120,8 +120,8 @@ describe('decide: приём решения командой', () => {
 
   it('прогон без ожиданий — отказ', async () => {
     const { project, runsRoot } = projectWithRuns();
-    project.write('stepcast.yml', 'version: 1\nkind: pipeline\nname: без-ожиданий\njobs:\n  build:\n    steps:\n      - id: s\n        run: ["true"]\n');
-    const expanded = expandPipeline({ pipelinePath: project.path('stepcast.yml'), config: project.config });
+    project.write('burnex.yml', 'version: 1\nkind: pipeline\nname: без-ожиданий\njobs:\n  build:\n    steps:\n      - id: s\n        run: ["true"]\n');
+    const expanded = expandPipeline({ pipelinePath: project.path('burnex.yml'), config: project.config });
     const result = await runPipeline({
       expanded,
       config: { ...project.config, runs: { ...project.config.runs, root: runsRoot } },
@@ -294,8 +294,8 @@ describe('decide: строка ожидания в burnex status', () => {
 
   it('прогон без ожиданий печатается как прежде, без строки ожидания', async () => {
     const { project, runsRoot } = projectWithRuns();
-    project.write('stepcast.yml', 'version: 1\nkind: pipeline\nname: без-ожиданий\njobs:\n  build:\n    steps:\n      - id: s\n        run: ["true"]\n');
-    const expanded = expandPipeline({ pipelinePath: project.path('stepcast.yml'), config: project.config });
+    project.write('burnex.yml', 'version: 1\nkind: pipeline\nname: без-ожиданий\njobs:\n  build:\n    steps:\n      - id: s\n        run: ["true"]\n');
+    const expanded = expandPipeline({ pipelinePath: project.path('burnex.yml'), config: project.config });
     const result = await runPipeline({
       expanded,
       config: { ...project.config, runs: { ...project.config.runs, root: runsRoot } },

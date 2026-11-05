@@ -26,14 +26,14 @@ function lint(project: Project, inputs?: Record<string, string>): Diagnostic[] {
 
 function lintWithConfig(project: Project, config: Config, inputs?: Record<string, string>): Diagnostic[] {
   const expanded = expandPipeline({
-    pipelinePath: project.path('stepcast.yml'),
+    pipelinePath: project.path('burnex.yml'),
     config,
     ...(inputs === undefined ? {} : { inputs }),
   });
   return lintPipeline(expanded, { config });
 }
 
-/** Тот же проект, но с объявленным составом `project.nested_repos`, будто он объявлен в `.stepcast/config.yml`. */
+/** Тот же проект, но с объявленным составом `project.nested_repos`, будто он объявлен в `.burnex/config.yml`. */
 function withNestedRepos(project: Project, nestedRepos: readonly string[]): Config {
   return { ...project.config, project: { ...project.config.project, nestedRepos } };
 }
@@ -51,7 +51,7 @@ function lintScript(
   scriptRoots: { project: string; home: string; builtin: string },
   config: Config = project.config,
 ): Diagnostic[] {
-  const expanded = expandPipeline({ pipelinePath: project.path('stepcast.yml'), config, scriptRoots });
+  const expanded = expandPipeline({ pipelinePath: project.path('burnex.yml'), config, scriptRoots });
   return lintPipeline(expanded, { config });
 }
 
@@ -66,7 +66,7 @@ function lintUses(
   config: Config = project.config,
 ): Diagnostic[] {
   const expanded = expandPipeline({
-    pipelinePath: project.path('stepcast.yml'),
+    pipelinePath: project.path('burnex.yml'),
     config,
     stepRoots,
     scriptRoots: isolatedScriptRoots(project),
@@ -104,7 +104,7 @@ jobs:
 
 describe('pipeline-definition: статическая проверка', () => {
   it('чистый пайплайн не даёт ни ошибок, ни предупреждений', () => {
-    const diagnostics = lint(makeProject({ 'stepcast.yml': OK_PIPELINE }));
+    const diagnostics = lint(makeProject({ 'burnex.yml': OK_PIPELINE }));
     assert.deepEqual(diagnostics, []);
     assert.equal(hasErrors(diagnostics), false);
   });
@@ -112,7 +112,7 @@ describe('pipeline-definition: статическая проверка', () => {
   it('принимает lane в kebab-case', () => {
     const diagnostics = lint(
       makeProject({
-        'stepcast.yml': `
+        'burnex.yml': `
 kind: pipeline
 budget: { tokens: 100k }
 jobs:
@@ -128,7 +128,7 @@ jobs:
   it('отклоняет lane, не являющийся слагом, называя работу и значение', () => {
     const diagnostics = lint(
       makeProject({
-        'stepcast.yml': `
+        'burnex.yml': `
 kind: pipeline
 budget: { tokens: 100k }
 jobs:
@@ -147,7 +147,7 @@ jobs:
   it('отклоняет lane: all, называя работу и причину резервирования', () => {
     const diagnostics = lint(
       makeProject({
-        'stepcast.yml': `
+        'burnex.yml': `
 kind: pipeline
 budget: { tokens: 100k }
 jobs:
@@ -168,7 +168,7 @@ jobs:
   it('слаг all-lanes остаётся допустимой меткой', () => {
     const diagnostics = lint(
       makeProject({
-        'stepcast.yml': `
+        'burnex.yml': `
 kind: pipeline
 budget: { tokens: 100k }
 jobs:
@@ -207,7 +207,7 @@ jobs:
   it('needs на работу соседней дорожки — ошибка, называющая обе работы и обе дорожки', () => {
     const diagnostics = lint(
       makeProject({
-        'stepcast.yml': LANE_PIPELINE.replace(
+        'burnex.yml': LANE_PIPELINE.replace(
           'work-b:\n    lane: b\n    needs: [slots]',
           'work-b:\n    lane: b\n    needs: [slots, work-a]',
         ),
@@ -225,7 +225,7 @@ jobs:
   it('context_upstream на работу соседней дорожки — ошибка про дорожку, а не про граф', () => {
     const diagnostics = lint(
       makeProject({
-        'stepcast.yml': LANE_PIPELINE.replace(
+        'burnex.yml': LANE_PIPELINE.replace(
           'work-b:\n    lane: b\n    needs: [slots]',
           'work-b:\n    lane: b\n    needs: [slots, work-a]\n    context_upstream: [work-a]',
         ),
@@ -244,7 +244,7 @@ jobs:
   it('те же записи в пределах своей дорожки — ошибки нет', () => {
     const diagnostics = lint(
       makeProject({
-        'stepcast.yml': LANE_PIPELINE.replace(
+        'burnex.yml': LANE_PIPELINE.replace(
           'work-a:\n    lane: a\n    needs: [slots]',
           'work-a:\n    lane: a\n    needs: [slots]\n    steps: [{ id: c, run: [echo, ok], expect: [{ exit_code: 0 }] }]\n  work-a2:\n    lane: a\n    needs: [slots, work-a]\n    context_upstream: [work-a]',
         ),
@@ -256,7 +256,7 @@ jobs:
   it('работа без метки lane, называющая работы обеих дорожек, — ошибки нет', () => {
     const diagnostics = lint(
       makeProject({
-        'stepcast.yml': LANE_PIPELINE.replace(
+        'burnex.yml': LANE_PIPELINE.replace(
           'work-b:\n    lane: b\n    needs: [slots]\n    steps: [{ id: c, run: [echo, ok], expect: [{ exit_code: 0 }] }]',
           'work-b:\n    lane: b\n    needs: [slots]\n    steps: [{ id: c, run: [echo, ok], expect: [{ exit_code: 0 }] }]\n  merge:\n    needs: [work-a, work-b]\n    context_upstream: [work-a, work-b]\n    steps: [{ id: c, run: [echo, ok], expect: [{ exit_code: 0 }] }]',
         ),
@@ -268,7 +268,7 @@ jobs:
   it('слот чужой дорожки в подстановке — ошибка, называющая обе дорожки', () => {
     const diagnostics = lint(
       makeProject({
-        'stepcast.yml': LANE_PIPELINE.replace(
+        'burnex.yml': LANE_PIPELINE.replace(
           'work-b:\n    lane: b\n    needs: [slots]\n    steps: [{ id: c, run: [echo, ok], expect: [{ exit_code: 0 }] }]',
           'work-b:\n    lane: b\n    needs: [slots]\n    steps: [{ id: c, run: [echo, "${jobs.slots.output.lanes.a.repo.check}"], expect: [{ exit_code: 0 }] }]',
         ),
@@ -284,7 +284,7 @@ jobs:
   it('собственная дорожка в подстановке слота допустима', () => {
     const diagnostics = lint(
       makeProject({
-        'stepcast.yml': LANE_PIPELINE.replace(
+        'burnex.yml': LANE_PIPELINE.replace(
           'work-a:\n    lane: a\n    needs: [slots]\n    steps: [{ id: c, run: [echo, ok], expect: [{ exit_code: 0 }] }]',
           'work-a:\n    lane: a\n    needs: [slots]\n    steps: [{ id: c, run: [echo, "${jobs.slots.output.lanes.a.repo.check}"], expect: [{ exit_code: 0 }] }]',
         ),
@@ -296,7 +296,7 @@ jobs:
   it('выход работы соседней дорожки в подстановке — ошибка, называющая обе дорожки', () => {
     const diagnostics = lint(
       makeProject({
-        'stepcast.yml': LANE_PIPELINE.replace(
+        'burnex.yml': LANE_PIPELINE.replace(
           'work-b:\n    lane: b\n    needs: [slots]\n    steps: [{ id: c, run: [echo, ok], expect: [{ exit_code: 0 }] }]',
           'work-b:\n    lane: b\n    needs: [slots, work-a]\n    steps: [{ id: c, run: [echo, "${jobs.work-a.output.slug}"], expect: [{ exit_code: 0 }] }]',
         ),
@@ -308,7 +308,7 @@ jobs:
 
   it('ссылка из общего файла промпта называет файл и позицию', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 budget: { tokens: 100k }
 jobs:
@@ -356,7 +356,7 @@ steps:
     // ради которой написан.
     const diagnostics = lint(
       makeProject({
-        'stepcast.yml': LANE_PIPELINE.replace(
+        'burnex.yml': LANE_PIPELINE.replace(
           'work-a:\n    lane: a\n    needs: [slots]',
           'work-a:\n    lane: a\n    needs: [slots]\n    data: [title]',
         ).replace(
@@ -371,7 +371,7 @@ steps:
   it('условие if, обращающееся к сегменту чужой дорожки, — ошибка', () => {
     const diagnostics = lint(
       makeProject({
-        'stepcast.yml': LANE_PIPELINE.replace(
+        'burnex.yml': LANE_PIPELINE.replace(
           'work-b:\n    lane: b\n    needs: [slots]',
           'work-b:\n    lane: b\n    needs: [slots]\n    if: "jobs.slots.output.lanes.a.filled == true"',
         ),
@@ -387,7 +387,7 @@ describe('pipeline-definition: статическая проверка', () => {
   it('находит цикл и перечисляет участников', () => {
     const diagnostics = lint(
       makeProject({
-        'stepcast.yml': `
+        'burnex.yml': `
 kind: pipeline
 budget: { tokens: 100k }
 jobs:
@@ -410,7 +410,7 @@ jobs:
   it('сообщает о недостижимой работе за циклом', () => {
     const diagnostics = lint(
       makeProject({
-        'stepcast.yml': `
+        'burnex.yml': `
 kind: pipeline
 budget: { tokens: 100k }
 jobs:
@@ -432,7 +432,7 @@ jobs:
   it('находит зависимость от несуществующей работы', () => {
     const diagnostics = lint(
       makeProject({
-        'stepcast.yml': `
+        'burnex.yml': `
 kind: pipeline
 budget: { tokens: 100k }
 jobs:
@@ -448,7 +448,7 @@ jobs:
   it('предупреждает о явно перечисленной транзитивной зависимости', () => {
     const diagnostics = lint(
       makeProject({
-        'stepcast.yml': `
+        'burnex.yml': `
 kind: pipeline
 budget: { tokens: 100k }
 jobs:
@@ -470,7 +470,7 @@ jobs:
   it('отклоняет условие с необъявленным входом', () => {
     const diagnostics = lint(
       makeProject({
-        'stepcast.yml': `
+        'burnex.yml': `
 kind: pipeline
 budget: { tokens: 100k }
 jobs:
@@ -486,7 +486,7 @@ jobs:
   it('отклоняет условие о работе не выше по графу', () => {
     const diagnostics = lint(
       makeProject({
-        'stepcast.yml': `
+        'burnex.yml': `
 kind: pipeline
 budget: { tokens: 100k }
 jobs:
@@ -504,7 +504,7 @@ jobs:
   it('разрешает условие о работе выше по графу и при needs: all', () => {
     const diagnostics = lint(
       makeProject({
-        'stepcast.yml': `
+        'burnex.yml': `
 kind: pipeline
 budget: { tokens: 100k }
 jobs:
@@ -530,7 +530,7 @@ jobs:
   it('предупреждает об условии на соседнюю работу при concurrency больше единицы', () => {
     const diagnostics = lint(
       makeProject({
-        'stepcast.yml': `
+        'burnex.yml': `
 kind: pipeline
 budget: { tokens: 100k }
 concurrency: 2
@@ -554,7 +554,7 @@ jobs:
   it('не предупреждает об условии на объявленную зависимость при concurrency больше единицы', () => {
     const diagnostics = lint(
       makeProject({
-        'stepcast.yml': `
+        'burnex.yml': `
 kind: pipeline
 budget: { tokens: 100k }
 concurrency: 2
@@ -579,7 +579,7 @@ jobs:
   it('не предупреждает о той же ссылке при concurrency: 1', () => {
     const diagnostics = lint(
       makeProject({
-        'stepcast.yml': `
+        'burnex.yml': `
 kind: pipeline
 budget: { tokens: 100k }
 jobs:
@@ -622,7 +622,7 @@ jobs:
 
   it('отклоняет ошибкой подстановку выхода соседней работы при concurrency больше единицы', () => {
     const diagnostics = lint(
-      makeProject({ 'stepcast.yml': neighborSubstitutionPipeline(2) }),
+      makeProject({ 'burnex.yml': neighborSubstitutionPipeline(2) }),
     );
     assert.ok(
       errors(diagnostics).some(
@@ -637,7 +637,7 @@ jobs:
   // Сценарий: «Последовательное исполнение не оправдывает ссылку»
   it('отклоняет ту же подстановку и при concurrency: 1', () => {
     const diagnostics = lint(
-      makeProject({ 'stepcast.yml': neighborSubstitutionPipeline(1) }),
+      makeProject({ 'burnex.yml': neighborSubstitutionPipeline(1) }),
     );
     assert.ok(
       errors(diagnostics).some(
@@ -652,7 +652,7 @@ jobs:
   it('не отклоняет подстановку выхода транзитивной предшественницы', () => {
     const diagnostics = lint(
       makeProject({
-        'stepcast.yml': `
+        'burnex.yml': `
 version: 1
 kind: pipeline
 name: подстановка
@@ -689,7 +689,7 @@ jobs:
   it('не отклоняет подстановку выхода любой работы при needs: all', () => {
     const diagnostics = lint(
       makeProject({
-        'stepcast.yml': `
+        'burnex.yml': `
 version: 1
 kind: pipeline
 name: подстановка
@@ -723,7 +723,7 @@ jobs:
   it('не отклоняет подстановку выхода объявленной зависимости', () => {
     const diagnostics = lint(
       makeProject({
-        'stepcast.yml': `
+        'burnex.yml': `
 version: 1
 kind: pipeline
 name: подстановка
@@ -758,7 +758,7 @@ jobs:
   it('отклоняет опечатку в имени работы, подставленной через with', () => {
     const diagnostics = lint(
       makeProject({
-        'stepcast.yml': `
+        'burnex.yml': `
 kind: pipeline
 budget: { tokens: 100k }
 jobs:
@@ -795,7 +795,7 @@ steps: [{ id: c, run: [echo, ok] }]
   // это её файл, а у `with` того же подключения — файл пайплайна.
   it('называет файл объявления подстановки: тело работы и место подключения — разные файлы', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 budget: { tokens: 100k }
 jobs:
@@ -822,7 +822,7 @@ steps:
 
     const wired = diagnostics.find((entry) => /jobs.wired.output.slug/.test(entry.message));
     assert.ok(wired !== undefined, 'подстановка в with должна давать ошибку');
-    assert.equal(wired?.file, project.path('stepcast.yml'));
+    assert.equal(wired?.file, project.path('burnex.yml'));
     assert.equal(wired?.at, 'jobs.build.with.change');
   });
 
@@ -830,7 +830,7 @@ steps:
   // его не видит — но имя, которого в графе нет, не разрешится и в нём.
   it('отклоняет несуществующее имя в подстановке поля пайплайна', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 budget: { tokens: 100k }
 context:
@@ -848,7 +848,7 @@ jobs:
     const found = diagnostics.find((entry) => /jobs.nope.output.slug/.test(entry.message));
     assert.ok(found !== undefined, 'ошибка называет выражение поля пайплайна');
     assert.equal(found?.severity, 'error');
-    assert.equal(found?.file, project.path('stepcast.yml'));
+    assert.equal(found?.file, project.path('burnex.yml'));
     assert.equal(found?.at, 'context.0');
   });
 
@@ -857,7 +857,7 @@ jobs:
   // суффикса, которого в графе нет ни у одной из них.
   it('отклоняет имя без суффикса дорожки, подставленное в общем файле промпта', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 budget: { tokens: 100k }
 jobs:
@@ -894,7 +894,7 @@ jobs:
   it('отклоняет ошибкой несуществующее имя в if при concurrency больше единицы', () => {
     const diagnostics = lint(
       makeProject({
-        'stepcast.yml': `
+        'burnex.yml': `
 kind: pipeline
 budget: { tokens: 100k }
 concurrency: 2
@@ -918,7 +918,7 @@ jobs:
   it('не отклоняет экранированную ссылку на несуществующую работу в промпте', () => {
     const diagnostics = lint(
       makeProject({
-        'stepcast.yml': `
+        'burnex.yml': `
 kind: pipeline
 budget: { tokens: 100k }
 jobs:
@@ -938,7 +938,7 @@ jobs:
   it('не отклоняет экранированную ссылку на несуществующую работу в поле документа', () => {
     const diagnostics = lint(
       makeProject({
-        'stepcast.yml': `
+        'burnex.yml': `
 kind: pipeline
 budget: { tokens: 100k }
 jobs:
@@ -956,7 +956,7 @@ jobs:
   it('отклоняет context_upstream, называющий работу вне предшественников', () => {
     const diagnostics = lint(
       makeProject({
-        'stepcast.yml': `
+        'burnex.yml': `
 kind: pipeline
 budget: { tokens: 100k }
 jobs:
@@ -979,7 +979,7 @@ jobs:
   it('не трогает context_upstream, называющий объявленную зависимость', () => {
     const diagnostics = lint(
       makeProject({
-        'stepcast.yml': `
+        'burnex.yml': `
 kind: pipeline
 budget: { tokens: 100k }
 jobs:
@@ -1002,7 +1002,7 @@ jobs:
   it('отклоняет вывод работы в строковой форме run и предлагает argv', () => {
     const diagnostics = lint(
       makeProject({
-        'stepcast.yml': `
+        'burnex.yml': `
 kind: pipeline
 budget: { tokens: 100k }
 jobs:
@@ -1024,7 +1024,7 @@ jobs:
   it('разрешает тот же вывод в форме списком argv', () => {
     const diagnostics = lint(
       makeProject({
-        'stepcast.yml': `
+        'burnex.yml': `
 kind: pipeline
 budget: { tokens: 100k }
 jobs:
@@ -1042,7 +1042,7 @@ jobs:
   it('отклоняет переменную env под действующим запретом', () => {
     const diagnostics = lint(
       makeProject({
-        'stepcast.yml': `
+        'burnex.yml': `
 kind: pipeline
 budget: { tokens: 100k }
 env:
@@ -1063,7 +1063,7 @@ jobs:
   it('отклоняет неизвестный бэкенд и перечисляет настроенные', () => {
     const diagnostics = lint(
       makeProject({
-        'stepcast.yml': `
+        'burnex.yml': `
 kind: pipeline
 budget: { tokens: 100k }
 jobs:
@@ -1081,7 +1081,7 @@ jobs:
   it('не проверяет существование схемы, если в пути есть подстановка', () => {
     const withSubstitution = lint(
       makeProject({
-        'stepcast.yml': `
+        'burnex.yml': `
 kind: pipeline
 budget: { tokens: 100k }
 inputs:
@@ -1096,7 +1096,7 @@ jobs:
 
     const withoutSubstitution = lint(
       makeProject({
-        'stepcast.yml': `
+        'burnex.yml': `
 kind: pipeline
 budget: { tokens: 100k }
 jobs:
@@ -1111,7 +1111,7 @@ jobs:
   // Сценарий: «Несуществующая схема выхода» (pipeline-definition, шаг script)
   it('проверяет путь output_schema у шага script тем же правилом, что у agent и run', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 budget: { tokens: 100k }
 jobs:
@@ -1119,14 +1119,14 @@ jobs:
     steps: [{ id: c, script: cleanup.py, output_schema: ./schemas/pick.json }]
 `,
     });
-    project.write('.stepcast/scripts/cleanup.py', 'print(1)\n');
+    project.write('.burnex/scripts/cleanup.py', 'print(1)\n');
     const messages = errors(lintScript(project, isolatedScriptRoots(project)));
     assert.ok(messages.some((message) => /Файл схемы не найден/.test(message) && /pick\.json/.test(message)));
   });
 
   it('не проверяет output_schema шага script с подстановкой в пути', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 budget: { tokens: 100k }
 inputs:
@@ -1136,14 +1136,14 @@ jobs:
     steps: [{ id: c, script: cleanup.py, output_schema: "./schemas/\${inputs.kind}.json" }]
 `,
     });
-    project.write('.stepcast/scripts/cleanup.py', 'print(1)\n');
+    project.write('.burnex/scripts/cleanup.py', 'print(1)\n');
     const messages = errors(lintScript(project, isolatedScriptRoots(project)));
     assert.ok(!messages.some((message) => /Файл схемы не найден/.test(message)));
   });
 
   it('проверяет превышение потолков конфигурации', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 budget: { tokens: 90M }
 concurrency: 20
@@ -1160,7 +1160,7 @@ jobs:
   it('предупреждает о пайплайне без бюджета', () => {
     const diagnostics = lint(
       makeProject({
-        'stepcast.yml': `
+        'burnex.yml': `
 kind: pipeline
 jobs:
   build:
@@ -1175,7 +1175,7 @@ jobs:
   it('даёт ошибку на budget_exempt при on: success', () => {
     const diagnostics = lint(
       makeProject({
-        'stepcast.yml': `
+        'burnex.yml': `
 kind: pipeline
 budget: { tokens: 100k }
 jobs:
@@ -1191,7 +1191,7 @@ jobs:
   it('даёт ошибку на освобождённую работу с агентскими шагами без собственного budget', () => {
     const diagnostics = lint(
       makeProject({
-        'stepcast.yml': `
+        'burnex.yml': `
 kind: pipeline
 budget: { tokens: 100k }
 jobs:
@@ -1215,7 +1215,7 @@ jobs:
     // освобождать её без собственного потолка так же нельзя.
     const diagnostics = lint(
       makeProject({
-        'stepcast.yml': `
+        'burnex.yml': `
 kind: pipeline
 budget: { tokens: 100k }
 jobs:
@@ -1243,7 +1243,7 @@ jobs:
   it('не даёт ошибку на освобождённую агентскую работу с собственным budget', () => {
     const diagnostics = lint(
       makeProject({
-        'stepcast.yml': `
+        'burnex.yml': `
 kind: pipeline
 budget: { tokens: 100k }
 jobs:
@@ -1261,7 +1261,7 @@ jobs:
   it('предупреждает о неосвобождённой работе on: always в пайплайне с бюджетом', () => {
     const diagnostics = lint(
       makeProject({
-        'stepcast.yml': `
+        'burnex.yml': `
 kind: pipeline
 budget: { tokens: 100k }
 jobs:
@@ -1280,7 +1280,7 @@ jobs:
   it('предупреждает о cwd при параллелизме', () => {
     const diagnostics = lint(
       makeProject({
-        'stepcast.yml': `
+        'burnex.yml': `
 kind: pipeline
 budget: { tokens: 100k }
 concurrency: 3
@@ -1298,7 +1298,7 @@ jobs:
   it('предупреждает о единственном предикате changed_only', () => {
     const diagnostics = lint(
       makeProject({
-        'stepcast.yml': `
+        'burnex.yml': `
 kind: pipeline
 budget: { tokens: 100k }
 jobs:
@@ -1321,7 +1321,7 @@ jobs:
   it('не предупреждает о on_exceed: wait без rate_limit_pct', () => {
     const diagnostics = lint(
       makeProject({
-        'stepcast.yml': `
+        'burnex.yml': `
 kind: pipeline
 budget: { tokens: 100k, on_exceed: wait }
 jobs:
@@ -1340,7 +1340,7 @@ jobs:
   it('не предупреждает о wait, объявленном вместе с rate_limit_pct', () => {
     const diagnostics = lint(
       makeProject({
-        'stepcast.yml': `
+        'burnex.yml': `
 kind: pipeline
 budget: { tokens: 100k }
 jobs:
@@ -1359,7 +1359,7 @@ jobs:
   it('предупреждает о гейте только из совещательного judge', () => {
     const diagnostics = lint(
       makeProject({
-        'stepcast.yml': `
+        'burnex.yml': `
 kind: pipeline
 budget: { tokens: 100k }
 jobs:
@@ -1377,7 +1377,7 @@ jobs:
   it('не отклоняет judge на бэкенде со структурированным выводом', () => {
     const diagnostics = lint(
       makeProject({
-        'stepcast.yml': `
+        'burnex.yml': `
 kind: pipeline
 budget: { tokens: 100k }
 jobs:
@@ -1395,7 +1395,7 @@ jobs:
   it('отклоняет неизвестный бэкенд судьи', () => {
     const diagnostics = lint(
       makeProject({
-        'stepcast.yml': `
+        'burnex.yml': `
 kind: pipeline
 budget: { tokens: 100k }
 jobs:
@@ -1412,7 +1412,7 @@ jobs:
 
   it('отклоняет бэкенд судьи без структурированного вывода', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 budget: { tokens: 100k }
 jobs:
@@ -1443,7 +1443,7 @@ jobs:
       },
     };
     const diagnostics = lintPipeline(
-      expandPipeline({ pipelinePath: project.path('stepcast.yml'), config }),
+      expandPipeline({ pipelinePath: project.path('burnex.yml'), config }),
       { config },
     );
     assert.ok(
@@ -1455,7 +1455,7 @@ jobs:
   it('отклоняет output_schema агентского шага на бэкенде без структурированного вывода', () => {
     const project = makeProject({
       'schemas/plan.json': '{ "type": "object" }\n',
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 budget: { tokens: 100k }
 jobs:
@@ -1482,7 +1482,7 @@ jobs:
     };
     const config = { ...project.config, backends: { ...project.config.backends, text_only: textOnly } };
     const diagnostics = lintPipeline(
-      expandPipeline({ pipelinePath: project.path('stepcast.yml'), config }),
+      expandPipeline({ pipelinePath: project.path('burnex.yml'), config }),
       { config },
     );
     const found = diagnostics.find(
@@ -1500,7 +1500,7 @@ jobs:
       backends: { ...config.backends, text_only: { ...textOnly, structuredOutput: true } },
     };
     const clean = lintPipeline(
-      expandPipeline({ pipelinePath: project.path('stepcast.yml'), config: enabled }),
+      expandPipeline({ pipelinePath: project.path('burnex.yml'), config: enabled }),
       { config: enabled },
     );
     assert.deepEqual(
@@ -1513,7 +1513,7 @@ jobs:
   // предоставлен — иначе прогон упрётся в это на первом вызове судьи.
   it('отклоняет бэкенд судьи, для которого нет адаптера', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 budget: { tokens: 100k }
 jobs:
@@ -1533,7 +1533,7 @@ jobs:
     };
 
     const diagnostics = lintPipeline(
-      expandPipeline({ pipelinePath: project.path('stepcast.yml'), config }),
+      expandPipeline({ pipelinePath: project.path('burnex.yml'), config }),
       { config },
     );
 
@@ -1543,7 +1543,7 @@ jobs:
 
   it('принимает бэкенд судьи, предоставленный плагином', async () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 budget: { tokens: 100k }
 jobs:
@@ -1566,7 +1566,7 @@ jobs:
     await applyDeclarativePlugin(kernel, { name: 'codex-adapter', backends: { codex: { create: () => ({}) as never } } }, '/м.js', DECLARATIVE_CONTRIBUTION_FIELDS);
 
     const diagnostics = lintPipeline(
-      expandPipeline({ pipelinePath: project.path('stepcast.yml'), config }),
+      expandPipeline({ pipelinePath: project.path('burnex.yml'), config }),
       { config, registry },
     );
 
@@ -1579,7 +1579,7 @@ jobs:
   // Сценарий: «Противоречивое сочетание с разрешающим режимом»
   it('отклоняет enforce: strict рядом с разрешающим режимом бэкенда', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 budget: { tokens: 100k }
 jobs:
@@ -1604,7 +1604,7 @@ jobs:
   // Сценарий: «Жёсткий режим на бэкенде без поддержки»
   it('отклоняет enforce: strict на бэкенде без объявленной возможности', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 budget: { tokens: 100k }
 jobs:
@@ -1637,7 +1637,7 @@ jobs:
       },
     };
     const diagnostics = lintPipeline(
-      expandPipeline({ pipelinePath: project.path('stepcast.yml'), config }),
+      expandPipeline({ pipelinePath: project.path('burnex.yml'), config }),
       { config },
     );
     const messages = errors(diagnostics);
@@ -1650,7 +1650,7 @@ jobs:
 
   it('для Codex временно пропускает проверку enforce: strict', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 budget: { tokens: 100k }
 jobs:
@@ -1684,7 +1684,7 @@ jobs:
       },
     };
     const diagnostics = lintPipeline(
-      expandPipeline({ pipelinePath: project.path('stepcast.yml'), config }),
+      expandPipeline({ pipelinePath: project.path('burnex.yml'), config }),
       { config },
     );
     assert.deepEqual(errors(diagnostics), []);
@@ -1692,7 +1692,7 @@ jobs:
 
   it('enforce: strict на поддерживающем бэкенде с запрещающим режимом проходит молча', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 budget: { tokens: 100k }
 jobs:
@@ -1712,7 +1712,7 @@ jobs:
 
   it('называет объявление работы, а не скопированное в шаг поле', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 budget: { tokens: 100k }
 jobs:
@@ -1734,7 +1734,7 @@ jobs:
 
   it('базовый strict бэкенда проверяется и у шага со своим блоком permissions', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 budget: { tokens: 100k }
 jobs:
@@ -1767,7 +1767,7 @@ jobs:
       },
     };
     const found = lintPipeline(
-      expandPipeline({ pipelinePath: project.path('stepcast.yml'), config }),
+      expandPipeline({ pipelinePath: project.path('burnex.yml'), config }),
       { config },
     ).filter((item) => item.severity === 'error');
 
@@ -1778,7 +1778,7 @@ jobs:
   // Сценарий: «Серверы на бэкенде без такой возможности»
   it('отклоняет объявление mcp на бэкенде без флага, называя шаг, бэкенд и флаг', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 budget: { tokens: 100k }
 jobs:
@@ -1811,7 +1811,7 @@ jobs:
       },
     };
     const messages = errors(
-      lintPipeline(expandPipeline({ pipelinePath: project.path('stepcast.yml'), config }), { config }),
+      lintPipeline(expandPipeline({ pipelinePath: project.path('burnex.yml'), config }), { config }),
     );
     assert.ok(
       messages.some(
@@ -1826,7 +1826,7 @@ jobs:
   // Сценарий: «Диагностика называет уровень объявления»
   it('объявление работы указывает диагностику на работу, а не на поле шага', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 budget: { tokens: 100k }
 jobs:
@@ -1859,10 +1859,10 @@ jobs:
       },
     };
     const found = errors(
-      lintPipeline(expandPipeline({ pipelinePath: project.path('stepcast.yml'), config }), { config }),
+      lintPipeline(expandPipeline({ pipelinePath: project.path('burnex.yml'), config }), { config }),
     );
     assert.ok(found.some((message) => /возможность работать с MCP/.test(message)));
-    const diagnostics = lintPipeline(expandPipeline({ pipelinePath: project.path('stepcast.yml'), config }), {
+    const diagnostics = lintPipeline(expandPipeline({ pipelinePath: project.path('burnex.yml'), config }), {
       config,
     }).filter((item) => item.severity === 'error');
     assert.equal(diagnostics[0]?.at, 'jobs.build.mcp');
@@ -1873,7 +1873,7 @@ jobs:
   // их всё равно не будет.
   it('пустое объявление на бэкенде без флага ошибкой не считается', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 budget: { tokens: 100k }
 mcp:
@@ -1907,7 +1907,7 @@ jobs:
       },
     };
     const messages = errors(
-      lintPipeline(expandPipeline({ pipelinePath: project.path('stepcast.yml'), config }), { config }),
+      lintPipeline(expandPipeline({ pipelinePath: project.path('burnex.yml'), config }), { config }),
     );
     assert.ok(!messages.some((message) => /возможность работать с MCP/.test(message)));
   });
@@ -1915,7 +1915,7 @@ jobs:
   // Сценарий: «Объявленный сервер не назван в правах»
   it('предупреждает о сервере, не названном ни в одной записи allow под strict', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 budget: { tokens: 100k }
 jobs:
@@ -1937,7 +1937,7 @@ jobs:
   // Сценарий: «Сервер назван в правах»
   it('называет mcp__assertum__run_case в allow — предупреждения нет', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 budget: { tokens: 100k }
 jobs:
@@ -1958,7 +1958,7 @@ jobs:
 
   it('предупреждает о контексте у работы без агентских шагов', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 budget: { tokens: 100k }
 jobs:
@@ -1974,7 +1974,7 @@ jobs:
   it('собирает все ошибки сразу, а не по одной', () => {
     const diagnostics = lint(
       makeProject({
-        'stepcast.yml': `
+        'burnex.yml': `
 kind: pipeline
 budget: { tokens: 90M }
 jobs:
@@ -1992,7 +1992,7 @@ jobs:
   // Спека stepcast-configuration: «budget.cost выше limits.cost»
   it('даёт ошибку при budget.cost выше limits.cost на уровне пайплайна', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 budget: { cost: 999 }
 jobs:
@@ -2006,7 +2006,7 @@ jobs:
 
   it('даёт ошибку при budget.cost выше limits.cost на уровне шага', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 jobs:
   build:
@@ -2022,13 +2022,13 @@ jobs:
   });
 
   it('не даёт ошибку, когда budget.cost не объявлен', () => {
-    const diagnostics = lint(makeProject({ 'stepcast.yml': OK_PIPELINE }));
+    const diagnostics = lint(makeProject({ 'burnex.yml': OK_PIPELINE }));
     assert.deepEqual(errors(diagnostics), []);
   });
 
   it('ошибка раскрытия остаётся фатальной и одиночной', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 jobs:
   build:
@@ -2037,7 +2037,7 @@ jobs:
     });
     assert.throws(
       () =>
-        expandPipeline({ pipelinePath: project.path('stepcast.yml'), config: project.config }),
+        expandPipeline({ pipelinePath: project.path('burnex.yml'), config: project.config }),
       StepcastError,
     );
   });
@@ -2046,7 +2046,7 @@ jobs:
 describe('pipeline-definition: skip_exit_code и expect exit_code', () => {
   const project = (root: string, step: string): Project =>
     makeProject({
-      'stepcast.yml': `kind: pipeline
+      'burnex.yml': `kind: pipeline
 ${root}jobs:
   build:
     steps:
@@ -2084,7 +2084,7 @@ ${root}jobs:
 describe('pipeline-definition: путь копии при неподходящем режиме', () => {
   it('отклоняет путь размещения рабочей копии при режиме, отличном от copy', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 version: 1
 kind: pipeline
 name: путь-не-туда
@@ -2124,7 +2124,7 @@ jobs:
   // Копия `.git` не содержит — тот же отказ и та же причина, что в
   // `checkWorkspaceAvailability` (run/workspace.ts), только раньше, статически.
   it('отклоняет работу в режиме copy при объявленном составе, называя работу и режим', () => {
-    const project = makeProject({ 'stepcast.yml': PIPELINE_COPY });
+    const project = makeProject({ 'burnex.yml': PIPELINE_COPY });
 
     const diagnostics = lintWithConfig(project, withNestedRepos(project, ['public-site']));
     const found = diagnostics.find((item) => item.at === 'jobs.build.workspace.mode');
@@ -2132,13 +2132,13 @@ jobs:
     assert.equal(found.severity, 'error');
     assert.match(found.message, /build/);
     assert.match(found.message, /copy/);
-    assert.equal(found.file, project.path('stepcast.yml'));
+    assert.equal(found.file, project.path('burnex.yml'));
   });
 
   // Задача 3 (nested-repo-isolation): worktree при объявленном составе больше
   // не отклоняется — часть материализуется собственным рабочим деревом.
   it('worktree при объявленном составе не отклоняется по workspace.mode', () => {
-    const project = makeProject({ 'stepcast.yml': PIPELINE_WORKTREE });
+    const project = makeProject({ 'burnex.yml': PIPELINE_WORKTREE });
 
     const diagnostics = lintWithConfig(project, withNestedRepos(project, ['public-site']));
     assert.equal(
@@ -2148,7 +2148,7 @@ jobs:
   });
 
   it('на пустом составе диагностики нет', () => {
-    const project = makeProject({ 'stepcast.yml': PIPELINE_WORKTREE });
+    const project = makeProject({ 'burnex.yml': PIPELINE_WORKTREE });
 
     const diagnostics = lint(project);
     assert.equal(
@@ -2159,7 +2159,7 @@ jobs:
 
   it('отклоняет часть без коммита в режиме worktree, даже если корень её игнорирует', () => {
     const project = makeProject({
-      'stepcast.yml': PIPELINE_WORKTREE,
+      'burnex.yml': PIPELINE_WORKTREE,
       '.gitignore': 'public-site/\n',
       'public-site/index.html': 'сайт\n',
     });
@@ -2177,7 +2177,7 @@ jobs:
 
   it('отклоняет часть, чьи файлы отслеживает корень, в режиме worktree', () => {
     const project = makeProject({
-      'stepcast.yml': PIPELINE_WORKTREE,
+      'burnex.yml': PIPELINE_WORKTREE,
       'public-site/index.html': 'сайт\n',
     });
     gitInit(project.root);
@@ -2195,7 +2195,7 @@ jobs:
 
   it('пригодный состав в режиме worktree диагностики не даёт', () => {
     const project = makeProject({
-      'stepcast.yml': PIPELINE_WORKTREE,
+      'burnex.yml': PIPELINE_WORKTREE,
       'public-site/.gitkeep': '',
     });
     gitInit(project.path('public-site'));
@@ -2214,7 +2214,7 @@ jobs:
 describe('pipeline-definition: подстановка в числовые поля', () => {
   it('пайплайн с параметризованными числовыми полями проходит lint', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 budget: { tokens: 100k }
 inputs:
@@ -2246,7 +2246,7 @@ steps:
   // Предупреждение о худшем случае цикла until считается по раскрытому пределу
   it('предупреждение о худшем случае цикла until считается по раскрытому max_iterations', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 budget: { tokens: 100k }
 jobs:
@@ -2279,7 +2279,7 @@ steps:
 describe('попытки работы в оценке худшего случая', () => {
   it('худший случай умножается на attempts.max работы', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 budget: { tokens: 100k }
 jobs:
@@ -2309,7 +2309,7 @@ describe('schedule-trigger: статическая проверка распис
   it('принимает объявленное расписание', () => {
     const diagnostics = lint(
       makeProject({
-        'stepcast.yml': `
+        'burnex.yml': `
 kind: pipeline
 budget: { tokens: 100k }
 triggers:
@@ -2328,7 +2328,7 @@ jobs:
   it('называет отсутствие обязательного cron', () => {
     const diagnostics = lint(
       makeProject({
-        'stepcast.yml': `
+        'burnex.yml': `
 kind: pipeline
 budget: { tokens: 100k }
 triggers:
@@ -2350,7 +2350,7 @@ jobs:
   it('называет пустой cron тем же способом, что и отсутствующий', () => {
     const diagnostics = lint(
       makeProject({
-        'stepcast.yml': `
+        'burnex.yml': `
 kind: pipeline
 budget: { tokens: 100k }
 triggers:
@@ -2371,7 +2371,7 @@ jobs:
   it('называет номер записи и причину отказа разбора', () => {
     const diagnostics = lint(
       makeProject({
-        'stepcast.yml': `
+        'burnex.yml': `
 kind: pipeline
 budget: { tokens: 100k }
 triggers:
@@ -2393,7 +2393,7 @@ jobs:
   it('называет неизвестный часовой пояс', () => {
     const diagnostics = lint(
       makeProject({
-        'stepcast.yml': `
+        'burnex.yml': `
 kind: pipeline
 budget: { tokens: 100k }
 triggers:
@@ -2414,7 +2414,7 @@ jobs:
   it('называет невыполнимое расписание', () => {
     const diagnostics = lint(
       makeProject({
-        'stepcast.yml': `
+        'burnex.yml': `
 kind: pipeline
 budget: { tokens: 100k }
 triggers:
@@ -2435,7 +2435,7 @@ jobs:
   it('принимает 29 февраля: вердикт не зависит от дня запуска линта', () => {
     const diagnostics = lint(
       makeProject({
-        'stepcast.yml': `
+        'burnex.yml': `
 kind: pipeline
 budget: { tokens: 100k }
 triggers:
@@ -2454,7 +2454,7 @@ jobs:
   it('называет именно вторую запись из двух, когда ошибочна она', () => {
     const diagnostics = lint(
       makeProject({
-        'stepcast.yml': `
+        'burnex.yml': `
 kind: pipeline
 budget: { tokens: 100k }
 triggers:
@@ -2481,7 +2481,7 @@ describe('dependent-job-workspace: источник наследования р�
   it('отклоняет inherit, называющий несуществующую работу', () => {
     const diagnostics = lint(
       makeProject({
-        'stepcast.yml': `
+        'burnex.yml': `
 kind: pipeline
 workspace: { mode: worktree }
 budget: { tokens: 100k }
@@ -2503,7 +2503,7 @@ jobs:
   it('отклоняет inherit, называющий работу вне зависимостей', () => {
     const diagnostics = lint(
       makeProject({
-        'stepcast.yml': `
+        'burnex.yml': `
 kind: pipeline
 workspace: { mode: worktree }
 budget: { tokens: 100k }
@@ -2527,7 +2527,7 @@ jobs:
   it('отклоняет inherit при режиме cwd', () => {
     const diagnostics = lint(
       makeProject({
-        'stepcast.yml': `
+        'burnex.yml': `
 kind: pipeline
 workspace: { mode: cwd }
 budget: { tokens: 100k }
@@ -2549,7 +2549,7 @@ jobs:
   it('отклоняет несколько зависимостей в изолирующем режиме без inherit', () => {
     const diagnostics = lint(
       makeProject({
-        'stepcast.yml': `
+        'burnex.yml': `
 kind: pipeline
 workspace: { mode: worktree }
 budget: { tokens: 100k }
@@ -2573,7 +2573,7 @@ jobs:
   // пайплайна целиком. Отказ приходит из схемы, до линта, и называет ключ.
   it('отклоняет workspace.inherit на уровне пайплайна, называя ключ', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 workspace: { mode: worktree, inherit: a }
 budget: { tokens: 100k }
@@ -2596,7 +2596,7 @@ jobs:
 
   it('отклоняет workspace.inherit в defaults.workspace, называя ключ', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 budget: { tokens: 100k }
 defaults: { workspace: { mode: worktree, inherit: a } }
@@ -2620,7 +2620,7 @@ jobs:
   it('принимает единственную зависимость без inherit', () => {
     const diagnostics = lint(
       makeProject({
-        'stepcast.yml': `
+        'burnex.yml': `
 kind: pipeline
 workspace: { mode: worktree }
 budget: { tokens: 100k }
@@ -2668,18 +2668,18 @@ jobs:
 `;
 
   it('lint отказывает на ссылке без объявления, называя оба места объявления', async () => {
-    const project = makeProject({ 'stepcast.yml': REFERRING });
+    const project = makeProject({ 'burnex.yml': REFERRING });
 
-    const result = await cli(project, ['lint', 'stepcast.yml']);
+    const result = await cli(project, ['lint', 'burnex.yml']);
 
     assert.equal(result.code, ExitCode.configError);
     assert.match(result.out, /project\.check/);
-    assert.match(result.out, /\.stepcast\/config\.yml/);
+    assert.match(result.out, /\.burnex\/config\.yml/);
   });
 
   it('lint отказывает на имени вне состава пространства — другим сообщением', async () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 budget: { tokens: 100k }
 jobs:
@@ -2688,36 +2688,36 @@ jobs:
 `,
     });
 
-    const result = await cli(project, ['lint', 'stepcast.yml']);
+    const result = await cli(project, ['lint', 'burnex.yml']);
 
     assert.equal(result.code, ExitCode.configError);
     assert.match(result.out, /содержит только check/);
     assert.doesNotMatch(result.out, /Объявите/);
   });
 
-  it('lint принимает пайплайн, когда команду объявляет .stepcast/config.yml проекта', async () => {
+  it('lint принимает пайплайн, когда команду объявляет .burnex/config.yml проекта', async () => {
     const project = makeProject({
-      'stepcast.yml': REFERRING,
-      '.stepcast/config.yml': 'project:\n  check: npm run check\n',
+      'burnex.yml': REFERRING,
+      '.burnex/config.yml': 'project:\n  check: npm run check\n',
     });
 
-    const result = await cli(project, ['lint', 'stepcast.yml']);
+    const result = await cli(project, ['lint', 'burnex.yml']);
 
     assert.equal(result.code, ExitCode.ok);
-    assert.match(result.out, /^ok: stepcast\.yml/m);
+    assert.match(result.out, /^ok: burnex\.yml/m);
   });
 
   it('run не начинает прогон: каталога журнала не появляется', async () => {
-    const project = makeProject({ 'stepcast.yml': REFERRING });
+    const project = makeProject({ 'burnex.yml': REFERRING });
 
-    const result = await cli(project, ['run', 'stepcast.yml']);
+    const result = await cli(project, ['run', 'burnex.yml']);
 
     assert.equal(result.code, ExitCode.configError);
     assert.match(result.out, /project\.check/);
-    // `runs.root` умолчанием — `~/.stepcast/runs`, а HOME на время вызова
+    // `runs.root` умолчанием — `~/.burnex/runs`, а HOME на время вызова
     // подменён каталогом проекта: отсутствие каталога и значит, что прогон не
     // начинался.
-    assert.equal(existsSync(join(project.home, '.stepcast', 'runs')), false);
+    assert.equal(existsSync(join(project.home, '.burnex', 'runs')), false);
   });
 });
 
@@ -2752,35 +2752,35 @@ jobs:
 `;
 
   it('lint отказывает на ссылке без объявления, называя ключ и оба места объявления', async () => {
-    const project = makeProject({ 'stepcast.yml': REFERRING });
+    const project = makeProject({ 'burnex.yml': REFERRING });
 
-    const result = await cli(project, ['lint', 'stepcast.yml']);
+    const result = await cli(project, ['lint', 'burnex.yml']);
 
     assert.equal(result.code, ExitCode.configError);
     assert.match(result.out, /project\.spec\.dir/);
-    assert.match(result.out, /\.stepcast\/config\.yml/);
+    assert.match(result.out, /\.burnex\/config\.yml/);
   });
 
-  it('lint принимает пайплайн, когда группу объявляет .stepcast/config.yml проекта', async () => {
+  it('lint принимает пайплайн, когда группу объявляет .burnex/config.yml проекта', async () => {
     const project = makeProject({
-      'stepcast.yml': REFERRING,
-      '.stepcast/config.yml': 'project:\n  spec:\n    dir: openspec/changes\n',
+      'burnex.yml': REFERRING,
+      '.burnex/config.yml': 'project:\n  spec:\n    dir: openspec/changes\n',
     });
 
-    const result = await cli(project, ['lint', 'stepcast.yml']);
+    const result = await cli(project, ['lint', 'burnex.yml']);
 
     assert.equal(result.code, ExitCode.ok);
-    assert.match(result.out, /^ok: stepcast\.yml/m);
+    assert.match(result.out, /^ok: burnex\.yml/m);
   });
 
   it('run не начинает прогон: каталога журнала не появляется', async () => {
-    const project = makeProject({ 'stepcast.yml': REFERRING });
+    const project = makeProject({ 'burnex.yml': REFERRING });
 
-    const result = await cli(project, ['run', 'stepcast.yml']);
+    const result = await cli(project, ['run', 'burnex.yml']);
 
     assert.equal(result.code, ExitCode.configError);
     assert.match(result.out, /project\.spec\.dir/);
-    assert.equal(existsSync(join(project.home, '.stepcast', 'runs')), false);
+    assert.equal(existsSync(join(project.home, '.burnex', 'runs')), false);
   });
 });
 
@@ -2798,9 +2798,9 @@ jobs:
 
   it('принимает форму с подстановками и разворачивает её в вид item_refs', () => {
     const project = makeProject({
-      'stepcast.yml': pipeline('{ item_refs: "${run.dir}/item-${job.lane}.json", mode: reference }'),
+      'burnex.yml': pipeline('{ item_refs: "${run.dir}/item-${job.lane}.json", mode: reference }'),
     });
-    const expanded = expandPipeline({ pipelinePath: project.path('stepcast.yml'), config: project.config });
+    const expanded = expandPipeline({ pipelinePath: project.path('burnex.yml'), config: project.config });
     // `${job.lane}` раскрывается при разборе, `${run.dir}` — только в прогоне.
     assert.deepEqual(
       expanded.pipeline.jobs[0]?.context,
@@ -2810,13 +2810,13 @@ jobs:
   });
 
   it('режим по умолчанию — auto', () => {
-    const project = makeProject({ 'stepcast.yml': pipeline('{ item_refs: item.json }') });
-    const expanded = expandPipeline({ pipelinePath: project.path('stepcast.yml'), config: project.config });
+    const project = makeProject({ 'burnex.yml': pipeline('{ item_refs: item.json }') });
+    const expanded = expandPipeline({ pipelinePath: project.path('burnex.yml'), config: project.config });
     assert.deepEqual(expanded.pipeline.jobs[0]?.context, [{ kind: 'item_refs', path: 'item.json', mode: 'auto' }]);
   });
 
   it('лишний ключ рядом с item_refs отклоняется', () => {
-    const project = makeProject({ 'stepcast.yml': pipeline('{ item_refs: item.json, required: true }') });
+    const project = makeProject({ 'burnex.yml': pipeline('{ item_refs: item.json, required: true }') });
     assert.throws(() => lint(project), StepcastError);
   });
 });
@@ -2837,7 +2837,7 @@ jobs:
         expect: [{ knowledge_valid: true }]
 `;
 
-  /** Практика памяти, объявленная так, будто она в `.stepcast/config.yml`. */
+  /** Практика памяти, объявленная так, будто она в `.burnex/config.yml`. */
   function withKnowledge(project: Project): Config {
     return {
       ...project.config,
@@ -2850,7 +2850,7 @@ jobs:
 
   // Задача 3.7 / Сценарий: «Запись знания без источника»
   it('отклоняет запись knowledge, когда практика памяти не объявлена', () => {
-    const project = makeProject({ 'stepcast.yml': WITH_KNOWLEDGE });
+    const project = makeProject({ 'burnex.yml': WITH_KNOWLEDGE });
     const messages = errors(lint(project));
 
     assert.ok(messages.some((message) => /Запись контекста knowledge/.test(message)));
@@ -2858,14 +2858,14 @@ jobs:
 
   // Задача 6.2 / Сценарий: «Предикат без источника»
   it('отклоняет предикат knowledge_valid, когда практика памяти не объявлена', () => {
-    const project = makeProject({ 'stepcast.yml': WITH_KNOWLEDGE });
+    const project = makeProject({ 'burnex.yml': WITH_KNOWLEDGE });
     const messages = errors(lint(project));
 
     assert.ok(messages.some((message) => /Предикат knowledge_valid/.test(message)));
   });
 
   it('принимает и запись, и предикат, когда практика объявлена', () => {
-    const project = makeProject({ 'stepcast.yml': WITH_KNOWLEDGE });
+    const project = makeProject({ 'burnex.yml': WITH_KNOWLEDGE });
     const messages = errors(lintWithConfig(project, withKnowledge(project)));
 
     assert.deepEqual(
@@ -2877,7 +2877,7 @@ jobs:
   // Задача 3.6 / Сценарий: «Неизвестная форма отклоняется»
   it('раскрытие отклоняет неизвестную форму селектора', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 name: bad
 context:
@@ -2894,7 +2894,7 @@ jobs:
   // Задача 3.6: ни одной формы селектора — та же природа промаха.
   it('раскрытие отклоняет запись knowledge без scope и без id', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 name: bad
 context:
@@ -2917,7 +2917,7 @@ jobs:
 
   it('раскрытие отклоняет запись knowledge и со scope, и с id', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 name: bad
 context:
@@ -2942,7 +2942,7 @@ jobs:
   // «не проверять» отличало бы выключенную проверку от отсутствующей ничем.
   it('раскрытие отклоняет knowledge_valid: false', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 name: bad
 jobs:
@@ -2967,7 +2967,7 @@ jobs:
   // Задача 3.1 / Сценарий: «Область списком раскрывает подстановку границ»
   it('область списком раскрывает ${project.edit_paths} по элементу на путь', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 name: scoped
 budget: { tokens: 100k }
@@ -2993,7 +2993,7 @@ jobs:
       },
     };
 
-    const expanded = expandPipeline({ pipelinePath: project.path('stepcast.yml'), config });
+    const expanded = expandPipeline({ pipelinePath: project.path('burnex.yml'), config });
     const entry = expanded.pipeline.jobs[0]?.context[0];
     assert.equal(entry?.kind, 'knowledge');
     assert.deepEqual(entry.selector, { kind: 'scope', scope: ['src/**', 'test/**'] });
@@ -3032,7 +3032,7 @@ jobs:
   }
 
   function lintWithRegistry(project: Project, registry?: Registry): Diagnostic[] {
-    return lintPipeline(expandPipeline({ pipelinePath: project.path('stepcast.yml'), config: project.config }), {
+    return lintPipeline(expandPipeline({ pipelinePath: project.path('burnex.yml'), config: project.config }), {
       config: project.config,
       cwd: project.root,
       ...(registry === undefined ? {} : { registry }),
@@ -3041,12 +3041,12 @@ jobs:
 
   // Сценарий: «Плагин добавлен, схема не перегенерирована»
   it('файл, записанный без плагина, при плагине в действующем реестре даёт предупреждение', async () => {
-    const project = makeProject({ 'stepcast.yml': PIPELINE });
+    const project = makeProject({ 'burnex.yml': PIPELINE });
     const stalePath = project.write(
-      join('.stepcast', 'schema', 'pipeline.schema.json'),
+      join('.burnex', 'schema', 'pipeline.schema.json'),
       `${JSON.stringify(buildPublishedSchemas().pipeline, null, 2)}\n`,
     );
-    project.write(join('.stepcast', 'schema', 'job.schema.json'), `${JSON.stringify(buildPublishedSchemas().job, null, 2)}\n`);
+    project.write(join('.burnex', 'schema', 'job.schema.json'), `${JSON.stringify(buildPublishedSchemas().job, null, 2)}\n`);
 
     const diagnostics = lintWithRegistry(project, await registryWithPredicate());
 
@@ -3057,7 +3057,7 @@ jobs:
 
   // Сценарий: «Схема свежа»
   it('файл, совпадающий с действующим реестром, предупреждения не даёт', async () => {
-    const project = makeProject({ 'stepcast.yml': PIPELINE });
+    const project = makeProject({ 'burnex.yml': PIPELINE });
     const registry = await registryWithPredicate();
     // Реестр несёт и предикат example, и встроенный вид шага decision
     // (`user-decision-steps`) — свежая схема обязана знать оба, иначе линт
@@ -3066,8 +3066,8 @@ jobs:
       [{ name: 'text_has', schema: { type: 'string', minLength: 1 }, owner: 'example' }],
       pluginStepKindEntries(registry),
     );
-    project.write(join('.stepcast', 'schema', 'pipeline.schema.json'), `${JSON.stringify(fresh.pipeline, null, 2)}\n`);
-    project.write(join('.stepcast', 'schema', 'job.schema.json'), `${JSON.stringify(fresh.job, null, 2)}\n`);
+    project.write(join('.burnex', 'schema', 'pipeline.schema.json'), `${JSON.stringify(fresh.pipeline, null, 2)}\n`);
+    project.write(join('.burnex', 'schema', 'job.schema.json'), `${JSON.stringify(fresh.job, null, 2)}\n`);
 
     const diagnostics = lintWithRegistry(project, registry);
 
@@ -3080,8 +3080,8 @@ jobs:
   // Файл на месте, а прочитать его нельзя: сказать об этом обязана та же
   // диагностика — молча признать схему свежей нельзя, уронить линт тоже.
   it('неразбираемый файл схемы даёт предупреждение с путём, а не отказ', async () => {
-    const project = makeProject({ 'stepcast.yml': PIPELINE });
-    const brokenPath = project.write(join('.stepcast', 'schema', 'pipeline.schema.json'), '{ это не JSON\n');
+    const project = makeProject({ 'burnex.yml': PIPELINE });
+    const brokenPath = project.write(join('.burnex', 'schema', 'pipeline.schema.json'), '{ это не JSON\n');
 
     const diagnostics = lintWithRegistry(project, await registryWithPredicate());
 
@@ -3092,9 +3092,9 @@ jobs:
   });
 
   it('нечитаемый файл схемы даёт то же предупреждение', async () => {
-    const project = makeProject({ 'stepcast.yml': PIPELINE });
+    const project = makeProject({ 'burnex.yml': PIPELINE });
     // Каталог вместо файла: `existsSync` его видит, чтение отказывает.
-    const path = project.path(join('.stepcast', 'schema', 'job.schema.json'));
+    const path = project.path(join('.burnex', 'schema', 'job.schema.json'));
     mkdirSync(path, { recursive: true });
 
     const diagnostics = lintWithRegistry(project, await registryWithPredicate());
@@ -3106,8 +3106,8 @@ jobs:
   });
 
   // Сценарий: «Схемы проекта нет»
-  it('отсутствующий каталог .stepcast/schema линт не замечает вовсе', async () => {
-    const project = makeProject({ 'stepcast.yml': PIPELINE });
+  it('отсутствующий каталог .burnex/schema линт не замечает вовсе', async () => {
+    const project = makeProject({ 'burnex.yml': PIPELINE });
 
     const diagnostics = lintWithRegistry(project, await registryWithPredicate());
 
@@ -3133,13 +3133,13 @@ jobs:
   // составу — отключённый встроенный вид шага снимает ключи из напечатанной
   // схемы, а прежде напечатанный файл (со всеми ключами) становится устаревшим.
   it('при отключённом step-agent напечатанная схема не признаёт ключа prompt, а прежде напечатанная — устарела', async () => {
-    const project = makeProject({ 'stepcast.yml': PIPELINE });
+    const project = makeProject({ 'burnex.yml': PIPELINE });
     // «Прежде напечатанная» — полным дефолтным составом, до отключения строки.
     project.write(
-      join('.stepcast', 'schema', 'pipeline.schema.json'),
+      join('.burnex', 'schema', 'pipeline.schema.json'),
       `${JSON.stringify(buildPublishedSchemas().pipeline, null, 2)}\n`,
     );
-    project.write(join('.stepcast', 'schema', 'job.schema.json'), `${JSON.stringify(buildPublishedSchemas().job, null, 2)}\n`);
+    project.write(join('.burnex', 'schema', 'job.schema.json'), `${JSON.stringify(buildPublishedSchemas().job, null, 2)}\n`);
 
     const registryWithoutAgent = await registryWithoutRow('step-agent');
     const fresh = buildPublishedSchemas(
@@ -3164,12 +3164,12 @@ jobs:
   // состав предикатов тем же правилом, что и печать, — файл, напечатанный
   // дефолтным составом, при снятой строке `predicates` устарел.
   it('при отключённой строке predicates прежде напечатанная схема проекта — устарела', async () => {
-    const project = makeProject({ 'stepcast.yml': PIPELINE });
+    const project = makeProject({ 'burnex.yml': PIPELINE });
     project.write(
-      join('.stepcast', 'schema', 'pipeline.schema.json'),
+      join('.burnex', 'schema', 'pipeline.schema.json'),
       `${JSON.stringify(buildPublishedSchemas().pipeline, null, 2)}\n`,
     );
-    project.write(join('.stepcast', 'schema', 'job.schema.json'), `${JSON.stringify(buildPublishedSchemas().job, null, 2)}\n`);
+    project.write(join('.burnex', 'schema', 'job.schema.json'), `${JSON.stringify(buildPublishedSchemas().job, null, 2)}\n`);
 
     const registryWithoutPredicates = await registryWithoutRow('predicates');
 
@@ -3183,7 +3183,7 @@ describe('pipeline-definition: статическая проверка шага 
   // Сценарий: «Файла нет ни в одном слое»
   it('ненайденный файл — ошибка с перечнем просмотренных каталогов', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 budget: { tokens: 100k }
 jobs:
@@ -3197,13 +3197,13 @@ jobs:
     const message = errors(diagnostics).find((text) => /не найден/.test(text));
     assert.ok(message !== undefined, errors(diagnostics).join('\n'));
     const diagnostic = diagnostics.find((item) => item.message === message);
-    assert.match(diagnostic?.hint ?? '', new RegExp(join(roots.project, '.stepcast', 'scripts').replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+    assert.match(diagnostic?.hint ?? '', new RegExp(join(roots.project, '.burnex', 'scripts').replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
   });
 
   // Сценарий: «Неизвестное имя раннера»
   it('неизвестный runner — ошибка с перечнем известных', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 budget: { tokens: 100k }
 jobs:
@@ -3212,7 +3212,7 @@ jobs:
 `,
     });
     const roots = isolatedScriptRoots(project);
-    project.write('.stepcast/scripts/build.py', 'print(1)\n');
+    project.write('.burnex/scripts/build.py', 'print(1)\n');
     const diagnostics = lintScript(project, roots);
 
     const message = errors(diagnostics).find((text) => /неизвестный раннер bun/.test(text));
@@ -3224,7 +3224,7 @@ jobs:
   // Сценарий: «Раннер не определяется»
   it('нераспознаваемое расширение без shebang — ошибка с перечнем известных расширений', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 budget: { tokens: 100k }
 jobs:
@@ -3233,7 +3233,7 @@ jobs:
 `,
     });
     const roots = isolatedScriptRoots(project);
-    project.write('.stepcast/scripts/mystery.rb', 'puts 1\n');
+    project.write('.burnex/scripts/mystery.rb', 'puts 1\n');
     const diagnostics = lintScript(project, roots);
 
     const message = errors(diagnostics).find((text) => /не определяется/.test(text));
@@ -3245,7 +3245,7 @@ jobs:
   // Сценарий: «Путь с подстановкой не проверяется»
   it('путь с подстановкой ${inputs.*} не проверяется статически', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 budget: { tokens: 100k }
 inputs:
@@ -3266,7 +3266,7 @@ jobs:
   // правила `pathCheckSkipped`: значение с глобом линт тоже не проверяет.
   it('путь с глобом не проверяется статически', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 budget: { tokens: 100k }
 jobs:
@@ -3284,7 +3284,7 @@ jobs:
   // Сценарий: «Отсутствующий на машине интерпретатор линт не касается»
   it('раннер, известный конфигурации, но отсутствующий в PATH, линт не задевает', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 budget: { tokens: 100k }
 jobs:
@@ -3292,12 +3292,12 @@ jobs:
     steps: [{ id: c, script: build.py, runner: uv }]
 `,
     });
-    project.write('.stepcast/scripts/build.py', 'print(1)\n');
+    project.write('.burnex/scripts/build.py', 'print(1)\n');
     const config: Config = {
       ...project.config,
       runners: {
         ...project.config.runners,
-        uv: { command: ['stepcast-test-runner-that-does-not-exist-xyz'], extensions: [] },
+        uv: { command: ['burnex-test-runner-that-does-not-exist-xyz'], extensions: [] },
       },
     };
     const diagnostics = lintScript(project, isolatedScriptRoots(project), config);
@@ -3309,7 +3309,7 @@ describe('pipeline-definition: статическая проверка пред�
   // Сценарий: «Файла нет ни в одном слое»
   it('ненайденный файл предиката в expect — ошибка, называющая шаг и просмотренные каталоги', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 budget: { tokens: 100k }
 jobs:
@@ -3326,14 +3326,14 @@ jobs:
     assert.match(diagnostic?.message ?? '', /build\/c/);
     assert.match(
       diagnostic?.hint ?? '',
-      new RegExp(join(roots.project, '.stepcast', 'scripts').replace(/[.*+?^${}()|[\]\\]/g, '\\$&')),
+      new RegExp(join(roots.project, '.burnex', 'scripts').replace(/[.*+?^${}()|[\]\\]/g, '\\$&')),
     );
   });
 
   // Сценарий: «Раннер не определяется»
   it('раннер предиката, не определяемый ни расширением, ни shebang, — ошибка с перечнем известных расширений', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 budget: { tokens: 100k }
 jobs:
@@ -3342,7 +3342,7 @@ jobs:
 `,
     });
     const roots = isolatedScriptRoots(project);
-    project.write('.stepcast/scripts/checks/mystery.rb', 'puts 1\n');
+    project.write('.burnex/scripts/checks/mystery.rb', 'puts 1\n');
     const diagnostics = lintScript(project, roots);
 
     const message = errors(diagnostics).find((text) => /предиката script/.test(text) && /не определяется/.test(text));
@@ -3354,7 +3354,7 @@ jobs:
   // Сценарий: «Предикат в until.check с ненайденным файлом»
   it('ненайденный файл предиката в until.check — ошибка, называющая работу', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 budget: { tokens: 100k }
 jobs:
@@ -3377,7 +3377,7 @@ jobs:
   // Сценарий: «Путь с подстановкой не проверяется»
   it('путь предиката script с подстановкой ${inputs.*} не проверяется статически', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 budget: { tokens: 100k }
 inputs:
@@ -3413,7 +3413,7 @@ params:
   // Сценарий: «Имя не найдено»
   it('неизвестное имя шага — ошибка с именем шага и перечнем просмотренных каталогов', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 budget: { tokens: 100k }
 jobs:
@@ -3430,14 +3430,14 @@ jobs:
     assert.match(diagnostic?.message ?? '', /build\/c/);
     assert.match(
       diagnostic?.hint ?? '',
-      new RegExp(join(roots.project, '.stepcast', 'steps', 'no-such-step').replace(/[.*+?^${}()|[\]\\]/g, '\\$&')),
+      new RegExp(join(roots.project, '.burnex', 'steps', 'no-such-step').replace(/[.*+?^${}()|[\]\\]/g, '\\$&')),
     );
   });
 
   // Сценарий: «Несколько промахов за один проход»
   it('два шага uses с разными промахами дают два сообщения за один проход', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 budget: { tokens: 100k }
 jobs:
@@ -3451,7 +3451,7 @@ jobs:
 `,
     });
     const roots = isolatedStepRoots(project);
-    writeUsesStep(join(roots.project, '.stepcast', 'steps'), 'greet', GREET_MANIFEST, 'main.cjs', GREET_MAIN);
+    writeUsesStep(join(roots.project, '.burnex', 'steps'), 'greet', GREET_MANIFEST, 'main.cjs', GREET_MAIN);
     const diagnostics = lintUses(project, roots);
 
     assert.ok(errors(diagnostics).some((text) => /no-such-step/.test(text)));
@@ -3460,7 +3460,7 @@ jobs:
 
   it('несовпадение имени манифеста — ошибка, называющая оба имени и файл манифеста', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 budget: { tokens: 100k }
 jobs:
@@ -3470,7 +3470,7 @@ jobs:
     });
     const roots = isolatedStepRoots(project);
     writeUsesStep(
-      join(roots.project, '.stepcast', 'steps'),
+      join(roots.project, '.burnex', 'steps'),
       'greet',
       GREET_MANIFEST.replace('name: greet', 'name: list-changes'),
       'main.cjs',
@@ -3486,7 +3486,7 @@ jobs:
 
   it('отсутствующий файл шага — ошибка, называющая шаг и путь манифеста', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 budget: { tokens: 100k }
 jobs:
@@ -3495,7 +3495,7 @@ jobs:
 `,
     });
     const roots = isolatedStepRoots(project);
-    const dir = join(roots.project, '.stepcast', 'steps', 'greet');
+    const dir = join(roots.project, '.burnex', 'steps', 'greet');
     mkdirSync(dir, { recursive: true });
     writeFileSync(join(dir, 'step.yml'), GREET_MANIFEST);
     const diagnostics = lintUses(project, roots);
@@ -3506,7 +3506,7 @@ jobs:
 
   it('неизвестный параметр — ошибка с перечнем объявленных, именем шага и файлом манифеста', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 budget: { tokens: 100k }
 jobs:
@@ -3515,7 +3515,7 @@ jobs:
 `,
     });
     const roots = isolatedStepRoots(project);
-    writeUsesStep(join(roots.project, '.stepcast', 'steps'), 'greet', GREET_MANIFEST, 'main.cjs', GREET_MAIN);
+    writeUsesStep(join(roots.project, '.burnex', 'steps'), 'greet', GREET_MANIFEST, 'main.cjs', GREET_MAIN);
     const diagnostics = lintUses(project, roots);
 
     const message = errors(diagnostics).find((text) => /greet/.test(text));
@@ -3536,7 +3536,7 @@ jobs:
 
   it('неизвестный раннер манифеста — ошибка называет манифест, а не ключ runner документа', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 budget: { tokens: 100k }
 jobs:
@@ -3546,7 +3546,7 @@ jobs:
     });
     const roots = isolatedStepRoots(project);
     writeUsesStep(
-      join(roots.project, '.stepcast', 'steps'),
+      join(roots.project, '.burnex', 'steps'),
       'greet',
       `${GREET_MANIFEST}runner: nosuch\n`,
       'main.cjs',
@@ -3564,7 +3564,7 @@ jobs:
 
   it('неопределимый раннер файла манифеста — ошибка называет манифест, а не ключ script документа', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 budget: { tokens: 100k }
 jobs:
@@ -3574,7 +3574,7 @@ jobs:
     });
     const roots = isolatedStepRoots(project);
     writeUsesStep(
-      join(roots.project, '.stepcast', 'steps'),
+      join(roots.project, '.burnex', 'steps'),
       'greet',
       GREET_MANIFEST.replace('file: ./main.cjs', 'file: ./main.zzz'),
       'main.zzz',
@@ -3592,7 +3592,7 @@ jobs:
 
   it('отсутствующий файл схемы выхода манифеста — ошибка называет манифест, а не ключ output_schema документа', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 budget: { tokens: 100k }
 jobs:
@@ -3602,7 +3602,7 @@ jobs:
     });
     const roots = isolatedStepRoots(project);
     writeUsesStep(
-      join(roots.project, '.stepcast', 'steps'),
+      join(roots.project, '.burnex', 'steps'),
       'greet',
       `${GREET_MANIFEST}output_schema: ./output.schema.json\n`,
       'main.cjs',
@@ -3620,7 +3620,7 @@ jobs:
 
   it('значение с отложенной подстановкой не проверяется схемой, а состав — проверяется', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 budget: { tokens: 100k }
 jobs:
@@ -3633,7 +3633,7 @@ jobs:
     });
     const roots = isolatedStepRoots(project);
     writeUsesStep(
-      join(roots.project, '.stepcast', 'steps'),
+      join(roots.project, '.burnex', 'steps'),
       'greet',
       GREET_MANIFEST.replace('name: { type: string, default: world }', 'name: { type: integer }'),
       'main.cjs',
@@ -3687,7 +3687,7 @@ describe('step-kind-document-form: адрес места и правило waits
       deployKind({ lint: (fields) => [{ severity: 'warning', message: `поля: ${JSON.stringify(fields)}` }] }),
     );
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 budget: { tokens: 100k }
 jobs:
@@ -3699,7 +3699,7 @@ jobs:
 `,
     });
     const diagnostics = lintPipeline(
-      expandPipeline({ pipelinePath: project.path('stepcast.yml'), config: project.config, registry }),
+      expandPipeline({ pipelinePath: project.path('burnex.yml'), config: project.config, registry }),
       { config: project.config, registry },
     );
 
@@ -3717,7 +3717,7 @@ jobs:
       execute: () => ({ exitCode: 0 }),
     });
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 budget: { tokens: 100k }
 jobs:
@@ -3728,7 +3728,7 @@ jobs:
 `,
     });
     const diagnostics = lintPipeline(
-      expandPipeline({ pipelinePath: project.path('stepcast.yml'), config: project.config, registry }),
+      expandPipeline({ pipelinePath: project.path('burnex.yml'), config: project.config, registry }),
       { config: project.config, registry },
     );
 
@@ -3740,7 +3740,7 @@ jobs:
   it('правило waits действует для вида с формой document так же, как для вида с fields', async () => {
     const registry = await registryWith(deployKind({ waits: true }));
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 budget: { tokens: 100k }
 jobs:
@@ -3753,7 +3753,7 @@ jobs:
 `,
     });
     const diagnostics = lintPipeline(
-      expandPipeline({ pipelinePath: project.path('stepcast.yml'), config: project.config, registry }),
+      expandPipeline({ pipelinePath: project.path('burnex.yml'), config: project.config, registry }),
       { config: project.config, registry },
     );
 
@@ -3766,7 +3766,7 @@ jobs:
   it('правило waits предупреждает о timeout и на виде с формой document', async () => {
     const registry = await registryWith(deployKind({ waits: true }));
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 budget: { tokens: 100k }
 jobs:
@@ -3779,7 +3779,7 @@ jobs:
 `,
     });
     const diagnostics = lintPipeline(
-      expandPipeline({ pipelinePath: project.path('stepcast.yml'), config: project.config, registry }),
+      expandPipeline({ pipelinePath: project.path('burnex.yml'), config: project.config, registry }),
       { config: project.config, registry },
     );
 
@@ -3812,7 +3812,7 @@ ${extraJobs}`;
   const GOOD = '    jobs: [check, fix]\n    max_iterations: 3\n    cost: 5';
 
   const diagnostics = (yaml: string, config?: (project: Project) => Config): Diagnostic[] => {
-    const project = makeProject({ 'stepcast.yml': yaml });
+    const project = makeProject({ 'burnex.yml': yaml });
     return lintWithConfig(project, config === undefined ? project.config : config(project));
   };
   const errors = (list: readonly Diagnostic[]): Diagnostic[] => list.filter((item) => item.severity === 'error');

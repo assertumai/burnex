@@ -34,13 +34,13 @@ function bed(): Bed {
   const base = tempDir('plugins-load-');
   const root = join(base, 'work');
   const home = join(base, 'home');
-  mkdirSync(join(root, '.stepcast'), { recursive: true });
-  mkdirSync(join(home, '.stepcast'), { recursive: true });
+  mkdirSync(join(root, '.burnex'), { recursive: true });
+  mkdirSync(join(home, '.burnex'), { recursive: true });
   return { root, home };
 }
 
 function writePluginDir(baseDir: string, id: string, manifest: Record<string, unknown> | undefined, files: Readonly<Record<string, string>> = {}): string {
-  const dir = join(baseDir, '.stepcast', 'plugins', id);
+  const dir = join(baseDir, '.burnex', 'plugins', id);
   mkdirSync(dir, { recursive: true });
   if (manifest !== undefined) writeFileSync(join(dir, 'plugin.json'), JSON.stringify(manifest));
   for (const [name, content] of Object.entries(files)) writeFileSync(join(dir, name), content);
@@ -51,7 +51,7 @@ describe('plugins-load: мягкий отказ каталожной строк�
   it('сломанный каталожный плагин не мешает соседям: их вклады в реестре, отказ — в итогах', async () => {
     const place = bed();
     // Каталог без plugin.json — отказавшая строка.
-    mkdirSync(join(place.home, '.stepcast', 'plugins', 'broken'), { recursive: true });
+    mkdirSync(join(place.home, '.burnex', 'plugins', 'broken'), { recursive: true });
     writePluginDir(place.home, 'good', { server: 'server.mjs' }, {
       'server.mjs': 'export default { name: "good", predicates: [] };\n',
     });
@@ -69,7 +69,7 @@ describe('plugins-load: мягкий отказ каталожной строк�
 
   it('команда, зависящая от конфигурации, исполняется несмотря на сломанный каталожный плагин', async () => {
     const place = bed();
-    mkdirSync(join(place.home, '.stepcast', 'plugins', 'broken'), { recursive: true });
+    mkdirSync(join(place.home, '.burnex', 'plugins', 'broken'), { recursive: true });
 
     const config = resolveConfig({ cwd: place.root, home: place.home });
     // `loadPlugins` не бросает — вызывающая команда получает реестр и работает дальше.
@@ -79,7 +79,7 @@ describe('plugins-load: мягкий отказ каталожной строк�
 
   it('явная строка (ключ plugins) при отказе по-прежнему прекращает загрузку', async () => {
     const place = bed();
-    writeFileSync(join(place.root, '.stepcast', 'config.yml'), 'plugins: ["./missing.mjs"]\n');
+    writeFileSync(join(place.root, '.burnex', 'config.yml'), 'plugins: ["./missing.mjs"]\n');
     const config = resolveConfig({ cwd: place.root, home: place.home });
 
     await assert.rejects(
@@ -95,7 +95,7 @@ describe('plugins-load: мягкий отказ каталожной строк�
   it('явная строка (каталог, названный руками через патч) при отказе прекращает загрузку', async () => {
     const place = bed();
     writeFileSync(
-      join(place.home, '.stepcast', 'plugins.patch.yml'),
+      join(place.home, '.burnex', 'plugins.patch.yml'),
       'version: 1\nkind: plugins-patch\nplugins:\n  - id: mine\n    use: ./does-not-exist\n',
     );
     const config = resolveConfig({ cwd: place.root, home: place.home });
@@ -159,8 +159,8 @@ describe('plugins-load: мягкий отказ каталожной строк�
 
   it('несколько сломанных каталожных строк все получают состояние failed, ни одна не прерывает соседей', async () => {
     const place = bed();
-    mkdirSync(join(place.home, '.stepcast', 'plugins', 'broken-a'), { recursive: true });
-    mkdirSync(join(place.home, '.stepcast', 'plugins', 'broken-b'), { recursive: true });
+    mkdirSync(join(place.home, '.burnex', 'plugins', 'broken-a'), { recursive: true });
+    mkdirSync(join(place.home, '.burnex', 'plugins', 'broken-b'), { recursive: true });
     writePluginDir(place.home, 'good', { server: 'server.mjs' }, {
       'server.mjs': 'export default { name: "good", predicates: [] };\n',
     });

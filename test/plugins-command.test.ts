@@ -75,12 +75,12 @@ async function cli(project: Project, argv: readonly string[]): Promise<Outcome> 
 }
 
 function withHomePatch(project: Project, body: string): void {
-  writeFileSync(join(project.home, '.stepcast', 'plugins.patch.yml'), body);
+  writeFileSync(join(project.home, '.burnex', 'plugins.patch.yml'), body);
 }
 
 function withProjectPatch(project: Project, body: string): void {
-  mkdirSync(join(project.root, '.stepcast'), { recursive: true });
-  writeFileSync(join(project.root, '.stepcast', 'plugins.patch.yml'), body);
+  mkdirSync(join(project.root, '.burnex'), { recursive: true });
+  writeFileSync(join(project.root, '.burnex', 'plugins.patch.yml'), body);
 }
 
 /** Минимальный плагин без вкладов — достаточен, чтобы модуль загрузился и прошёл контракт. */
@@ -89,10 +89,10 @@ const EMPTY_PLUGIN = (name: string): string => `export default { name: ${JSON.st
 describe('plugin-tree: burnex plugins печатает дерево со слоями', () => {
   it('называет каждую строку с id, модулем и слоем; файловые слои — путями своих файлов', async () => {
     const project = makeProject({});
-    writeFileSync(join(project.home, '.stepcast', 'home-extra.mjs'), EMPTY_PLUGIN('home-extra'));
+    writeFileSync(join(project.home, '.burnex', 'home-extra.mjs'), EMPTY_PLUGIN('home-extra'));
     withHomePatch(project, 'version: 1\nkind: plugins-patch\nplugins:\n  - id: home-extra\n    use: ./home-extra.mjs\n');
-    mkdirSync(join(project.root, '.stepcast'), { recursive: true });
-    writeFileSync(join(project.root, '.stepcast', 'project-extra.mjs'), EMPTY_PLUGIN('project-extra'));
+    mkdirSync(join(project.root, '.burnex'), { recursive: true });
+    writeFileSync(join(project.root, '.burnex', 'project-extra.mjs'), EMPTY_PLUGIN('project-extra'));
     withProjectPatch(
       project,
       'version: 1\nkind: plugins-patch\nplugins:\n  - id: project-extra\n    use: ./project-extra.mjs\n    after: home-extra\n',
@@ -153,13 +153,13 @@ describe('plugin-tree: burnex plugins печатает дерево со сло�
 
     assert.match(
       lines[cursor] ?? '',
-      new RegExp(`^${place}\\s+home-extra\\s+${escapeRegExp(join(project.home, '.stepcast', 'plugins.patch.yml'))}\\s+\\./home-extra\\.mjs\\s+действует$`),
+      new RegExp(`^${place}\\s+home-extra\\s+${escapeRegExp(join(project.home, '.burnex', 'plugins.patch.yml'))}\\s+\\./home-extra\\.mjs\\s+действует$`),
     );
     cursor += 1;
     place += 1;
     assert.match(
       lines[cursor] ?? '',
-      new RegExp(`^${place}\\s+project-extra\\s+${escapeRegExp(join(project.root, '.stepcast', 'plugins.patch.yml'))}\\s+\\./project-extra\\.mjs\\s+действует$`),
+      new RegExp(`^${place}\\s+project-extra\\s+${escapeRegExp(join(project.root, '.burnex', 'plugins.patch.yml'))}\\s+\\./project-extra\\.mjs\\s+действует$`),
     );
     cursor += 1;
 
@@ -209,7 +209,7 @@ describe('plugin-tree: burnex plugins печатает дерево со сло�
     assert.equal(outcome.code, ExitCode.ok);
     const line = outcome.stdout.split('\n').find((entry) => entry.includes('backend-claude'));
     assert.match(line ?? '', /отключена/);
-    assert.match(line ?? '', new RegExp(escapeRegExp(join(project.root, '.stepcast', 'plugins.patch.yml'))));
+    assert.match(line ?? '', new RegExp(escapeRegExp(join(project.root, '.burnex', 'plugins.patch.yml'))));
   });
 
   it('--dump печатает то же самое', async () => {
@@ -225,7 +225,7 @@ describe('plugin-tree: burnex plugins печатает дерево со сло�
 
 describe('plugin-tree: отказ загрузки не заслоняет дерево', () => {
   it('дерево напечатано целиком, строка-виновница несёт причину, соседи ниже — «не загружалась», код возврата — ошибка конфигурации', async () => {
-    const project = makeProject({ '.stepcast/config.yml': 'plugins: ["./plugins/нет.mjs", "./plugins/тоже-нет.mjs"]\n' });
+    const project = makeProject({ '.burnex/config.yml': 'plugins: ["./plugins/нет.mjs", "./plugins/тоже-нет.mjs"]\n' });
 
     const outcome = await cli(project, ['plugins']);
 
@@ -286,10 +286,10 @@ describe('plugin-tree: отказ загрузки не заслоняет де�
     // не на строке, а после успокоения контекста, — и без успокоения команда
     // осмотра напечатала бы все строки действующими, вернув при этом код
     // ошибки (`plugin-tree`: строка-виновница называется вместе с причиной).
-    const project = makeProject({ '.stepcast/config.yml': 'plugins: ["./plugins/ждун.mjs"]\n' });
-    mkdirSync(join(project.root, '.stepcast', 'plugins'), { recursive: true });
+    const project = makeProject({ '.burnex/config.yml': 'plugins: ["./plugins/ждун.mjs"]\n' });
+    mkdirSync(join(project.root, '.burnex', 'plugins'), { recursive: true });
     writeFileSync(
-      join(project.root, '.stepcast', 'plugins', 'ждун.mjs'),
+      join(project.root, '.burnex', 'plugins', 'ждун.mjs'),
       'export default { name: "ждун", inject: ["нет-такого-сервиса"], apply() {} };\n',
     );
 
@@ -307,10 +307,10 @@ describe('plugin-tree: отказ загрузки не заслоняет де�
   });
 
   it('незакрытое внедрение видно и в машинном выводе неразрешённым именем, а не только в тексте причины', async () => {
-    const project = makeProject({ '.stepcast/config.yml': 'plugins: ["./plugins/ждун.mjs"]\n' });
-    mkdirSync(join(project.root, '.stepcast', 'plugins'), { recursive: true });
+    const project = makeProject({ '.burnex/config.yml': 'plugins: ["./plugins/ждун.mjs"]\n' });
+    mkdirSync(join(project.root, '.burnex', 'plugins'), { recursive: true });
     writeFileSync(
-      join(project.root, '.stepcast', 'plugins', 'ждун.mjs'),
+      join(project.root, '.burnex', 'plugins', 'ждун.mjs'),
       'export default { name: "ждун", inject: ["нет-такого-сервиса"], apply() {} };\n',
     );
 
@@ -332,7 +332,7 @@ describe('plugin-tree: отказ загрузки не заслоняет де�
   });
 
   it('для прочих команд поведение прежнее: отказ загрузки прекращает команду до диспетчеризации', async () => {
-    const project = makeProject({ '.stepcast/config.yml': 'plugins: ["./plugins/нет.mjs"]\n' });
+    const project = makeProject({ '.burnex/config.yml': 'plugins: ["./plugins/нет.mjs"]\n' });
 
     const outcome = await cli(project, ['config']);
 
@@ -341,13 +341,13 @@ describe('plugin-tree: отказ загрузки не заслоняет де�
   });
 
   it('отказ разбора самой конфигурации по-прежнему валит команду plugins обычным путём', async () => {
-    const project = makeProject({ '.stepcast/config.yml': 'plugins: [нет закрывающей\n' });
+    const project = makeProject({ '.burnex/config.yml': 'plugins: [нет закрывающей\n' });
 
     const outcome = await cli(project, ['plugins']);
 
     assert.equal(outcome.code, ExitCode.configError);
     assert.equal(outcome.stdout, '');
-    assert.match(outcome.stderr, /\.stepcast[/\\]config\.yml/);
+    assert.match(outcome.stderr, /\.burnex[/\\]config\.yml/);
   });
 });
 
@@ -355,22 +355,22 @@ describe('user-plugins: burnex plugins печатает каталожные с�
   it('называет каталог и слой у строк обоих слоёв, а не «встроенный» и не путь файла', async () => {
     const project = makeProject({});
     // Заводим каталоги вручную — project.write ограничен корнем проекта.
-    mkdirSync(join(project.home, '.stepcast', 'plugins', 'home-clock'), { recursive: true });
+    mkdirSync(join(project.home, '.burnex', 'plugins', 'home-clock'), { recursive: true });
     writeFileSync(
-      join(project.home, '.stepcast', 'plugins', 'home-clock', 'plugin.json'),
+      join(project.home, '.burnex', 'plugins', 'home-clock', 'plugin.json'),
       JSON.stringify({ server: 'server.mjs' }),
     );
     writeFileSync(
-      join(project.home, '.stepcast', 'plugins', 'home-clock', 'server.mjs'),
+      join(project.home, '.burnex', 'plugins', 'home-clock', 'server.mjs'),
       EMPTY_PLUGIN('home-clock'),
     );
-    mkdirSync(join(project.root, '.stepcast', 'plugins', 'project-clock'), { recursive: true });
+    mkdirSync(join(project.root, '.burnex', 'plugins', 'project-clock'), { recursive: true });
     writeFileSync(
-      join(project.root, '.stepcast', 'plugins', 'project-clock', 'plugin.json'),
+      join(project.root, '.burnex', 'plugins', 'project-clock', 'plugin.json'),
       JSON.stringify({ server: 'server.mjs' }),
     );
     writeFileSync(
-      join(project.root, '.stepcast', 'plugins', 'project-clock', 'server.mjs'),
+      join(project.root, '.burnex', 'plugins', 'project-clock', 'server.mjs'),
       EMPTY_PLUGIN('project-clock'),
     );
 
@@ -381,11 +381,11 @@ describe('user-plugins: burnex plugins печатает каталожные с�
     const projectLine = outcome.stdout.split('\n').find((entry) => entry.includes('project-clock'));
     assert.match(
       homeLine ?? '',
-      new RegExp(`${escapeRegExp(join(project.home, '.stepcast', 'plugins', 'home-clock'))}.*\\(home\\)`),
+      new RegExp(`${escapeRegExp(join(project.home, '.burnex', 'plugins', 'home-clock'))}.*\\(home\\)`),
     );
     assert.match(
       projectLine ?? '',
-      new RegExp(`${escapeRegExp(join(project.root, '.stepcast', 'plugins', 'project-clock'))}.*\\(project\\)`),
+      new RegExp(`${escapeRegExp(join(project.root, '.burnex', 'plugins', 'project-clock'))}.*\\(project\\)`),
     );
     assert.match(homeLine ?? '', /действует/);
     assert.match(projectLine ?? '', /действует/);
@@ -393,7 +393,7 @@ describe('user-plugins: burnex plugins печатает каталожные с�
 
   it('каталог, названный именем встроенной строки, напечатан отказавшим рядом с ней — и команда работает', async () => {
     const project = makeProject({});
-    mkdirSync(join(project.home, '.stepcast', 'plugins', 'backend-claude'), { recursive: true });
+    mkdirSync(join(project.home, '.burnex', 'plugins', 'backend-claude'), { recursive: true });
 
     const outcome = await cli(project, ['plugins']);
 
@@ -408,7 +408,7 @@ describe('user-plugins: burnex plugins печатает каталожные с�
 
   it('каталожная строка без манифеста показана отказавшей с причиной, а команда не прекращается', async () => {
     const project = makeProject({});
-    mkdirSync(join(project.home, '.stepcast', 'plugins', 'broken'), { recursive: true });
+    mkdirSync(join(project.home, '.burnex', 'plugins', 'broken'), { recursive: true });
 
     const outcome = await cli(project, ['plugins']);
 
@@ -434,11 +434,11 @@ consumer.inject = ['published-service'];
 describe('plugin-introspection: печать сервисов и вкладов строки', () => {
   it('первая строка названа со своим вкладом и объявленным сервисом, вторая — с запрошенным именем и признаком «разрешён»', async () => {
     const project = makeProject({
-      '.stepcast/config.yml': 'plugins: ["./plugins/provider.mjs", "./plugins/consumer.mjs"]\n',
+      '.burnex/config.yml': 'plugins: ["./plugins/provider.mjs", "./plugins/consumer.mjs"]\n',
     });
-    mkdirSync(join(project.root, '.stepcast', 'plugins'), { recursive: true });
-    writeFileSync(join(project.root, '.stepcast', 'plugins', 'provider.mjs'), SERVICE_PROVIDER);
-    writeFileSync(join(project.root, '.stepcast', 'plugins', 'consumer.mjs'), SERVICE_CONSUMER);
+    mkdirSync(join(project.root, '.burnex', 'plugins'), { recursive: true });
+    writeFileSync(join(project.root, '.burnex', 'plugins', 'provider.mjs'), SERVICE_PROVIDER);
+    writeFileSync(join(project.root, '.burnex', 'plugins', 'consumer.mjs'), SERVICE_CONSUMER);
 
     const outcome = await cli(project, ['plugins']);
 
@@ -452,10 +452,10 @@ describe('plugin-introspection: печать сервисов и вкладов 
   });
 
   it('слот отчёта — имя объявленного сервиса с префиксом slot: помечено «(слот)»', async () => {
-    const project = makeProject({ '.stepcast/config.yml': 'plugins: ["./plugins/provider.mjs"]\n' });
-    mkdirSync(join(project.root, '.stepcast', 'plugins'), { recursive: true });
+    const project = makeProject({ '.burnex/config.yml': 'plugins: ["./plugins/provider.mjs"]\n' });
+    mkdirSync(join(project.root, '.burnex', 'plugins'), { recursive: true });
     writeFileSync(
-      join(project.root, '.stepcast', 'plugins', 'provider.mjs'),
+      join(project.root, '.burnex', 'plugins', 'provider.mjs'),
       "export default function provider(ctx) { ctx.provide('slot:widgets'); ctx.set('slot:widgets', {}); }\n",
     );
 
@@ -472,11 +472,11 @@ describe('plugin-introspection: печать сервисов и вкладов 
 describe('plugin-introspection: --json печатает ту же модель машинно', () => {
   it('вывод целиком разбирается как JSON, несёт version и покрывает состав вкладов и сервисов', async () => {
     const project = makeProject({
-      '.stepcast/config.yml': 'plugins: ["./plugins/provider.mjs", "./plugins/consumer.mjs"]\n',
+      '.burnex/config.yml': 'plugins: ["./plugins/provider.mjs", "./plugins/consumer.mjs"]\n',
     });
-    mkdirSync(join(project.root, '.stepcast', 'plugins'), { recursive: true });
-    writeFileSync(join(project.root, '.stepcast', 'plugins', 'provider.mjs'), SERVICE_PROVIDER);
-    writeFileSync(join(project.root, '.stepcast', 'plugins', 'consumer.mjs'), SERVICE_CONSUMER);
+    mkdirSync(join(project.root, '.burnex', 'plugins'), { recursive: true });
+    writeFileSync(join(project.root, '.burnex', 'plugins', 'provider.mjs'), SERVICE_PROVIDER);
+    writeFileSync(join(project.root, '.burnex', 'plugins', 'consumer.mjs'), SERVICE_CONSUMER);
 
     const outcome = await cli(project, ['plugins', '--json']);
 
@@ -724,10 +724,10 @@ function disableAllPipelineRows(): string {
 
 describe('plugin-tree: команды в составе без единого сервиса пайплайна', () => {
   it('run отказывает названно кодом ошибки конфигурации: строка команды снята вместе со строкой pipeline', async () => {
-    const project = makeProject({ 'stepcast.yml': MINIMAL_PIPELINE });
+    const project = makeProject({ 'burnex.yml': MINIMAL_PIPELINE });
     withProjectPatch(project, disableAllPipelineRows());
 
-    const outcome = await cli(project, ['run', 'stepcast.yml']);
+    const outcome = await cli(project, ['run', 'burnex.yml']);
 
     assert.equal(outcome.code, ExitCode.configError);
     // Строка `command-run` отключена тем же патчем — дерево применяется
@@ -780,7 +780,7 @@ describe('plugin-tree: inject команды плагина проверяетс
 
   it('команда, ждущая сервис, которого не заводит никто, отказывает названно и не доходит до тела', async () => {
     const project = makeProject({});
-    writeFileSync(join(project.home, '.stepcast', 'own-command.mjs'), COMMAND_PLUGIN('нет-такого-сервиса'));
+    writeFileSync(join(project.home, '.burnex', 'own-command.mjs'), COMMAND_PLUGIN('нет-такого-сервиса'));
     withHomePatch(project, 'version: 1\nkind: plugins-patch\nplugins:\n  - id: own-command\n    use: ./own-command.mjs\n');
 
     const outcome = await cli(project, ['own-cmd']);
@@ -796,7 +796,7 @@ describe('plugin-tree: inject команды плагина проверяетс
     const project = makeProject({});
     // Имя, которое в составе есть: сервис заводит строка `pipeline`. Проверка
     // по контексту не должна отказывать там, где сервис на месте.
-    writeFileSync(join(project.home, '.stepcast', 'own-command.mjs'), COMMAND_PLUGIN('backends'));
+    writeFileSync(join(project.home, '.burnex', 'own-command.mjs'), COMMAND_PLUGIN('backends'));
     withHomePatch(project, 'version: 1\nkind: plugins-patch\nplugins:\n  - id: own-command\n    use: ./own-command.mjs\n');
 
     const outcome = await cli(project, ['own-cmd']);

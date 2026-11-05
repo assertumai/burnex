@@ -39,10 +39,10 @@ function withStepEnv<T>(vars: Readonly<Record<string, string | undefined>>, fn: 
   }
 }
 
-/** Фальшивый HOME на время вызова — иначе `resolveConfig` внутри команды подхватила бы настоящий `~/.stepcast/config.yml`. */
+/** Фальшивый HOME на время вызова — иначе `resolveConfig` внутри команды подхватила бы настоящий `~/.burnex/config.yml`. */
 function withFakeHome<T>(fn: () => T): T {
   const home = tempDir('propose-home-');
-  mkdirSync(join(home, '.stepcast'), { recursive: true });
+  mkdirSync(join(home, '.burnex'), { recursive: true });
   return withHome(home, fn);
 }
 
@@ -67,7 +67,7 @@ describe('cli propose: постановка из шага прогона', () =>
     // Временное дерево работы (`workspace: worktree`) — рабочая директория
     // команды, но не проект: очередь обязана лечь в `projectRoot`, а не сюда.
     const worktree = tempDir('worktree-');
-    mkdirSync(join(worktree, '.stepcast'), { recursive: true });
+    mkdirSync(join(worktree, '.burnex'), { recursive: true });
 
     const contentFile = join(worktree, 'clock.tsx');
     writeFileSync(contentFile, 'export default 1;\n');
@@ -83,7 +83,7 @@ describe('cli propose: постановка из шага прогона', () =>
         },
         () =>
           runProposeCommand(
-            { command: 'propose', positional: ['.stepcast/widgets/clock.tsx'], flags: { from: contentFile } },
+            { command: 'propose', positional: ['.burnex/widgets/clock.tsx'], flags: { from: contentFile } },
             write,
             worktree,
           ),
@@ -104,7 +104,7 @@ describe('cli propose: вызов вне прогона', () => {
   function project(): string {
     const dir = tempDir('propose-cli-');
     mkdirSync(join(dir, '.git'), { recursive: true });
-    mkdirSync(join(dir, '.stepcast'), { recursive: true });
+    mkdirSync(join(dir, '.burnex'), { recursive: true });
     return dir;
   }
 
@@ -117,7 +117,7 @@ describe('cli propose: вызов вне прогона', () => {
     const code = await withFakeHome(() =>
       withoutRunEnv(() =>
         runProposeCommand(
-          { command: 'propose', positional: ['.stepcast/widgets/clock.tsx'], flags: { from: contentFile } },
+          { command: 'propose', positional: ['.burnex/widgets/clock.tsx'], flags: { from: contentFile } },
           write,
           dir,
         ),
@@ -136,7 +136,7 @@ describe('cli propose: вызов вне прогона', () => {
     const code = await withFakeHome(() =>
       withoutRunEnv(() =>
         runProposeCommand(
-          { command: 'propose', positional: ['.stepcast/widgets/clock.tsx'], flags: {} },
+          { command: 'propose', positional: ['.burnex/widgets/clock.tsx'], flags: {} },
           write,
           dir,
           async () => 'export default 2;\n',
@@ -154,7 +154,7 @@ describe('cli propose: вызов вне прогона', () => {
     const code = await withFakeHome(() =>
       withoutRunEnv(() =>
         runProposeCommand(
-          { command: 'propose', positional: ['.stepcast/widgets/clock.tsx'], flags: {} },
+          { command: 'propose', positional: ['.burnex/widgets/clock.tsx'], flags: {} },
           write,
           dir,
           async () => '',
@@ -173,7 +173,7 @@ describe('cli propose: вызов вне прогона', () => {
         runProposeCommand(
           {
             command: 'propose',
-            positional: ['.stepcast/widgets/clock.tsx'],
+            positional: ['.burnex/widgets/clock.tsx'],
             flags: { from: join(dir, 'нет-такого-файла.tsx') },
           },
           write,
@@ -190,7 +190,7 @@ describe('cli propose: вызов вне прогона', () => {
     const code = await withFakeHome(() =>
       withoutRunEnv(() =>
         runProposeCommand(
-          { command: 'propose', positional: ['.stepcast/config.yml'], flags: {} },
+          { command: 'propose', positional: ['.burnex/config.yml'], flags: {} },
           write,
           dir,
           async () => 'version: 1\n',
@@ -207,7 +207,7 @@ describe('cli propose: вызов вне прогона', () => {
     const code = await withFakeHome(() =>
       withoutRunEnv(() =>
         runProposeCommand(
-          { command: 'propose', positional: ['.stepcast/dashboards/release.yml'], flags: {} },
+          { command: 'propose', positional: ['.burnex/dashboards/release.yml'], flags: {} },
           write,
           dir,
           async () => 'title: r\n',
@@ -215,18 +215,18 @@ describe('cli propose: вызов вне прогона', () => {
       ),
     );
     assert.equal(code, ExitCode.ok);
-    assert.equal(existsSync(join(dir, '.stepcast', 'dashboards', 'release.yml')), false);
+    assert.equal(existsSync(join(dir, '.burnex', 'dashboards', 'release.yml')), false);
     assert.equal(readProposalsDir(dir).records[0]?.state, 'pending');
   });
 
   it('режим direct — цель записана немедленно, очередь остаётся пустой', async () => {
     const dir = project();
-    writeFileSync(join(dir, '.stepcast', 'config.yml'), 'project:\n  proposals: direct\n');
+    writeFileSync(join(dir, '.burnex', 'config.yml'), 'project:\n  proposals: direct\n');
     const { lines, write } = capture();
     const code = await withFakeHome(() =>
       withoutRunEnv(() =>
         runProposeCommand(
-          { command: 'propose', positional: ['.stepcast/dashboards/release.yml'], flags: {} },
+          { command: 'propose', positional: ['.burnex/dashboards/release.yml'], flags: {} },
           write,
           dir,
           async () => 'title: r\n',
@@ -234,7 +234,7 @@ describe('cli propose: вызов вне прогона', () => {
       ),
     );
     assert.equal(code, ExitCode.ok);
-    assert.equal(readFileSync(join(dir, '.stepcast', 'dashboards', 'release.yml'), 'utf8'), 'title: r\n');
+    assert.equal(readFileSync(join(dir, '.burnex', 'dashboards', 'release.yml'), 'utf8'), 'title: r\n');
     assert.equal(existsSync(proposalsDirPath(dir)), false);
     assert.match(lines.join('\n'), /release\.yml/);
   });

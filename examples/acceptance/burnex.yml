@@ -1,7 +1,7 @@
 # Приёмка цикла `until` на живом бэкенде.
 #
-#   burnex lint examples/acceptance/stepcast.yml
-#   burnex run  examples/acceptance/stepcast.yml
+#   burnex lint examples/acceptance/burnex.yml
+#   burnex run  examples/acceptance/burnex.yml
 #   node examples/acceptance/verify.mjs <каталог-прогона-из-вывода>
 #
 # Пайплайн намеренно дёшев: один агентский вызов на итерацию, промпт в одну
@@ -34,7 +34,7 @@ jobs:
     description: Обнулить счётчик, задающий число итераций
     steps:
       - id: обнуляет
-        run: [sh, -c, 'echo 0 > .stepcast-счётчик']
+        run: [sh, -c, 'echo 0 > .burnex-счётчик']
         expect: [{ exit_code: 0 }]
 
   цикл:
@@ -47,7 +47,7 @@ jobs:
       # Счётчик растёт на единицу за итерацию, поэтому условие выполняется на
       # второй: третья итерация не должна начаться.
       check:
-        - cmd: "test $(cat .stepcast-счётчик) -ge 2"
+        - cmd: "test $(cat .burnex-счётчик) -ge 2"
     steps:
       # Агентский шаг нужен ровно для одного: у него есть сессия, и по её
       # идентификатору видно, что на новой итерации диалог начался заново.
@@ -59,7 +59,7 @@ jobs:
           - matches: "/готов/i"
 
       - id: считает
-        run: [sh, -c, 'echo $(( $(cat .stepcast-счётчик) + 1 )) > .stepcast-счётчик']
+        run: [sh, -c, 'echo $(( $(cat .burnex-счётчик) + 1 )) > .burnex-счётчик']
         expect: [{ exit_code: 0 }]
 
   без-цикла:

@@ -2,8 +2,8 @@
 # на которой прогон останавливается и ждёт решения человека. Экран «Решения»
 # витрины (`/decisions`, docs/decisions.md) виден на этом пайплайне вживую.
 #
-#   burnex lint examples/decision/stepcast.yml
-#   burnex run  examples/decision/stepcast.yml
+#   burnex lint examples/decision/burnex.yml
+#   burnex run  examples/decision/burnex.yml
 #
 # Прогон доходит до работы gate и останавливается. Дальше решает человек:
 #

@@ -1,6 +1,6 @@
 import { existsSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { join, relative } from 'node:path';
+import { relative } from 'node:path';
 
 import { listPipelineEntries, type PipelineEntry } from '../pipeline/domain/project/pipelines.js';
 import { listProjects } from '../pipeline/run/journal/reader.js';
@@ -21,6 +21,7 @@ import { stepsMissingExternal } from '../pipeline/run/shadow.js';
 import { hasStepExecutor } from '../pipeline/contract.js';
 import { layoutJobs, type JobGraph } from './graph.js';
 import { paramViews, type StepParamView } from './steps.js';
+import { homeRoot } from '../../kernel/dirs.js';
 
 /**
  * Пайплайны проектов, известных корню прогонов.
@@ -215,7 +216,7 @@ export interface PipelineView {
    * всегда совпадает с файлом пайплайна: ошибка приходит и из файла работы,
    * подключённой по `uses`.
    *
-   * Файл вне корня проекта — глобальный `~/.stepcast/config.yml`, объявивший
+   * Файл вне корня проекта — глобальный `~/.burnex/config.yml`, объявивший
    * плагин, — назван абсолютным путём: он и не принадлежит проекту, а цепочка
    * `../../..` от его корня не отвечает на вопрос «какой файл править».
    * Абсолютным именем тот же экран уже называет файл слоя `config` на
@@ -500,7 +501,7 @@ export interface Failure {
  * проекта ничего не добавляет); вне проекта — сам абсолютный путь.
  *
  * Вне корня проекта файл оказывается не по недосмотру: плагин вправе быть
- * объявлен глобальным `~/.stepcast/config.yml`, и его отказ показывается
+ * объявлен глобальным `~/.burnex/config.yml`, и его отказ показывается
  * карточками проекта. Относительное имя вышло бы цепочкой `../../..` до
  * домашнего каталога — путём, который ни на что не указывает и вдобавок врёт
  * про принадлежность файла проекту.
@@ -810,7 +811,7 @@ export async function resolveWithCachedKernel(
  * документ, — и разбор оставался верным при чужих умолчаниях. Теперь карточка
  * шага показывает эффективную модель, и то же самое `defaults.model`
  * демонского каталога стало значением, которое видит пользователь: проект со
- * своим `.stepcast/config.yml` обязан быть раскрыт своими умолчаниями, а не
+ * своим `.burnex/config.yml` обязан быть раскрыт своими умолчаниями, а не
  * чужими. Подмена не расширяется до конфигурации целиком: `runs.root`,
  * `ui.port` и `limits` не влияют на показ пайплайна, а витрина уже работает в
  * корне прогонов и с потолками, выбранными при старте демона (design.md,
@@ -899,7 +900,7 @@ export async function buildPipelines(
     // Проект, чей путь неизвестен, обходить негде: в указателе его нет.
     if (project.path === undefined || !existsSync(project.path)) continue;
     const entries = listPipelineEntries(project.path, {
-      globalConfigDir: join(options.home ?? homedir(), '.stepcast'),
+      globalConfigDir: homeRoot(options.home ?? homedir()),
     });
     if (entries.length === 0) continue;
 

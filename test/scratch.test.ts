@@ -24,7 +24,7 @@ function gitInit(project: Project): void {
 }
 
 async function run(project: Project, runsRoot: string): Promise<RunResult> {
-  const expanded = expandPipeline({ pipelinePath: project.path('stepcast.yml'), config: project.config });
+  const expanded = expandPipeline({ pipelinePath: project.path('burnex.yml'), config: project.config });
   return runPipeline({
     expanded,
     config: { ...project.config, runs: { ...project.config.runs, root: runsRoot } },
@@ -43,7 +43,7 @@ describe('run-layout: путь каталога черновиков', () => {
   for (const mode of ['cwd', 'worktree', 'copy'] as const) {
     it(`лежит вне рабочего дерева в режиме ${mode}`, async () => {
       const project = makeProject({
-        'stepcast.yml': `
+        'burnex.yml': `
 version: 1
 kind: pipeline
 name: режим-${mode}
@@ -77,7 +77,7 @@ jobs:
 describe('run-layout: жизненный цикл каталога черновиков', () => {
   it('заведён до первого шага, даже если шаг только проверяет его, не создавая', async () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 version: 1
 kind: pipeline
 name: заведён-заранее
@@ -99,7 +99,7 @@ jobs:
 
   it('пустой каталог снят по завершении работы', async () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 version: 1
 kind: pipeline
 name: пустой-снят
@@ -121,7 +121,7 @@ jobs:
 
   it('непустой каталог остаётся нетронутым', async () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 version: 1
 kind: pipeline
 name: непустой-сохранён
@@ -147,7 +147,7 @@ jobs:
   // результат, а не отказ учёта: жалобы в журнале тут быть не должно.
   it('каталог, убранный самим шагом, не даёт отказа учёта', async () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 version: 1
 kind: pipeline
 name: убран-шагом
@@ -173,7 +173,7 @@ jobs:
 
   it('отказ снятия пустого каталога не роняет работу, а идёт в bookkeeping.failed', async () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 version: 1
 kind: pipeline
 name: отказ-снятия
@@ -234,7 +234,7 @@ jobs:
   // каталог не записавшая, не должна оставлять его в раскладке.
   it('снят и когда работа отказала на подготовке рабочей директории', async () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 version: 1
 kind: pipeline
 name: отказ-подготовки
@@ -262,7 +262,7 @@ jobs:
 
   it('снят и когда работа отказала на раскрытии подстановки', async () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 version: 1
 kind: pipeline
 name: отказ-подстановки

@@ -62,8 +62,8 @@ function writeModule(path: string, body: string): void {
 }
 
 function writePatch(home: string, body: string): void {
-  mkdirSync(join(home, '.stepcast'), { recursive: true });
-  writeFileSync(join(home, '.stepcast', 'plugins.patch.yml'), body);
+  mkdirSync(join(home, '.burnex'), { recursive: true });
+  writeFileSync(join(home, '.burnex', 'plugins.patch.yml'), body);
 }
 
 describe('ui-screens: регистрация и снятие маршрута', () => {
@@ -158,7 +158,7 @@ describe('ui-screens: состав экранов у демона', () => {
   it('патч ставит на место строки встроенного экрана модуль пользователя: действуют его объявление и маршрут, встроенная половина не применяется, отказа по занятому маршруту нет', async (t) => {
     const { runsRoot, home } = makeJournalBed();
     writeModule(
-      join(home, '.stepcast', 'my-usage.mjs'),
+      join(home, '.burnex', 'my-usage.mjs'),
       `export default {
         name: 'user-usage',
         inject: ['screens', 'api'],
@@ -200,8 +200,8 @@ describe('ui-screens: состав экранов у демона', () => {
         },
       };
       `;
-    writeModule(join(home, '.stepcast', 'twin-a.mjs'), twin('twin-a'));
-    writeModule(join(home, '.stepcast', 'twin-b.mjs'), twin('twin-b'));
+    writeModule(join(home, '.burnex', 'twin-a.mjs'), twin('twin-a'));
+    writeModule(join(home, '.burnex', 'twin-b.mjs'), twin('twin-b'));
     writePatch(
       home,
       'version: 1\nkind: plugins-patch\nplugins:\n  - id: twin-a\n    use: ./twin-a.mjs\n  - id: twin-b\n    use: ./twin-b.mjs\n',
@@ -253,7 +253,7 @@ describe('ui-screens: маршрут принадлежит одной стро�
   it('повтор пары «метод и путь» — отказ сборки, называющий обе строки; действующий состав остаётся встроенным', async (t) => {
     const { runsRoot, home } = makeJournalBed();
     writeModule(
-      join(home, '.stepcast', 'dup-a.mjs'),
+      join(home, '.burnex', 'dup-a.mjs'),
       `export default {
         name: 'dup-a',
         inject: ['api'],
@@ -262,7 +262,7 @@ describe('ui-screens: маршрут принадлежит одной стро�
       `,
     );
     writeModule(
-      join(home, '.stepcast', 'dup-b.mjs'),
+      join(home, '.burnex', 'dup-b.mjs'),
       `export default {
         name: 'dup-b',
         inject: ['api'],
@@ -371,8 +371,8 @@ describe('ui-screens: строка каркаса снята патчем', () =
 
   it('пока ни одна сборка не удалась, настройки отказывают с причиной, а не выдают встроенные умолчания за конфигурацию пользователя', async (t) => {
     const { runsRoot, home } = makeJournalBed();
-    mkdirSync(join(home, '.stepcast'), { recursive: true });
-    writeFileSync(join(home, '.stepcast', 'config.yml'), 'defaults:\n  agent: claude\n  model: моя-модель\n');
+    mkdirSync(join(home, '.burnex'), { recursive: true });
+    writeFileSync(join(home, '.burnex', 'config.yml'), 'defaults:\n  agent: claude\n  model: моя-модель\n');
     writePatch(home, 'version: 1\nkind: plugins-patch\nplugins: [\n');
     const server = await startServer(t, { runsRoot, home });
 

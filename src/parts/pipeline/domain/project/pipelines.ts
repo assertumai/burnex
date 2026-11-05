@@ -9,6 +9,7 @@ import {
   packagePipelineFile,
   type PackageLayer,
 } from '../../../packages/index.js';
+import { cabinetDir, defaultPipelineFile, homeRoot } from '../../../../kernel/dirs.js';
 
 /**
  * Обход файлов-кандидатов пайплайна в проекте.
@@ -17,13 +18,10 @@ import {
  * оба ищут одни и те же файлы одним и тем же правилом, и раздваивать его —
  * плодить два места, которые могут разойтись.
  *
- * Обход намеренно мелкий: корневой `stepcast.yml` и `.stepcast/pipelines/*.yml`
+ * Обход намеренно мелкий: корневой `burnex.yml` и `.burnex/pipelines/*.yml`
  * — раскладка, которую заводит `burnex init` и которой держится сам проект.
  * Полный обход дерева проекта стоил бы дорого и находил бы чужие YAML.
  */
-
-/** Каталог пайплайнов проекта относительно его корня. */
-const PIPELINE_DIR = join('.stepcast', 'pipelines');
 
 /** Пайплайн ли это. Определение работы лежит в таком же `.yml` и им не является. */
 export function isPipelineFile(path: string): boolean {
@@ -38,10 +36,10 @@ export function isPipelineFile(path: string): boolean {
 /** Файлы-кандидаты пайплайна проекта, в порядке от корневого к каталогу пайплайнов. */
 export function listPipelineFiles(projectPath: string): string[] {
   const out: string[] = [];
-  const root = join(projectPath, 'stepcast.yml');
+  const root = defaultPipelineFile(projectPath);
   if (existsSync(root)) out.push(root);
 
-  const dir = join(projectPath, PIPELINE_DIR);
+  const dir = join(cabinetDir(projectPath), 'pipelines');
   try {
     for (const name of readdirSync(dir).sort()) {
       if (name.endsWith('.yml') || name.endsWith('.yaml')) out.push(join(dir, name));
@@ -63,7 +61,7 @@ export interface PipelineEntry {
 }
 
 export interface PipelineEntriesOptions {
-  /** Каталог глобального конфига: пакеты home лежат рядом. По умолчанию `~/.stepcast`. */
+  /** Каталог глобального конфига: пакеты home лежат рядом. По умолчанию `~/.burnex`. */
   readonly globalConfigDir?: string;
 }
 
@@ -79,7 +77,7 @@ export function listPipelineEntries(projectPath: string, options: PipelineEntrie
 
   const index = buildPackageIndex({
     projectRoot: projectPath,
-    globalPath: join(options.globalConfigDir ?? join(homedir(), '.stepcast'), 'config.yml'),
+    globalPath: join(options.globalConfigDir ?? homeRoot(homedir()), 'config.yml'),
   });
   for (const layer of ['project', 'home'] as const) {
     for (const pack of activePackages(index, layer)) {

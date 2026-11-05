@@ -35,7 +35,7 @@ mkdirSync(dir + '/artifacts', { recursive: true });
 mkdirSync(dir + '/anchors', { recursive: true });
 const started = new Date().toISOString();
 writeFileSync(dir + '/run.json', JSON.stringify({
-  run_id: ${JSON.stringify(runId)}, pipeline: 'demo', pipeline_file: ${JSON.stringify(join(projectRoot, 'stepcast.yml'))},
+  run_id: ${JSON.stringify(runId)}, pipeline: 'demo', pipeline_file: ${JSON.stringify(join(projectRoot, 'burnex.yml'))},
   lock_hash: 'abc', project_root: ${JSON.stringify(projectRoot)}, workspace: { mode: 'cwd' }, inputs: {},
   git: {}, backends: {}, started_at: started, pid: process.pid, format: 10
 }, null, 2) + '\\n');
@@ -63,7 +63,7 @@ process.exit(17);
 
     launchRun({
       cwd: projectRoot,
-      pipeline: 'stepcast.yml',
+      pipeline: 'burnex.yml',
       runsRoot,
       projectKey: key,
       execPath: executable,
@@ -121,13 +121,13 @@ require('node:fs').writeFileSync(process.argv[1] + '.' + (process.argv.includes(
     );
     chmodSync(executable, 0o700);
 
-    launchRun({ cwd: projectRoot, pipeline: 'stepcast.yml', runsRoot, projectKey: key, execPath: executable });
-    launchRun({ cwd: projectRoot, pipeline: 'stepcast.yml', runsRoot, projectKey: key, execPath: executable, shadow: true });
+    launchRun({ cwd: projectRoot, pipeline: 'burnex.yml', runsRoot, projectKey: key, execPath: executable });
+    launchRun({ cwd: projectRoot, pipeline: 'burnex.yml', runsRoot, projectKey: key, execPath: executable, shadow: true });
     await waitFor(() => existsSync(`${executable}.plain`) && existsSync(`${executable}.shadow`));
 
     const argvOf = (suffix: string): string[] => JSON.parse(readFileSync(`${executable}.${suffix}`, 'utf8'));
-    assert.deepEqual(argvOf('plain').slice(-2), ['run', 'stepcast.yml']);
-    assert.deepEqual(argvOf('shadow').slice(-3), ['run', 'stepcast.yml', '--shadow']);
+    assert.deepEqual(argvOf('plain').slice(-2), ['run', 'burnex.yml']);
+    assert.deepEqual(argvOf('shadow').slice(-3), ['run', 'burnex.yml', '--shadow']);
   });
 
   it('agent превращается в --agent <имя>, без него флага нет', async () => {
@@ -142,13 +142,13 @@ require('node:fs').writeFileSync(process.argv[1] + '.' + (process.argv.includes(
     );
     chmodSync(executable, 0o700);
 
-    launchRun({ cwd: projectRoot, pipeline: 'stepcast.yml', runsRoot, projectKey: key, execPath: executable });
-    launchRun({ cwd: projectRoot, pipeline: 'stepcast.yml', runsRoot, projectKey: key, execPath: executable, agent: 'codex' });
+    launchRun({ cwd: projectRoot, pipeline: 'burnex.yml', runsRoot, projectKey: key, execPath: executable });
+    launchRun({ cwd: projectRoot, pipeline: 'burnex.yml', runsRoot, projectKey: key, execPath: executable, agent: 'codex' });
     await waitFor(() => existsSync(`${executable}.plain`) && existsSync(`${executable}.agent`));
 
     const argvOf = (suffix: string): string[] => JSON.parse(readFileSync(`${executable}.${suffix}`, 'utf8'));
-    assert.deepEqual(argvOf('plain').slice(-2), ['run', 'stepcast.yml']);
-    assert.deepEqual(argvOf('agent').slice(-4), ['run', 'stepcast.yml', '--agent', 'codex']);
+    assert.deepEqual(argvOf('plain').slice(-2), ['run', 'burnex.yml']);
+    assert.deepEqual(argvOf('agent').slice(-4), ['run', 'burnex.yml', '--agent', 'codex']);
   });
 
   it('scheduled превращается во флаги --scheduled/--schedule-entry, а догон добавляет --catchup', async () => {
@@ -163,17 +163,17 @@ require('node:fs').writeFileSync(process.argv[1] + '.' + (process.argv.includes(
     );
     chmodSync(executable, 0o700);
 
-    const base = { cwd: projectRoot, pipeline: 'stepcast.yml', runsRoot, projectKey: key, execPath: executable };
+    const base = { cwd: projectRoot, pipeline: 'burnex.yml', runsRoot, projectKey: key, execPath: executable };
     launchRun({ ...base, scheduled: { entry: 2, moment: '2026-11-01T03:00:00Z', catchup: false } });
     launchRun({ ...base, scheduled: { entry: 2, moment: '2026-11-01T03:00:00Z', catchup: true } });
     await waitFor(() => existsSync(`${executable}.ontime`) && existsSync(`${executable}.catchup`));
 
     const argvOf = (suffix: string): string[] => JSON.parse(readFileSync(`${executable}.${suffix}`, 'utf8'));
     assert.deepEqual(argvOf('ontime').slice(-6), [
-      'run', 'stepcast.yml', '--scheduled', '2026-11-01T03:00:00Z', '--schedule-entry', '2',
+      'run', 'burnex.yml', '--scheduled', '2026-11-01T03:00:00Z', '--schedule-entry', '2',
     ]);
     assert.deepEqual(argvOf('catchup').slice(-7), [
-      'run', 'stepcast.yml', '--scheduled', '2026-11-01T03:00:00Z', '--schedule-entry', '2', '--catchup',
+      'run', 'burnex.yml', '--scheduled', '2026-11-01T03:00:00Z', '--schedule-entry', '2', '--catchup',
     ]);
   });
 

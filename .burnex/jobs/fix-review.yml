@@ -80,14 +80,14 @@ steps:
           # см. implement.yml.
           - ${params.spec_dir}/**
           - ${params.spec_rules}
-          # Устройство петли: каталог .stepcast/ задаёт движок, а не
+          # Устройство петли: каталог .burnex/ задаёт движок, а не
           # репозиторий — тот же критерий, по которому литералом осталось
           # Bash(git status*).
-          - .stepcast/config.yml
-          - .stepcast/jobs/**
-          - .stepcast/pipelines/**
-          - .stepcast/prompts/**
-          - .stepcast/schemas/**
+          - .burnex/config.yml
+          - .burnex/jobs/**
+          - .burnex/pipelines/**
+          - .burnex/prompts/**
+          - .burnex/schemas/**
     attempts:
       max: 2
       escalation:

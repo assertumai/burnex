@@ -12,7 +12,7 @@ const MANAGED = JSON.stringify({
   repo: '/srv/stepcast.git',
   ref: 'v0.3.0',
   version: '0.3.0',
-  releases_dir: '/h/.stepcast/releases',
+  releases_dir: '/h/.burnex/releases',
 });
 
 const SHA = 'a'.repeat(40);
@@ -54,9 +54,9 @@ function bed(options: {
     readAgentPlist: () => undefined,
   };
   const host: UpdateHost = {
-    engineRoot: options.engineRoot ?? '/h/.stepcast/releases/0.3.0',
-    manifestPath: '/h/.stepcast/install.json',
-    probes: { isGitTree: () => false, readPackageName: () => undefined, releasesDir: '/h/.stepcast/releases' },
+    engineRoot: options.engineRoot ?? '/h/.burnex/releases/0.3.0',
+    manifestPath: '/h/.burnex/install.json',
+    probes: { isGitTree: () => false, readPackageName: () => undefined, releasesDir: '/h/.burnex/releases' },
     readManifest: () => options.manifest,
     exec: (step) => {
       executed.push(line(step));
@@ -87,7 +87,7 @@ describe('install-update: команда update', () => {
     const { host, executed, restartCalls } = bed({ manifest: MANAGED, tags: ['v0.3.0', 'v0.10.0'], agentLoaded: true });
 
     assert.equal(await runUpdateCommand(args(), () => undefined, host), ExitCode.ok);
-    assert.deepEqual(executed, ['bash /h/.stepcast/releases/current/install.sh --repo /srv/stepcast.git --ref v0.10.0']);
+    assert.deepEqual(executed, ['bash /h/.burnex/releases/current/install.sh --repo /srv/stepcast.git --ref v0.10.0']);
     assert.equal(restartCalls.some((c) => c.startsWith('launchctl kickstart')), true);
   });
 
@@ -95,7 +95,7 @@ describe('install-update: команда update', () => {
     const { host, executed } = bed({ manifest: MANAGED, tags: ['v0.4.0'], engineRoot: '/work/stepcast' });
 
     assert.equal(await runUpdateCommand(args(), () => undefined, host), ExitCode.ok);
-    assert.deepEqual(executed, ['bash /h/.stepcast/releases/current/install.sh --repo /srv/stepcast.git --ref v0.4.0']);
+    assert.deepEqual(executed, ['bash /h/.burnex/releases/current/install.sh --repo /srv/stepcast.git --ref v0.4.0']);
   });
 
   it('checkout с отцеплённым HEAD без --ref — отказ до шагов', async () => {

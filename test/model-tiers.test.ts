@@ -47,7 +47,7 @@ backends:
 `;
 
 function expand(yaml: string, configYaml = TIERS_CONFIG, files: Record<string, string> = {}) {
-  const project = makeProject({ 'pipeline.yml': yaml, '.stepcast/config.yml': configYaml, ...files });
+  const project = makeProject({ 'pipeline.yml': yaml, '.burnex/config.yml': configYaml, ...files });
   const { config } = resolveConfig({ cwd: project.root, home: project.home });
   return expandPipeline({ pipelinePath: project.path('pipeline.yml'), config });
 }
@@ -62,7 +62,7 @@ function selection(yaml: string, configYaml = TIERS_CONFIG) {
 describe('agent model tiers', () => {
   it('normalizes legacy strings and custom object tiers in backend configuration', () => {
     const project = makeProject({
-      '.stepcast/config.yml': `
+      '.burnex/config.yml': `
 backends:
   codex:
     model_tiers:
@@ -293,7 +293,7 @@ jobs:
 
   it('locks the effective model without retaining tier selection in executable steps', () => {
     // Use the same source file so selection syntax is the only changing input.
-    const project = makeProject({ 'pipeline.yml': `model_tier: deep\n${JOB}`, '.stepcast/config.yml': TIERS_CONFIG });
+    const project = makeProject({ 'pipeline.yml': `model_tier: deep\n${JOB}`, '.burnex/config.yml': TIERS_CONFIG });
     const { config } = resolveConfig({ cwd: project.root, home: project.home });
     const opts = { pipelinePath: project.path('pipeline.yml'), config };
     const fromTier = expandPipeline(opts).pipeline;
@@ -302,7 +302,7 @@ jobs:
   });
 
   it('includes effective effort in the executable lock', () => {
-    const project = makeProject({ 'pipeline.yml': `effort: low\n${JOB}`, '.stepcast/config.yml': '' });
+    const project = makeProject({ 'pipeline.yml': `effort: low\n${JOB}`, '.burnex/config.yml': '' });
     const { config } = resolveConfig({ cwd: project.root, home: project.home });
     const opts = { pipelinePath: project.path('pipeline.yml'), config };
     const low = serializeLock(expandPipeline(opts).pipeline);

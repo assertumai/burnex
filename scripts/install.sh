@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Устанавливает stepcast: клонирует ссылку, собирает и раскладывает релиз в
+# Устанавливает burnex: клонирует ссылку, собирает и раскладывает релиз в
 # $BURNEX_HOME/releases/<имя>, переключает current и ставит лаунчер
-# `stepcast` в $BURNEX_BIN_DIR.
+# `burnex` (с псевдонимом `stepcast`) в $BURNEX_BIN_DIR.
 #
 #   curl -fsSL https://raw.githubusercontent.com/assertumai/stepcast/main/scripts/install.sh | bash
 #   bash scripts/install.sh [--repo URL] [--ref REF] [--force]
@@ -13,8 +13,8 @@ set -euo pipefail
 
 usage() {
   cat <<'EOF'
-install.sh — установка stepcast в $BURNEX_HOME/releases (по умолчанию ~/.stepcast)
-и лаунчер stepcast в $BURNEX_BIN_DIR (по умолчанию ~/.local/bin).
+install.sh — установка burnex в $BURNEX_HOME/releases (по умолчанию ~/.burnex)
+и лаунчер burnex (с псевдонимом stepcast) в $BURNEX_BIN_DIR (по умолчанию ~/.local/bin).
 
   --repo URL     откуда клонировать (по умолчанию GitHub; подойдёт и путь)
   --ref REF      тег, ветка или sha; по умолчанию последний тег vX.Y.Z
@@ -34,7 +34,15 @@ FROM_DIR=""
 NAME=""
 
 # Прежние имена STEPCAST_* читаются один выпуск переходного периода.
-BURNEX_HOME="${BURNEX_HOME:-${STEPCAST_HOME:-$HOME/.stepcast}}"
+# Домашний каталог по умолчанию — ~/.burnex; прежний ~/.stepcast без нового
+# переименовывается, и на его месте остаётся ссылка: лаунчер и агент
+# автозапуска установленного релиза указывают внутрь прежнего пути.
+if [ -z "${BURNEX_HOME:-}" ] && [ -z "${STEPCAST_HOME:-}" ] && [ ! -e "$HOME/.burnex" ] && [ -d "$HOME/.stepcast" ] && [ ! -L "$HOME/.stepcast" ]; then
+  mv "$HOME/.stepcast" "$HOME/.burnex"
+  ln -s .burnex "$HOME/.stepcast"
+  echo "==> домашний каталог ~/.stepcast переименован в ~/.burnex, на прежнем месте ссылка"
+fi
+BURNEX_HOME="${BURNEX_HOME:-${STEPCAST_HOME:-$HOME/.burnex}}"
 BIN_DIR="${BURNEX_BIN_DIR:-${STEPCAST_BIN_DIR:-$HOME/.local/bin}}"
 BURNEX_RELEASES_DIR="${BURNEX_RELEASES_DIR:-${STEPCAST_RELEASES_DIR:-}}"
 RELEASES_DIR="$BURNEX_HOME/releases"
@@ -89,19 +97,27 @@ STRICT_TAG='^v[0-9]+\.[0-9]+\.[0-9]+$'
 
 # Чужой файл на месте лаунчера (например, `npm link`) — отказ до клонирования
 # и сборки: минуты работы не должны кончаться отказом, известным заранее.
-LAUNCHER="$BIN_DIR/stepcast"
-if [ -z "$FROM_DIR" ] && { [ -e "$LAUNCHER" ] || [ -L "$LAUNCHER" ]; }; then
-  OURS=0
-  if [ -L "$LAUNCHER" ]; then
-    case "$(readlink "$LAUNCHER")" in
-      "$RELEASES_DIR"/*) OURS=1 ;;
-    esac
+# Лаунчер — `burnex`, рядом ссылка `stepcast` (псевдоним переходного периода);
+# у обоих одна проверка. Прежняя ссылка `stepcast` на наш релиз — своя.
+LAUNCHER="$BIN_DIR/burnex"
+ALIAS_LAUNCHER="$BIN_DIR/stepcast"
+check_launcher_free() {
+  local launcher="$1"
+  if [ -z "$FROM_DIR" ] && { [ -e "$launcher" ] || [ -L "$launcher" ]; }; then
+    local ours=0
+    if [ -L "$launcher" ]; then
+      case "$(readlink "$launcher")" in
+        "$RELEASES_DIR"/*|"$HOME/.stepcast/releases"/*) ours=1 ;;
+      esac
+    fi
+    if [ "$ours" -eq 0 ]; then
+      [ "$FORCE" -eq 1 ] || die "$launcher уже занят чужим файлом (npm link?); повторите с --force, чтобы заменить его"
+      if [ -d "$launcher" ] && [ ! -L "$launcher" ]; then die "$launcher — каталог, заменять его нельзя"; fi
+    fi
   fi
-  if [ "$OURS" -eq 0 ]; then
-    [ "$FORCE" -eq 1 ] || die "$LAUNCHER уже занят чужим файлом (npm link?); повторите с --force, чтобы заменить его"
-    if [ -d "$LAUNCHER" ] && [ ! -L "$LAUNCHER" ]; then die "$LAUNCHER — каталог, заменять его нельзя"; fi
-  fi
-fi
+}
+check_launcher_free "$LAUNCHER"
+check_launcher_free "$ALIAS_LAUNCHER"
 
 if [ -n "$FROM_DIR" ]; then
   SRC="$(cd "$FROM_DIR" && pwd)"
@@ -121,7 +137,7 @@ else
     REF="v$REF"
   fi
 
-  WORK="$(mktemp -d "${TMPDIR:-/tmp}/stepcast-install.XXXXXX")"
+  WORK="$(mktemp -d "${TMPDIR:-/tmp}/burnex-install.XXXXXX")"
   SRC="$WORK/src"
   echo "==> Клонирую $REPO @ $REF"
   if ! git clone --quiet --depth 1 --branch "$REF" "$REPO" "$SRC" 2>/dev/null; then
@@ -199,7 +215,8 @@ fi
 
 mkdir -p "$BIN_DIR"
 ln -sfn "$RELEASES_DIR/current/dist/src/bin.js" "$LAUNCHER"
-echo "==> лаунчер: $LAUNCHER -> $RELEASES_DIR/current/dist/src/bin.js"
+ln -sfn "$RELEASES_DIR/current/dist/src/bin.js" "$ALIAS_LAUNCHER"
+echo "==> лаунчер: $LAUNCHER -> $RELEASES_DIR/current/dist/src/bin.js (и псевдоним $ALIAS_LAUNCHER)"
 
 # Паспорт пишется последним и атомарно: по нему `burnex update` узнаёт
 # способ установки, а полупрозрачный файл хуже отсутствующего.
@@ -221,4 +238,4 @@ case ":$PATH:" in
   *) echo "Каталога $BIN_DIR нет в PATH. Добавьте в профиль оболочки:"
      echo "  export PATH=\"$BIN_DIR:\$PATH\"" ;;
 esac
-echo "Готово: stepcast $SRC_VERSION"
+echo "Готово: burnex $SRC_VERSION"

@@ -22,34 +22,34 @@ function args(flags: ParsedArgs['flags'] = {}): ParsedArgs {
 
 describe('CLI: burnex init', () => {
   // Сценарий: «Файлы созданы»
-  it('создаёт stepcast.yml и файл примера работы', () => {
+  it('создаёт burnex.yml и файл примера работы', () => {
     const project = makeProject();
     const lines: string[] = [];
 
     const code = runInitCommand(args(), (line) => lines.push(line), project.root);
 
     assert.equal(code, ExitCode.ok);
-    assert.ok(existsSync(project.path('stepcast.yml')));
-    assert.ok(existsSync(project.path('.stepcast/jobs/example.yml')));
-    assert.match(readFileSync(project.path('stepcast.yml'), 'utf8'), /uses: \.stepcast\/jobs\/example\.yml/);
+    assert.ok(existsSync(project.path('burnex.yml')));
+    assert.ok(existsSync(project.path('.burnex/jobs/example.yml')));
+    assert.match(readFileSync(project.path('burnex.yml'), 'utf8'), /uses: \.burnex\/jobs\/example\.yml/);
   });
 
   // Сценарий: «Отказ без флага»
-  it('отказывается перезаписывать существующий stepcast.yml без --force', () => {
-    const project = makeProject({ 'stepcast.yml': 'исходное содержимое\n' });
+  it('отказывается перезаписывать существующий burnex.yml без --force', () => {
+    const project = makeProject({ 'burnex.yml': 'исходное содержимое\n' });
 
     assert.throws(() => runInitCommand(args(), () => {}, project.root), StepcastError);
-    assert.equal(readFileSync(project.path('stepcast.yml'), 'utf8'), 'исходное содержимое\n');
+    assert.equal(readFileSync(project.path('burnex.yml'), 'utf8'), 'исходное содержимое\n');
   });
 
   // Сценарий: «Перезапись с флагом»
-  it('перезаписывает stepcast.yml с --force', () => {
-    const project = makeProject({ 'stepcast.yml': 'исходное содержимое\n' });
+  it('перезаписывает burnex.yml с --force', () => {
+    const project = makeProject({ 'burnex.yml': 'исходное содержимое\n' });
 
     const code = runInitCommand(args({ force: true }), () => {}, project.root);
 
     assert.equal(code, ExitCode.ok);
-    assert.notEqual(readFileSync(project.path('stepcast.yml'), 'utf8'), 'исходное содержимое\n');
+    assert.notEqual(readFileSync(project.path('burnex.yml'), 'utf8'), 'исходное содержимое\n');
   });
 
   // Интеграционный тест: init → раскрытие/линт без ошибок → run завершается успехом
@@ -58,7 +58,7 @@ describe('CLI: burnex init', () => {
     runInitCommand(args(), () => {}, project.root);
 
     const expanded = expandPipeline({
-      pipelinePath: project.path('stepcast.yml'),
+      pipelinePath: project.path('burnex.yml'),
       config: project.config,
     });
     const diagnostics = lintPipeline(expanded, { config: project.config });
@@ -78,11 +78,11 @@ describe('CLI: burnex init', () => {
 
 describe('CLI: burnex init — очередь предложений не грязнит дерево', () => {
   // Сценарий: «Заведённый проект игнорирует очередь»
-  it('вносит .stepcast/proposals/ в .gitignore проекта', () => {
+  it('вносит .burnex/proposals/ в .gitignore проекта', () => {
     const project = makeProject();
     runInitCommand(args(), () => {}, project.root);
     const text = readFileSync(project.path('.gitignore'), 'utf8');
-    assert.ok(text.split('\n').some((line) => line.trim() === '.stepcast/proposals/'));
+    assert.ok(text.split('\n').some((line) => line.trim() === '.burnex/proposals/'));
   });
 
   it('повторный вызов не дублирует строку и не переписывает остальное содержимое', () => {
@@ -91,7 +91,7 @@ describe('CLI: burnex init — очередь предложений не гря
     runInitCommand(args({ force: true }), () => {}, project.root);
     runInitCommand(args({ force: true }), () => {}, project.root);
     const text = readFileSync(project.path('.gitignore'), 'utf8');
-    const proposalsLines = text.split('\n').filter((line) => line.trim() === '.stepcast/proposals/');
+    const proposalsLines = text.split('\n').filter((line) => line.trim() === '.burnex/proposals/');
     assert.equal(proposalsLines.length, 1);
     assert.match(text, /node_modules\//);
     assert.match(text, /dist\//);
@@ -113,7 +113,7 @@ describe('CLI: burnex init — очередь предложений не гря
     try {
       await withHome(project.home, () =>
         runProposeCommand(
-          { command: 'propose', positional: ['.stepcast/widgets/clock.tsx'], flags: {} },
+          { command: 'propose', positional: ['.burnex/widgets/clock.tsx'], flags: {} },
           () => {},
           project.root,
           async () => 'export default 1;\n',
@@ -126,7 +126,7 @@ describe('CLI: burnex init — очередь предложений не гря
       }
     }
 
-    assert.ok(existsSync(join(project.root, '.stepcast', 'proposals')));
+    assert.ok(existsSync(join(project.root, '.burnex', 'proposals')));
     assert.doesNotThrow(() => assertCleanTree(project.root));
   });
 });
@@ -141,10 +141,10 @@ describe('CLI: burnex init --knowledge fs', () => {
 
     assert.equal(code, ExitCode.ok);
     assert.ok(existsSync(project.path('knowledge')));
-    assert.ok(existsSync(project.path('.stepcast/prompts/knowledge-rules.md')));
+    assert.ok(existsSync(project.path('.burnex/prompts/knowledge-rules.md')));
     assert.ok(existsSync(project.path('knowledge/knowledge-index-is-derived.md')));
     assert.match(
-      readFileSync(project.path('.stepcast/config.yml'), 'utf8'),
+      readFileSync(project.path('.burnex/config.yml'), 'utf8'),
       /provider: fs\n\s+dir: knowledge/,
     );
   });
@@ -157,8 +157,8 @@ describe('CLI: burnex init --knowledge fs', () => {
     const config = resolveConfig({
       cwd: project.root,
       home: project.home,
-      globalPath: join(project.home, '.stepcast', 'config.yml'),
-      projectPath: project.path('.stepcast/config.yml'),
+      globalPath: join(project.home, '.burnex', 'config.yml'),
+      projectPath: project.path('.burnex/config.yml'),
     }).config;
 
     const source = createKnowledgeSource({
@@ -196,13 +196,13 @@ describe('CLI: burnex init --knowledge fs', () => {
         return true;
       },
     );
-    assert.equal(existsSync(project.path('.stepcast/prompts/knowledge-rules.md')), false);
+    assert.equal(existsSync(project.path('.burnex/prompts/knowledge-rules.md')), false);
   });
 
   // Задача 7.2: конфигурация с уже объявленной секцией не трогается.
   it('отказывается, когда секция project.knowledge уже объявлена', () => {
     const project = makeProject({
-      '.stepcast/config.yml': 'project:\n  knowledge:\n    provider: cmd\n    command: своё\n',
+      '.burnex/config.yml': 'project:\n  knowledge:\n    provider: cmd\n    command: своё\n',
     });
 
     assert.throws(
@@ -214,14 +214,14 @@ describe('CLI: burnex init --knowledge fs', () => {
   // Задача 7.1: конфигурация есть, секции нет — движок не правит чужой YAML,
   // а называет, что дописать.
   it('не правит существующую конфигурацию, а печатает, что в неё дописать', () => {
-    const project = makeProject({ '.stepcast/config.yml': 'project:\n  check: npm run check\n' });
+    const project = makeProject({ '.burnex/config.yml': 'project:\n  check: npm run check\n' });
     const lines: string[] = [];
 
     const code = runInitCommand(args({ knowledge: 'fs' }), (line) => lines.push(line), project.root);
 
     assert.equal(code, ExitCode.ok);
     assert.equal(
-      readFileSync(project.path('.stepcast/config.yml'), 'utf8'),
+      readFileSync(project.path('.burnex/config.yml'), 'utf8'),
       'project:\n  check: npm run check\n',
     );
     assert.ok(lines.some((line) => /provider: fs/.test(line)));
@@ -239,7 +239,7 @@ describe('CLI: burnex init --knowledge fs', () => {
   // стоить она не должна ни команды проверки, ни границ правок, ни бюджетов.
   it('--force перезаписывает каталог знания, но не трогает существующую конфигурацию', () => {
     const CONFIG = 'project:\n  check: npm run check\n  edit_paths: [src/**]\n';
-    const project = makeProject({ '.stepcast/config.yml': CONFIG, 'knowledge/своё.md': 'своё\n' });
+    const project = makeProject({ '.burnex/config.yml': CONFIG, 'knowledge/своё.md': 'своё\n' });
     const lines: string[] = [];
 
     const code = runInitCommand(
@@ -249,19 +249,19 @@ describe('CLI: burnex init --knowledge fs', () => {
     );
 
     assert.equal(code, ExitCode.ok);
-    assert.equal(readFileSync(project.path('.stepcast/config.yml'), 'utf8'), CONFIG);
-    assert.ok(existsSync(project.path('.stepcast/prompts/knowledge-rules.md')));
+    assert.equal(readFileSync(project.path('.burnex/config.yml'), 'utf8'), CONFIG);
+    assert.ok(existsSync(project.path('.burnex/prompts/knowledge-rules.md')));
     assert.ok(lines.some((line) => /provider: fs/.test(line)));
   });
 
   it('--force не переписывает конфигурацию и когда секция в ней уже объявлена', () => {
     const CONFIG = 'project:\n  check: npm run check\n  knowledge:\n    provider: cmd\n    command: своё\n';
-    const project = makeProject({ '.stepcast/config.yml': CONFIG });
+    const project = makeProject({ '.burnex/config.yml': CONFIG });
 
     const code = runInitCommand(args({ knowledge: 'fs', force: true }), () => {}, project.root);
 
     assert.equal(code, ExitCode.ok);
-    assert.equal(readFileSync(project.path('.stepcast/config.yml'), 'utf8'), CONFIG);
+    assert.equal(readFileSync(project.path('.burnex/config.yml'), 'utf8'), CONFIG);
   });
 
   it('отклоняет неизвестный источник', () => {

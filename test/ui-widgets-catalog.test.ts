@@ -62,7 +62,7 @@ describe('ui-widgets: каталог поставки', () => {
     assert.ok(existsSync(builtinWidgetsDir()));
   });
 
-  it('установка копирует файл в .stepcast/widgets проекта, повтор — отказ без перезаписи, неизвестный — unknown', () => {
+  it('установка копирует файл в .burnex/widgets проекта, повтор — отказ без перезаписи, неизвестный — unknown', () => {
     const projectRoot = tempDir('widget-install-');
     mkdirSync(projectRoot, { recursive: true });
 

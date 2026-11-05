@@ -57,7 +57,7 @@ export function backlogLockPath(file: string): string {
     } catch {
       // Каталог не читается — остаётся разрешённый путь.
     }
-    return join(real, 'stepcast-backlog.lock');
+    return join(real, 'burnex-backlog.lock');
   } catch {
     return join(dir, '.backlog.lock');
   }

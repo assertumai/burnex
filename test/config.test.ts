@@ -23,11 +23,11 @@ function sandbox(files: { global?: string; project?: string }): Sandbox {
   const root = tempDir('config-');
   const home = join(root, 'home');
   const cwd = join(root, 'project');
-  mkdirSync(join(home, '.stepcast'), { recursive: true });
-  mkdirSync(join(cwd, '.stepcast'), { recursive: true });
+  mkdirSync(join(home, '.burnex'), { recursive: true });
+  mkdirSync(join(cwd, '.burnex'), { recursive: true });
 
-  const globalPath = join(home, '.stepcast', 'config.yml');
-  const projectPath = join(cwd, '.stepcast', 'config.yml');
+  const globalPath = join(home, '.burnex', 'config.yml');
+  const projectPath = join(cwd, '.burnex', 'config.yml');
   if (files.global !== undefined) writeFileSync(globalPath, files.global);
   if (files.project !== undefined) writeFileSync(projectPath, files.project);
 
@@ -202,8 +202,8 @@ describe('stepcast-configuration', () => {
   });
 
   it('разворачивает тильду в корне прогонов', () => {
-    const box = sandbox({ global: 'runs:\n  root: ~/.stepcast/runs\n' });
-    assert.equal(resolveIn(box).config.runs.root, join(box.home, '.stepcast', 'runs'));
+    const box = sandbox({ global: 'runs:\n  root: ~/.burnex/runs\n' });
+    assert.equal(resolveIn(box).config.runs.root, join(box.home, '.burnex', 'runs'));
   });
 
   // Сценарий: «Отчёт о конфигурации»
@@ -346,7 +346,7 @@ describe('stepcast-configuration', () => {
         assert.ok(error instanceof StepcastError);
         assert.match(error.message, /project\.check/);
         assert.equal(error.file, box.globalPath);
-        assert.match(error.hint ?? '', /\.stepcast\/config\.yml/);
+        assert.match(error.hint ?? '', /\.burnex\/config\.yml/);
         return true;
       },
     );
@@ -371,11 +371,11 @@ describe('stepcast-configuration', () => {
   it('принимает project.spec в проектном конфиге и печатает значения в отчёте', () => {
     const box = sandbox({
       project:
-        'project:\n  spec:\n    dir: openspec/changes\n    rules: .stepcast/prompts/spec-rules.md\n    tool: openspec\n',
+        'project:\n  spec:\n    dir: openspec/changes\n    rules: .burnex/prompts/spec-rules.md\n    tool: openspec\n',
     });
     const resolved = resolveIn(box);
     assert.equal(resolved.config.project.spec.dir, 'openspec/changes');
-    assert.equal(resolved.config.project.spec.rules, '.stepcast/prompts/spec-rules.md');
+    assert.equal(resolved.config.project.spec.rules, '.burnex/prompts/spec-rules.md');
     assert.equal(resolved.config.project.spec.tool, 'openspec');
     assert.equal(describeSource(resolved.provenance.get('project.spec.dir')!), box.projectPath);
 
@@ -487,7 +487,7 @@ describe('stepcast-configuration', () => {
         assert.ok(error instanceof StepcastError);
         assert.match(error.message, /project\.spec\.check/);
         assert.equal(error.file, box.globalPath);
-        assert.match(error.hint ?? '', /\.stepcast\/config\.yml/);
+        assert.match(error.hint ?? '', /\.burnex\/config\.yml/);
         return true;
       },
     );
@@ -562,7 +562,7 @@ describe('stepcast-configuration', () => {
         assert.ok(error instanceof StepcastError);
         assert.match(error.message, /project\.tools/);
         assert.equal(error.file, box.globalPath);
-        assert.match(error.hint ?? '', /\.stepcast\/config\.yml/);
+        assert.match(error.hint ?? '', /\.burnex\/config\.yml/);
         return true;
       },
     );
@@ -679,7 +679,7 @@ describe('stepcast-configuration', () => {
         assert.ok(error instanceof StepcastError);
         assert.match(error.message, /project\.edit_paths/);
         assert.equal(error.file, box.globalPath);
-        assert.match(error.hint ?? '', /\.stepcast\/config\.yml/);
+        assert.match(error.hint ?? '', /\.burnex\/config\.yml/);
         return true;
       },
     );
@@ -841,7 +841,7 @@ describe('stepcast-configuration', () => {
         assert.ok(error instanceof StepcastError);
         assert.match(error.message, /project\.nested_repos/);
         assert.equal(error.file, box.globalPath);
-        assert.match(error.hint ?? '', /\.stepcast\/config\.yml/);
+        assert.match(error.hint ?? '', /\.burnex\/config\.yml/);
         return true;
       },
     );
@@ -1007,7 +1007,7 @@ describe('stepcast-configuration: RawSpecSchema', () => {
   it('принимает полную группу', () => {
     const result = RawSpecSchema.safeParse({
       dir: 'openspec/changes',
-      rules: '.stepcast/prompts/spec-rules.md',
+      rules: '.burnex/prompts/spec-rules.md',
       tool: 'openspec',
       check: 'openspec validate "$SPEC_CHANGE" --strict',
     });
@@ -1038,7 +1038,7 @@ describe('stepcast-configuration: запрет глобального слоя �
   });
 
   // Задача 2.2 / Сценарий: «Вложенный ключ в глобальном конфиге»
-  it('отклоняет project.spec.dir в глобальном конфиге, называя ключ и .stepcast/config.yml', () => {
+  it('отклоняет project.spec.dir в глобальном конфиге, называя ключ и .burnex/config.yml', () => {
     const box = sandbox({ global: 'project:\n  spec:\n    dir: openspec/changes\n' });
     assert.throws(
       () => resolveIn(box),
@@ -1046,7 +1046,7 @@ describe('stepcast-configuration: запрет глобального слоя �
         assert.ok(error instanceof StepcastError);
         assert.match(error.message, /project\.spec\.dir/);
         assert.equal(error.file, box.globalPath);
-        assert.match(error.hint ?? '', /\.stepcast\/config\.yml/);
+        assert.match(error.hint ?? '', /\.burnex\/config\.yml/);
         return true;
       },
     );
@@ -1127,12 +1127,12 @@ describe('stepcast-configuration: практика памяти', () => {
   it('разрешает provider, dir и rules из проектного конфига', () => {
     const box = sandbox({
       project:
-        'project:\n  knowledge:\n    provider: fs\n    dir: knowledge\n    rules: .stepcast/prompts/knowledge-rules.md\n',
+        'project:\n  knowledge:\n    provider: fs\n    dir: knowledge\n    rules: .burnex/prompts/knowledge-rules.md\n',
     });
     const { config } = resolveIn(box);
     assert.equal(config.project.knowledge.provider, 'fs');
     assert.equal(config.project.knowledge.dir, 'knowledge');
-    assert.equal(config.project.knowledge.rules, '.stepcast/prompts/knowledge-rules.md');
+    assert.equal(config.project.knowledge.rules, '.burnex/prompts/knowledge-rules.md');
   });
 
   // Задача 1.5: величины несут встроенные умолчания, в отличие от provider и dir.
@@ -1434,7 +1434,7 @@ describe('backends.<id>.credentials', () => {
     assert.deepEqual(config.backends.codex?.credentials, {
       OPENAI_API_KEY: { provider: 'keychain', params: { service: 'api.openai.com', account: 'alice' } },
     });
-    assert.equal(config.globalConfigDir, join(box.home, '.stepcast'));
+    assert.equal(config.globalConfigDir, join(box.home, '.burnex'));
   });
 
   it('проектный конфиг отклоняет credentials: путь ключа и файл', () => {

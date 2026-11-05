@@ -8,9 +8,9 @@ import { makeProject } from './helpers.js';
 import type { Pipeline } from '../src/parts/pipeline/document/model.js';
 
 function pipelineOf(yaml: string, inputs?: Record<string, string>): Pipeline {
-  const project = makeProject({ 'stepcast.yml': yaml });
+  const project = makeProject({ 'burnex.yml': yaml });
   return expandPipeline({
-    pipelinePath: project.path('stepcast.yml'),
+    pipelinePath: project.path('burnex.yml'),
     config: project.config,
     ...(inputs === undefined ? {} : { inputs }),
   }).pipeline;

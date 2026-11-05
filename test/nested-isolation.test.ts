@@ -57,7 +57,7 @@ jobs:
 
 function twoPartsProject(): Project {
   const project = makeProject({
-    'stepcast.yml': PIPELINE,
+    'burnex.yml': PIPELINE,
     '.gitignore': 'ignored-part/\n',
     'ignored-part/.gitkeep': '',
     'linked-part/.gitkeep': '',
@@ -77,7 +77,7 @@ function withNestedRepos(project: Project, nestedRepos: readonly string[]): Conf
 
 async function runWithConfig(project: Project, config: Config): Promise<RunResult> {
   const runsRoot = tempDir('runs-');
-  const expanded = expandPipeline({ pipelinePath: project.path('stepcast.yml'), config });
+  const expanded = expandPipeline({ pipelinePath: project.path('burnex.yml'), config });
   return runPipeline({
     expanded,
     config: { ...config, runs: { ...config.runs, root: runsRoot } },
@@ -244,7 +244,7 @@ describe('nested-repo-isolation: сквозной сценарий состав�
 
   it('продолжение видит части предшественника с его правками, а развилка получает части, приведённые к источнику', async () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 version: 1
 kind: pipeline
 name: наследование-составное
@@ -314,7 +314,7 @@ jobs:
   // форма записи, что и до этого изменения — части не материализуются.
   it('режим cwd на том же дереве не заводит части и ведёт себя как прежде', async () => {
     const project = twoPartsProject();
-    project.write('stepcast.yml', PIPELINE.replace('mode: worktree', 'mode: cwd'));
+    project.write('burnex.yml', PIPELINE.replace('mode: worktree', 'mode: cwd'));
 
     const result = await runWithConfig(project, withNestedRepos(project, ['ignored-part', 'linked-part']));
     assert.equal(result.status, 'success');

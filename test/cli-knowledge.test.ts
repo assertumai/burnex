@@ -26,11 +26,11 @@ function sandbox(files: Readonly<Record<string, string>> = {}): { root: string; 
   const base = tempDir('cli-knowledge-');
   const root = join(base, 'work');
   const home = join(base, 'home');
-  mkdirSync(join(home, '.stepcast'), { recursive: true });
+  mkdirSync(join(home, '.burnex'), { recursive: true });
   mkdirSync(root, { recursive: true });
   gitInit(root);
 
-  for (const [name, content] of Object.entries({ '.stepcast/config.yml': CONFIG, ...files })) {
+  for (const [name, content] of Object.entries({ '.burnex/config.yml': CONFIG, ...files })) {
     const full = join(root, name);
     mkdirSync(dirname(full), { recursive: true });
     writeFileSync(full, content);
@@ -94,7 +94,7 @@ describe('CLI: burnex knowledge', () => {
     const configWithSpec =
       'project:\n  knowledge:\n    provider: fs\n    dir: knowledge\n  spec:\n    dir: openspec/changes\n';
     const box = sandbox({
-      '.stepcast/config.yml': configWithSpec,
+      '.burnex/config.yml': configWithSpec,
       'openspec/changes/one/proposal.md': '## Why\n\nПричина изменения one.\n',
       'openspec/changes/one/design.md': '## Context\n\nКонтекст изменения one.\n',
     });
@@ -219,7 +219,7 @@ describe('CLI: burnex knowledge', () => {
     const base = tempDir('cli-knowledge-none-');
     const root = join(base, 'work');
     const home = join(base, 'home');
-    mkdirSync(join(home, '.stepcast'), { recursive: true });
+    mkdirSync(join(home, '.burnex'), { recursive: true });
     mkdirSync(root, { recursive: true });
 
     const result = await knowledge({ root, home }, ['index']);
@@ -267,7 +267,7 @@ describe('CLI: burnex knowledge check --publish', () => {
   it('публикует true на переполненном оглавлении', async () => {
     const box = sandbox({
       'knowledge/a.md': unit('a', 'Очень длинный заголовок'.repeat(20)),
-      '.stepcast/config.yml': OVERFLOWING_CONFIG,
+      '.burnex/config.yml': OVERFLOWING_CONFIG,
     });
     const jobDir = jobDirWithDeclaration(['index_full']);
 
@@ -315,7 +315,7 @@ describe('CLI: burnex knowledge check --publish', () => {
   it('код возврата check без --publish не меняется на переполненном оглавлении', async () => {
     const box = sandbox({
       'knowledge/a.md': unit('a', 'Очень длинный заголовок'.repeat(20)),
-      '.stepcast/config.yml': OVERFLOWING_CONFIG,
+      '.burnex/config.yml': OVERFLOWING_CONFIG,
     });
 
     const result = await knowledge(box, ['check']);

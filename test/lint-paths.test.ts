@@ -15,26 +15,26 @@ name: probe
 budget: { tokens: 100k }
 jobs:
   probe:
-    uses: ./.stepcast/jobs/probe.yml
+    uses: ./.burnex/jobs/probe.yml
 `;
 
 /** Пропустить пайплайн с указанным телом работы через линт. */
 function lint(jobBody: string, files: Readonly<Record<string, string>> = {}): Diagnostic[] {
   const project = makeProject({
-    'stepcast.yml': PIPELINE,
-    '.stepcast/jobs/probe.yml': `
+    'burnex.yml': PIPELINE,
+    '.burnex/jobs/probe.yml': `
 version: 1
 kind: job
 name: probe
 ${jobBody}
 `,
-    '.stepcast/schemas/real.json': SCHEMA,
+    '.burnex/schemas/real.json': SCHEMA,
     'real-context.md': 'текст',
     ...files,
   });
 
   return lintPipeline(
-    expandPipeline({ pipelinePath: project.path('stepcast.yml'), config: project.config }),
+    expandPipeline({ pipelinePath: project.path('burnex.yml'), config: project.config }),
     { config: project.config },
   );
 }
@@ -117,7 +117,7 @@ ${AGENT_STEP}`),
 
   it('отсутствующий путь контекста пайплайна — ошибка', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 version: 1
 kind: pipeline
 name: probe
@@ -135,7 +135,7 @@ jobs:
 
     const found = errors(
       lintPipeline(
-        expandPipeline({ pipelinePath: project.path('stepcast.yml'), config: project.config }),
+        expandPipeline({ pipelinePath: project.path('burnex.yml'), config: project.config }),
         { config: project.config },
       ),
     );
@@ -182,14 +182,14 @@ ${AGENT_STEP}`),
   // никто: работа отказывает уже посреди прогона.
   it('путь из подстановки, раскрытой при разборе, проверяется наравне с литералом', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 version: 1
 kind: pipeline
 name: probe
 budget: { tokens: 100k }
 project:
   spec:
-    rules: .stepcast/prompts/no-such-rules.md
+    rules: .burnex/prompts/no-such-rules.md
 jobs:
   probe:
     context:
@@ -203,7 +203,7 @@ jobs:
 
     const found = errors(
       lintPipeline(
-        expandPipeline({ pipelinePath: project.path('stepcast.yml'), config: project.config }),
+        expandPipeline({ pipelinePath: project.path('burnex.yml'), config: project.config }),
         { config: project.config },
       ),
     );
@@ -215,14 +215,14 @@ jobs:
 
   it('существующий путь из такой подстановки ошибки не даёт', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 version: 1
 kind: pipeline
 name: probe
 budget: { tokens: 100k }
 project:
   spec:
-    rules: .stepcast/prompts/spec-rules.md
+    rules: .burnex/prompts/spec-rules.md
 jobs:
   probe:
     context:
@@ -232,13 +232,13 @@ jobs:
         agent: claude
         prompt: ok
 `,
-      '.stepcast/prompts/spec-rules.md': 'правила',
+      '.burnex/prompts/spec-rules.md': 'правила',
     });
 
     assert.deepEqual(
       errors(
         lintPipeline(
-          expandPipeline({ pipelinePath: project.path('stepcast.yml'), config: project.config }),
+          expandPipeline({ pipelinePath: project.path('burnex.yml'), config: project.config }),
           { config: project.config },
         ),
       ),
@@ -251,7 +251,7 @@ jobs:
   // произведённый путь по отдельности, а не потерять их за одним ключом.
   it('список путей из списочной подстановки ${project.*} проверяется поэлементно', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 version: 1
 kind: pipeline
 name: probe
@@ -272,7 +272,7 @@ jobs:
 
     const found = errors(
       lintPipeline(
-        expandPipeline({ pipelinePath: project.path('stepcast.yml'), config: project.config }),
+        expandPipeline({ pipelinePath: project.path('burnex.yml'), config: project.config }),
         { config: project.config },
       ),
     );
@@ -312,9 +312,9 @@ ${AGENT_STEP}`),
   it('контекст считается от корня проекта, а не от каталога пайплайна', () => {
     // Пайплайн в подкаталоге: только так видно, что основанием взят корень.
     // С каталогом пайплайна `real-context.md` искался бы в
-    // `.stepcast/pipelines/real-context.md`.
+    // `.burnex/pipelines/real-context.md`.
     const project = makeProject({
-      '.stepcast/pipelines/nested.yml': `
+      '.burnex/pipelines/nested.yml': `
 version: 1
 kind: pipeline
 name: nested
@@ -333,7 +333,7 @@ jobs:
 
     const diagnostics = lintPipeline(
       expandPipeline({
-        pipelinePath: project.path('.stepcast/pipelines/nested.yml'),
+        pipelinePath: project.path('.burnex/pipelines/nested.yml'),
         config: project.config,
       }),
       { config: project.config, cwd: project.root },
@@ -370,7 +370,7 @@ ${AGENT_STEP}`),
 
   it('uses: burnex:implement остаётся обычным путём и даёт ошибку ненайденного файла', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 version: 1
 kind: pipeline
 name: probe
@@ -382,7 +382,7 @@ jobs:
     });
 
     assert.throws(
-      () => expandPipeline({ pipelinePath: project.path('stepcast.yml'), config: project.config }),
+      () => expandPipeline({ pipelinePath: project.path('burnex.yml'), config: project.config }),
       (error: unknown) => {
         assert.ok(error instanceof StepcastError);
         assert.match(error.message, /Файл не найден/);
@@ -394,8 +394,8 @@ jobs:
 
   it('prompt: file:burnex:implement остаётся обычным путём и даёт ошибку ненайденного файла', () => {
     const project = makeProject({
-      'stepcast.yml': PIPELINE,
-      '.stepcast/jobs/probe.yml': `
+      'burnex.yml': PIPELINE,
+      '.burnex/jobs/probe.yml': `
 version: 1
 kind: job
 name: probe
@@ -407,7 +407,7 @@ steps:
     });
 
     assert.throws(
-      () => expandPipeline({ pipelinePath: project.path('stepcast.yml'), config: project.config }),
+      () => expandPipeline({ pipelinePath: project.path('burnex.yml'), config: project.config }),
       (error: unknown) => {
         assert.ok(error instanceof StepcastError);
         assert.match(error.message, /Не удалось прочитать файл промпта/);

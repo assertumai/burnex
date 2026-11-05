@@ -20,7 +20,7 @@ async function run(project: Project): Promise<RunResult> {
   const backend = createFakeBackend({ lines: [initLine(), resultLine({ text: 'ок' })] });
 
   return runPipeline({
-    expanded: expandPipeline({ pipelinePath: project.path('stepcast.yml'), config: project.config }),
+    expanded: expandPipeline({ pipelinePath: project.path('burnex.yml'), config: project.config }),
     config: { ...project.config, runs: { ...project.config.runs, root: runsRoot } },
     projectRoot: project.root,
     cwd: project.root,
@@ -81,7 +81,7 @@ jobs:
 describe('step-context: многословная проверка не срывает следующую итерацию', () => {
   // Сценарий: «Многословная проверка не срывает следующую итерацию»
   it('усекает выдержку и проходит вторую итерацию вместо отказа по пределу', async () => {
-    const project = makeProject({ 'stepcast.yml': VERBOSE_CHECK_LOOPING });
+    const project = makeProject({ 'burnex.yml': VERBOSE_CHECK_LOOPING });
     const result = await run(project);
 
     const second = promptOf(result, 'работа', 'думает', 2);
@@ -121,7 +121,7 @@ jobs:
 
 describe('step-context: событие об усечении не двоится по попыткам', () => {
   it('пишет одно событие на шаг, сколько бы попыток он ни сделал', async () => {
-    const project = makeProject({ 'stepcast.yml': RETRYING_VERBOSE });
+    const project = makeProject({ 'burnex.yml': RETRYING_VERBOSE });
     const runsRoot = tempDir('runs-');
     // Вторая итерация с первой попытки не проходит предикат: промпт с
     // выдержкой собирается дважды, а усечение у него одно.
@@ -130,7 +130,7 @@ describe('step-context: событие об усечении не двоится
     });
 
     const result = await runPipeline({
-      expanded: expandPipeline({ pipelinePath: project.path('stepcast.yml'), config: project.config }),
+      expanded: expandPipeline({ pipelinePath: project.path('burnex.yml'), config: project.config }),
       config: { ...project.config, runs: { ...project.config.runs, root: runsRoot } },
       projectRoot: project.root,
       cwd: project.root,
@@ -148,7 +148,7 @@ describe('step-context: событие об усечении не двоится
 describe('step-context: результат непрошедшей проверки в следующей итерации', () => {
   // Сценарий: «На первой итерации записи нет»
   it('не подмешивает результат проверки на первой итерации', async () => {
-    const project = makeProject({ 'stepcast.yml': LOOPING });
+    const project = makeProject({ 'burnex.yml': LOOPING });
     const result = await run(project);
 
     assert.equal(result.status, 'success');
@@ -160,7 +160,7 @@ describe('step-context: результат непрошедшей проверк
 
   // Сценарий: «Вывод проверки подмешан»
   it('подмешивает результат непрошедшей проверки на следующей итерации', async () => {
-    const project = makeProject({ 'stepcast.yml': LOOPING });
+    const project = makeProject({ 'burnex.yml': LOOPING });
     const result = await run(project);
 
     const second = promptOf(result, 'работа', 'думает', 2);
@@ -170,7 +170,7 @@ describe('step-context: результат непрошедшей проверк
 
   // Сценарий: «Берётся только предыдущая итерация»
   it('не накапливает результаты нескольких прошлых итераций', async () => {
-    const project = makeProject({ 'stepcast.yml': LOOPING });
+    const project = makeProject({ 'burnex.yml': LOOPING });
     const result = await run(project);
 
     const second = promptOf(result, 'работа', 'думает', 2);
@@ -180,7 +180,7 @@ describe('step-context: результат непрошедшей проверк
 
   // Сценарий: «Запись учитывается в составе контекста»
   it('включает запись в фиксируемый состав контекста', async () => {
-    const project = makeProject({ 'stepcast.yml': LOOPING });
+    const project = makeProject({ 'burnex.yml': LOOPING });
     const result = await run(project);
 
     const dir = findStepDir(result.journal.paths, 'работа', 'думает', 2);
@@ -295,7 +295,7 @@ describe('step-context: выдержка о прошлом отказе', () => 
   // Сценарий: «Запись добавлена первому переисполняемому шагу»
   it('попадает в контекст первого переисполняемого шага и только в него', async () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 version: 1
 kind: pipeline
 name: возобновление-с-контекстом
@@ -328,7 +328,7 @@ jobs:
     const backend = createFakeBackend({ lines: [initLine(), resultLine({ text: 'ок' })] });
     const second = await runPipeline({
       expanded: expandPipeline({
-        pipelinePath: project.path('stepcast.yml'),
+        pipelinePath: project.path('burnex.yml'),
         config: project.config,
       }),
       config: { ...project.config, runs: { ...project.config.runs, root: runsRoot } },

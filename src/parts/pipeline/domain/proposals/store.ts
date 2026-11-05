@@ -4,6 +4,7 @@ import { basename, dirname, join, sep } from 'node:path';
 import { z } from 'zod';
 
 import { StepcastError } from '../../../../kernel/errors.js';
+import { cabinetDir } from '../../../../kernel/dirs.js';
 import { atomicWrite } from '../../run/journal/writer.js';
 import {
   PROPOSAL_MAX_CONTENT_BYTES,
@@ -21,7 +22,7 @@ import {
 
 /**
  * Хранилище очереди предложений — модуль с диском: чтение каталога `<проект>/
- * .stepcast/proposals/`, приведение цели к реальному пути, постановка,
+ * .burnex/proposals/`, приведение цели к реальному пути, постановка,
  * решение и запись цели (`ui-proposals`, design.md Решение 1, 3, 5, 6).
  * Форма записи и проверка цели как строки — в `./entry.js`, чистом модуле без
  * `node:*`, чей `ProposalError` здесь же переводится в `StepcastError`: у
@@ -39,10 +40,9 @@ function callEntry<T>(fn: () => T): T {
 }
 
 const PROPOSALS_DIR_NAME = 'proposals';
-const CABINET_DIR_NAME = '.stepcast';
 
 export function proposalsDirPath(projectPath: string): string {
-  return join(projectPath, CABINET_DIR_NAME, PROPOSALS_DIR_NAME);
+  return join(cabinetDir(projectPath), PROPOSALS_DIR_NAME);
 }
 
 function proposalRecordPath(projectPath: string, id: string): string {
@@ -176,9 +176,9 @@ interface ResolvedTarget {
  */
 export function resolveProposalTarget(projectPath: string, target: string): ResolvedTarget {
   const parsed = callEntry(() => parseProposalTarget(target));
-  const cabinetDir = join(projectPath, CABINET_DIR_NAME);
-  const cabinetReal = realWithMissingTail(cabinetDir);
-  const absolutePath = join(cabinetDir, ...parsed.segments);
+  const cabinet = cabinetDir(projectPath);
+  const cabinetReal = realWithMissingTail(cabinet);
+  const absolutePath = join(cabinet, ...parsed.segments);
   const real = realWithMissingTail(absolutePath);
 
   if (real !== cabinetReal && !real.startsWith(cabinetReal + sep)) {

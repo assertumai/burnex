@@ -128,7 +128,7 @@ function sampleManifest(runId: string): Parameters<RunJournal['writeManifest']>[
   return {
     run_id: runId,
     pipeline: 'demo',
-    pipeline_file: '/tmp/stepcast.yml',
+    pipeline_file: '/tmp/burnex.yml',
     lock_hash: 'abc',
     project_root: '/tmp/project',
     workspace: { mode: 'cwd' },
@@ -563,10 +563,10 @@ describe('run-journal: раскладка и состояние', () => {
     assert.equal(findProjectRoot(worktreePath), findProjectRoot(projectRoot));
   });
 
-  it('явный маркер `.stepcast/config.yml` не перебивает разбор `.git` внутри worktree', () => {
+  it('явный маркер `.burnex/config.yml` не перебивает разбор `.git` внутри worktree', () => {
     const { projectRoot } = bed();
-    mkdirSync(join(projectRoot, '.stepcast'), { recursive: true });
-    writeFileSync(join(projectRoot, '.stepcast', 'config.yml'), 'version: 1\nkind: config\n');
+    mkdirSync(join(projectRoot, '.burnex'), { recursive: true });
+    writeFileSync(join(projectRoot, '.burnex', 'config.yml'), 'version: 1\nkind: config\n');
     gitInit({ root: projectRoot } as Project);
 
     const worktreePath = join(projectRoot, '..', 'lane-b');
@@ -580,12 +580,12 @@ describe('run-journal: раскладка и состояние', () => {
     assert.equal(findProjectRoot(worktreePath), findProjectRoot(projectRoot));
   });
 
-  it('явный маркер `.stepcast/config.yml` заводит корень проекта без git', () => {
+  it('явный маркер `.burnex/config.yml` заводит корень проекта без git', () => {
     const { projectRoot } = bed();
     const nested = join(projectRoot, 'src', 'deep');
     mkdirSync(nested, { recursive: true });
-    mkdirSync(join(projectRoot, '.stepcast'), { recursive: true });
-    writeFileSync(join(projectRoot, '.stepcast', 'config.yml'), 'version: 1\nkind: config\n');
+    mkdirSync(join(projectRoot, '.burnex'), { recursive: true });
+    writeFileSync(join(projectRoot, '.burnex', 'config.yml'), 'version: 1\nkind: config\n');
 
     assert.equal(findProjectRoot(nested), findProjectRoot(projectRoot));
   });
@@ -826,9 +826,9 @@ const RECENT = new Date().toISOString();
 describe('run-journal: идентификатор процесса прогона', () => {
   // Сценарий: «Идущий прогон отличим от брошенного»
   it('пишет pid в манифест до запуска первой работы и переживает завершение прогона', async () => {
-    const project = makeProject({ 'stepcast.yml': MINIMAL_PIPELINE });
+    const project = makeProject({ 'burnex.yml': MINIMAL_PIPELINE });
     const runsRoot = tempDir('runs-');
-    const expanded = expandPipeline({ pipelinePath: project.path('stepcast.yml'), config: project.config });
+    const expanded = expandPipeline({ pipelinePath: project.path('burnex.yml'), config: project.config });
 
     const result = await runPipeline({
       expanded,
@@ -849,7 +849,7 @@ describe('run-journal: идентификатор процесса прогон�
     alive.writeManifest({
       run_id: 'alive',
       pipeline: 'demo',
-      pipeline_file: join(projectRoot, 'stepcast.yml'),
+      pipeline_file: join(projectRoot, 'burnex.yml'),
       lock_hash: 'abc',
       project_root: projectRoot,
       workspace: { mode: 'cwd' },
@@ -875,7 +875,7 @@ describe('run-journal: идентификатор процесса прогон�
     abandoned.writeManifest({
       run_id: 'abandoned',
       pipeline: 'demo',
-      pipeline_file: join(projectRoot, 'stepcast.yml'),
+      pipeline_file: join(projectRoot, 'burnex.yml'),
       lock_hash: 'abc',
       project_root: projectRoot,
       workspace: { mode: 'cwd' },
@@ -907,7 +907,7 @@ describe('run-journal: идентификатор процесса прогон�
     journal.writeManifest({
       run_id: 'rebooted',
       pipeline: 'demo',
-      pipeline_file: join(projectRoot, 'stepcast.yml'),
+      pipeline_file: join(projectRoot, 'burnex.yml'),
       lock_hash: 'abc',
       project_root: projectRoot,
       workspace: { mode: 'cwd' },
@@ -932,7 +932,7 @@ describe('run-journal: идентификатор процесса прогон�
     });
 
     assert.equal(isRunAlive(journal.paths), false);
-    assert.equal(findAliveRun(runsRoot, projectRoot, join(projectRoot, 'stepcast.yml')), undefined);
+    assert.equal(findAliveRun(runsRoot, projectRoot, join(projectRoot, 'burnex.yml')), undefined);
   });
 
   // Сценарий: «Манифест прежней формы»
@@ -942,7 +942,7 @@ describe('run-journal: идентификатор процесса прогон�
     journal.writeManifest({
       run_id: 'legacy',
       pipeline: 'demo',
-      pipeline_file: join(projectRoot, 'stepcast.yml'),
+      pipeline_file: join(projectRoot, 'burnex.yml'),
       lock_hash: 'abc',
       project_root: projectRoot,
       workspace: { mode: 'cwd' },
@@ -974,7 +974,7 @@ describe('run-journal: идентификатор процесса прогон�
     journal.writeManifest({
       run_id: 'sleeping',
       pipeline: 'demo',
-      pipeline_file: join(projectRoot, 'stepcast.yml'),
+      pipeline_file: join(projectRoot, 'burnex.yml'),
       lock_hash: 'abc',
       project_root: projectRoot,
       workspace: { mode: 'cwd' },
@@ -1038,7 +1038,7 @@ describe('run-journal: идентификатор процесса прогон�
 
   it('findAliveRun находит живой прогон того же пайплайна', () => {
     const { runsRoot, projectRoot } = bed();
-    const pipelineFile = join(projectRoot, 'stepcast.yml');
+    const pipelineFile = join(projectRoot, 'burnex.yml');
 
     const journal = RunJournal.create({ runsRoot, projectRoot, runId: 'mine' });
     journal.writeManifest({
@@ -1074,7 +1074,7 @@ describe('run-journal: идентификатор процесса прогон�
 describe('dependent-job-workspace: источник наследования в журнале', () => {
   async function runChain(): Promise<Awaited<ReturnType<typeof runPipeline>>> {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 version: 1
 kind: pipeline
 name: наследование
@@ -1089,7 +1089,7 @@ jobs:
     });
     gitInit(project);
     const runsRoot = tempDir('runs-');
-    const expanded = expandPipeline({ pipelinePath: project.path('stepcast.yml'), config: project.config });
+    const expanded = expandPipeline({ pipelinePath: project.path('burnex.yml'), config: project.config });
     return runPipeline({
       expanded,
       config: { ...project.config, runs: { ...project.config.runs, root: runsRoot } },
@@ -1138,7 +1138,7 @@ describe('run-journal: перечень материализованных ча�
     command = 'echo ok',
   ): Promise<Awaited<ReturnType<typeof runPipeline>>> {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 version: 1
 kind: pipeline
 name: части
@@ -1159,7 +1159,7 @@ jobs:
 
     const runsRoot = tempDir('runs-');
     const config = withNestedRepos(project, ['public-site']);
-    const expanded = expandPipeline({ pipelinePath: project.path('stepcast.yml'), config });
+    const expanded = expandPipeline({ pipelinePath: project.path('burnex.yml'), config });
     return runPipeline({
       expanded,
       config: { ...config, runs: { ...config.runs, root: runsRoot } },
@@ -1199,9 +1199,9 @@ jobs:
   });
 
   it('запись работы без объявленного состава поля nested не имеет', async () => {
-    const project = makeProject({ 'stepcast.yml': MINIMAL_PIPELINE });
+    const project = makeProject({ 'burnex.yml': MINIMAL_PIPELINE });
     const runsRoot = tempDir('runs-');
-    const expanded = expandPipeline({ pipelinePath: project.path('stepcast.yml'), config: project.config });
+    const expanded = expandPipeline({ pipelinePath: project.path('burnex.yml'), config: project.config });
     const result = await runPipeline({
       expanded,
       config: { ...project.config, runs: { ...project.config.runs, root: runsRoot } },
@@ -1238,7 +1238,7 @@ jobs:
 describe('run-journal: момент сброса окна лимита из последнего прогона', () => {
   it('возвращает resets_at последнего backend.refused завершённого прогона', () => {
     const { runsRoot, projectRoot } = bed();
-    const pipelineFile = join(projectRoot, 'stepcast.yml');
+    const pipelineFile = join(projectRoot, 'burnex.yml');
 
     const journal = RunJournal.create({ runsRoot, projectRoot, runId: 'stopped' });
     journal.writeManifest({
@@ -1272,7 +1272,7 @@ describe('run-journal: момент сброса окна лимита из по
 
   it('возвращает undefined, когда прогон не упирался в окно лимита', () => {
     const { runsRoot, projectRoot } = bed();
-    const pipelineFile = join(projectRoot, 'stepcast.yml');
+    const pipelineFile = join(projectRoot, 'burnex.yml');
 
     const journal = RunJournal.create({ runsRoot, projectRoot, runId: 'clean' });
     journal.writeManifest({
@@ -1295,7 +1295,7 @@ describe('run-journal: момент сброса окна лимита из по
 
   it('не откладывает срабатывание, если прогон дождался сброса и пошёл дальше', () => {
     const { runsRoot, projectRoot } = bed();
-    const pipelineFile = join(projectRoot, 'stepcast.yml');
+    const pipelineFile = join(projectRoot, 'burnex.yml');
 
     const journal = RunJournal.create({ runsRoot, projectRoot, runId: 'waited' });
     journal.writeManifest({
@@ -1327,7 +1327,7 @@ describe('run-journal: момент сброса окна лимита из по
 
   it('не откладывает срабатывание, если после отказа шаг всё-таки прошёл', () => {
     const { runsRoot, projectRoot } = bed();
-    const pipelineFile = join(projectRoot, 'stepcast.yml');
+    const pipelineFile = join(projectRoot, 'burnex.yml');
 
     const journal = RunJournal.create({ runsRoot, projectRoot, runId: 'retried' });
     journal.writeManifest({
@@ -1366,7 +1366,7 @@ describe('run-journal: момент сброса окна лимита из по
 
   it('игнорирует budget.exceeded (потолки tokens/cost/wallclock не откладывают срабатывание)', () => {
     const { runsRoot, projectRoot } = bed();
-    const pipelineFile = join(projectRoot, 'stepcast.yml');
+    const pipelineFile = join(projectRoot, 'burnex.yml');
 
     const journal = RunJournal.create({ runsRoot, projectRoot, runId: 'over-budget' });
     journal.writeManifest({
@@ -1390,7 +1390,7 @@ describe('run-journal: момент сброса окна лимита из по
 
   it('находит момент сброса по manifest.pipeline_file, минуя живой (незавершённый) прогон', () => {
     const { runsRoot, projectRoot } = bed();
-    const pipelineFile = join(projectRoot, 'stepcast.yml');
+    const pipelineFile = join(projectRoot, 'burnex.yml');
 
     const finished = RunJournal.create({ runsRoot, projectRoot, runId: 'a-finished' });
     finished.writeManifest({
@@ -1448,7 +1448,7 @@ jobs:
 
   // Сценарий: «Запись об отказе в разрешении»
   it('пишет событие permission.denied с работой, шагом и именем инструмента', async () => {
-    const project = makeProject({ 'stepcast.yml': AGENT_PIPELINE });
+    const project = makeProject({ 'burnex.yml': AGENT_PIPELINE });
     const runsRoot = tempDir('runs-');
     const backend = createFakeBackend({
       lines: [
@@ -1460,7 +1460,7 @@ jobs:
     });
 
     const result = await runPipeline({
-      expanded: expandPipeline({ pipelinePath: project.path('stepcast.yml'), config: project.config }),
+      expanded: expandPipeline({ pipelinePath: project.path('burnex.yml'), config: project.config }),
       config: { ...project.config, runs: { ...project.config.runs, root: runsRoot } },
       projectRoot: project.root,
       cwd: project.root,
@@ -1484,7 +1484,7 @@ jobs:
   // на встроенном инструменте и называет инструмент целиком.
   it('пишет permission.denied на инструмент объявленного MCP-сервера', async () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 name: p
 jobs:
@@ -1510,7 +1510,7 @@ jobs:
     });
 
     const result = await runPipeline({
-      expanded: expandPipeline({ pipelinePath: project.path('stepcast.yml'), config: project.config }),
+      expanded: expandPipeline({ pipelinePath: project.path('burnex.yml'), config: project.config }),
       config: { ...project.config, runs: { ...project.config.runs, root: runsRoot } },
       projectRoot: project.root,
       cwd: project.root,
@@ -1528,7 +1528,7 @@ jobs:
 
   // Сценарий: «Деталь отказа обезврежена»
   it('сводит многострочную деталь отказа с управляющими последовательностями к одной строке', async () => {
-    const project = makeProject({ 'stepcast.yml': AGENT_PIPELINE });
+    const project = makeProject({ 'burnex.yml': AGENT_PIPELINE });
     const runsRoot = tempDir('runs-');
     const esc = String.fromCharCode(0x1b);
     const backend = createFakeBackend({
@@ -1543,7 +1543,7 @@ jobs:
     });
 
     const result = await runPipeline({
-      expanded: expandPipeline({ pipelinePath: project.path('stepcast.yml'), config: project.config }),
+      expanded: expandPipeline({ pipelinePath: project.path('burnex.yml'), config: project.config }),
       config: { ...project.config, runs: { ...project.config.runs, root: runsRoot } },
       projectRoot: project.root,
       cwd: project.root,
@@ -1561,7 +1561,7 @@ jobs:
 
   // Сценарий: «Отказы посчитаны»
   it('считает число отказов попытки в записи попытки', async () => {
-    const project = makeProject({ 'stepcast.yml': AGENT_PIPELINE });
+    const project = makeProject({ 'burnex.yml': AGENT_PIPELINE });
     const runsRoot = tempDir('runs-');
     const backend = createFakeBackend({
       lines: [
@@ -1576,7 +1576,7 @@ jobs:
     });
 
     const result = await runPipeline({
-      expanded: expandPipeline({ pipelinePath: project.path('stepcast.yml'), config: project.config }),
+      expanded: expandPipeline({ pipelinePath: project.path('burnex.yml'), config: project.config }),
       config: { ...project.config, runs: { ...project.config.runs, root: runsRoot } },
       projectRoot: project.root,
       cwd: project.root,
@@ -1590,7 +1590,7 @@ jobs:
 
   // Сценарий: «Отказ не проваливает попытку»
   it('успешный результат с отказами и без предикатов даёт успешный шаг', async () => {
-    const project = makeProject({ 'stepcast.yml': AGENT_PIPELINE });
+    const project = makeProject({ 'burnex.yml': AGENT_PIPELINE });
     const runsRoot = tempDir('runs-');
     const backend = createFakeBackend({
       lines: [
@@ -1602,7 +1602,7 @@ jobs:
     });
 
     const result = await runPipeline({
-      expanded: expandPipeline({ pipelinePath: project.path('stepcast.yml'), config: project.config }),
+      expanded: expandPipeline({ pipelinePath: project.path('burnex.yml'), config: project.config }),
       config: { ...project.config, runs: { ...project.config.runs, root: runsRoot } },
       projectRoot: project.root,
       cwd: project.root,
@@ -1835,7 +1835,7 @@ describe('run-journal: версия формата и диагноз чтени�
     });
 
     const paths = resolveRun(runsRoot, projectRoot);
-    assert.deepEqual(readResetHint(runsRoot, projectRoot, '/tmp/stepcast.yml'), {
+    assert.deepEqual(readResetHint(runsRoot, projectRoot, '/tmp/burnex.yml'), {
       resetsAt: 1_800_000_000_000,
     });
 
@@ -1846,7 +1846,7 @@ describe('run-journal: версия формата и диагноз чтени�
     tampered.bogus_field = 'x';
     writeFileSync(paths.events, `${lines.join('\n')}\n${JSON.stringify(tampered)}\n`);
 
-    assert.equal(readResetHint(runsRoot, projectRoot, '/tmp/stepcast.yml'), undefined);
+    assert.equal(readResetHint(runsRoot, projectRoot, '/tmp/burnex.yml'), undefined);
   });
 });
 

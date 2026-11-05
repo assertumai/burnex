@@ -45,16 +45,16 @@ interface Bed {
 }
 
 function bed(): Bed {
-  const project = makeProject({ 'stepcast.yml': PIPELINE });
+  const project = makeProject({ 'burnex.yml': PIPELINE });
   const runsRoot = tempDir('runs-');
   // `runs.root` допустим только в глобальной конфигурации.
-  writeFileSync(join(project.home, '.stepcast', 'config.yml'), `runs:\n  root: ${runsRoot}\n`);
+  writeFileSync(join(project.home, '.burnex', 'config.yml'), `runs:\n  root: ${runsRoot}\n`);
   const lines: string[] = [];
   return { project, runsRoot, lines, write: (line) => lines.push(line) };
 }
 
 function run(b: Bed, flags: ParsedArgs['flags']): Promise<number> {
-  return withHome(b.project.home, () => runRunCommand(args('run', ['stepcast.yml'], flags), b.write, b.project.root));
+  return withHome(b.project.home, () => runRunCommand(args('run', ['burnex.yml'], flags), b.write, b.project.root));
 }
 
 function seen(b: Bed): string {

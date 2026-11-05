@@ -19,7 +19,7 @@ async function run(project: Project): Promise<RunResult> {
   const backend = createFakeBackend({ lines: [initLine(), resultLine({ text: 'ок' })] });
 
   return runPipeline({
-    expanded: expandPipeline({ pipelinePath: project.path('stepcast.yml'), config: project.config }),
+    expanded: expandPipeline({ pipelinePath: project.path('burnex.yml'), config: project.config }),
     config: { ...project.config, runs: { ...project.config.runs, root: runsRoot } },
     projectRoot: project.root,
     cwd: project.root,
@@ -79,7 +79,7 @@ jobs:
 describe('step-context: однократность унаследованного контекста в общей сессии', () => {
   // Сценарий: «Второй шаг общей сессии»
   it('первый шаг получает пайплайн и работу, второй — только собственную запись', async () => {
-    const project = makeProject({ 'stepcast.yml': SHARED_ONCE });
+    const project = makeProject({ 'burnex.yml': SHARED_ONCE });
     const result = await run(project);
     assert.equal(result.status, 'success');
 
@@ -96,7 +96,7 @@ describe('step-context: однократность унаследованног�
 
   // Сценарий: «Второй шаг общей сессии», второй пробник — по тексту промпта
   it('промпт второго шага не содержит текст контекста пайплайна', async () => {
-    const project = makeProject({ 'stepcast.yml': SHARED_ONCE });
+    const project = makeProject({ 'burnex.yml': SHARED_ONCE });
     const result = await run(project);
 
     assert.match(promptOf(result, 'работа', 'первый'), /контекст пайплайна/);
@@ -140,7 +140,7 @@ jobs:
 describe('step-context: блок выходов предшественников в общей сессии', () => {
   // Сценарий: продолжение «Второго шага общей сессии» блоком выходов
   it('первый шаг consumer получает блок выходов, второй — нет', async () => {
-    const project = makeProject({ 'stepcast.yml': UPSTREAM_SHARED });
+    const project = makeProject({ 'burnex.yml': UPSTREAM_SHARED });
     const runsRoot = tempDir('runs-');
     // Первый запуск бэкенда — агентский шаг producer, отдающий структурный
     // выход; остальные — шаги consumer, которым структура не нужна.
@@ -152,7 +152,7 @@ describe('step-context: блок выходов предшественников
     });
 
     const result = await runPipeline({
-      expanded: expandPipeline({ pipelinePath: project.path('stepcast.yml'), config: project.config }),
+      expanded: expandPipeline({ pipelinePath: project.path('burnex.yml'), config: project.config }),
       config: { ...project.config, runs: { ...project.config.runs, root: runsRoot } },
       projectRoot: project.root,
       cwd: project.root,
@@ -198,7 +198,7 @@ jobs:
 describe('step-context: границы отметки об отправленном контексте', () => {
   // Сценарий: «Работа с session: per_step»
   it('session: per_step — каждый шаг получает унаследованный контекст сам', async () => {
-    const project = makeProject({ 'stepcast.yml': PER_STEP });
+    const project = makeProject({ 'burnex.yml': PER_STEP });
     const result = await run(project);
     assert.equal(result.status, 'success');
 
@@ -241,7 +241,7 @@ jobs:
 
   // Сценарий: «Одноимённая сессия соседней работы»
   it('одноимённая сессия соседней работы получает унаследованный контекст самостоятельно', async () => {
-    const project = makeProject({ 'stepcast.yml': SAME_SESSION_NAME });
+    const project = makeProject({ 'burnex.yml': SAME_SESSION_NAME });
     const result = await run(project);
     assert.equal(result.status, 'success');
 
@@ -278,7 +278,7 @@ jobs:
 
   // Сценарий: «Новая итерация цикла»
   it('новая итерация until начинает сессию заново и получает контекст снова', async () => {
-    const project = makeProject({ 'stepcast.yml': UNTIL_BOUNDARY });
+    const project = makeProject({ 'burnex.yml': UNTIL_BOUNDARY });
     const result = await run(project);
     assert.equal(result.status, 'success');
 
@@ -310,14 +310,14 @@ jobs:
 
   // Сценарий: «Повторная попытка шага»
   it('повторная попытка внутри шага унаследованный контекст заново не получает', async () => {
-    const project = makeProject({ 'stepcast.yml': RETRY_BOUNDARY });
+    const project = makeProject({ 'burnex.yml': RETRY_BOUNDARY });
     const runsRoot = tempDir('runs-');
     const backend = createFakeBackend({
       lines: (index) => [initLine(), resultLine({ text: index === 0 ? 'мимо' : 'готово' })],
     });
 
     const result = await runPipeline({
-      expanded: expandPipeline({ pipelinePath: project.path('stepcast.yml'), config: project.config }),
+      expanded: expandPipeline({ pipelinePath: project.path('burnex.yml'), config: project.config }),
       config: { ...project.config, runs: { ...project.config.runs, root: runsRoot } },
       projectRoot: project.root,
       cwd: project.root,
@@ -408,7 +408,7 @@ jobs:
 
   // Сценарий: «Продолженная сессия контекста не повторяет»
   it('промпт продолженной попытки содержит промпт шага и запись о прерывании, но не контекст пайплайна и не выходы предшественников', async () => {
-    const project = makeProject({ 'stepcast.yml': CONTINUATION_PIPELINE });
+    const project = makeProject({ 'burnex.yml': CONTINUATION_PIPELINE });
     gitInit(project.root);
     const runsRoot = tempDir('runs-');
     const config: Project['config'] = {
@@ -424,7 +424,7 @@ jobs:
 
     const controller = new AbortController();
     const firstPromise = runPipeline({
-      expanded: expandPipeline({ pipelinePath: project.path('stepcast.yml'), config }),
+      expanded: expandPipeline({ pipelinePath: project.path('burnex.yml'), config }),
       config,
       projectRoot: project.root,
       cwd: project.root,
@@ -444,7 +444,7 @@ jobs:
       lines: [initLine(), resultLine({ text: 'готово' }), initLine(), resultLine({ text: 'дальше' })],
     });
     const second = await runPipeline({
-      expanded: expandPipeline({ pipelinePath: project.path('stepcast.yml'), config }),
+      expanded: expandPipeline({ pipelinePath: project.path('burnex.yml'), config }),
       config,
       projectRoot: project.root,
       cwd: project.root,
@@ -481,7 +481,7 @@ jobs:
   // сессия не открылась, засев снят, контекст пересылается целиком — и запись
   // о прерывании ей уже неправда, диалога, который «продолжается», нет.
   it('попытка после неудавшегося продолжения получает полный контекст и записи о прерывании не получает', async () => {
-    const project = makeProject({ 'stepcast.yml': CONTINUATION_RETRY_PIPELINE });
+    const project = makeProject({ 'burnex.yml': CONTINUATION_RETRY_PIPELINE });
     gitInit(project.root);
     const runsRoot = tempDir('runs-');
     const config: Project['config'] = {
@@ -497,7 +497,7 @@ jobs:
 
     const controller = new AbortController();
     const firstPromise = runPipeline({
-      expanded: expandPipeline({ pipelinePath: project.path('stepcast.yml'), config }),
+      expanded: expandPipeline({ pipelinePath: project.path('burnex.yml'), config }),
       config,
       projectRoot: project.root,
       cwd: project.root,
@@ -520,7 +520,7 @@ jobs:
       exitCode: (index) => (index === 0 ? 1 : 0),
     });
     const second = await runPipeline({
-      expanded: expandPipeline({ pipelinePath: project.path('stepcast.yml'), config }),
+      expanded: expandPipeline({ pipelinePath: project.path('burnex.yml'), config }),
       config,
       projectRoot: project.root,
       cwd: project.root,

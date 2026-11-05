@@ -83,7 +83,7 @@ knowledge/
   process-kill-is-posix-only.md
   archive/
     старое.md            # status: superseded — соглашение о месте, не правило
-.stepcast/prompts/
+.burnex/prompts/
   knowledge-rules.md     # project.knowledge.rules
 ```
 

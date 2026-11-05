@@ -45,7 +45,7 @@ describe('дерево состава: use строки приводится к 
   it('ключ plugins со старым адресом или подпутём читается как новый, id остаётся как написан', () => {
     assert.equal(canonicalUse('stepcast:backend-claude'), 'burnex:backend-claude');
     assert.equal(canonicalUse('stepcast/backends/codex'), 'burnex/backends/codex');
-    const [row] = keyOperations(['stepcast/backends/codex'], '/p/.stepcast/config.yml');
+    const [row] = keyOperations(['stepcast/backends/codex'], '/p/.burnex/config.yml');
     assert.equal(row?.use, 'burnex/backends/codex');
     assert.equal(row?.id, 'stepcast/backends/codex');
   });

@@ -13,7 +13,7 @@ export interface InferProbes {
   readonly isGitTree: (dir: string) => boolean;
   /** `name` из `package.json` корня; `undefined`, если прочесть нельзя. */
   readonly readPackageName: (dir: string) => string | undefined;
-  /** Каталог релизов `install.sh`: `$BURNEX_HOME/releases` или `~/.stepcast/releases`. */
+  /** Каталог релизов `install.sh`: `$BURNEX_HOME/releases` или `~/.burnex/releases`. */
   readonly releasesDir: string;
 }
 
@@ -31,7 +31,7 @@ function noManifestError(root: string): StepcastError {
 
 /**
  * Вывод способа по корню движка. Каталог релизов проверяется раньше git:
- * `~/.stepcast` вполне может оказаться внутри чьего-то git-дерева, а релиз без
+ * `~/.burnex` вполне может оказаться внутри чьего-то git-дерева, а релиз без
  * паспорта обновлять нечем — источник утерян.
  */
 export function inferInstallMethod(root: string, probes: InferProbes): InstallManifest {

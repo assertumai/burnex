@@ -68,7 +68,7 @@ const BROKEN_UNIT = [
 
 async function runWith(pipeline: string): Promise<Awaited<ReturnType<typeof runPipeline>>> {
   const project = makeProject({
-    'stepcast.yml': pipeline,
+    'burnex.yml': pipeline,
     'knowledge/.keep': '',
     // Заготовка лежит вне каталога знания и попадает в коммит: шаг копирует
     // её внутрь уже в своей копии дерева, а главное дерево остаётся целым —
@@ -80,7 +80,7 @@ async function runWith(pipeline: string): Promise<Awaited<ReturnType<typeof runP
 
   const config = withKnowledge(project);
   const runsRoot = tempDir('runs-');
-  const expanded = expandPipeline({ pipelinePath: project.path('stepcast.yml'), config });
+  const expanded = expandPipeline({ pipelinePath: project.path('burnex.yml'), config });
 
   return runPipeline({
     expanded,
@@ -170,9 +170,9 @@ jobs:
   /** Дерево с одним недатированным расхождением по якорю, готовое к запуску пайплайна. */
   function staleProject(record: boolean): Project {
     const project = makeProject({
-      '.stepcast/config.yml': 'project:\n  knowledge:\n    provider: fs\n    dir: knowledge\n',
+      '.burnex/config.yml': 'project:\n  knowledge:\n    provider: fs\n    dir: knowledge\n',
       'src/a.ts': 'export const a = 1;\n',
-      'stepcast.yml': pipelineCalling(record),
+      'burnex.yml': pipelineCalling(record),
     });
     gitInit(project);
     const hash = anchorHash(project.path('src/a.ts'));
@@ -202,7 +202,7 @@ jobs:
 
   async function runOn(project: Project): Promise<{ result: RunResult; anchorText: string }> {
     const runsRoot = tempDir('runs-');
-    const expanded = expandPipeline({ pipelinePath: project.path('stepcast.yml'), config: project.config });
+    const expanded = expandPipeline({ pipelinePath: project.path('burnex.yml'), config: project.config });
     const result = await runPipeline({
       expanded,
       config: { ...project.config, runs: { ...project.config.runs, root: runsRoot } },

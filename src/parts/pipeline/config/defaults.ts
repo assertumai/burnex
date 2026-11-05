@@ -10,7 +10,7 @@ export const BUILTIN_CONFIG: RawConfig = {
   // встроенном слое, чтобы отчёт назвал источником умолчание, а не пустоту.
   agent_policy: 'force',
   runs: {
-    root: '~/.stepcast/runs',
+    root: '~/.burnex/runs',
     keep: '30d',
   },
   defaults: {
@@ -34,7 +34,7 @@ export const BUILTIN_CONFIG: RawConfig = {
     // многоработный прогон на предпоследней работе.
     tokens: '20M',
     // $100, а не прежние $50: заход лаборатории генерации тестов
-    // (workspace assertum, .stepcast/pipelines/test-generation-lab.yml) —
+    // (workspace assertum, .burnex/pipelines/test-generation-lab.yml) —
     // десять записей на устройстве, ревью и карточки — конструктивно не
     // помещается в $50, а ключ объявлен tighten-only, и поднять его
     // конфигурацией или флагом нельзя нигде: умолчание движка — единственное

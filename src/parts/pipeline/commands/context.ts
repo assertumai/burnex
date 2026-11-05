@@ -11,6 +11,7 @@ import { findProjectRoot } from '../run/journal/paths.js';
 import { resolveRun } from '../run/journal/reader.js';
 import { formatTokens } from '../../../kernel/units.js';
 import { StepcastError, ExitCode, type ExitCodeValue } from '../../../kernel/errors.js';
+import { defaultPipelineName } from '../../../kernel/dirs.js';
 import type { PipelineCommandEnv } from '../contract.js';
 import { formatColumns } from '../../../kernel/cli/output.js';
 import { commandRow } from '../../../kernel/cli/commandRow.js';
@@ -43,7 +44,7 @@ export function runContextCommand(
     });
   }
 
-  const target = args.positional[0] ?? 'stepcast.yml';
+  const target = args.positional[0] ?? defaultPipelineName(cwd);
   const pipelinePath = resolvePath(cwd, target);
   const { config } = resolveConfig({ cwd });
   const inputs = (args.flags.input as Record<string, string> | undefined) ?? {};

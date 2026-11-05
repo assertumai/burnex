@@ -123,7 +123,7 @@ export const SECTIONS: readonly SectionGroup[] = [
       {
         target: screenTarget(proposalsDeclaration.id),
         title: proposalsDeclaration.title,
-        description: 'Changes an agent proposed to a project’s .stepcast/ files, with a diff to accept or reject.',
+        description: 'Changes an agent proposed to a project’s .burnex/ files, with a diff to accept or reject.',
       },
     ],
   },

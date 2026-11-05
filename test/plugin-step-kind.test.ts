@@ -84,7 +84,7 @@ async function run(
   const config = project.config;
   const backends = options.backends;
   return runPipeline({
-    expanded: expandPipeline({ pipelinePath: project.path(options.pipelinePath ?? 'stepcast.yml'), config, registry }),
+    expanded: expandPipeline({ pipelinePath: project.path(options.pipelinePath ?? 'burnex.yml'), config, registry }),
     config: { ...config, runs: { ...config.runs, root: runsRoot } },
     projectRoot: project.root,
     cwd: project.root,
@@ -362,13 +362,13 @@ describe('step-kinds-registry: реестр видов шага', () => {
 describe('step-kinds-registry: разбор документа', () => {
   it('шаг плагинного вида раскрывается именем вида и полями', async () => {
     const project = makeProject({
-      'stepcast.yml': pipelineWith(`        http_probe:
+      'burnex.yml': pipelineWith(`        http_probe:
           url: https://example.org/health
           expect_status: 200
         expect: [{ exit_code: 0 }]`),
     });
     const { pipeline } = expandPipeline({
-      pipelinePath: project.path('stepcast.yml'),
+      pipelinePath: project.path('burnex.yml'),
       config: project.config,
       registry: await stepKindRegistry(),
     });
@@ -380,12 +380,12 @@ describe('step-kinds-registry: разбор документа', () => {
 
   it('значение не по схеме вклада отклоняется разбором, называя плагин', async () => {
     const project = makeProject({
-      'stepcast.yml': pipelineWith(`        http_probe:
+      'burnex.yml': pipelineWith(`        http_probe:
           expect_status: 200`),
     });
     const registry = await stepKindRegistry();
     assert.throws(
-      () => expandPipeline({ pipelinePath: project.path('stepcast.yml'), config: project.config, registry }),
+      () => expandPipeline({ pipelinePath: project.path('burnex.yml'), config: project.config, registry }),
       (error: unknown) => {
         assert.ok(error instanceof StepcastError);
         assert.match(error.message, /http_probe/);
@@ -397,12 +397,12 @@ describe('step-kinds-registry: разбор документа', () => {
 
   it('неизвестный ключ вида шага отклоняется, называя ключ и перечень доступных', async () => {
     const project = makeProject({
-      'stepcast.yml': pipelineWith(`        http_prob:
+      'burnex.yml': pipelineWith(`        http_prob:
           url: https://example.org`),
     });
     const registry = await stepKindRegistry();
     assert.throws(
-      () => expandPipeline({ pipelinePath: project.path('stepcast.yml'), config: project.config, registry }),
+      () => expandPipeline({ pipelinePath: project.path('burnex.yml'), config: project.config, registry }),
       (error: unknown) => {
         assert.ok(error instanceof StepcastError);
         assert.match(error.message, /http_prob/);
@@ -415,11 +415,11 @@ describe('step-kinds-registry: разбор документа', () => {
 
   it('шаг без ключа вида отклоняется, даже когда плагинный вид зарегистрирован', async () => {
     const project = makeProject({
-      'stepcast.yml': pipelineWith('        expect: [{ exit_code: 0 }]'),
+      'burnex.yml': pipelineWith('        expect: [{ exit_code: 0 }]'),
     });
     const registry = await stepKindRegistry();
     assert.throws(
-      () => expandPipeline({ pipelinePath: project.path('stepcast.yml'), config: project.config, registry }),
+      () => expandPipeline({ pipelinePath: project.path('burnex.yml'), config: project.config, registry }),
       (error: unknown) => {
         assert.ok(error instanceof StepcastError);
         assert.match(error.message, /не называет ни один известный вид/);
@@ -433,16 +433,16 @@ describe('step-kinds-registry: разбор документа', () => {
     const registry = registryFromKernel(kernel);
     const fiber = await applyDeclarativePlugin(kernel, { name: 'example-steps', steps: [fakeStepKind()] }, '<synthetic>', DECLARATIVE_CONTRIBUTION_FIELDS);
     const project = makeProject({
-      'stepcast.yml': pipelineWith(`        http_probe:
+      'burnex.yml': pipelineWith(`        http_probe:
           url: https://example.org`),
     });
     // Пока плагин на месте, тот же документ разбирается.
-    expandPipeline({ pipelinePath: project.path('stepcast.yml'), config: project.config, registry });
+    expandPipeline({ pipelinePath: project.path('burnex.yml'), config: project.config, registry });
 
     await fiber.dispose();
 
     assert.throws(
-      () => expandPipeline({ pipelinePath: project.path('stepcast.yml'), config: project.config, registry }),
+      () => expandPipeline({ pipelinePath: project.path('burnex.yml'), config: project.config, registry }),
       (error: unknown) => {
         assert.ok(error instanceof StepcastError);
         assert.match(error.message, /http_probe/);
@@ -454,7 +454,7 @@ describe('step-kinds-registry: разбор документа', () => {
 
   it('поля вида шага раскрываются типизированно: число остаётся числом, объект — объектом', async () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 version: 1
 kind: pipeline
 name: типизированные-поля
@@ -472,7 +472,7 @@ jobs:
     const registry = await stepKindRegistry();
 
     const { pipeline } = expandPipeline({
-      pipelinePath: project.path('stepcast.yml'),
+      pipelinePath: project.path('burnex.yml'),
       config: project.config,
       registry,
     });
@@ -488,11 +488,11 @@ jobs:
     const registry = await stepKindRegistry();
     const key = (url: string): string => {
       const project = makeProject({
-        'stepcast.yml': pipelineWith(`        http_probe:
+        'burnex.yml': pipelineWith(`        http_probe:
           url: ${url}`),
       });
       const { pipeline } = expandPipeline({
-        pipelinePath: project.path('stepcast.yml'),
+        pipelinePath: project.path('burnex.yml'),
         config: project.config,
         registry,
       });
@@ -511,7 +511,7 @@ jobs:
 
   it('отложенная подстановка объектом доходит до поля объектом, а не строкой', async () => {
     const project = makeProject({
-      'stepcast.yml': pipelineWith(`        http_probe:
+      'burnex.yml': pipelineWith(`        http_probe:
           url: https://example.org
           payload: \${jobs.plan.output.body}`),
     });
@@ -524,7 +524,7 @@ jobs:
       },
     });
     const { pipeline } = expandPipeline({
-      pipelinePath: project.path('stepcast.yml'),
+      pipelinePath: project.path('burnex.yml'),
       config: project.config,
       registry,
     });
@@ -545,11 +545,11 @@ jobs:
 
   it('замок печатает вид шага одним ключом с полями', async () => {
     const project = makeProject({
-      'stepcast.yml': pipelineWith(`        http_probe:
+      'burnex.yml': pipelineWith(`        http_probe:
           url: https://example.org`),
     });
     const { pipeline } = expandPipeline({
-      pipelinePath: project.path('stepcast.yml'),
+      pipelinePath: project.path('burnex.yml'),
       config: project.config,
       registry: await stepKindRegistry(),
     });
@@ -562,7 +562,7 @@ jobs:
 describe('step-kinds-registry: линт', () => {
   it('диагностика хука вклада печатается с путём поля', async () => {
     const project = makeProject({
-      'stepcast.yml': pipelineWith(`        http_probe:
+      'burnex.yml': pipelineWith(`        http_probe:
           url: http://insecure.example`),
     });
     const registry = await stepKindRegistry({
@@ -572,7 +572,7 @@ describe('step-kinds-registry: линт', () => {
           : [],
     });
     const diagnostics = lintPipeline(
-      expandPipeline({ pipelinePath: project.path('stepcast.yml'), config: project.config, registry }),
+      expandPipeline({ pipelinePath: project.path('burnex.yml'), config: project.config, registry }),
       { config: project.config, registry },
     );
     const own = diagnostics.find((item) => item.message === 'адрес без TLS');
@@ -585,10 +585,10 @@ describe('step-kinds-registry: линт', () => {
     const registry = registryFromKernel(kernel);
     const fiber = await applyDeclarativePlugin(kernel, { name: 'example-steps', steps: [fakeStepKind()] }, '<synthetic>', DECLARATIVE_CONTRIBUTION_FIELDS);
     const project = makeProject({
-      'stepcast.yml': pipelineWith(`        http_probe:
+      'burnex.yml': pipelineWith(`        http_probe:
           url: https://example.org`),
     });
-    const expanded = expandPipeline({ pipelinePath: project.path('stepcast.yml'), config: project.config, registry });
+    const expanded = expandPipeline({ pipelinePath: project.path('burnex.yml'), config: project.config, registry });
 
     await fiber.dispose();
 
@@ -644,13 +644,13 @@ jobs:
   it('карточка пайплайна собрана из реестра: название вклада, поля с подписями, признак выхода', async () => {
     const bed = makeJournalBed();
     seedRun(bed.runsRoot, bed.projectRoot, { runId: 'a' });
-    mkdirSync(join(bed.projectRoot, '.stepcast', 'plugins'), { recursive: true });
-    writeFileSync(join(bed.projectRoot, '.stepcast', 'plugins', 'steps.mjs'), PLUGIN_MODULE);
+    mkdirSync(join(bed.projectRoot, '.burnex', 'plugins'), { recursive: true });
+    writeFileSync(join(bed.projectRoot, '.burnex', 'plugins', 'steps.mjs'), PLUGIN_MODULE);
     writeFileSync(
-      join(bed.projectRoot, '.stepcast', 'config.yml'),
+      join(bed.projectRoot, '.burnex', 'config.yml'),
       'plugins: ["./plugins/steps.mjs"]\n',
     );
-    writeFileSync(join(bed.projectRoot, 'stepcast.yml'), PIPELINE);
+    writeFileSync(join(bed.projectRoot, 'burnex.yml'), PIPELINE);
     const { config } = resolveConfig({ cwd: bed.home, home: bed.home, projectPath: null });
 
     const view = (await buildPipelines(bed.runsRoot, config, { home: bed.home })).pipelines[0];
@@ -674,9 +674,9 @@ jobs:
 
   it('прогон с видом шага, которого больше нет, показан из замка с названной причиной', async () => {
     const registry = await stepKindRegistry();
-    const project = makeProject({ 'stepcast.yml': PIPELINE });
+    const project = makeProject({ 'burnex.yml': PIPELINE });
     const lock = serializeLock(
-      expandPipeline({ pipelinePath: project.path('stepcast.yml'), config: project.config, registry }).pipeline,
+      expandPipeline({ pipelinePath: project.path('burnex.yml'), config: project.config, registry }).pipeline,
     );
 
     const bed = makeJournalBed();
@@ -728,7 +728,7 @@ describe('step-kinds-registry: исполнение', () => {
   it('сквозной прогон: исполнитель вызван с полями, попытка успешна', async () => {
     const seen: StepKindInput[] = [];
     const project = makeProject({
-      'stepcast.yml': pipelineWith(`        http_probe:
+      'burnex.yml': pipelineWith(`        http_probe:
           url: https://example.org/health
           expect_status: 200
         expect: [{ exit_code: 0 }]`),
@@ -766,7 +766,7 @@ describe('step-kinds-registry: исполнение', () => {
   it('вторая попытка пишет stdout.2.log, не затирая первую', async () => {
     let calls = 0;
     const project = makeProject({
-      'stepcast.yml': pipelineWith(`        http_probe:
+      'burnex.yml': pipelineWith(`        http_probe:
           url: https://example.org
         expect: [{ exit_code: 0 }]
         attempts: { max: 2 }`),
@@ -787,7 +787,7 @@ describe('step-kinds-registry: исполнение', () => {
 
   it('структурированный выход без схемы output доходит до выхода работы', async () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 version: 1
 kind: pipeline
 name: выход-плагинного-шага
@@ -816,7 +816,7 @@ jobs:
   it('первая попытка проваливает жёсткий предикат — вторая попытка исполняется с номером 2', async () => {
     let calls = 0;
     const project = makeProject({
-      'stepcast.yml': pipelineWith(`        http_probe:
+      'burnex.yml': pipelineWith(`        http_probe:
           url: https://example.org
         expect: [{ exit_code: 0 }]
         attempts: { max: 2 }`),
@@ -836,7 +836,7 @@ jobs:
 
   it('исключение исполнителя — непройденная попытка с названной причиной, а не крушение прогона', async () => {
     const project = makeProject({
-      'stepcast.yml': pipelineWith(`        http_probe:
+      'burnex.yml': pipelineWith(`        http_probe:
           url: https://example.org`),
     });
     const registry = await stepKindRegistry({
@@ -855,7 +855,7 @@ jobs:
   it('таймаут шага отказывает попытку, а сигнал взводится', async () => {
     let aborted = false;
     const project = makeProject({
-      'stepcast.yml': pipelineWith(`        http_probe:
+      'burnex.yml': pipelineWith(`        http_probe:
           url: https://example.org
         timeout: 0.05s
         attempts: { max: 1 }`),
@@ -878,7 +878,7 @@ jobs:
 
   it('выход не по схеме output отказывает попытку жёстким предикатом', async () => {
     const project = makeProject({
-      'stepcast.yml': pipelineWith(`        http_probe:
+      'burnex.yml': pipelineWith(`        http_probe:
           url: https://example.org`),
     });
     const registry = await stepKindRegistry({
@@ -900,7 +900,7 @@ jobs:
     let written: string | undefined;
     let stepDir: string | undefined;
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 version: 1
 kind: pipeline
 name: каталог-попытки
@@ -933,7 +933,7 @@ jobs:
 
   it('судья в expect вычисляется вторым проходом и решает исход шага', async () => {
     const project = makeProject({
-      'stepcast.yml': pipelineWith(`        http_probe:
+      'burnex.yml': pipelineWith(`        http_probe:
           url: https://example.org
         expect:
           - exit_code: 0
@@ -968,7 +968,7 @@ jobs:
   it('предикат script на плагинном шаге вычисляется, а не падает без контракта вызова', async () => {
     const project = makeProject({
       'проверка.mjs': 'process.exit(0);\n',
-      'stepcast.yml': pipelineWith(`        http_probe:
+      'burnex.yml': pipelineWith(`        http_probe:
           url: https://example.org
         expect:
           - script: ./проверка.mjs`),
@@ -984,7 +984,7 @@ jobs:
 
   it('таймаут шага числится причиной остановки timeout, а не отказом expect', async () => {
     const project = makeProject({
-      'stepcast.yml': pipelineWith(`        http_probe:
+      'burnex.yml': pipelineWith(`        http_probe:
           url: https://example.org
         timeout: 0.05s
         attempts: { max: 1 }`),
@@ -1002,7 +1002,7 @@ jobs:
 
   it('потолок прогона, перейденный расходом исполнителя, останавливает прогон', async () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 version: 1
 kind: pipeline
 name: потолок-прогона
@@ -1044,7 +1044,7 @@ jobs:
 
   it('расход, сообщённый исполнителем, попадает в отчёт расхода прогона', async () => {
     const project = makeProject({
-      'stepcast.yml': pipelineWith(`        http_probe:
+      'burnex.yml': pipelineWith(`        http_probe:
           url: https://example.org`),
     });
     const registry = await stepKindRegistry({
@@ -1074,7 +1074,7 @@ jobs:
 describe('step-kinds-registry: waits и способность ожидания (user-decision-steps)', () => {
   it('вклад с waits не отказывает по таймауту шага, дольше которого он работает', async () => {
     const project = makeProject({
-      'stepcast.yml': pipelineWith(`        http_probe:
+      'burnex.yml': pipelineWith(`        http_probe:
           url: https://example.org
         timeout: 0.05s
         attempts: { max: 1 }`),
@@ -1091,7 +1091,7 @@ describe('step-kinds-registry: waits и способность ожидания 
 
   it('вклад без waits по-прежнему отказывает по таймауту тем же текстом, что и раньше', async () => {
     const project = makeProject({
-      'stepcast.yml': pipelineWith(`        http_probe:
+      'burnex.yml': pipelineWith(`        http_probe:
           url: https://example.org
         timeout: 0.05s
         attempts: { max: 1 }`),
@@ -1111,7 +1111,7 @@ describe('step-kinds-registry: waits и способность ожидания 
   it('вид без waits не получает способности ожидания во входе исполнителя', async () => {
     let sawDecision: boolean | undefined;
     const project = makeProject({
-      'stepcast.yml': pipelineWith(`        http_probe:
+      'burnex.yml': pipelineWith(`        http_probe:
           url: https://example.org`),
     });
     const registry = await stepKindRegistry({
@@ -1130,7 +1130,7 @@ describe('step-kinds-registry: waits и способность ожидания 
   it('исполнитель, проглотивший отказ обещания decision.request, не меняет судьбы прогона', async () => {
     const runsRoot = tempDir('runs-');
     const project = makeProject({
-      'stepcast.yml': pipelineWith(`        http_probe:
+      'burnex.yml': pipelineWith(`        http_probe:
           url: https://example.org`),
     });
     const registry = await stepKindRegistry({
@@ -1148,7 +1148,7 @@ describe('step-kinds-registry: waits и способность ожидания 
 
     let paths: RunPaths | undefined;
     const promise = runPipeline({
-      expanded: expandPipeline({ pipelinePath: project.path('stepcast.yml'), config: project.config, registry }),
+      expanded: expandPipeline({ pipelinePath: project.path('burnex.yml'), config: project.config, registry }),
       config: { ...project.config, runs: { ...project.config.runs, root: runsRoot } },
       projectRoot: project.root,
       cwd: project.root,
@@ -1206,7 +1206,7 @@ describe('shadow-run-mode: external и точка действия act вида 
   it('в обычном режиме act вызывает perform и отдаёт результат, ничего не записывая', async () => {
     const performed: string[] = [];
     const seen: { returned?: unknown[]; hadAct?: boolean } = {};
-    const project = makeProject({ 'stepcast.yml': PROBE });
+    const project = makeProject({ 'burnex.yml': PROBE });
     const result = await run(project, await stepKindRegistry(actingKind(performed, seen)));
 
     assert.equal(result.status, 'success');
@@ -1219,7 +1219,7 @@ describe('shadow-run-mode: external и точка действия act вида 
   it('в shadow-режиме perform не вызывается, пишутся action-1.json, action-2.json и события', async () => {
     const performed: string[] = [];
     const seen: { returned?: unknown[]; hadAct?: boolean } = {};
-    const project = makeProject({ 'stepcast.yml': PROBE });
+    const project = makeProject({ 'burnex.yml': PROBE });
     const result = await run(project, await stepKindRegistry(actingKind(performed, seen)), { shadow: true });
 
     assert.equal(result.status, 'success');
@@ -1242,7 +1242,7 @@ describe('shadow-run-mode: external и точка действия act вида 
 
   it('вид без external не получает act, а шаг плагина в shadow-режиме объявления не требует', async () => {
     const seen: { hadAct?: boolean } = {};
-    const project = makeProject({ 'stepcast.yml': PROBE });
+    const project = makeProject({ 'burnex.yml': PROBE });
     const registry = await stepKindRegistry({
       execute: (input) => {
         seen.hadAct = input.act !== undefined;
@@ -1257,7 +1257,7 @@ describe('shadow-run-mode: external и точка действия act вида 
   it('decision и плагинный вид без external рядом со встроенными: проверка их не называет, оба исполняются', async () => {
     const runsRoot = tempDir('runs-');
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 version: 1
 kind: pipeline
 name: shadow-рядом
@@ -1286,7 +1286,7 @@ jobs:
         return { exitCode: 0, text: 'ok' };
       },
     });
-    const expanded = expandPipeline({ pipelinePath: project.path('stepcast.yml'), config: project.config, registry });
+    const expanded = expandPipeline({ pipelinePath: project.path('burnex.yml'), config: project.config, registry });
 
     // Проверка называет только встроенный шаг без объявления — ни `gate`, ни `probe`.
     assert.throws(
@@ -1301,10 +1301,10 @@ jobs:
     // С объявленным `undeclared` проверка проходит, а прогон исполняет и
     // решение, и плагинный шаг — без записи действий.
     writeFileSync(
-      project.path('stepcast.yml'),
-      readFileSync(project.path('stepcast.yml'), 'utf8').replace('run: [echo, ok]', 'run: [echo, ok]\n        external: false'),
+      project.path('burnex.yml'),
+      readFileSync(project.path('burnex.yml'), 'utf8').replace('run: [echo, ok]', 'run: [echo, ok]\n        external: false'),
     );
-    const declared = expandPipeline({ pipelinePath: project.path('stepcast.yml'), config: project.config, registry });
+    const declared = expandPipeline({ pipelinePath: project.path('burnex.yml'), config: project.config, registry });
     assert.doesNotThrow(() => assertShadowDeclarations(declared.pipeline));
 
     let paths: RunPaths | undefined;
@@ -1347,7 +1347,7 @@ jobs:
       const performed: string[] = [];
       const cyclic: Record<string, unknown> = {};
       cyclic.self = cyclic;
-      const project = makeProject({ 'stepcast.yml': PROBE });
+      const project = makeProject({ 'burnex.yml': PROBE });
       for (const details of [{ amount: 10n }, cyclic, { callback: () => 1 }]) {
         const registry = await stepKindRegistry({
           external: true,

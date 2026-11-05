@@ -309,11 +309,11 @@ describe('ui-dashboard: сборка вида очереди (src/parts/ui/backl
     const { runsRoot, projectRoot } = makeJournalBed();
     seedRun(runsRoot, projectRoot, { runId: 'a' });
     writeFileSync(join(projectRoot, 'backlog.md'), backlogText(item('one', BASE)));
-    mkdirSync(join(projectRoot, '.stepcast'), { recursive: true });
-    writeFileSync(join(projectRoot, '.stepcast', 'board.yml'), 'columns:\n  - id: todo\n');
+    mkdirSync(join(projectRoot, '.burnex'), { recursive: true });
+    writeFileSync(join(projectRoot, '.burnex', 'board.yml'), 'columns:\n  - id: todo\n');
 
     const backlog = buildBacklog(buildOverview(runsRoot));
-    assert.equal(backlog.projects[0]?.failures[0]?.sourceFile, '.stepcast/board.yml');
+    assert.equal(backlog.projects[0]?.failures[0]?.sourceFile, '.burnex/board.yml');
     assert.match(backlog.projects[0]?.failures[0]?.error ?? '', /in_progress/);
     assert.equal(backlog.projects[0]?.columns.length, 4);
     assert.deepEqual(backlog.projects[0]?.items.map((entry) => entry.slug), ['one']);
@@ -415,7 +415,7 @@ describe('ui-dashboard: блокировка очереди в виде прое
     const dir = realpathSync(tempDir('lockpath-'));
     assert.equal(spawnSync('git', ['init', '-q', dir]).status, 0);
     const before = lockPathOf(dir, 0);
-    assert.equal(before, join(dir, '.git', 'stepcast-backlog.lock'));
+    assert.equal(before, join(dir, '.git', 'burnex-backlog.lock'));
     // Если бы путь пересчитывался, без `.git` он ушёл бы в запасной.
     renameSync(join(dir, '.git'), join(dir, 'moved-git'));
     assert.equal(lockPathOf(dir, LOCK_PATH_RETRY_MS * 10), before);
@@ -428,6 +428,6 @@ describe('ui-dashboard: блокировка очереди в виде прое
     assert.equal(spawnSync('git', ['init', '-q', dir]).status, 0);
     // До предела — прежний путь, без нового процесса git на каждом такте.
     assert.equal(lockPathOf(dir, LOCK_PATH_RETRY_MS - 1), fallback);
-    assert.equal(lockPathOf(dir, LOCK_PATH_RETRY_MS), join(dir, '.git', 'stepcast-backlog.lock'));
+    assert.equal(lockPathOf(dir, LOCK_PATH_RETRY_MS), join(dir, '.git', 'burnex-backlog.lock'));
   });
 });

@@ -126,10 +126,10 @@ interface Bed {
 }
 
 function bed(): Bed {
-  const project = makeProject({ 'stepcast.yml': PIPELINE });
+  const project = makeProject({ 'burnex.yml': PIPELINE });
   const runsRoot = join(project.home, '..', 'runs');
   mkdirSync(runsRoot, { recursive: true });
-  writeFileSync(join(project.home, '.stepcast', 'config.yml'), `runs:\n  root: ${runsRoot}\n`);
+  writeFileSync(join(project.home, '.burnex', 'config.yml'), `runs:\n  root: ${runsRoot}\n`);
   return { project, runsRoot, home: project.home };
 }
 
@@ -158,7 +158,7 @@ describe('CLI: burnex context', () => {
     journal.writeManifest({
       run_id: journal.paths.runId,
       pipeline: 'context-preview',
-      pipeline_file: b.project.path('stepcast.yml'),
+      pipeline_file: b.project.path('burnex.yml'),
       lock_hash: 'abc',
       project_root: b.project.root,
       workspace: { mode: 'cwd' },
@@ -235,12 +235,12 @@ describe('CLI: burnex context', () => {
   // должен удваивать величину уровня «работа».
   it('повтор одного файла на пайплайне и на работе не удваивает величину уровня', () => {
     const project = makeProject({
-      'stepcast.yml': DEDUP_PIPELINE,
+      'burnex.yml': DEDUP_PIPELINE,
       'CLAUDE.md': 'а'.repeat(400),
     });
     const runsRoot = join(project.root, '..', 'runs');
     mkdirSync(runsRoot, { recursive: true });
-    writeFileSync(join(project.home, '.stepcast', 'config.yml'), `runs:\n  root: ${runsRoot}\n`);
+    writeFileSync(join(project.home, '.burnex', 'config.yml'), `runs:\n  root: ${runsRoot}\n`);
 
     const lines: string[] = [];
     const code = withHome(project.home, () =>
@@ -721,10 +721,10 @@ jobs:
 `;
 
   function refsBed(files: Record<string, string>): Bed {
-    const project = makeProject({ 'stepcast.yml': PIPELINE_REFS, ...files });
+    const project = makeProject({ 'burnex.yml': PIPELINE_REFS, ...files });
     const runsRoot = join(project.home, '..', 'runs');
     mkdirSync(runsRoot, { recursive: true });
-    writeFileSync(join(project.home, '.stepcast', 'config.yml'), `runs:\n  root: ${runsRoot}\n`);
+    writeFileSync(join(project.home, '.burnex', 'config.yml'), `runs:\n  root: ${runsRoot}\n`);
     return { project, runsRoot, home: project.home };
   }
 

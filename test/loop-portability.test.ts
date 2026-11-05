@@ -19,13 +19,13 @@ import { tempDir } from './tmp.js';
 
 /**
  * Корень репозитория. Тесты компилируются в `dist/test/**`, а файлы петли —
- * `.stepcast/**` — остаются там же, где лежат в исходном дереве: два уровня
+ * `.burnex/**` — остаются там же, где лежат в исходном дереве: два уровня
  * вверх от `dist/test/` (тот же приём, что в `schema-generated.test.ts`).
  */
 const ROOT = fileURLToPath(new URL('../../', import.meta.url));
-const JOBS_DIR = join(ROOT, '.stepcast', 'jobs');
-const PROMPTS_DIR = join(ROOT, '.stepcast', 'prompts');
-const PIPELINES_DIR = join(ROOT, '.stepcast', 'pipelines');
+const JOBS_DIR = join(ROOT, '.burnex', 'jobs');
+const PROMPTS_DIR = join(ROOT, '.burnex', 'prompts');
+const PIPELINES_DIR = join(ROOT, '.burnex', 'pipelines');
 
 /** Номер строки (с единицы) по смещению в тексте — для отказа, называющего файл и строку. */
 function lineAt(text: string, index: number): number {
@@ -35,7 +35,7 @@ function lineAt(text: string, index: number): number {
 /**
  * Файлы с одним из перечисленных расширений во всём поддереве каталога.
  *
- * Обход именно рекурсивный: `.stepcast/jobs/**` — это весь поддиректорий работ,
+ * Обход именно рекурсивный: `.burnex/jobs/**` — это весь поддиректорий работ,
  * и файл, положенный в подкаталог, обязан попадать в те же проверки, а не
  * выпадать из них молча.
  */
@@ -176,14 +176,14 @@ describe('self-improvement-loop: переносимость файлов пет�
    * Файл, названный объявлением, обязан существовать. Линт этого не увидит:
    * путь с подстановкой чистого пространства `${project.*}` раскрывается при
    * разборе, и проверка существования его ловит (`checkDeclaredPath`) — но
-   * `project.spec.rules` этого репозитория объявлен в `.stepcast/config.yml`
+   * `project.spec.rules` этого репозитория объявлен в `.burnex/config.yml`
    * (backlog-item-names-repo, «Объявления этого репозитория живут в его
    * конфигурации»), а не в документе пайплайна, который секции `project`
    * больше не несёт. Здесь — та же проверка на самом объявлении, чтобы промах
    * был виден и без прогона линта на петле.
    */
   it('файл, названный project.spec.rules, лежит на диске', () => {
-    const document = parseYaml(readFileSync(join(ROOT, '.stepcast', 'config.yml'), 'utf8')) as {
+    const document = parseYaml(readFileSync(join(ROOT, '.burnex', 'config.yml'), 'utf8')) as {
       project?: { spec?: { rules?: string } };
     };
     const rules = document.project?.spec?.rules;
@@ -201,7 +201,7 @@ describe('self-improvement-loop: переносимость файлов пет�
    */
   it('документ пайплайна секции project не содержит', () => {
     const document = parseYaml(
-      readFileSync(join(ROOT, '.stepcast', 'pipelines', 'self-improve.yml'), 'utf8'),
+      readFileSync(join(ROOT, '.burnex', 'pipelines', 'self-improve.yml'), 'utf8'),
     ) as { project?: unknown };
     assert.equal(document.project, undefined);
   });
@@ -216,7 +216,7 @@ describe('self-improvement-loop: переносимость файлов пет�
    */
   it('текст контекста пайплайна не называет ${project.check} и ${project.spec.*}', () => {
     const document = parseYaml(
-      readFileSync(join(ROOT, '.stepcast', 'pipelines', 'self-improve.yml'), 'utf8'),
+      readFileSync(join(ROOT, '.burnex', 'pipelines', 'self-improve.yml'), 'utf8'),
     ) as { context?: readonly { text?: string }[] };
 
     for (const entry of document.context ?? []) {
@@ -292,7 +292,7 @@ describe('self-improvement-loop: переносимость файлов пет�
 /**
  * Конфигурация настоящего репозитория, читаемая так же, как её читала бы
  * команда движка: домашний каталог фальшивый (иначе гоняющая машина подмешала
- * бы свой `~/.stepcast/config.yml`), проектный — настоящий `.stepcast/config.yml`
+ * бы свой `~/.burnex/config.yml`), проектный — настоящий `.burnex/config.yml`
  * этого репозитория, куда переехала секция `project`. `makeProject()` для
  * этих тестов не годится: с тех пор как пайплайн секцию `project` не несёт,
  * пустая конфигурация оставила бы `project.check`/`tools`/`spec` неопределёнными
@@ -300,7 +300,7 @@ describe('self-improvement-loop: переносимость файлов пет�
  */
 function realProjectConfig(): Config {
   const home = tempDir('loop-portability-home-');
-  mkdirSync(join(home, '.stepcast'), { recursive: true });
+  mkdirSync(join(home, '.burnex'), { recursive: true });
   return resolveConfig({ cwd: ROOT, home }).config;
 }
 
@@ -330,7 +330,7 @@ describe('self-improvement-loop: работа дорожки не адресуе
     });
   }
 
-  it('ни один файл .stepcast/jobs/** не объявляет параметр lane', () => {
+  it('ни один файл .burnex/jobs/** не объявляет параметр lane', () => {
     for (const file of jobFiles()) {
       const text = readFileSync(file, 'utf8');
       const document = parseYaml(text) as { params?: Record<string, unknown> };
@@ -397,8 +397,8 @@ describe('self-improvement-loop: запись item_refs в работах дор
  * давать `implement` и `fix-review` тот же набор прав, что они несли
  * литералами до изменения, — в том же порядке и с теми же соседями.
  *
- * Проверка идёт по настоящему `.stepcast/pipelines/self-improve.yml`, а не по
- * его копии: перенос объявления `tools` в `.stepcast/config.yml` или правка
+ * Проверка идёт по настоящему `.burnex/pipelines/self-improve.yml`, а не по
+ * его копии: перенос объявления `tools` в `.burnex/config.yml` или правка
  * прав в файле работы обязаны быть видны здесь, а копия пайплайна отставала бы
  * от оригинала молча. Ожидаемый список выписан целиком, а не проверен на
  * вхождение: смысл требования — тождество прежнему набору, и лишнее право в
@@ -425,7 +425,7 @@ describe('self-improvement-loop: настоящий пайплайн петли 
    * множество, а не по порядку.
    *
    * Каталог документов изменения и файл правил здесь — не разрешённые пути
-   * (`openspec/changes/**`, `.stepcast/prompts/spec-rules.md`), а буквальный
+   * (`openspec/changes/**`, `.burnex/prompts/spec-rules.md`), а буквальный
    * текст отложенной подстановки `${jobs.slots.output.lanes.<lane>.repo.spec.*}`
    * (backlog-item-names-repo, риск «Путь, объявленный через params, выпадает
    * из статической проверки линта»): значение приходит параметром с места
@@ -449,25 +449,25 @@ describe('self-improvement-loop: настоящий пайплайн петли 
       'package.json',
       'package-lock.json',
       '.gitattributes',
-      '.stepcast/config.yml',
-      '.stepcast/prompts/**',
+      '.burnex/config.yml',
+      '.burnex/prompts/**',
       `\${jobs.slots.output.lanes.${lane}.repo.spec.rules}`,
-      '.stepcast/jobs/**',
-      '.stepcast/pipelines/**',
-      '.stepcast/schemas/**',
+      '.burnex/jobs/**',
+      '.burnex/pipelines/**',
+      '.burnex/schemas/**',
       'ui/**',
       'vite.config.ts',
       'README.md',
       'eslint.config.js',
       'examples/**',
       // ui-runtime-widget-spike: каталог виджетов пользователя внутри проекта.
-      '.stepcast/widgets/**',
+      '.burnex/widgets/**',
     ]);
   }
 
   it('implement и fix-review обеих дорожек несут прежние права в прежнем порядке', () => {
     const { pipeline } = expandPipeline({
-      pipelinePath: join(ROOT, '.stepcast', 'pipelines', 'self-improve.yml'),
+      pipelinePath: join(ROOT, '.burnex', 'pipelines', 'self-improve.yml'),
       config: realProjectConfig(),
     });
 
@@ -480,7 +480,7 @@ describe('self-improvement-loop: настоящий пайплайн петли 
 
   it('implement и fix-review обеих дорожек несут прежний набор границ changed_only (для своей дорожки)', () => {
     const { pipeline } = expandPipeline({
-      pipelinePath: join(ROOT, '.stepcast', 'pipelines', 'self-improve.yml'),
+      pipelinePath: join(ROOT, '.burnex', 'pipelines', 'self-improve.yml'),
       config: realProjectConfig(),
     });
 
@@ -505,7 +505,7 @@ describe('self-improvement-loop: настоящий пайплайн петли 
    */
   it('границы implement/fix-review не содержат ${project.spec.*} и ${project.check}', () => {
     const { pipeline } = expandPipeline({
-      pipelinePath: join(ROOT, '.stepcast', 'pipelines', 'self-improve.yml'),
+      pipelinePath: join(ROOT, '.burnex', 'pipelines', 'self-improve.yml'),
       config: realProjectConfig(),
     });
 
@@ -610,8 +610,8 @@ jobs:
   }
 
   function expandForeign(project: Project, tools?: readonly string[]) {
-    project.write('stepcast.yml', foreignPipeline(tools));
-    return expandPipeline({ pipelinePath: project.path('stepcast.yml'), config: project.config }).pipeline;
+    project.write('burnex.yml', foreignPipeline(tools));
+    return expandPipeline({ pipelinePath: project.path('burnex.yml'), config: project.config }).pipeline;
   }
 
   it('propose-a: границы и право на инструмент называют чужие значения', () => {
@@ -780,18 +780,18 @@ jobs:
   });
 
   // Устройство петли задаёт движок, а не репозиторий, поэтому записи
-  // `.stepcast/**` остались в файлах работ литералами и в `project.edit_paths`
+  // `.burnex/**` остались в файлах работ литералами и в `project.edit_paths`
   // не переносятся: чужое объявление границ их не заменяет и не отменяет.
   // Косвенно это же сторожит сравнение с прежним набором на настоящем
   // пайплайне, но там свойство видно только через отсутствие записей в
   // `edit_paths` — здесь оно утверждается прямо.
-  it('записи .stepcast/** остаются в границах и против чужого объявления', () => {
+  it('записи .burnex/** остаются в границах и против чужого объявления', () => {
     const ENGINE_FILES = [
-      '.stepcast/config.yml',
-      '.stepcast/jobs/**',
-      '.stepcast/pipelines/**',
-      '.stepcast/prompts/**',
-      '.stepcast/schemas/**',
+      '.burnex/config.yml',
+      '.burnex/jobs/**',
+      '.burnex/pipelines/**',
+      '.burnex/prompts/**',
+      '.burnex/schemas/**',
     ];
 
     const pipeline = expandForeign(makeProject());
@@ -894,7 +894,7 @@ jobs:
    */
   function foreignTree(): Project {
     const project = makeProject({
-      'stepcast.yml': RUN_PIPELINE,
+      'burnex.yml': RUN_PIPELINE,
       'docs/spec-rules.md': 'Документы изменения пишутся руками, проверяются `make spec`.\n',
       'docs/changes/demo-change/README.md': '# demo-change\n\nОписание изменения.\n',
     });
@@ -916,7 +916,7 @@ jobs:
 
     const runsRoot = tempDir('runs-');
     const result = await runPipeline({
-      expanded: expandPipeline({ pipelinePath: project.path('stepcast.yml'), config: project.config }),
+      expanded: expandPipeline({ pipelinePath: project.path('burnex.yml'), config: project.config }),
       config: { ...project.config, runs: { ...project.config.runs, root: runsRoot } },
       projectRoot: project.root,
       cwd: project.root,
@@ -948,7 +948,7 @@ jobs:
    */
   it('спец.check, ожидающий недоехавший слаг, роняет прогон', async () => {
     const project = makeProject({
-      'stepcast.yml': RUN_PIPELINE.replace(
+      'burnex.yml': RUN_PIPELINE.replace(
         'test "$SPEC_CHANGE" = demo-change',
         'test "$SPEC_CHANGE" = never-delivered',
       ),
@@ -969,7 +969,7 @@ jobs:
 
     const runsRoot = tempDir('runs-');
     const result = await runPipeline({
-      expanded: expandPipeline({ pipelinePath: project.path('stepcast.yml'), config: project.config }),
+      expanded: expandPipeline({ pipelinePath: project.path('burnex.yml'), config: project.config }),
       config: { ...project.config, runs: { ...project.config.runs, root: runsRoot } },
       projectRoot: project.root,
       cwd: project.root,
@@ -1026,7 +1026,7 @@ jobs:
 
   async function runExpress(pipelineText: string) {
     const project = makeProject({
-      'stepcast.yml': pipelineText,
+      'burnex.yml': pipelineText,
       'docs/spec-rules.md': 'Документы изменения пишутся руками, проверяются `make spec`.\n',
       'docs/changes/demo-change/README.md': '# demo-change\n\nОписание изменения.\n',
     });
@@ -1040,7 +1040,7 @@ jobs:
 
     const runsRoot = tempDir('runs-');
     const result = await runPipeline({
-      expanded: expandPipeline({ pipelinePath: project.path('stepcast.yml'), config: project.config }),
+      expanded: expandPipeline({ pipelinePath: project.path('burnex.yml'), config: project.config }),
       config: { ...project.config, runs: { ...project.config.runs, root: runsRoot } },
       projectRoot: project.root,
       cwd: project.root,
@@ -1079,7 +1079,7 @@ jobs:
    */
   it('пустой каталог изменения роняет первую же работу, а не проходит молча', async () => {
     const project = makeProject({
-      'stepcast.yml': RUN_PIPELINE,
+      'burnex.yml': RUN_PIPELINE,
       'docs/spec-rules.md': 'правила\n',
     });
 
@@ -1089,7 +1089,7 @@ jobs:
 
     const runsRoot = tempDir('runs-');
     const result = await runPipeline({
-      expanded: expandPipeline({ pipelinePath: project.path('stepcast.yml'), config: project.config }),
+      expanded: expandPipeline({ pipelinePath: project.path('burnex.yml'), config: project.config }),
       config: { ...project.config, runs: { ...project.config.runs, root: runsRoot } },
       projectRoot: project.root,
       cwd: project.root,
@@ -1110,13 +1110,13 @@ jobs:
   // роняет разбор раньше первого исполнения, а не проезжает мимо молча.
   it('пайплайн без объявления project.tools роняет разбор', () => {
     const project = makeProject({
-      'stepcast.yml': RUN_PIPELINE.replace('  tools: [make]\n', ''),
+      'burnex.yml': RUN_PIPELINE.replace('  tools: [make]\n', ''),
       'docs/spec-rules.md': 'правила\n',
       'docs/changes/demo-change/README.md': '# demo-change\n',
     });
 
     assert.throws(
-      () => expandPipeline({ pipelinePath: project.path('stepcast.yml'), config: project.config }),
+      () => expandPipeline({ pipelinePath: project.path('burnex.yml'), config: project.config }),
       (error: unknown) => {
         assert.match((error as Error).message ?? '', /project\.tools/);
         return true;
@@ -1130,13 +1130,13 @@ jobs:
   // петлю с границами наугад.
   it('пайплайн без объявления project.edit_paths роняет разбор до первого агентского вызова', () => {
     const project = makeProject({
-      'stepcast.yml': RUN_PIPELINE.replace('  edit_paths: [cmd/**, internal/**, go.mod]\n', ''),
+      'burnex.yml': RUN_PIPELINE.replace('  edit_paths: [cmd/**, internal/**, go.mod]\n', ''),
       'docs/spec-rules.md': 'правила\n',
       'docs/changes/demo-change/README.md': '# demo-change\n',
     });
 
     assert.throws(
-      () => expandPipeline({ pipelinePath: project.path('stepcast.yml'), config: project.config }),
+      () => expandPipeline({ pipelinePath: project.path('burnex.yml'), config: project.config }),
       (error: unknown) => {
         assert.match((error as Error).message ?? '', /project\.edit_paths/);
         return true;
@@ -1178,7 +1178,7 @@ jobs:
   async function runVerify(project: Project) {
     const runsRoot = tempDir('runs-');
     return runPipeline({
-      expanded: expandPipeline({ pipelinePath: project.path('stepcast.yml'), config: project.config }),
+      expanded: expandPipeline({ pipelinePath: project.path('burnex.yml'), config: project.config }),
       config: { ...project.config, runs: { ...project.config.runs, root: runsRoot } },
       projectRoot: project.root,
       cwd: project.root,
@@ -1187,7 +1187,7 @@ jobs:
 
   it('пункт без repos: проверка идёт в корне, как и до изменения', async () => {
     const project = makeProject({
-      'stepcast.yml': verifyPipeline('.', 'test -f marker-root.txt'),
+      'burnex.yml': verifyPipeline('.', 'test -f marker-root.txt'),
       'marker-root.txt': 'корень\n',
     });
 
@@ -1199,7 +1199,7 @@ jobs:
 
   it('пункт с объявленным вложенным репозиторием: проверка идёт в его каталоге, не в корне', async () => {
     const project = makeProject({
-      'stepcast.yml': verifyPipeline('backend', 'test -f marker-backend.txt && test ! -f marker-root.txt'),
+      'burnex.yml': verifyPipeline('backend', 'test -f marker-backend.txt && test ! -f marker-root.txt'),
       'marker-root.txt': 'корень\n',
       'backend/marker-backend.txt': 'бэкенд\n',
     });
@@ -1216,7 +1216,7 @@ jobs:
     // доказывал бы только то, что check вообще что-то пропускает, а не то,
     // что cd ведёт именно туда, куда назвал params.repo_dir.
     const project = makeProject({
-      'stepcast.yml': verifyPipeline('backend', 'test -f marker-root.txt'),
+      'burnex.yml': verifyPipeline('backend', 'test -f marker-root.txt'),
       'marker-root.txt': 'корень\n',
       'backend/marker-backend.txt': 'бэкенд\n',
     });
@@ -1230,8 +1230,8 @@ jobs:
 
 /**
  * job-schema-path-portable: ни одна ссылка файла работы петли, разрешаемая от
- * файла объявления, не должна вести за пределы `.stepcast/` — иначе перенос
- * `.stepcast/jobs/` в чужой репозиторий требует правки внутри скопированных
+ * файла объявления, не должна вести за пределы `.burnex/` — иначе перенос
+ * `.burnex/jobs/` в чужой репозиторий требует правки внутри скопированных
  * файлов. `slots.yml` был последней ссылкой наружу (`../../schema/...`);
  * форма `burnex:<имя>` резолвится от расположения движка, а не от файла
  * объявления, и на границу репозитория не выходит.
@@ -1242,8 +1242,8 @@ jobs:
  * включение их запретило бы петле знать что-либо о правимом репозитории, а
  * не сузило бы проверку до настоящих ссылок.
  */
-describe('self-improvement-loop: ссылки файлов работ петли не покидают .stepcast/', () => {
-  const STEPCAST_DIR = join(ROOT, '.stepcast');
+describe('self-improvement-loop: ссылки файлов работ петли не покидают .burnex/', () => {
+  const STEPCAST_DIR = join(ROOT, '.burnex');
 
   interface DeclaredRef {
     readonly key: string;
@@ -1303,11 +1303,11 @@ describe('self-improvement-loop: ссылки файлов работ петли
     return refs;
   }
 
-  /** Ссылки документа работы, ведущие за пределы `.stepcast/`, — с местом объявления. */
+  /** Ссылки документа работы, ведущие за пределы `.burnex/`, — с местом объявления. */
   function outsideRefs(document: unknown, file: string): string[] {
     return collectRefs(document)
       .filter((ref) => {
-        // Ссылка на схему пакета не выходит за пределы .stepcast/ по построению:
+        // Ссылка на схему пакета не выходит за пределы .burnex/ по построению:
         // движок разрешает её от собственного расположения, а не от файла
         // работы, и файловую систему работы вовсе не затрагивает.
         if (ref.value.startsWith('stepcast:')) return false;
@@ -1319,7 +1319,7 @@ describe('self-improvement-loop: ссылки файлов работ петли
       .map((ref) => `${file}: ${ref.key} = ${ref.value}`);
   }
 
-  it('каждая ссылка uses, prompt: file: и объявленная схема разрешается внутрь .stepcast/', () => {
+  it('каждая ссылка uses, prompt: file: и объявленная схема разрешается внутрь .burnex/', () => {
     const files = jobFiles();
     assert.ok(files.length > 0, `в ${JOBS_DIR} не найдено ни одного файла работы`);
 
@@ -1362,7 +1362,7 @@ steps:
     ]);
   });
 
-  it('те же ссылки внутри .stepcast/ и форма stepcast: наружу не считаются', () => {
+  it('те же ссылки внутри .burnex/ и форма stepcast: наружу не считаются', () => {
     const file = join(JOBS_DIR, 'probe.yml');
     const document = parseYaml(`
 kind: job
@@ -1386,7 +1386,7 @@ steps:
 
 /**
  * job-schema-path-portable: обход выше доказывает, что ссылка не выходит за
- * `.stepcast/`; он не доказывает, что `burnex:backlog-slots` в чужом дереве
+ * `.burnex/`; он не доказывает, что `burnex:backlog-slots` в чужом дереве
  * во что-то разрешается. Здесь — настоящий `slots.yml`, скопированный (не
  * подключённый по абсолютному пути — тот всегда лежит рядом с настоящим
  * `schema/` этого репозитория и ничего бы не доказал) в проект, где каталога
@@ -1395,18 +1395,18 @@ steps:
 describe('self-improvement-loop: работа slots раскрывается в дереве без schema/', () => {
   it('output.schema ведёт в схему пакета, существующую и читаемую как JSON', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 name: probe
 jobs:
   slots:
-    uses: ./.stepcast/jobs/slots.yml
+    uses: ./.burnex/jobs/slots.yml
 `,
-      '.stepcast/jobs/slots.yml': readFileSync(join(JOBS_DIR, 'slots.yml'), 'utf8'),
+      '.burnex/jobs/slots.yml': readFileSync(join(JOBS_DIR, 'slots.yml'), 'utf8'),
     });
 
     const { pipeline } = expandPipeline({
-      pipelinePath: project.path('stepcast.yml'),
+      pipelinePath: project.path('burnex.yml'),
       config: project.config,
     });
 

@@ -31,9 +31,9 @@ const SCOPE: LateScope = {
 
 /** Раскрыть первую работу пайплайна, собранного из переданного текста. */
 function expandJob(document: string): Job {
-  const project = makeProject({ 'stepcast.yml': document });
+  const project = makeProject({ 'burnex.yml': document });
   const { pipeline } = expandPipeline({
-    pipelinePath: project.path('stepcast.yml'),
+    pipelinePath: project.path('burnex.yml'),
     config: project.config,
   });
   return pipeline.jobs[0] as Job;
@@ -184,7 +184,7 @@ describe('раскрытие отложенных подстановок', () =>
   // отправленном тексте остаётся литерал, а не значение.
   it('оставляет экранированное в файле промпта литералом в отправленном тексте', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 jobs:
   probe:
@@ -196,7 +196,7 @@ jobs:
       'prompt.md': 'Литерал: $${jobs.plan.output.slug}\n',
     });
     const { pipeline } = expandPipeline({
-      pipelinePath: project.path('stepcast.yml'),
+      pipelinePath: project.path('burnex.yml'),
       config: project.config,
     });
 
@@ -376,7 +376,7 @@ jobs:
 async function run(project: Project): Promise<RunResult> {
   const runsRoot = tempDir('runs-');
   return runPipeline({
-    expanded: expandPipeline({ pipelinePath: project.path('stepcast.yml'), config: project.config }),
+    expanded: expandPipeline({ pipelinePath: project.path('burnex.yml'), config: project.config }),
     config: { ...project.config, runs: { ...project.config.runs, root: runsRoot } },
     projectRoot: project.root,
     cwd: project.root,
@@ -386,7 +386,7 @@ async function run(project: Project): Promise<RunResult> {
 describe('раскрытие отложенных подстановок в прогоне', () => {
   it('вторая работа получает исход первой', async () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 version: 1
 kind: pipeline
 name: cross
@@ -418,7 +418,7 @@ jobs:
   // по идентификатору эти два шага не совпадают между собой.
   it('исполняет шаг, идентификатор которого сам содержит подстановку', async () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 version: 1
 kind: pipeline
 name: id-substitution
@@ -444,7 +444,7 @@ jobs:
 
   it('раскрытое определение работы попадает в журнал', async () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 version: 1
 kind: pipeline
 name: journalled
@@ -471,7 +471,7 @@ jobs:
 
   it('${run.scratch} в прогоне раскрывается в каталог черновиков работы', async () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 version: 1
 kind: pipeline
 name: scratch-late
@@ -498,7 +498,7 @@ jobs:
 
   it('работа с until раскрывается один раз и одинаково на всех итерациях', async () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 version: 1
 kind: pipeline
 name: looped
@@ -527,7 +527,7 @@ jobs:
 
   it('обращение к невыполнявшейся работе роняет работу, а не прогон', async () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 version: 1
 kind: pipeline
 name: missing
@@ -577,7 +577,7 @@ describe('раскрытие отложенных подстановок в with
   function usesJob(input: Record<string, unknown>, paramsSchema?: Record<string, unknown>): Job {
     return {
       id: 'build',
-      source: '/fake/stepcast.yml',
+      source: '/fake/burnex.yml',
       needs: [],
       on: 'success',
       session: 'per_step',
@@ -607,7 +607,7 @@ describe('раскрытие отложенных подстановок в with
           uses: {
             name: 'echo-input',
             layer: 'project',
-            manifestPath: '/abs/.stepcast/steps/echo-input/step.yml',
+            manifestPath: '/abs/.burnex/steps/echo-input/step.yml',
             manifestFingerprint: 'a1b2c3d4',
             // Та же величина, что и `input`, — ровно как её кладёт раскрытие.
             params: input,

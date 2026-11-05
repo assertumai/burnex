@@ -92,7 +92,7 @@ interface Bed {
 }
 
 function bed(pipeline: string = PIPELINE): Bed {
-  const project = makeProject({ 'stepcast.yml': pipeline });
+  const project = makeProject({ 'burnex.yml': pipeline });
   const runsRoot = tempDir('runs-');
   return { project, runsRoot };
 }
@@ -104,7 +104,7 @@ function configOf(b: Bed) {
 /** Первый прогон: исполняется до шага решения и останавливается на нём. */
 function startRun(b: Bed, registry = builtinRegistry(), signal?: AbortSignal) {
   return runPipeline({
-    expanded: expandPipeline({ pipelinePath: b.project.path('stepcast.yml'), config: b.project.config, registry }),
+    expanded: expandPipeline({ pipelinePath: b.project.path('burnex.yml'), config: b.project.config, registry }),
     config: configOf(b),
     projectRoot: b.project.root,
     cwd: b.project.root,
@@ -208,13 +208,13 @@ describe('resume-chain: восстановление по просьбе о пе
   });
 
   it('прогон, запущенный командой, ведёт цепочку сам — без демона', async () => {
-    const project = makeProject({ 'stepcast.yml': PIPELINE });
+    const project = makeProject({ 'burnex.yml': PIPELINE });
     const runsRoot = tempDir('runs-');
     // `runs.root` допустим только в глобальной конфигурации.
-    writeFileSync(join(project.home, '.stepcast', 'config.yml'), `runs:\n  root: ${runsRoot}\n`);
+    writeFileSync(join(project.home, '.burnex', 'config.yml'), `runs:\n  root: ${runsRoot}\n`);
     const { lines, write } = capture();
 
-    const promise = withHome(project.home, () => runRunCommand(args(['stepcast.yml']), write, project.root));
+    const promise = withHome(project.home, () => runRunCommand(args(['burnex.yml']), write, project.root));
 
     await waitUntil(() => listRuns(runsRoot, project.root).length === 1);
     const firstRunId = listRuns(runsRoot, project.root)[0] as string;

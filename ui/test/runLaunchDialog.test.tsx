@@ -41,7 +41,7 @@ function pipeline(overrides: Partial<PipelineView> = {}): PipelineView {
   return {
     projectKey: 'proj',
     projectPath: '/work/proj',
-    file: '.stepcast/pipelines/p.yml',
+    file: '.burnex/pipelines/p.yml',
     name: 'p',
     jobs: [
       {
@@ -86,7 +86,7 @@ function form(pipelines: readonly PipelineView[], preselect: Parameters<typeof R
 }
 
 function draft(overrides: Partial<LaunchDraft> = {}): LaunchDraft {
-  return { project: 'proj', pipeline: '.stepcast/pipelines/p.yml', inputs: {}, envText: '', shadow: false, agent: '', ...overrides };
+  return { project: 'proj', pipeline: '.burnex/pipelines/p.yml', inputs: {}, envText: '', shadow: false, agent: '', ...overrides };
 }
 
 describe('ui-run-launch-dialog: правила строк env', () => {

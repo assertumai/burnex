@@ -88,7 +88,7 @@ async function startServer(
 function startWatcher(t: TestContext, runsRoot: string, intervalMs: number, home?: string): Watcher {
   // Домашний каталог называется там, где проверка трогает файлы слоёв
   // (маршруты, плагины): иначе наблюдатель отпечатывал бы настоящий
-  // `~/.stepcast` того, кто запустил проверку.
+  // `~/.burnex` того, кто запустил проверку.
   const watcher = createWatcher({ runsRoot, intervalMs, ...(home === undefined ? {} : { home }) });
   t.after(() => watcher.dispose());
   return watcher;
@@ -345,7 +345,7 @@ describe('ui-dashboard: HTTP-витрина', () => {
     seedRun(runsRoot, projectRoot, { runId: 'a' });
     seedRun(runsRoot, projectRoot, {
       runId: 'b',
-      manifest: { pipeline_file: join(projectRoot, '.stepcast', 'pipelines', 'ночной.yml') },
+      manifest: { pipeline_file: join(projectRoot, '.burnex', 'pipelines', 'ночной.yml') },
     });
     const server = await startServer(t, { runsRoot });
 
@@ -356,8 +356,8 @@ describe('ui-dashboard: HTTP-витрина', () => {
       ),
     );
 
-    assert.equal(files.get('a'), 'stepcast.yml');
-    assert.equal(files.get('b'), '.stepcast/pipelines/ночной.yml');
+    assert.equal(files.get('a'), 'burnex.yml');
+    assert.equal(files.get('b'), '.burnex/pipelines/ночной.yml');
   });
 
   // Файл вне корня проекта относительным не притворяется: он и не должен
@@ -571,7 +571,7 @@ describe('ui-dashboard: HTTP-витрина', () => {
   it('событие proposals несёт состав очереди без содержимого записей', async (t) => {
     const { runsRoot, projectRoot } = makeJournalBed();
     seedRun(runsRoot, projectRoot, { runId: 'a' });
-    proposeEntry(projectRoot, { target: '.stepcast/widgets/clock.tsx', content: 'export default 1;\n' });
+    proposeEntry(projectRoot, { target: '.burnex/widgets/clock.tsx', content: 'export default 1;\n' });
     const server = await startServer(t, { runsRoot });
 
     const stream = openStream(t, server, '/api/events');
@@ -580,7 +580,7 @@ describe('ui-dashboard: HTTP-витрина', () => {
     const event = stream.events.find((item) => item.event === 'proposals');
     assert.ok(event !== undefined, 'поток обязан нести состав очереди');
     const record = pick(event.data, 'projects', 0, 'records', 0) as Json;
-    assert.equal(record.target, '.stepcast/widgets/clock.tsx');
+    assert.equal(record.target, '.burnex/widgets/clock.tsx');
     assert.equal(record.state, 'pending');
     assert.ok(!('content' in record), 'содержимое записи в поток не идёт');
   });
@@ -695,7 +695,7 @@ describe('screen-scrum: перенос пункта доской', () => {
       body: JSON.stringify({ project: key, id: 'postponed', title: 'Отложено', index: 1 }),
     });
     assert.equal(added.code, 200);
-    const board = readFileSync(join(projectRoot, '.stepcast', 'board.yml'), 'utf8');
+    const board = readFileSync(join(projectRoot, '.burnex', 'board.yml'), 'utf8');
     assert.ok(board.indexOf('postponed') > board.indexOf('todo'));
     assert.ok(board.indexOf('postponed') < board.indexOf('in_progress'));
 
@@ -1223,15 +1223,15 @@ jobs:
 `;
 
 /**
- * Плагин на диске проекта витрины: `.stepcast/config.yml` с `plugins` и
+ * Плагин на диске проекта витрины: `.burnex/config.yml` с `plugins` и
  * модуль рядом — тем же образом, каким `withPlugin` заводит плагин для CLI
  * (`test/cli-plugins.test.ts`), только поверх уже готового `projectRoot`
  * журнальной завязки (`makeJournalBed`), а не свежего `Project`.
  */
 function withProjectPlugin(projectRoot: string, body: string, moduleName = 'probe'): void {
-  mkdirSync(join(projectRoot, '.stepcast'), { recursive: true });
-  writeFileSync(join(projectRoot, '.stepcast', 'config.yml'), `plugins: ["./plugins/${moduleName}.mjs"]\n`);
-  const path = join(projectRoot, '.stepcast', 'plugins', `${moduleName}.mjs`);
+  mkdirSync(join(projectRoot, '.burnex'), { recursive: true });
+  writeFileSync(join(projectRoot, '.burnex', 'config.yml'), `plugins: ["./plugins/${moduleName}.mjs"]\n`);
+  const path = join(projectRoot, '.burnex', 'plugins', `${moduleName}.mjs`);
   mkdirSync(dirname(path), { recursive: true });
   writeFileSync(path, body);
 }
@@ -2328,7 +2328,7 @@ describe('ui-dashboard: настройки дефолтов', () => {
     assert.equal(pick(settings.json, 'model', 'value'), undefined);
     assert.equal(pick(settings.json, 'effort', 'value'), undefined);
     assert.deepEqual(pick(settings.json, 'modelTiers'), ['max', 'deep', 'balance', 'fast', 'mini']);
-    assert.equal(settings.json.file, join(home, '.stepcast', 'config.yml'));
+    assert.equal(settings.json.file, join(home, '.burnex', 'config.yml'));
     assert.equal(
       (pick(settings.json, 'backends') as Array<{ name: string }>).some(
         (backend) => backend.name === 'claude',
@@ -2339,7 +2339,7 @@ describe('ui-dashboard: настройки дефолтов', () => {
 
   it('записывает модель в глобальный конфиг и сохраняет комментарии', async (t) => {
     const { runsRoot, home } = makeJournalBed();
-    const file = join(home, '.stepcast', 'config.yml');
+    const file = join(home, '.burnex', 'config.yml');
     const before = readFileSync(file, 'utf8');
     writeFileSync(file, `# корень прогонов задан тестом\n${before}`);
     const server = await startServer(t, { runsRoot, home });
@@ -2379,7 +2379,7 @@ describe('ui-dashboard: настройки дефолтов', () => {
 
     assert.equal(cleared.code, 200);
     assert.equal(pick(cleared.json, 'model', 'value'), undefined);
-    assert.doesNotMatch(readFileSync(join(home, '.stepcast', 'config.yml'), 'utf8'), /model:/);
+    assert.doesNotMatch(readFileSync(join(home, '.burnex', 'config.yml'), 'utf8'), /model:/);
   });
 
   it('отклоняет агента, которого не объявлял ни один бэкенд', async (t) => {
@@ -2394,7 +2394,7 @@ describe('ui-dashboard: настройки дефолтов', () => {
 
     assert.equal(refused.code, 400);
     assert.match(String(refused.json.error), /нет-такого/);
-    assert.doesNotMatch(readFileSync(join(home, '.stepcast', 'config.yml'), 'utf8'), /agent:/);
+    assert.doesNotMatch(readFileSync(join(home, '.burnex', 'config.yml'), 'utf8'), /agent:/);
   });
 });
 
@@ -2436,7 +2436,7 @@ describe('ui-dashboard: перечисление моделей агентов',
     writeFileSync(counterFile, '');
     const stub = writeStubClaude(home, counterFile);
     writeFileSync(
-      join(home, '.stepcast', 'config.yml'),
+      join(home, '.burnex', 'config.yml'),
       `runs:\n  root: ${runsRoot}\nbackends:\n  claude:\n    command: ${stub}\n`,
     );
     const server = await startServer(t, { runsRoot, home });
@@ -2468,7 +2468,7 @@ describe('ui-dashboard: перечисление моделей агентов',
     const { runsRoot, home } = makeJournalBed();
     const hanging = writeStubHangingClaude(home);
     writeFileSync(
-      join(home, '.stepcast', 'config.yml'),
+      join(home, '.burnex', 'config.yml'),
       `runs:\n  root: ${runsRoot}\nbackends:\n  claude:\n    command: ${hanging}\n`,
     );
     const server = await startServer(t, { runsRoot, home });
@@ -2490,14 +2490,14 @@ describe('ui-dashboard: пайплайны проектов', () => {
   it('находит пайплайн проекта и показывает его работы', async (t) => {
     const { runsRoot, projectRoot, home } = makeJournalBed();
     seedRun(runsRoot, projectRoot, { runId: 'a' });
-    writeFileSync(join(projectRoot, 'stepcast.yml'), DEMO_PIPELINE);
+    writeFileSync(join(projectRoot, 'burnex.yml'), DEMO_PIPELINE);
     const { config } = resolveConfig({ cwd: projectRoot, home, projectPath: null });
     const server = await startServer(t, { runsRoot, config, home });
 
     const pipelines = await fetchJson(server, '/api/pipelines');
     assert.equal(pipelines.code, 200);
     assert.equal(pick(pipelines.json, 'pipelines', 0, 'name'), 'demo');
-    assert.equal(pick(pipelines.json, 'pipelines', 0, 'file'), 'stepcast.yml');
+    assert.equal(pick(pipelines.json, 'pipelines', 0, 'file'), 'burnex.yml');
     assert.deepEqual(
       (pick(pipelines.json, 'pipelines', 0, 'jobs') as Array<{ id: string }>).map((job) => job.id),
       ['build', 'check'],
@@ -2509,7 +2509,7 @@ describe('ui-dashboard: пайплайны проектов', () => {
   it('показывает неразбираемый пайплайн с ошибкой, а не пропускает его молча', async (t) => {
     const { runsRoot, projectRoot, home } = makeJournalBed();
     seedRun(runsRoot, projectRoot, { runId: 'a' });
-    writeFileSync(join(projectRoot, 'stepcast.yml'), 'version: 1\nkind: pipeline\nname: broken\n');
+    writeFileSync(join(projectRoot, 'burnex.yml'), 'version: 1\nkind: pipeline\nname: broken\n');
     const { config } = resolveConfig({ cwd: projectRoot, home, projectPath: null });
     const server = await startServer(t, { runsRoot, config, home });
 
@@ -2522,7 +2522,7 @@ describe('ui-dashboard: пайплайны проектов', () => {
     const { runsRoot, projectRoot, home } = makeJournalBed();
     seedRun(runsRoot, projectRoot, { runId: 'a' });
     writeFileSync(
-      join(projectRoot, 'stepcast.yml'),
+      join(projectRoot, 'burnex.yml'),
       'version: 1\nkind: job\nid: solo\nsteps: []\n',
     );
     const { config } = resolveConfig({ cwd: projectRoot, home, projectPath: null });
@@ -2535,13 +2535,13 @@ describe('ui-dashboard: пайплайны проектов', () => {
   it('раскрывает пайплайн секцией project того проекта, которому он принадлежит', async (t) => {
     const { runsRoot, projectRoot, home } = makeJournalBed();
     seedRun(runsRoot, projectRoot, { runId: 'a' });
-    mkdirSync(join(projectRoot, '.stepcast'), { recursive: true });
+    mkdirSync(join(projectRoot, '.burnex'), { recursive: true });
     writeFileSync(
-      join(projectRoot, '.stepcast', 'config.yml'),
+      join(projectRoot, '.burnex', 'config.yml'),
       'project:\n  check: ./gradlew check\n',
     );
     writeFileSync(
-      join(projectRoot, 'stepcast.yml'),
+      join(projectRoot, 'burnex.yml'),
       `version: 1
 kind: pipeline
 name: свой
@@ -2570,14 +2570,14 @@ jobs:
   it('показывает нечитаемую конфигурацию проекта ошибкой, а не чужими значениями', async (t) => {
     const { runsRoot, projectRoot, home } = makeJournalBed();
     seedRun(runsRoot, projectRoot, { runId: 'a' });
-    mkdirSync(join(projectRoot, '.stepcast'), { recursive: true });
-    writeFileSync(join(projectRoot, '.stepcast', 'config.yml'), 'project:\n  check: "   "\n');
-    writeFileSync(join(projectRoot, 'stepcast.yml'), DEMO_PIPELINE);
+    mkdirSync(join(projectRoot, '.burnex'), { recursive: true });
+    writeFileSync(join(projectRoot, '.burnex', 'config.yml'), 'project:\n  check: "   "\n');
+    writeFileSync(join(projectRoot, 'burnex.yml'), DEMO_PIPELINE);
     const { config } = resolveConfig({ cwd: home, home, projectPath: null });
     const server = await startServer(t, { runsRoot, config, home });
 
     const pipelines = await fetchJson(server, '/api/pipelines');
-    assert.equal(pick(pipelines.json, 'pipelines', 0, 'file'), 'stepcast.yml');
+    assert.equal(pick(pipelines.json, 'pipelines', 0, 'file'), 'burnex.yml');
     assert.match(String(pick(pipelines.json, 'pipelines', 0, 'error')), /схеме/);
   });
 });
@@ -2600,10 +2600,10 @@ output_schema: ./output.schema.json
   it('перечисляет шаг проекта наравне со встроенными пакета, называя слой каждого', () => {
     const { runsRoot, projectRoot, home } = makeJournalBed();
     seedRun(runsRoot, projectRoot, { runId: 'a' });
-    writeFileSync(join(projectRoot, 'stepcast.yml'), DEMO_PIPELINE);
-    mkdirSync(join(projectRoot, '.stepcast', 'steps', 'greet'), { recursive: true });
-    writeFileSync(join(projectRoot, '.stepcast', 'steps', 'greet', 'step.yml'), GREET_MANIFEST);
-    writeFileSync(join(projectRoot, '.stepcast', 'steps', 'greet', 'main.cjs'), 'module.exports = () => {};\n');
+    writeFileSync(join(projectRoot, 'burnex.yml'), DEMO_PIPELINE);
+    mkdirSync(join(projectRoot, '.burnex', 'steps', 'greet'), { recursive: true });
+    writeFileSync(join(projectRoot, '.burnex', 'steps', 'greet', 'step.yml'), GREET_MANIFEST);
+    writeFileSync(join(projectRoot, '.burnex', 'steps', 'greet', 'main.cjs'), 'module.exports = () => {};\n');
     const steps = { code: 200, json: buildSteps(runsRoot, { home }) as unknown as Record<string, unknown> };
     assert.equal(steps.code, 200);
     const projectSteps = pick(steps.json, 'projects', 0, 'steps') as Array<{ name: string; layer: string }>;
@@ -2618,10 +2618,10 @@ output_schema: ./output.schema.json
   it('показывает параметр именем, типом, обязательностью, умолчанием и описанием', () => {
     const { runsRoot, projectRoot, home } = makeJournalBed();
     seedRun(runsRoot, projectRoot, { runId: 'a' });
-    writeFileSync(join(projectRoot, 'stepcast.yml'), DEMO_PIPELINE);
-    mkdirSync(join(projectRoot, '.stepcast', 'steps', 'greet'), { recursive: true });
-    writeFileSync(join(projectRoot, '.stepcast', 'steps', 'greet', 'step.yml'), GREET_MANIFEST);
-    writeFileSync(join(projectRoot, '.stepcast', 'steps', 'greet', 'main.cjs'), 'module.exports = () => {};\n');
+    writeFileSync(join(projectRoot, 'burnex.yml'), DEMO_PIPELINE);
+    mkdirSync(join(projectRoot, '.burnex', 'steps', 'greet'), { recursive: true });
+    writeFileSync(join(projectRoot, '.burnex', 'steps', 'greet', 'step.yml'), GREET_MANIFEST);
+    writeFileSync(join(projectRoot, '.burnex', 'steps', 'greet', 'main.cjs'), 'module.exports = () => {};\n');
     const steps = { code: 200, json: buildSteps(runsRoot, { home }) as unknown as Record<string, unknown> };
     const projectSteps = pick(steps.json, 'projects', 0, 'steps') as Array<{
       name: string;
@@ -2639,13 +2639,13 @@ output_schema: ./output.schema.json
   it('отмечает перекрытый шаг домашнего слоя, а не пропускает его', () => {
     const { runsRoot, projectRoot, home } = makeJournalBed();
     seedRun(runsRoot, projectRoot, { runId: 'a' });
-    writeFileSync(join(projectRoot, 'stepcast.yml'), DEMO_PIPELINE);
-    mkdirSync(join(projectRoot, '.stepcast', 'steps', 'greet'), { recursive: true });
-    writeFileSync(join(projectRoot, '.stepcast', 'steps', 'greet', 'step.yml'), GREET_MANIFEST);
-    writeFileSync(join(projectRoot, '.stepcast', 'steps', 'greet', 'main.cjs'), 'module.exports = () => {};\n');
-    mkdirSync(join(home, '.stepcast', 'steps', 'greet'), { recursive: true });
-    writeFileSync(join(home, '.stepcast', 'steps', 'greet', 'step.yml'), GREET_MANIFEST);
-    writeFileSync(join(home, '.stepcast', 'steps', 'greet', 'main.cjs'), 'module.exports = () => {};\n');
+    writeFileSync(join(projectRoot, 'burnex.yml'), DEMO_PIPELINE);
+    mkdirSync(join(projectRoot, '.burnex', 'steps', 'greet'), { recursive: true });
+    writeFileSync(join(projectRoot, '.burnex', 'steps', 'greet', 'step.yml'), GREET_MANIFEST);
+    writeFileSync(join(projectRoot, '.burnex', 'steps', 'greet', 'main.cjs'), 'module.exports = () => {};\n');
+    mkdirSync(join(home, '.burnex', 'steps', 'greet'), { recursive: true });
+    writeFileSync(join(home, '.burnex', 'steps', 'greet', 'step.yml'), GREET_MANIFEST);
+    writeFileSync(join(home, '.burnex', 'steps', 'greet', 'main.cjs'), 'module.exports = () => {};\n');
     const steps = { code: 200, json: buildSteps(runsRoot, { home }) as unknown as Record<string, unknown> };
     const projectSteps = pick(steps.json, 'projects', 0, 'steps') as Array<{
       name: string;
@@ -2663,10 +2663,10 @@ output_schema: ./output.schema.json
   });
 
   // Сценарий: «Чистый проект»
-  it('проект без .stepcast/steps/ показывает встроенные шаги пакета, а не пустой список', () => {
+  it('проект без .burnex/steps/ показывает встроенные шаги пакета, а не пустой список', () => {
     const { runsRoot, projectRoot, home } = makeJournalBed();
     seedRun(runsRoot, projectRoot, { runId: 'a' });
-    writeFileSync(join(projectRoot, 'stepcast.yml'), DEMO_PIPELINE);
+    writeFileSync(join(projectRoot, 'burnex.yml'), DEMO_PIPELINE);
     const steps = { code: 200, json: buildSteps(runsRoot, { home }) as unknown as Record<string, unknown> };
     const projectSteps = pick(steps.json, 'projects', 0, 'steps') as unknown[];
     assert.ok(projectSteps.length > 0);
@@ -2676,13 +2676,13 @@ output_schema: ./output.schema.json
   it('дефектный манифест показан с причиной отказа и файлом манифеста', () => {
     const { runsRoot, projectRoot, home } = makeJournalBed();
     seedRun(runsRoot, projectRoot, { runId: 'a' });
-    writeFileSync(join(projectRoot, 'stepcast.yml'), DEMO_PIPELINE);
-    mkdirSync(join(projectRoot, '.stepcast', 'steps', 'greet'), { recursive: true });
+    writeFileSync(join(projectRoot, 'burnex.yml'), DEMO_PIPELINE);
+    mkdirSync(join(projectRoot, '.burnex', 'steps', 'greet'), { recursive: true });
     writeFileSync(
-      join(projectRoot, '.stepcast', 'steps', 'greet', 'step.yml'),
+      join(projectRoot, '.burnex', 'steps', 'greet', 'step.yml'),
       `${GREET_MANIFEST}\nunexpected_field: 1\n`,
     );
-    writeFileSync(join(projectRoot, '.stepcast', 'steps', 'greet', 'main.cjs'), 'module.exports = () => {};\n');
+    writeFileSync(join(projectRoot, '.burnex', 'steps', 'greet', 'main.cjs'), 'module.exports = () => {};\n');
     const steps = { code: 200, json: buildSteps(runsRoot, { home }) as unknown as Record<string, unknown> };
     const projectSteps = pick(steps.json, 'projects', 0, 'steps') as Array<{
       name: string;
@@ -2700,7 +2700,7 @@ describe('ui-dashboard: пайплайн раскрыт реестром вкл�
     const { runsRoot, projectRoot, home } = makeJournalBed();
     seedRun(runsRoot, projectRoot, { runId: 'a' });
     withProjectPlugin(projectRoot, PREDICATE_PLUGIN);
-    writeFileSync(join(projectRoot, 'stepcast.yml'), PREDICATE_PIPELINE);
+    writeFileSync(join(projectRoot, 'burnex.yml'), PREDICATE_PIPELINE);
     const { config } = resolveConfig({ cwd: home, home, projectPath: null });
     const server = await startServer(t, { runsRoot, config, home });
 
@@ -2717,7 +2717,7 @@ describe('ui-dashboard: пайплайн раскрыт реестром вкл�
     seedRun(runsRoot, projectRoot, { runId: 'a' });
     withProjectPlugin(projectRoot, PREDICATE_PLUGIN);
     writeFileSync(
-      join(projectRoot, 'stepcast.yml'),
+      join(projectRoot, 'burnex.yml'),
       `version: 1
 kind: pipeline
 name: с циклом
@@ -2749,8 +2749,8 @@ jobs:
     seedRun(runsRoot, projectRoot, { runId: 'a' });
     seedRun(runsRoot, other.projectRoot, { runId: 'b' });
     withProjectPlugin(projectRoot, PREDICATE_PLUGIN);
-    writeFileSync(join(projectRoot, 'stepcast.yml'), PREDICATE_PIPELINE);
-    writeFileSync(join(other.projectRoot, 'stepcast.yml'), PREDICATE_PIPELINE);
+    writeFileSync(join(projectRoot, 'burnex.yml'), PREDICATE_PIPELINE);
+    writeFileSync(join(other.projectRoot, 'burnex.yml'), PREDICATE_PIPELINE);
     const { config } = resolveConfig({ cwd: home, home, projectPath: null });
     const server = await startServer(t, { runsRoot, config, home });
 
@@ -2768,7 +2768,7 @@ jobs:
     seedRun(runsRoot, projectRoot, { runId: 'a' });
     withProjectPlugin(projectRoot, BACKEND_PLUGIN);
     writeFileSync(
-      join(projectRoot, 'stepcast.yml'),
+      join(projectRoot, 'burnex.yml'),
       `version: 1
 kind: pipeline
 name: demo
@@ -2794,7 +2794,7 @@ describe('ui-dashboard: кеш реестров вкладов у демона',
   it('плагин, объявленный после старта демона, раскрывает документ следующим запросом без перезапуска', async (t) => {
     const { runsRoot, projectRoot, home } = makeJournalBed();
     seedRun(runsRoot, projectRoot, { runId: 'a' });
-    writeFileSync(join(projectRoot, 'stepcast.yml'), PREDICATE_PIPELINE);
+    writeFileSync(join(projectRoot, 'burnex.yml'), PREDICATE_PIPELINE);
     const { config } = resolveConfig({ cwd: home, home, projectPath: null });
     const server = await startServer(t, { runsRoot, config, home });
 
@@ -2817,9 +2817,9 @@ describe('ui-dashboard: кеш реестров вкладов у демона',
     seedRun(runsRoot, other.projectRoot, { runId: 'b' });
     withProjectPlugin(projectRoot, PREDICATE_PLUGIN);
     withProjectPlugin(other.projectRoot, BACKEND_PLUGIN);
-    writeFileSync(join(projectRoot, 'stepcast.yml'), PREDICATE_PIPELINE);
+    writeFileSync(join(projectRoot, 'burnex.yml'), PREDICATE_PIPELINE);
     writeFileSync(
-      join(other.projectRoot, 'stepcast.yml'),
+      join(other.projectRoot, 'burnex.yml'),
       `version: 1
 kind: pipeline
 name: demo
@@ -2854,10 +2854,10 @@ jobs:
     const { runsRoot, projectRoot, home } = makeJournalBed();
     seedRun(runsRoot, projectRoot, { runId: 'a' });
     withProjectPlugin(projectRoot, PREDICATE_PLUGIN);
-    const projectConfigFile = join(projectRoot, '.stepcast', 'config.yml');
+    const projectConfigFile = join(projectRoot, '.burnex', 'config.yml');
     writeFileSync(projectConfigFile, 'plugins: ["./plugins/probe.mjs"]\ndefaults:\n  model: opus\n');
     writeFileSync(
-      join(projectRoot, 'stepcast.yml'),
+      join(projectRoot, 'burnex.yml'),
       `version: 1
 kind: pipeline
 name: demo
@@ -2894,7 +2894,7 @@ jobs:
     const { runsRoot, projectRoot, home } = makeJournalBed();
     seedRun(runsRoot, projectRoot, { runId: 'a' });
     withProjectPlugin(projectRoot, PREDICATE_PLUGIN); // id ключа plugins — сам спецификатор ./plugins/probe.mjs
-    writeFileSync(join(projectRoot, 'stepcast.yml'), PREDICATE_PIPELINE);
+    writeFileSync(join(projectRoot, 'burnex.yml'), PREDICATE_PIPELINE);
     const { config } = resolveConfig({ cwd: home, home, projectPath: null });
     const kernelCache = createKernelCache();
     const server = await startServer(t, { runsRoot, config, home, kernelCache });
@@ -2905,9 +2905,9 @@ jobs:
     // Патч заменяет строку, объявленную ключом plugins, модулем без
     // предикатов, но с бэкендом probe — тем же id, равным спецификатору
     // (design.md, Решение 4).
-    writeFileSync(join(projectRoot, '.stepcast', 'plugins', 'backend.mjs'), BACKEND_PLUGIN);
+    writeFileSync(join(projectRoot, '.burnex', 'plugins', 'backend.mjs'), BACKEND_PLUGIN);
     writeFileSync(
-      join(projectRoot, '.stepcast', 'plugins.patch.yml'),
+      join(projectRoot, '.burnex', 'plugins.patch.yml'),
       'version: 1\nkind: plugins-patch\nplugins:\n  - id: ./plugins/probe.mjs\n    use: ./plugins/backend.mjs\n',
     );
 
@@ -2923,7 +2923,7 @@ jobs:
     const { runsRoot, projectRoot, home } = makeJournalBed();
     seedRun(runsRoot, projectRoot, { runId: 'a' });
     withProjectPlugin(projectRoot, PREDICATE_PLUGIN);
-    writeFileSync(join(projectRoot, 'stepcast.yml'), PREDICATE_PIPELINE);
+    writeFileSync(join(projectRoot, 'burnex.yml'), PREDICATE_PIPELINE);
     const { config } = resolveConfig({ cwd: home, home, projectPath: null });
     const kernelCache = createKernelCache();
     const server = await startServer(t, { runsRoot, config, home, kernelCache });
@@ -2932,7 +2932,7 @@ jobs:
     assert.equal(pick(before.json, 'pipelines', 0, 'error'), undefined);
 
     writeFileSync(
-      join(projectRoot, '.stepcast', 'plugins.patch.yml'),
+      join(projectRoot, '.burnex', 'plugins.patch.yml'),
       'version: 1\nkind: plugins-patch\nplugins:\n  - id: ./plugins/probe.mjs\n    use: ./plugins/probe.mjs\n    enabled: false\n',
     );
 
@@ -2950,15 +2950,15 @@ jobs:
     // котором сменился только слой-источник, равным прежнему считаться не
     // вправе — иначе демон продолжил бы держать модуль домашнего каталога
     // (ui-daemon: правка любого файла, участвующего в сборке дерева).
-    mkdirSync(join(home, '.stepcast', 'plugins'), { recursive: true });
-    writeFileSync(join(home, '.stepcast', 'plugins', 'probe.mjs'), PREDICATE_PLUGIN);
+    mkdirSync(join(home, '.burnex', 'plugins'), { recursive: true });
+    writeFileSync(join(home, '.burnex', 'plugins', 'probe.mjs'), PREDICATE_PLUGIN);
     writeFileSync(
-      join(home, '.stepcast', 'plugins.patch.yml'),
+      join(home, '.burnex', 'plugins.patch.yml'),
       'version: 1\nkind: plugins-patch\nplugins:\n  - id: probe\n    use: ./plugins/probe.mjs\n',
     );
-    mkdirSync(join(projectRoot, '.stepcast', 'plugins'), { recursive: true });
-    writeFileSync(join(projectRoot, '.stepcast', 'plugins', 'probe.mjs'), BACKEND_PLUGIN);
-    writeFileSync(join(projectRoot, 'stepcast.yml'), PREDICATE_PIPELINE);
+    mkdirSync(join(projectRoot, '.burnex', 'plugins'), { recursive: true });
+    writeFileSync(join(projectRoot, '.burnex', 'plugins', 'probe.mjs'), BACKEND_PLUGIN);
+    writeFileSync(join(projectRoot, 'burnex.yml'), PREDICATE_PIPELINE);
     const { config } = resolveConfig({ cwd: home, home, projectPath: null });
     const kernelCache = createKernelCache();
     const server = await startServer(t, { runsRoot, config, home, kernelCache });
@@ -2969,7 +2969,7 @@ jobs:
     // Тот же id и тот же `use` — но объявленные проектным патчем, то есть
     // разрешаемые от каталога проекта.
     writeFileSync(
-      join(projectRoot, '.stepcast', 'plugins.patch.yml'),
+      join(projectRoot, '.burnex', 'plugins.patch.yml'),
       'version: 1\nkind: plugins-patch\nplugins:\n  - id: probe\n    use: ./plugins/probe.mjs\n',
     );
 
@@ -2983,7 +2983,7 @@ jobs:
     const { runsRoot, projectRoot, home } = makeJournalBed();
     seedRun(runsRoot, projectRoot, { runId: 'a' });
     withProjectPlugin(projectRoot, PREDICATE_PLUGIN);
-    writeFileSync(join(projectRoot, 'stepcast.yml'), PREDICATE_PIPELINE);
+    writeFileSync(join(projectRoot, 'burnex.yml'), PREDICATE_PIPELINE);
     const { config } = resolveConfig({ cwd: home, home, projectPath: null });
     const kernelCache = createKernelCache();
     const server = await startServer(t, { runsRoot, config, home, kernelCache });
@@ -2994,7 +2994,7 @@ jobs:
 
     // Правка не трогает ни одной строки дерева — только defaults.model.
     writeFileSync(
-      join(projectRoot, '.stepcast', 'config.yml'),
+      join(projectRoot, '.burnex', 'config.yml'),
       'plugins: ["./plugins/probe.mjs"]\ndefaults:\n  model: opus\n',
     );
 
@@ -3005,10 +3005,10 @@ jobs:
 
   it('собственное ядро демона (ключ — домашний каталог) собирает дерево с домашним патчем, без проектного слоя', async (t) => {
     const { home } = makeJournalBed();
-    mkdirSync(join(home, '.stepcast', 'plugins'), { recursive: true });
-    writeFileSync(join(home, '.stepcast', 'plugins', 'probe.mjs'), PREDICATE_PLUGIN);
+    mkdirSync(join(home, '.burnex', 'plugins'), { recursive: true });
+    writeFileSync(join(home, '.burnex', 'plugins', 'probe.mjs'), PREDICATE_PLUGIN);
     writeFileSync(
-      join(home, '.stepcast', 'plugins.patch.yml'),
+      join(home, '.burnex', 'plugins.patch.yml'),
       'version: 1\nkind: plugins-patch\nplugins:\n  - id: home-probe\n    use: ./plugins/probe.mjs\n',
     );
 
@@ -3026,9 +3026,9 @@ describe('ui-dashboard: изоляция и снятие контекстов я
     const second = makeJournalBed();
     seedRun(first.runsRoot, first.projectRoot, { runId: 'a' });
     withProjectPlugin(first.projectRoot, SHARED_SERVICE_PLUGIN);
-    writeFileSync(join(first.projectRoot, 'stepcast.yml'), DEMO_PIPELINE);
+    writeFileSync(join(first.projectRoot, 'burnex.yml'), DEMO_PIPELINE);
     withProjectPlugin(second.projectRoot, SHARED_SERVICE_PLUGIN);
-    writeFileSync(join(second.projectRoot, 'stepcast.yml'), DEMO_PIPELINE);
+    writeFileSync(join(second.projectRoot, 'burnex.yml'), DEMO_PIPELINE);
     // Второй проект живёт под тем же корнем прогонов, что и первый — иначе
     // обход `listProjects` его не увидит вовсе.
     seedRun(first.runsRoot, second.projectRoot, { runId: 'b' });
@@ -3048,7 +3048,7 @@ describe('ui-dashboard: изоляция и снятие контекстов я
     const { runsRoot, projectRoot, home } = makeJournalBed();
     seedRun(runsRoot, projectRoot, { runId: 'a' });
     withProjectPlugin(projectRoot, SHARED_SERVICE_PLUGIN);
-    writeFileSync(join(projectRoot, 'stepcast.yml'), DEMO_PIPELINE);
+    writeFileSync(join(projectRoot, 'burnex.yml'), DEMO_PIPELINE);
     const { config } = resolveConfig({ cwd: home, home, projectPath: null });
 
     // Ядро поднято ХОЗЯИНОМ кеша, до сервера: именно такое сервер снимать не
@@ -3080,7 +3080,7 @@ describe('ui-dashboard: изоляция и снятие контекстов я
     const { runsRoot, projectRoot, home } = makeJournalBed();
     seedRun(runsRoot, projectRoot, { runId: 'a' });
     withProjectPlugin(projectRoot, SHARED_SERVICE_PLUGIN);
-    writeFileSync(join(projectRoot, 'stepcast.yml'), DEMO_PIPELINE);
+    writeFileSync(join(projectRoot, 'burnex.yml'), DEMO_PIPELINE);
     const { config } = resolveConfig({ cwd: home, home, projectPath: null });
     const kernelCache = createKernelCache();
     const server = await startServer(t, { runsRoot, config, home, kernelCache });
@@ -3117,9 +3117,9 @@ describe('ui-dashboard: изоляция и снятие контекстов я
   it('close() снимает поднятые сервером контексты проектов: процесс завершается сам', () => {
     const { runsRoot, projectRoot, home } = makeJournalBed();
     seedRun(runsRoot, projectRoot, { runId: 'a' });
-    const marker = join(projectRoot, '.stepcast', 'таймер.txt');
+    const marker = join(projectRoot, '.burnex', 'таймер.txt');
     withProjectPlugin(projectRoot, intervalPlugin(marker));
-    writeFileSync(join(projectRoot, 'stepcast.yml'), DEMO_PIPELINE);
+    writeFileSync(join(projectRoot, 'burnex.yml'), DEMO_PIPELINE);
 
     const moduleUrl = (path: string): string =>
       JSON.stringify(pathToFileURL(fileURLToPath(new URL(path, import.meta.url))).href);
@@ -3155,9 +3155,9 @@ describe('ui-daemon: демон загружает только объявлен
     // Плагин объявлен, но пайплайнов у проекта нет: раскрывать нечего, а
     // значит и повода исполнять чужой код нет. Порядок проверок в обходе
     // («нет файлов — дальше» раньше сборки реестра) и есть граница доверия.
-    const marker = join(projectRoot, '.stepcast', 'загружен.txt');
+    const marker = join(projectRoot, '.burnex', 'загружен.txt');
     withProjectPlugin(projectRoot, markerPlugin(marker));
-    writeFileSync(join(other.projectRoot, 'stepcast.yml'), DEMO_PIPELINE);
+    writeFileSync(join(other.projectRoot, 'burnex.yml'), DEMO_PIPELINE);
     const { config } = resolveConfig({ cwd: home, home, projectPath: null });
     const server = await startServer(t, { runsRoot, config, home });
 
@@ -3175,10 +3175,10 @@ describe('ui-daemon: демон загружает только объявлен
     seedRun(runsRoot, projectRoot, { runId: 'a' });
     // Модуль на диске есть, но конфигурация его не объявляет: списка «плагинов
     // витрины» демон не заводит и находкой на диске не пользуется.
-    const marker = join(projectRoot, '.stepcast', 'загружен.txt');
-    mkdirSync(join(projectRoot, '.stepcast', 'plugins'), { recursive: true });
-    writeFileSync(join(projectRoot, '.stepcast', 'plugins', 'probe.mjs'), markerPlugin(marker));
-    writeFileSync(join(projectRoot, 'stepcast.yml'), DEMO_PIPELINE);
+    const marker = join(projectRoot, '.burnex', 'загружен.txt');
+    mkdirSync(join(projectRoot, '.burnex', 'plugins'), { recursive: true });
+    writeFileSync(join(projectRoot, '.burnex', 'plugins', 'probe.mjs'), markerPlugin(marker));
+    writeFileSync(join(projectRoot, 'burnex.yml'), DEMO_PIPELINE);
     const { config } = resolveConfig({ cwd: home, home, projectPath: null });
     const server = await startServer(t, { runsRoot, config, home });
 
@@ -3192,7 +3192,7 @@ describe('ui-daemon: демон загружает только объявлен
     const { runsRoot, projectRoot, home } = makeJournalBed();
     seedRun(runsRoot, projectRoot, { runId: 'a' });
     withProjectPlugin(projectRoot, PREDICATE_PLUGIN);
-    writeFileSync(join(projectRoot, 'stepcast.yml'), PREDICATE_PIPELINE);
+    writeFileSync(join(projectRoot, 'burnex.yml'), PREDICATE_PIPELINE);
     const { config } = resolveConfig({ cwd: home, home, projectPath: null });
     const server = await startServer(t, { runsRoot, config, home });
 
@@ -3210,16 +3210,16 @@ describe('ui-dashboard: отказ загрузки плагина — карт�
   it('несуществующий модуль плагина — карточки с причиной, файлом объявления и спецификатором', async (t) => {
     const { runsRoot, projectRoot, home } = makeJournalBed();
     seedRun(runsRoot, projectRoot, { runId: 'a' });
-    mkdirSync(join(projectRoot, '.stepcast'), { recursive: true });
-    writeFileSync(join(projectRoot, '.stepcast', 'config.yml'), 'plugins: ["./plugins/нет.mjs"]\n');
-    writeFileSync(join(projectRoot, 'stepcast.yml'), DEMO_PIPELINE);
+    mkdirSync(join(projectRoot, '.burnex'), { recursive: true });
+    writeFileSync(join(projectRoot, '.burnex', 'config.yml'), 'plugins: ["./plugins/нет.mjs"]\n');
+    writeFileSync(join(projectRoot, 'burnex.yml'), DEMO_PIPELINE);
     const { config } = resolveConfig({ cwd: home, home, projectPath: null });
     const server = await startServer(t, { runsRoot, config, home });
 
     const pipelines = await fetchJson(server, '/api/pipelines');
     assert.match(String(pick(pipelines.json, 'pipelines', 0, 'error')), /не загружается/);
     assert.match(String(pick(pipelines.json, 'pipelines', 0, 'error')), /\.\/plugins\/нет\.mjs/);
-    assert.equal(pick(pipelines.json, 'pipelines', 0, 'errorFile'), '.stepcast/config.yml');
+    assert.equal(pick(pipelines.json, 'pipelines', 0, 'errorFile'), '.burnex/config.yml');
     assert.equal(pick(pipelines.json, 'pipelines', 0, 'errorAt'), 'plugins');
   });
 
@@ -3241,7 +3241,7 @@ export default {
 };
 `,
     );
-    writeFileSync(join(projectRoot, 'stepcast.yml'), DEMO_PIPELINE);
+    writeFileSync(join(projectRoot, 'burnex.yml'), DEMO_PIPELINE);
     const { config } = resolveConfig({ cwd: home, home, projectPath: null });
     const server = await startServer(t, { runsRoot, config, home });
 
@@ -3251,7 +3251,7 @@ export default {
     // дописанного загрузчиком места карточка вышла бы без ответа на вопрос
     // «какой конфиг это объявил» — не тем составом полей, каким показана
     // нечитаемая конфигурация.
-    assert.equal(pick(pipelines.json, 'pipelines', 0, 'errorFile'), '.stepcast/config.yml');
+    assert.equal(pick(pipelines.json, 'pipelines', 0, 'errorFile'), '.burnex/config.yml');
     assert.equal(pick(pipelines.json, 'pipelines', 0, 'errorAt'), 'plugins');
     assert.match(String(pick(pipelines.json, 'pipelines', 0, 'errorHint')), /снимите один из плагинов/);
   });
@@ -3262,9 +3262,9 @@ export default {
     // Файл объявления лежит вне корня проекта: имя относительно него вышло бы
     // цепочкой `../../..` до домашнего каталога — путём, который ни на что не
     // указывает и вдобавок врёт про принадлежность файла проекту.
-    const globalConfigFile = join(home, '.stepcast', 'config.yml');
+    const globalConfigFile = join(home, '.burnex', 'config.yml');
     writeFileSync(globalConfigFile, `runs:\n  root: ${runsRoot}\nplugins: ["./plugins/нет.mjs"]\n`);
-    writeFileSync(join(projectRoot, 'stepcast.yml'), DEMO_PIPELINE);
+    writeFileSync(join(projectRoot, 'burnex.yml'), DEMO_PIPELINE);
     const { config } = resolveConfig({ cwd: home, home, projectPath: null });
     const server = await startServer(t, { runsRoot, config, home });
 
@@ -3279,10 +3279,10 @@ export default {
     const other = makeJournalBed();
     seedRun(runsRoot, projectRoot, { runId: 'a' });
     seedRun(runsRoot, other.projectRoot, { runId: 'b' });
-    mkdirSync(join(projectRoot, '.stepcast'), { recursive: true });
-    writeFileSync(join(projectRoot, '.stepcast', 'config.yml'), 'plugins: ["./plugins/нет.mjs"]\n');
-    writeFileSync(join(projectRoot, 'stepcast.yml'), DEMO_PIPELINE);
-    writeFileSync(join(other.projectRoot, 'stepcast.yml'), DEMO_PIPELINE);
+    mkdirSync(join(projectRoot, '.burnex'), { recursive: true });
+    writeFileSync(join(projectRoot, '.burnex', 'config.yml'), 'plugins: ["./plugins/нет.mjs"]\n');
+    writeFileSync(join(projectRoot, 'burnex.yml'), DEMO_PIPELINE);
+    writeFileSync(join(other.projectRoot, 'burnex.yml'), DEMO_PIPELINE);
     const { config } = resolveConfig({ cwd: home, home, projectPath: null });
     const server = await startServer(t, { runsRoot, config, home });
 
@@ -3299,9 +3299,9 @@ export default {
   it('исправленное объявление плагина действует следующим запросом — отказ не закеширован', async (t) => {
     const { runsRoot, projectRoot, home } = makeJournalBed();
     seedRun(runsRoot, projectRoot, { runId: 'a' });
-    mkdirSync(join(projectRoot, '.stepcast'), { recursive: true });
-    writeFileSync(join(projectRoot, '.stepcast', 'config.yml'), 'plugins: ["./plugins/нет.mjs"]\n');
-    writeFileSync(join(projectRoot, 'stepcast.yml'), PREDICATE_PIPELINE);
+    mkdirSync(join(projectRoot, '.burnex'), { recursive: true });
+    writeFileSync(join(projectRoot, '.burnex', 'config.yml'), 'plugins: ["./plugins/нет.mjs"]\n');
+    writeFileSync(join(projectRoot, 'burnex.yml'), PREDICATE_PIPELINE);
     const { config } = resolveConfig({ cwd: home, home, projectPath: null });
     const server = await startServer(t, { runsRoot, config, home });
 
@@ -3323,7 +3323,7 @@ describe('ui-dashboard: слой модели шага', () => {
     const { runsRoot, projectRoot, home } = makeJournalBed();
     seedRun(runsRoot, projectRoot, { runId: 'a' });
     writeFileSync(
-      join(projectRoot, 'stepcast.yml'),
+      join(projectRoot, 'burnex.yml'),
       `version: 1
 kind: pipeline
 name: demo
@@ -3348,7 +3348,7 @@ jobs:
     const { runsRoot, projectRoot, home } = makeJournalBed();
     seedRun(runsRoot, projectRoot, { runId: 'a' });
     writeFileSync(
-      join(projectRoot, 'stepcast.yml'),
+      join(projectRoot, 'burnex.yml'),
       `version: 1
 kind: pipeline
 name: demo
@@ -3373,11 +3373,11 @@ jobs:
   it('слой config: проект со своим defaults.model показан своим значением и своим файлом', async (t) => {
     const { runsRoot, projectRoot, home } = makeJournalBed();
     seedRun(runsRoot, projectRoot, { runId: 'a' });
-    mkdirSync(join(projectRoot, '.stepcast'), { recursive: true });
-    const projectConfigFile = join(projectRoot, '.stepcast', 'config.yml');
+    mkdirSync(join(projectRoot, '.burnex'), { recursive: true });
+    const projectConfigFile = join(projectRoot, '.burnex', 'config.yml');
     writeFileSync(projectConfigFile, 'defaults:\n  model: opus\n');
     writeFileSync(
-      join(projectRoot, 'stepcast.yml'),
+      join(projectRoot, 'burnex.yml'),
       `version: 1
 kind: pipeline
 name: demo
@@ -3391,7 +3391,7 @@ jobs:
     // Демон поднят с другим умолчанием модели: карточка обязана показать
     // значение проекта, а не каталога демона.
     writeFileSync(
-      join(home, '.stepcast', 'config.yml'),
+      join(home, '.burnex', 'config.yml'),
       `runs:\n  root: ${runsRoot}\ndefaults:\n  model: sonnet\n`,
     );
     const { config } = resolveConfig({ cwd: home, home, projectPath: null });
@@ -3411,7 +3411,7 @@ jobs:
     const { runsRoot, projectRoot, home } = makeJournalBed();
     seedRun(runsRoot, projectRoot, { runId: 'a' });
     writeFileSync(
-      join(projectRoot, 'stepcast.yml'),
+      join(projectRoot, 'burnex.yml'),
       `version: 1
 kind: pipeline
 name: demo
@@ -3422,7 +3422,7 @@ jobs:
         prompt: спроси
 `,
     );
-    const globalConfigFile = join(home, '.stepcast', 'config.yml');
+    const globalConfigFile = join(home, '.burnex', 'config.yml');
     writeFileSync(globalConfigFile, `runs:\n  root: ${runsRoot}\ndefaults:\n  model: sonnet\n`);
     const { config } = resolveConfig({ cwd: home, home, projectPath: null });
     const server = await startServer(t, { runsRoot, config, home });
@@ -3440,7 +3440,7 @@ jobs:
     const { runsRoot, projectRoot, home } = makeJournalBed();
     seedRun(runsRoot, projectRoot, { runId: 'a' });
     writeFileSync(
-      join(projectRoot, 'stepcast.yml'),
+      join(projectRoot, 'burnex.yml'),
       `version: 1
 kind: pipeline
 name: demo
@@ -3452,7 +3452,7 @@ jobs:
 `,
     );
     writeFileSync(
-      join(home, '.stepcast', 'config.yml'),
+      join(home, '.burnex', 'config.yml'),
       `runs:\n  root: ${runsRoot}\nbackends:\n  claude:\n    default_model: haiku\n`,
     );
     const { config } = resolveConfig({ cwd: home, home, projectPath: null });
@@ -3468,7 +3468,7 @@ jobs:
     const { runsRoot, projectRoot, home } = makeJournalBed();
     seedRun(runsRoot, projectRoot, { runId: 'a' });
     writeFileSync(
-      join(projectRoot, 'stepcast.yml'),
+      join(projectRoot, 'burnex.yml'),
       `version: 1
 kind: pipeline
 name: demo
@@ -3491,9 +3491,9 @@ jobs:
   it('нечитаемая конфигурация проекта не выдаёт слой модели, а даёт карточку с объяснением', async (t) => {
     const { runsRoot, projectRoot, home } = makeJournalBed();
     seedRun(runsRoot, projectRoot, { runId: 'a' });
-    mkdirSync(join(projectRoot, '.stepcast'), { recursive: true });
-    writeFileSync(join(projectRoot, '.stepcast', 'config.yml'), 'project:\n  check: "   "\n');
-    writeFileSync(join(projectRoot, 'stepcast.yml'), DEMO_PIPELINE);
+    mkdirSync(join(projectRoot, '.burnex'), { recursive: true });
+    writeFileSync(join(projectRoot, '.burnex', 'config.yml'), 'project:\n  check: "   "\n');
+    writeFileSync(join(projectRoot, 'burnex.yml'), DEMO_PIPELINE);
     const { config } = resolveConfig({ cwd: home, home, projectPath: null });
     const server = await startServer(t, { runsRoot, config, home });
 
@@ -3507,7 +3507,7 @@ describe('ui-dashboard: слой effort шага', () => {
   it('показывает effective effort и слой pipeline', async (t) => {
     const { runsRoot, projectRoot, home } = makeJournalBed();
     seedRun(runsRoot, projectRoot, { runId: 'a' });
-    writeFileSync(join(projectRoot, 'stepcast.yml'), `version: 1
+    writeFileSync(join(projectRoot, 'burnex.yml'), `version: 1
 kind: pipeline
 name: demo
 effort: high
@@ -3528,7 +3528,7 @@ jobs:
   it('называет файл settings для config effort и none при отсутствии', async (t) => {
     const { runsRoot, projectRoot, home } = makeJournalBed();
     seedRun(runsRoot, projectRoot, { runId: 'a' });
-    writeFileSync(join(projectRoot, 'stepcast.yml'), `version: 1
+    writeFileSync(join(projectRoot, 'burnex.yml'), `version: 1
 kind: pipeline
 name: demo
 jobs:
@@ -3537,7 +3537,7 @@ jobs:
       - id: a
         prompt: спроси
 `);
-    const configFile = join(home, '.stepcast', 'config.yml');
+    const configFile = join(home, '.burnex', 'config.yml');
     writeFileSync(configFile, `runs:\n  root: ${runsRoot}\ndefaults:\n  effort: medium\n`);
     const { config } = resolveConfig({ cwd: home, home, projectPath: null });
     const server = await startServer(t, { runsRoot, config, home });
@@ -3555,7 +3555,7 @@ jobs:
   it('показывает tier provenance вместе с effective effort', async (t) => {
     const { runsRoot, projectRoot, home } = makeJournalBed();
     seedRun(runsRoot, projectRoot, { runId: 'a' });
-    writeFileSync(join(projectRoot, 'stepcast.yml'), `version: 1
+    writeFileSync(join(projectRoot, 'burnex.yml'), `version: 1
 kind: pipeline
 name: demo
 model_tier: review
@@ -3565,7 +3565,7 @@ jobs:
       - id: a
         prompt: спроси
 `);
-    writeFileSync(join(home, '.stepcast', 'config.yml'), `runs:
+    writeFileSync(join(home, '.burnex', 'config.yml'), `runs:
   root: ${runsRoot}
 backends:
   claude:
@@ -4213,7 +4213,7 @@ describe('ui-dashboard: конфигурация агентов и tier', () => 
   it('сохраняет модели и effort каждого агента и подключает поставляемый Codex', async (t) => {
     const { runsRoot, home } = makeJournalBed();
     const server = await startServer(t, { runsRoot, home });
-    const file = join(home, '.stepcast', 'config.yml');
+    const file = join(home, '.burnex', 'config.yml');
     writeFileSync(file, `# сохранить комментарий\n${readFileSync(file, 'utf8')}`);
     const saved = await sendJson(server, {
       method: 'PUT', path: '/api/settings',
@@ -4263,7 +4263,7 @@ describe('ui-dashboard: конфигурация агентов и tier', () => 
   it('не удаляет встроенный tier и не меняет файл при отказе', async (t) => {
     const { runsRoot, home } = makeJournalBed();
     const server = await startServer(t, { runsRoot, home });
-    const file = join(home, '.stepcast', 'config.yml');
+    const file = join(home, '.burnex', 'config.yml');
     const before = readFileSync(file, 'utf8');
     const result = await sendJson(server, {
       method: 'PUT', path: '/api/settings', body: JSON.stringify({ removeModelTiers: ['deep'] }),
@@ -4276,7 +4276,7 @@ describe('ui-dashboard: конфигурация агентов и tier', () => 
   it('отклоняет неправильные правки целиком, не меняя файл', async (t) => {
     const { runsRoot, home } = makeJournalBed();
     const server = await startServer(t, { runsRoot, home });
-    const file = join(home, '.stepcast', 'config.yml');
+    const file = join(home, '.burnex', 'config.yml');
     const before = readFileSync(file, 'utf8');
     for (const patch of [
       null, [], { backends: { claude: { modelTiers: { Review: { model: 'opus' } } } } },
@@ -4323,7 +4323,7 @@ describe('ui-dashboard: конфигурация агентов и tier', () => 
 
   it('уже подключённый поставляемый бэкенд не дублируется и не несёт plugin', async (t) => {
     const { runsRoot, home } = makeJournalBed();
-    const file = join(home, '.stepcast', 'config.yml');
+    const file = join(home, '.burnex', 'config.yml');
     writeFileSync(file, `${readFileSync(file, 'utf8')}\nplugins: [burnex/backends/cursor]\n`);
     const server = await startServer(t, { runsRoot, home });
     const result = await fetchJson(server, '/api/settings');
@@ -4336,7 +4336,7 @@ describe('ui-dashboard: конфигурация агентов и tier', () => 
   it('connect подключает бэкенд и делает его агентом, сохраняя комментарии; повтор не дублирует', async (t) => {
     const { runsRoot, home } = makeJournalBed();
     const server = await startServer(t, { runsRoot, home });
-    const file = join(home, '.stepcast', 'config.yml');
+    const file = join(home, '.burnex', 'config.yml');
     writeFileSync(file, `# сохранить комментарий\n${readFileSync(file, 'utf8')}`);
     const saved = await sendJson(server, {
       method: 'PUT', path: '/api/settings', body: JSON.stringify({ agent: 'cursor-agent', connect: ['cursor-agent'] }),
@@ -4360,7 +4360,7 @@ describe('ui-dashboard: конфигурация агентов и tier', () => 
   it('connect отказывает на claude и неизвестном имени, не меняя файл', async (t) => {
     const { runsRoot, home } = makeJournalBed();
     const server = await startServer(t, { runsRoot, home });
-    const file = join(home, '.stepcast', 'config.yml');
+    const file = join(home, '.burnex', 'config.yml');
     const before = readFileSync(file, 'utf8');
     for (const name of ['claude', 'gemini']) {
       const result = await sendJson(server, {
@@ -4374,7 +4374,7 @@ describe('ui-dashboard: конфигурация агентов и tier', () => 
 
   it('удаление своего tier не спотыкается о неподключённые бэкенды без карточки в файле', async (t) => {
     const { runsRoot, home } = makeJournalBed();
-    const file = join(home, '.stepcast', 'config.yml');
+    const file = join(home, '.burnex', 'config.yml');
     writeFileSync(file, `${readFileSync(file, 'utf8')}backends:\n  claude:\n    model_tiers:\n      review: opus\n`);
     const server = await startServer(t, { runsRoot, home });
     const result = await sendJson(server, {
@@ -4397,7 +4397,7 @@ describe('ui-dashboard: конфигурация агентов и tier', () => 
 
     // Сборка состава отказывает (рядом объявлен несуществующий плагин), и
     // демон живёт на прежнем ядре без адаптера, хотя строка в `plugins:` уже есть.
-    const file = join(home, '.stepcast', 'config.yml');
+    const file = join(home, '.burnex', 'config.yml');
     writeFileSync(file, `${readFileSync(file, 'utf8')}plugins: [burnex/backends/copilot, ./missing-plugin.js]\n`);
     watcher.poll();
 
@@ -4418,7 +4418,7 @@ describe('ui-dashboard: конфигурация агентов и tier', () => 
   it('неподключённый агент без connect отклоняется', async (t) => {
     const { runsRoot, home } = makeJournalBed();
     const server = await startServer(t, { runsRoot, home });
-    const file = join(home, '.stepcast', 'config.yml');
+    const file = join(home, '.burnex', 'config.yml');
     const before = readFileSync(file, 'utf8');
     const result = await sendJson(server, { method: 'PUT', path: '/api/settings', body: JSON.stringify({ agent: 'copilot' }) });
     assert.equal(result.code, 400);
@@ -4897,14 +4897,14 @@ describe('ui-routes: экран «Маршруты»', () => {
       body: JSON.stringify({ layer: 'project', route: newRoute }),
     });
     assert.equal(written.code, 200);
-    assert.match(readFileSync(join(projectRoot, '.stepcast', 'routes.yml'), 'utf8'), /my-route/);
+    assert.match(readFileSync(join(projectRoot, '.burnex', 'routes.yml'), 'utf8'), /my-route/);
   });
 
   it('POST /api/routes в файл, который не разбирается, отказывает и не переписывает файл', async (t) => {
     const { runsRoot } = makeJournalBed();
     const { home } = makeJournalBed();
-    mkdirSync(join(home, '.stepcast'), { recursive: true });
-    const brokenPath = join(home, '.stepcast', 'routes.yml');
+    mkdirSync(join(home, '.burnex'), { recursive: true });
+    const brokenPath = join(home, '.burnex', 'routes.yml');
     const brokenContent = 'routes: [{ id: bad, path: 7 }]\n';
     writeFileSync(brokenPath, brokenContent);
     const server = await startServer(t, { runsRoot, home });
@@ -4950,8 +4950,8 @@ describe('ui-routes: экран «Маршруты»', () => {
     const stream = openStream(t, server, '/api/events');
     await settle();
 
-    mkdirSync(join(home, '.stepcast'), { recursive: true });
-    writeFileSync(join(home, '.stepcast', 'routes.yml'), 'routes:\n  - id: screen-cleanup\n    nav:\n      title: Чистка\n');
+    mkdirSync(join(home, '.burnex'), { recursive: true });
+    writeFileSync(join(home, '.burnex', 'routes.yml'), 'routes:\n  - id: screen-cleanup\n    nav:\n      title: Чистка\n');
     await settle(300);
 
     const routeEvents = stream.events.filter((event) => event.event === 'routes');
@@ -4963,8 +4963,8 @@ describe('ui-routes: экран «Маршруты»', () => {
   it('GET /api/routes отдаёт отключённые строки отдельно от действующих', async (t) => {
     const { runsRoot } = makeJournalBed();
     const { home } = makeJournalBed();
-    mkdirSync(join(home, '.stepcast'), { recursive: true });
-    writeFileSync(join(home, '.stepcast', 'routes.yml'), 'routes:\n  - id: screen-agents\n    enabled: false\n');
+    mkdirSync(join(home, '.burnex'), { recursive: true });
+    writeFileSync(join(home, '.burnex', 'routes.yml'), 'routes:\n  - id: screen-agents\n    enabled: false\n');
     const server = await startServer(t, { runsRoot, home });
 
     const { json } = await fetchJson(server, '/api/routes');
@@ -4987,8 +4987,8 @@ describe('ui-routes: экран «Маршруты»', () => {
     const before = await fetchJson(server, '/api/routes');
     assert.equal(before.json.buildError, undefined);
 
-    mkdirSync(join(home, '.stepcast'), { recursive: true });
-    writeFileSync(join(home, '.stepcast', 'routes.yml'), 'routes:\n  - id: bad\n    bogus: 1\n');
+    mkdirSync(join(home, '.burnex'), { recursive: true });
+    writeFileSync(join(home, '.burnex', 'routes.yml'), 'routes:\n  - id: bad\n    bogus: 1\n');
     watcher.poll();
 
     const after = await fetchJson(server, '/api/routes');
@@ -5000,8 +5000,8 @@ describe('ui-routes: экран «Маршруты»', () => {
   it('сохраняет комментарии и другие строки файла при записи', async (t) => {
     const { runsRoot } = makeJournalBed();
     const { home } = makeJournalBed();
-    mkdirSync(join(home, '.stepcast'), { recursive: true });
-    const path = join(home, '.stepcast', 'routes.yml');
+    mkdirSync(join(home, '.burnex'), { recursive: true });
+    const path = join(home, '.burnex', 'routes.yml');
     writeFileSync(path, '# мои маршруты\nroutes:\n  - id: screen-cleanup # правил вручную\n    enabled: false\n');
     const server = await startServer(t, { runsRoot, home });
 
@@ -5031,8 +5031,8 @@ describe('ui-dashboards: GET/POST /api/dashboards', () => {
   it('GET /api/dashboards отдаёт оба слоя с их источником', async (t) => {
     const { runsRoot } = makeJournalBed();
     const { home } = makeJournalBed();
-    mkdirSync(join(home, '.stepcast', 'dashboards'), { recursive: true });
-    writeFileSync(join(home, '.stepcast', 'dashboards', 'release.yml'), 'cells: []\n');
+    mkdirSync(join(home, '.burnex', 'dashboards'), { recursive: true });
+    writeFileSync(join(home, '.burnex', 'dashboards', 'release.yml'), 'cells: []\n');
     const server = await startServer(t, { runsRoot, home });
 
     const { code, json } = await fetchJson(server, '/api/dashboards');
@@ -5040,7 +5040,7 @@ describe('ui-dashboards: GET/POST /api/dashboards', () => {
     const dashboards = json.dashboards as Array<{ id: string; layer: string; file: string }>;
     const release = dashboards.find((d) => d.id === 'release');
     assert.equal(release?.layer, 'home');
-    assert.equal(release?.file, join(home, '.stepcast', 'dashboards', 'release.yml'));
+    assert.equal(release?.file, join(home, '.burnex', 'dashboards', 'release.yml'));
   });
 
   it('POST /api/dashboards создаёт файл дашборда в домашнем слое', async (t) => {
@@ -5071,7 +5071,7 @@ describe('ui-dashboards: GET/POST /api/dashboards', () => {
       body: JSON.stringify({ layer: 'home', id: 'release', document: DOCUMENT }),
     });
 
-    const fingerprintPath = join(home, '.stepcast', 'dashboards', 'release.yml');
+    const fingerprintPath = join(home, '.burnex', 'dashboards', 'release.yml');
     const stat = statSync(fingerprintPath);
 
     const changed = { ...DOCUMENT, title: 'Другое название' };
@@ -5108,8 +5108,8 @@ describe('ui-dashboards: GET/POST /api/dashboards', () => {
   it('POST /api/dashboards в неразбираемый файл отклонён названным местом разбора, файл не изменён', async (t) => {
     const { runsRoot } = makeJournalBed();
     const { home } = makeJournalBed();
-    mkdirSync(join(home, '.stepcast', 'dashboards'), { recursive: true });
-    const path = join(home, '.stepcast', 'dashboards', 'release.yml');
+    mkdirSync(join(home, '.burnex', 'dashboards'), { recursive: true });
+    const path = join(home, '.burnex', 'dashboards', 'release.yml');
     // Повтор ключа `cells:`: YAML такой файл не разбирает, а разбор «как
     // получится» даёт схемно верный объект — именно на нём сохранение и
     // переписало бы чужой блок молча.
@@ -5190,8 +5190,8 @@ describe('ui-dashboards: GET/POST /api/dashboards', () => {
     const { runsRoot, projectRoot } = makeJournalBed();
     const { home } = makeJournalBed();
     seedRun(runsRoot, projectRoot, { runId: 'a' });
-    mkdirSync(join(home, '.stepcast', 'dashboards'), { recursive: true });
-    const path = join(home, '.stepcast', 'dashboards', 'release.yml');
+    mkdirSync(join(home, '.burnex', 'dashboards'), { recursive: true });
+    const path = join(home, '.burnex', 'dashboards', 'release.yml');
     writeFileSync(path, 'title: Релиз\ncells: []\n');
     const watcher = startWatcher(t, runsRoot, 10_000, home);
     const server = await startServer(t, { runsRoot, home, watcher });
@@ -5222,8 +5222,8 @@ describe('ui-dashboards: GET/POST /api/dashboards', () => {
     const { runsRoot, projectRoot } = makeJournalBed();
     const { home } = makeJournalBed();
     const journal = seedRun(runsRoot, projectRoot, { runId: 'a', status: 'running' });
-    mkdirSync(join(home, '.stepcast', 'dashboards'), { recursive: true });
-    writeFileSync(join(home, '.stepcast', 'dashboards', 'release.yml'), 'title: Релиз\ncells: []\n');
+    mkdirSync(join(home, '.burnex', 'dashboards'), { recursive: true });
+    writeFileSync(join(home, '.burnex', 'dashboards', 'release.yml'), 'title: Релиз\ncells: []\n');
     const watcher = startWatcher(t, runsRoot, 10_000, home);
     const server = await startServer(t, { runsRoot, home, watcher });
 
@@ -5252,9 +5252,9 @@ describe('ui-dashboards: GET/POST /api/dashboards', () => {
   it('сломанный файл приходит потоком причиной рядом с исправными дашбордами', async (t) => {
     const { runsRoot } = makeJournalBed();
     const { home } = makeJournalBed();
-    mkdirSync(join(home, '.stepcast', 'dashboards'), { recursive: true });
-    writeFileSync(join(home, '.stepcast', 'dashboards', 'release.yml'), 'title: Релиз\ncells: []\n');
-    writeFileSync(join(home, '.stepcast', 'dashboards', 'broken.yml'), 'cells: []\nbogus: 1\n');
+    mkdirSync(join(home, '.burnex', 'dashboards'), { recursive: true });
+    writeFileSync(join(home, '.burnex', 'dashboards', 'release.yml'), 'title: Релиз\ncells: []\n');
+    writeFileSync(join(home, '.burnex', 'dashboards', 'broken.yml'), 'cells: []\nbogus: 1\n');
     const server = await startServer(t, { runsRoot, home });
 
     const stream = openStream(t, server, '/api/events');
@@ -5268,9 +5268,9 @@ describe('ui-dashboards: GET/POST /api/dashboards', () => {
   it('отключение строки ui-dashboards патчем убирает GET /api/dashboards, оставляя прочие маршруты', async (t) => {
     const { runsRoot } = makeJournalBed();
     const { home } = makeJournalBed();
-    mkdirSync(join(home, '.stepcast'), { recursive: true });
+    mkdirSync(join(home, '.burnex'), { recursive: true });
     writeFileSync(
-      join(home, '.stepcast', 'plugins.patch.yml'),
+      join(home, '.burnex', 'plugins.patch.yml'),
       'version: 1\nkind: plugins-patch\nplugins:\n  - id: ui-dashboards\n    use: burnex:ui-dashboards\n    enabled: false\n',
     );
     const server = await startServer(t, { runsRoot, home });
@@ -5310,7 +5310,7 @@ describe('ui-daemon: POST /api/run', () => {
   it('запускает известный пайплайн подставным пуском с ожидаемым cwd и файлом', async (t) => {
     const { runsRoot, projectRoot } = makeJournalBed();
     seedRun(runsRoot, projectRoot, { runId: 'seed' });
-    writeFileSync(join(projectRoot, 'stepcast.yml'), MINIMAL_PIPELINE_YAML);
+    writeFileSync(join(projectRoot, 'burnex.yml'), MINIMAL_PIPELINE_YAML);
     const key = projectKey(projectRoot);
     const { launchRun, calls } = stubLaunch();
     const server = await createUiServer({ runsRoot, port: 0, launchRun });
@@ -5319,20 +5319,20 @@ describe('ui-daemon: POST /api/run', () => {
     const written = await sendJson(server, {
       method: 'POST',
       path: '/api/run',
-      body: JSON.stringify({ project: key, pipeline: 'stepcast.yml' }),
+      body: JSON.stringify({ project: key, pipeline: 'burnex.yml' }),
     });
     assert.equal(written.code, 202);
     assert.equal(calls.length, 1);
     assert.equal(calls[0]?.cwd, projectRoot);
     assert.equal(calls[0]?.runsRoot, runsRoot);
     assert.equal(calls[0]?.projectKey, key);
-    assert.equal(calls[0]?.pipeline, 'stepcast.yml');
+    assert.equal(calls[0]?.pipeline, 'burnex.yml');
   });
 
   it('происхождение «по расписанию» от формы не принимается: запрос с scheduled отклонён без пуска', async (t) => {
     const { runsRoot, projectRoot } = makeJournalBed();
     seedRun(runsRoot, projectRoot, { runId: 'seed' });
-    writeFileSync(join(projectRoot, 'stepcast.yml'), MINIMAL_PIPELINE_YAML);
+    writeFileSync(join(projectRoot, 'burnex.yml'), MINIMAL_PIPELINE_YAML);
     const { launchRun, calls } = stubLaunch();
     const server = await createUiServer({ runsRoot, port: 0, launchRun });
     t.after(() => server.close());
@@ -5342,7 +5342,7 @@ describe('ui-daemon: POST /api/run', () => {
       path: '/api/run',
       body: JSON.stringify({
         project: projectKey(projectRoot),
-        pipeline: 'stepcast.yml',
+        pipeline: 'burnex.yml',
         scheduled: { entry: 0, moment: '2026-11-01T03:00:00Z', catchup: false },
       }),
     });
@@ -5359,7 +5359,7 @@ describe('ui-daemon: POST /api/run', () => {
     const written = await sendJson(server, {
       method: 'POST',
       path: '/api/run',
-      body: JSON.stringify({ project: 'нет-такого', pipeline: 'stepcast.yml' }),
+      body: JSON.stringify({ project: 'нет-такого', pipeline: 'burnex.yml' }),
     });
     assert.equal(written.code, 400);
     assert.equal(calls.length, 0);
@@ -5368,7 +5368,7 @@ describe('ui-daemon: POST /api/run', () => {
   it('неизвестный файл пайплайна отклонён без единого пуска', async (t) => {
     const { runsRoot, projectRoot } = makeJournalBed();
     seedRun(runsRoot, projectRoot, { runId: 'seed' });
-    writeFileSync(join(projectRoot, 'stepcast.yml'), MINIMAL_PIPELINE_YAML);
+    writeFileSync(join(projectRoot, 'burnex.yml'), MINIMAL_PIPELINE_YAML);
     const key = projectKey(projectRoot);
     const { launchRun, calls } = stubLaunch();
     const server = await createUiServer({ runsRoot, port: 0, launchRun });
@@ -5386,7 +5386,7 @@ describe('ui-daemon: POST /api/run', () => {
   it('env доезжает до пуска, а плохое имя и многострочное значение отклонены без пуска', async (t) => {
     const { runsRoot, projectRoot } = makeJournalBed();
     seedRun(runsRoot, projectRoot, { runId: 'seed' });
-    writeFileSync(join(projectRoot, 'stepcast.yml'), MINIMAL_PIPELINE_YAML);
+    writeFileSync(join(projectRoot, 'burnex.yml'), MINIMAL_PIPELINE_YAML);
     const key = projectKey(projectRoot);
     const { launchRun, calls } = stubLaunch();
     const server = await createUiServer({ runsRoot, port: 0, launchRun });
@@ -5396,7 +5396,7 @@ describe('ui-daemon: POST /api/run', () => {
       sendJson(server, {
         method: 'POST',
         path: '/api/run',
-        body: JSON.stringify({ project: key, pipeline: 'stepcast.yml', env }),
+        body: JSON.stringify({ project: key, pipeline: 'burnex.yml', env }),
       });
 
     assert.equal((await post({ MODE: 'fast' })).code, 202);
@@ -5410,7 +5410,7 @@ describe('ui-daemon: POST /api/run', () => {
   it('shadow доезжает до пуска, не булево значение отклонено без пуска', async (t) => {
     const { runsRoot, projectRoot } = makeJournalBed();
     seedRun(runsRoot, projectRoot, { runId: 'seed' });
-    writeFileSync(join(projectRoot, 'stepcast.yml'), MINIMAL_PIPELINE_YAML);
+    writeFileSync(join(projectRoot, 'burnex.yml'), MINIMAL_PIPELINE_YAML);
     const key = projectKey(projectRoot);
     const { launchRun, calls } = stubLaunch();
     const server = await createUiServer({ runsRoot, port: 0, launchRun });
@@ -5420,7 +5420,7 @@ describe('ui-daemon: POST /api/run', () => {
       sendJson(server, {
         method: 'POST',
         path: '/api/run',
-        body: JSON.stringify({ project: key, pipeline: 'stepcast.yml', shadow }),
+        body: JSON.stringify({ project: key, pipeline: 'burnex.yml', shadow }),
       });
 
     assert.equal((await post(true)).code, 202);
@@ -5434,7 +5434,7 @@ describe('ui-daemon: POST /api/run', () => {
   it('agent доезжает до пуска, флагоподобное и не строковое значение отклонено без пуска', async (t) => {
     const { runsRoot, projectRoot } = makeJournalBed();
     seedRun(runsRoot, projectRoot, { runId: 'seed' });
-    writeFileSync(join(projectRoot, 'stepcast.yml'), MINIMAL_PIPELINE_YAML);
+    writeFileSync(join(projectRoot, 'burnex.yml'), MINIMAL_PIPELINE_YAML);
     const key = projectKey(projectRoot);
     const { launchRun, calls } = stubLaunch();
     const server = await createUiServer({ runsRoot, port: 0, launchRun });
@@ -5444,7 +5444,7 @@ describe('ui-daemon: POST /api/run', () => {
       sendJson(server, {
         method: 'POST',
         path: '/api/run',
-        body: JSON.stringify({ project: key, pipeline: 'stepcast.yml', ...extra }),
+        body: JSON.stringify({ project: key, pipeline: 'burnex.yml', ...extra }),
       });
 
     assert.equal((await post({ agent: 'codex' })).code, 202);
@@ -5463,7 +5463,7 @@ describe('ui-daemon: POST /api/run', () => {
   it('лишние поля тела отклонены', async (t) => {
     const { runsRoot, projectRoot } = makeJournalBed();
     seedRun(runsRoot, projectRoot, { runId: 'seed' });
-    writeFileSync(join(projectRoot, 'stepcast.yml'), MINIMAL_PIPELINE_YAML);
+    writeFileSync(join(projectRoot, 'burnex.yml'), MINIMAL_PIPELINE_YAML);
     const key = projectKey(projectRoot);
     const { launchRun, calls } = stubLaunch();
     const server = await createUiServer({ runsRoot, port: 0, launchRun });
@@ -5472,7 +5472,7 @@ describe('ui-daemon: POST /api/run', () => {
     const written = await sendJson(server, {
       method: 'POST',
       path: '/api/run',
-      body: JSON.stringify({ project: key, pipeline: 'stepcast.yml', bogus: 1 }),
+      body: JSON.stringify({ project: key, pipeline: 'burnex.yml', bogus: 1 }),
     });
     assert.equal(written.code, 400);
     assert.equal(calls.length, 0);
@@ -5517,7 +5517,7 @@ describe('ui-daemon: POST /api/run', () => {
   it('живой прогон того же пайплайна не отменяет новый запуск', async (t) => {
     const { runsRoot, projectRoot } = makeJournalBed();
     seedRun(runsRoot, projectRoot, { runId: 'running', status: 'running' });
-    writeFileSync(join(projectRoot, 'stepcast.yml'), MINIMAL_PIPELINE_YAML);
+    writeFileSync(join(projectRoot, 'burnex.yml'), MINIMAL_PIPELINE_YAML);
     const key = projectKey(projectRoot);
     const { launchRun, calls } = stubLaunch();
     const server = await createUiServer({ runsRoot, port: 0, launchRun });
@@ -5526,7 +5526,7 @@ describe('ui-daemon: POST /api/run', () => {
     const written = await sendJson(server, {
       method: 'POST',
       path: '/api/run',
-      body: JSON.stringify({ project: key, pipeline: 'stepcast.yml' }),
+      body: JSON.stringify({ project: key, pipeline: 'burnex.yml' }),
     });
     assert.equal(written.code, 202);
     assert.equal(calls.length, 1);
@@ -5542,7 +5542,7 @@ describe('ui-daemon: POST /api/run', () => {
       cwd: projectRoot,
       runsRoot,
       projectKey: projectKey(projectRoot),
-      pipeline: 'stepcast.yml',
+      pipeline: 'burnex.yml',
       execPath: join(projectRoot, 'нет-такого-узла'),
       onError: (error) => errors.push(error),
     });
@@ -5555,9 +5555,9 @@ describe('ui-daemon: POST /api/run', () => {
   it('отключение строки ui-run-launch патчем убирает только POST /api/run', async (t) => {
     const { runsRoot } = makeJournalBed();
     const { home } = makeJournalBed();
-    mkdirSync(join(home, '.stepcast'), { recursive: true });
+    mkdirSync(join(home, '.burnex'), { recursive: true });
     writeFileSync(
-      join(home, '.stepcast', 'plugins.patch.yml'),
+      join(home, '.burnex', 'plugins.patch.yml'),
       'version: 1\nkind: plugins-patch\nplugins:\n  - id: ui-run-launch\n    use: burnex:ui-run-launch\n    enabled: false\n',
     );
     const server = await createUiServer({ runsRoot, home, port: 0 });
@@ -5695,9 +5695,9 @@ describe('ui-daemon: POST /api/run/decision', () => {
   it('отключение строки screen-decisions патчем убирает маршрут и экран', async (t) => {
     const { runsRoot } = makeJournalBed();
     const { home } = makeJournalBed();
-    mkdirSync(join(home, '.stepcast'), { recursive: true });
+    mkdirSync(join(home, '.burnex'), { recursive: true });
     writeFileSync(
-      join(home, '.stepcast', 'plugins.patch.yml'),
+      join(home, '.burnex', 'plugins.patch.yml'),
       'version: 1\nkind: plugins-patch\nplugins:\n  - id: screen-decisions\n    use: burnex:screen-decisions\n    enabled: false\n',
     );
     const server = await createUiServer({ runsRoot, home, port: 0 });
@@ -5735,7 +5735,7 @@ describe('ui-daemon: POST /api/run/resume', () => {
   function seedResumable(status: 'success' | 'running' = 'success'): ReturnType<typeof makeJournalBed> & { key: string } {
     const bed = makeJournalBed();
     writeFileSync(
-      join(bed.projectRoot, 'stepcast.yml'),
+      join(bed.projectRoot, 'burnex.yml'),
       'kind: pipeline\nname: demo\njobs:\n  build:\n    steps:\n      - id: code\n        run: echo hi\n',
     );
     seedRun(bed.runsRoot, bed.projectRoot, {
@@ -5856,9 +5856,9 @@ jobs:
   function agentsBed() {
     const { runsRoot, projectRoot, home } = makeJournalBed();
     seedRun(runsRoot, projectRoot, { runId: 'a' });
-    mkdirSync(join(projectRoot, '.stepcast', 'pipelines'), { recursive: true });
-    writeFileSync(join(projectRoot, '.stepcast', 'pipelines', 'p.yml'), PIPELINE);
-    const file = join(home, '.stepcast', 'config.yml');
+    mkdirSync(join(projectRoot, '.burnex', 'pipelines'), { recursive: true });
+    writeFileSync(join(projectRoot, '.burnex', 'pipelines', 'p.yml'), PIPELINE);
+    const file = join(home, '.burnex', 'config.yml');
     writeFileSync(file, `# корень прогонов задан тестом\n${readFileSync(file, 'utf8')}`);
     const { config } = resolveConfig({ cwd: home, home, projectPath: null });
     return { runsRoot, home, file, config };
@@ -5978,7 +5978,7 @@ jobs:
 
 describe('ui-daemon: пайплайны пакетов (packages-directory-layer)', () => {
   function writePackagePipeline(root: string, name: string, pipeline: string, yaml: string): string {
-    const dir = join(root, '.stepcast', 'packages', name);
+    const dir = join(root, '.burnex', 'packages', name);
     mkdirSync(join(dir, 'pipelines'), { recursive: true });
     writeFileSync(
       join(dir, 'package.yml'),
@@ -6023,7 +6023,7 @@ describe('ui-daemon: пайплайны пакетов (packages-directory-layer
       'report',
       'version: 1\nkind: pipeline\nname: report\njobs:\n  build:\n    steps:\n      - id: hi\n        uses: tools-greet\n',
     );
-    const stepDir = join(home, '.stepcast', 'packages', 'tools', 'steps', 'tools-greet');
+    const stepDir = join(home, '.burnex', 'packages', 'tools', 'steps', 'tools-greet');
     mkdirSync(stepDir, { recursive: true });
     writeFileSync(
       join(stepDir, 'step.yml'),
@@ -6108,7 +6108,7 @@ describe('ui-daemon: пакеты без перезапуска (packages-direct
   const WIDGET_SOURCE = 'export default function Clock() { return null; }\n';
 
   function writePackage(projectRoot: string): string {
-    const dir = join(projectRoot, '.stepcast', 'packages', 'hello');
+    const dir = join(projectRoot, '.burnex', 'packages', 'hello');
     mkdirSync(join(dir, 'widgets'), { recursive: true });
     mkdirSync(join(dir, 'dashboards'), { recursive: true });
     writeFileSync(
@@ -6233,7 +6233,7 @@ describe('ui-daemon: пакеты без перезапуска (packages-direct
     const server = await startServer(t, { runsRoot, home, projectRoot, watcher });
 
     const listed = await fetchJson(server, '/api/packages');
-    const index = buildPackageIndex({ projectRoot, globalPath: join(home, '.stepcast', 'config.yml') });
+    const index = buildPackageIndex({ projectRoot, globalPath: join(home, '.burnex', 'config.yml') });
     assert.deepEqual(pick(listed.json, 'packages'), JSON.parse(JSON.stringify(summarizePackages(index))));
     assert.deepEqual(pick(listed.json, 'packages', 0, 'contents'), {
       widgets: ['clock'],
@@ -6241,8 +6241,8 @@ describe('ui-daemon: пакеты без перезапуска (packages-direct
       routes: ['pkg-ops'],
     });
     assert.deepEqual(pick(listed.json, 'layers'), {
-      project: join(projectRoot, '.stepcast', 'packages'),
-      home: join(home, '.stepcast', 'packages'),
+      project: join(projectRoot, '.burnex', 'packages'),
+      home: join(home, '.burnex', 'packages'),
     });
   });
 
@@ -6285,7 +6285,7 @@ describe('ui-daemon: пакеты без перезапуска (packages-direct
   it('виджет `clock` в двух пакетах слоя — ровно одна запись с обоими пакетами; сломанный пакет конфликта не даёт', async (t) => {
     const { runsRoot, projectRoot, home } = makeJournalBed();
     seedRun(runsRoot, projectRoot, { runId: 'a' });
-    const packages = join(projectRoot, '.stepcast', 'packages');
+    const packages = join(projectRoot, '.burnex', 'packages');
     for (const name of ['alpha', 'beta']) {
       mkdirSync(join(packages, name, 'widgets'), { recursive: true });
       writeFileSync(join(packages, name, 'package.yml'), `version: 1\nkind: package\nname: ${name}\ndescription: x\npackage_version: 0.1.0\n`);
@@ -6310,7 +6310,7 @@ describe('ui-daemon: пакеты без перезапуска (packages-direct
     seedRun(runsRoot, projectRoot, { runId: 'a' });
     // Плагины пакетов собирает ядро демона по слою home, поэтому конфликт
     // всех четырёх видов поднят там же.
-    const packages = join(home, '.stepcast', 'packages');
+    const packages = join(home, '.burnex', 'packages');
     for (const name of ['alpha', 'beta']) {
       const dir = join(packages, name);
       mkdirSync(join(dir, 'widgets'), { recursive: true });
@@ -6367,12 +6367,12 @@ describe('ui-daemon: пакеты без перезапуска (packages-direct
   it('отказавший плагин пакета home — запись problems с одним пакетом и именем каталога', async (t) => {
     const { runsRoot, projectRoot, home } = makeJournalBed();
     seedRun(runsRoot, projectRoot, { runId: 'a' });
-    const dir = join(home, '.stepcast', 'packages', 'solo');
+    const dir = join(home, '.burnex', 'packages', 'solo');
     mkdirSync(join(dir, 'plugins', 'broken'), { recursive: true });
     writeFileSync(join(dir, 'package.yml'), 'version: 1\nkind: package\nname: solo\ndescription: x\npackage_version: 0.1.0\n');
     // Ядро демона собрано по слою home, поэтому плагин пакета проекта в
     // `problems` не входит (docs/packages.md, «Витрина»).
-    const projectDir = join(projectRoot, '.stepcast', 'packages', 'local');
+    const projectDir = join(projectRoot, '.burnex', 'packages', 'local');
     mkdirSync(join(projectDir, 'plugins', 'broken'), { recursive: true });
     writeFileSync(join(projectDir, 'package.yml'), 'version: 1\nkind: package\nname: local\ndescription: x\npackage_version: 0.1.0\n');
     const watcher = createWatcher({ runsRoot, home, projectRoot, intervalMs: 10_000 });
@@ -6391,7 +6391,7 @@ describe('ui-daemon: пакеты без перезапуска (packages-direct
     seedRun(runsRoot, projectRoot, { runId: 'a' });
     const reserved = BUILTIN_ROW_IDS[0] as string;
     for (const name of ['alpha', 'beta']) {
-      const dir = join(home, '.stepcast', 'packages', name);
+      const dir = join(home, '.burnex', 'packages', name);
       mkdirSync(join(dir, 'plugins', reserved), { recursive: true });
       writeFileSync(join(dir, 'package.yml'), `version: 1\nkind: package\nname: ${name}\ndescription: x\npackage_version: 0.1.0\n`);
     }
@@ -6421,11 +6421,11 @@ describe('ui-daemon: пакеты без перезапуска (packages-direct
     const { runsRoot, projectRoot, home } = makeJournalBed();
     seedRun(runsRoot, projectRoot, { runId: 'a' });
     for (const name of ['alpha', 'beta']) {
-      const dir = join(home, '.stepcast', 'packages', name);
+      const dir = join(home, '.burnex', 'packages', name);
       mkdirSync(join(dir, 'plugins', 'shared'), { recursive: true });
       writeFileSync(join(dir, 'package.yml'), `version: 1\nkind: package\nname: ${name}\ndescription: x\npackage_version: 0.1.0\n`);
     }
-    mkdirSync(join(home, '.stepcast', 'packages', 'alpha', 'plugins', 'broken'), { recursive: true });
+    mkdirSync(join(home, '.burnex', 'packages', 'alpha', 'plugins', 'broken'), { recursive: true });
     const watcher = createWatcher({ runsRoot, home, projectRoot, intervalMs: 10_000 });
     t.after(() => watcher.dispose());
     const server = await startServer(t, { runsRoot, home, projectRoot, watcher, kernelCache: createKernelCache() });
@@ -6456,9 +6456,9 @@ describe('ui-schedule-view: GET /api/schedule', () => {
   it('отвечает расписанием проекта и не меняет файлов проекта; других методов нет', async (t) => {
     const { runsRoot, projectRoot, home } = makeJournalBed();
     seedRun(runsRoot, projectRoot, { runId: 'a' });
-    mkdirSync(join(projectRoot, '.stepcast', 'pipelines'), { recursive: true });
+    mkdirSync(join(projectRoot, '.burnex', 'pipelines'), { recursive: true });
     writeFileSync(
-      join(projectRoot, '.stepcast', 'pipelines', 'nightly.yml'),
+      join(projectRoot, '.burnex', 'pipelines', 'nightly.yml'),
       `kind: pipeline\nname: nightly\ntriggers:\n  schedule:\n    - { cron: '0 4 * * *', timezone: Europe/Berlin }\njobs:\n  build:\n    steps:\n      - { id: compile, run: [echo, ok] }\n`,
     );
     const { config } = resolveConfig({ cwd: home, home, projectPath: null });

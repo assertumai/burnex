@@ -19,7 +19,7 @@ const LOADED: SystemAutostart = {
   loaded: true,
   thisDaemon: true,
   pid: 4242,
-  entry: '/h/.stepcast/releases/current/dist/src/bin.js',
+  entry: '/h/.burnex/releases/current/dist/src/bin.js',
   entryStable: true,
 };
 
@@ -28,7 +28,7 @@ function overview(over: Partial<SystemOverview> = {}): SystemOverview {
     generatedAt: '2026-11-01T08:00:00Z',
     engine: {
       version: '0.4.0',
-      root: '/h/.stepcast/releases/0.4.0',
+      root: '/h/.burnex/releases/0.4.0',
       method: 'managed',
       source: 'manifest',
       managed: { ref: 'v0.4.0', version: '0.4.0', release: '0.4.0', installedAt: '2026-10-01T00:00:00Z' },
@@ -38,7 +38,7 @@ function overview(over: Partial<SystemOverview> = {}): SystemOverview {
       startedAt: '2026-11-01T07:00:00Z',
       port: 7717,
       projectRoot: '/work/project',
-      entry: '/h/.stepcast/releases/current/dist/src/bin.js',
+      entry: '/h/.burnex/releases/current/dist/src/bin.js',
       underLaunchd: true,
     },
     autostart: LOADED,
@@ -166,12 +166,12 @@ describe('System: автозапуск', () => {
   it('путь в конкретный релиз: подсказка называет путь и current', () => {
     const html = render({
       overview: overview({
-        autostart: { ...LOADED, entry: '/h/.stepcast/releases/0.3.0/dist/src/bin.js', entryStable: false },
+        autostart: { ...LOADED, entry: '/h/.burnex/releases/0.3.0/dist/src/bin.js', entryStable: false },
       }),
     });
 
     assert.ok(html.includes('data-hint="pinned-release"'));
-    assert.ok(html.includes('/h/.stepcast/releases/0.3.0/dist/src/bin.js'));
+    assert.ok(html.includes('/h/.burnex/releases/0.3.0/dist/src/bin.js'));
   });
 
   it('не macOS: переключатель неактивен, причина на месте', () => {
@@ -239,7 +239,7 @@ describe('System: обновление', () => {
   it('нет паспорта в каталоге релизов: обе кнопки неактивны, причина словами resolveInstallMethod', () => {
     const reason = 'Не удалось определить, как поставлен stepcast: паспорта установки нет';
     const html = render({
-      overview: overview({ engine: { version: '0.4.0', root: '/h/.stepcast/releases/0.4.0', error: reason } }),
+      overview: overview({ engine: { version: '0.4.0', root: '/h/.burnex/releases/0.4.0', error: reason } }),
     });
 
     assert.match(buttonTag(html, 'Update'), /disabled/);

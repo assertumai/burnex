@@ -87,7 +87,7 @@ function withNestedRepos(project: Project, nestedRepos: readonly string[]): Conf
 
 /** То же, что `runLanes`, но с переданной конфигурацией — для составного прогона. */
 async function runLanesWithConfig(project: Project, runsRoot: string, config: Config): Promise<RunResult> {
-  const expanded = expandPipeline({ pipelinePath: project.path('stepcast.yml'), config });
+  const expanded = expandPipeline({ pipelinePath: project.path('burnex.yml'), config });
   return runPipeline({
     expanded,
     config: { ...config, runs: { ...config.runs, root: runsRoot } },
@@ -104,7 +104,7 @@ async function runLanesWithConfig(project: Project, runsRoot: string, config: Co
  * получившийся гитлинк.
  */
 function makeCompositeProject(pipeline: string, extraRepos: readonly string[] = []): Project {
-  const files: Record<string, string> = { 'stepcast.yml': pipeline, 'backend/.gitkeep': '' };
+  const files: Record<string, string> = { 'burnex.yml': pipeline, 'backend/.gitkeep': '' };
   for (const repo of extraRepos) files[`${repo}/.gitkeep`] = '';
 
   const project = makeProject(files);
@@ -233,7 +233,7 @@ jobs:
 `;
 
 async function runLanes(project: Project, runsRoot: string): Promise<RunResult> {
-  const expanded = expandPipeline({ pipelinePath: project.path('stepcast.yml'), config: project.config });
+  const expanded = expandPipeline({ pipelinePath: project.path('burnex.yml'), config: project.config });
   return runPipeline({
     expanded,
     config: { ...project.config, runs: { ...project.config.runs, root: runsRoot } },
@@ -362,7 +362,7 @@ const SUCCESS_C = 'printf "от c\\n" > c.txt';
 describe('core: mergeLanes — публикация поверх нечистого дерева', () => {
   it('не перезаписывает live-очередь, изменённую во время интеграционной проверки', async () => {
     const project = makeProject({
-      'stepcast.yml': dirtyTreeLanePipeline(SUCCESS_A),
+      'burnex.yml': dirtyTreeLanePipeline(SUCCESS_A),
       'backlog.md': backlogItem('a-item'),
     });
     gitInit(project);
@@ -387,7 +387,7 @@ describe('core: mergeLanes — публикация поверх нечисто�
 
   it('дорожку пункта, который забрал другой прогон, не публикует и очередь не трогает', async () => {
     const project = makeProject({
-      'stepcast.yml': dirtyTreeLanePipeline(SUCCESS_A),
+      'burnex.yml': dirtyTreeLanePipeline(SUCCESS_A),
       'backlog.md': `${backlogItem('a-item')}claimed_by: run:R2\n`,
     });
     gitInit(project);
@@ -415,7 +415,7 @@ describe('core: mergeLanes — публикация поверх нечисто�
 
   it('возвращает commit_on_success: false в checkout, но не включает его в коммит', async () => {
     const project = makeProject({
-      'stepcast.yml': dirtyTreeLanePipelineWithNotes('printf "от a\\n" > a.txt; printf "lane\\n" > notes.md'),
+      'burnex.yml': dirtyTreeLanePipelineWithNotes('printf "от a\\n" > a.txt; printf "lane\\n" > notes.md'),
       'backlog.md': backlogItem('a-item'),
       'notes.md': 'base\n',
     });
@@ -448,7 +448,7 @@ describe('core: mergeLanes — публикация поверх нечисто�
 
   it('коммитит результат и live-очередь, оставляя unrelated staged, unstaged и untracked локальными', async () => {
     const project = makeProject({
-      'stepcast.yml': dirtyTreeLanePipeline(SUCCESS_A),
+      'burnex.yml': dirtyTreeLanePipeline(SUCCESS_A),
       'backlog.md': backlogItem('a-item'),
       'tracked.txt': 'base\n',
     });
@@ -486,7 +486,7 @@ describe('core: mergeLanes — публикация поверх нечисто�
   it('объединяет далёкие правки одного файла, сохраняя staged и unstaged границу', async () => {
     const base = 'one\ntwo\nthree\nfour\nfive\nsix\nseven\neight\nnine\nten\n';
     const project = makeProject({
-      'stepcast.yml': dirtyTreeLanePipeline(
+      'burnex.yml': dirtyTreeLanePipeline(
         'sed -i.bak "s/^ten$/pipeline/" shared.txt && rm shared.txt.bak',
       ),
       'backlog.md': backlogItem('a-item'),
@@ -520,7 +520,7 @@ describe('core: mergeLanes — публикация поверх нечисто�
 
   it('на настоящем конфликте не меняет HEAD и локальные байты, оставляя интеграционный результат', async () => {
     const project = makeProject({
-      'stepcast.yml': dirtyTreeLanePipeline('printf "pipeline\\n" > shared.txt'),
+      'burnex.yml': dirtyTreeLanePipeline('printf "pipeline\\n" > shared.txt'),
       'backlog.md': backlogItem('a-item'),
       'shared.txt': 'base\n',
     });
@@ -549,7 +549,7 @@ describe('core: mergeLanes — публикация поверх нечисто�
 
   it('красная проверка портит только одноразовое интеграционное дерево', async () => {
     const project = makeProject({
-      'stepcast.yml': dirtyTreeLanePipeline(SUCCESS_A),
+      'burnex.yml': dirtyTreeLanePipeline(SUCCESS_A),
       'backlog.md': backlogItem('a-item'),
     });
     gitInit(project);
@@ -616,7 +616,7 @@ describe('core: mergeLanes — публикация поверх нечисто�
 
   it('не начинает новый обход поверх журнала прерванной публикации', async () => {
     const project = makeProject({
-      'stepcast.yml': dirtyTreeLanePipeline(SUCCESS_A),
+      'burnex.yml': dirtyTreeLanePipeline(SUCCESS_A),
       'backlog.md': backlogItem('a-item'),
     });
     gitInit(project);
@@ -651,7 +651,7 @@ describe('core: mergeLanes — публикация поверх нечисто�
 
 describe('core: mergeLanes — наложение и порядок', () => {
   it('обе годные дорожки сводятся в порядке перечня, каждая своим коммитом', async () => {
-    const project = makeProject({ 'stepcast.yml': twoLanePipeline(SUCCESS_A, SUCCESS_B) });
+    const project = makeProject({ 'burnex.yml': twoLanePipeline(SUCCESS_A, SUCCESS_B) });
     gitInit(project);
     commit(project, 'начальный');
     const runsRoot = tempDir('lanes-runs-');
@@ -690,7 +690,7 @@ describe('core: mergeLanes — наложение и порядок', () => {
   });
 
   it('дорожка пункта, перехваченного другим прогоном, не сводится и не коммитится, своя сводится', async () => {
-    const project = makeProject({ 'stepcast.yml': twoLanePipeline(SUCCESS_A, SUCCESS_B) });
+    const project = makeProject({ 'burnex.yml': twoLanePipeline(SUCCESS_A, SUCCESS_B) });
     gitInit(project);
     commit(project, 'начальный');
     const runsRoot = tempDir('lanes-runs-');
@@ -739,7 +739,7 @@ describe('core: mergeLanes — наложение и порядок', () => {
   });
 
   it('пункт, перехваченный во время проверки, снимает наложенное: коммита нет, владелец цел', async () => {
-    const project = makeProject({ 'stepcast.yml': oneLanePipeline(SUCCESS_A) });
+    const project = makeProject({ 'burnex.yml': oneLanePipeline(SUCCESS_A) });
     gitInit(project);
     commit(project, 'начальный');
     const runsRoot = tempDir('lanes-runs-');
@@ -774,7 +774,7 @@ describe('core: mergeLanes — наложение и порядок', () => {
 
   it('вторая дорожка ложится на дерево, уже несущее первую', async () => {
     const project = makeProject({
-      'stepcast.yml': twoLanePipeline(
+      'burnex.yml': twoLanePipeline(
         'printf "общий файл, правка a\\n" > общий.txt',
         'printf "от b\\n" > b.txt',
       ),
@@ -814,7 +814,7 @@ describe('core: mergeLanes — наложение и порядок', () => {
  */
 describe('core: mergeLanes — --lanes all и отказ на укороченном перечне', () => {
   it('all сводит обе дорожки прогона', async () => {
-    const project = makeProject({ 'stepcast.yml': twoLanePipeline(SUCCESS_A, SUCCESS_B) });
+    const project = makeProject({ 'burnex.yml': twoLanePipeline(SUCCESS_A, SUCCESS_B) });
     gitInit(project);
     commit(project, 'начальный');
     const runsRoot = tempDir('lanes-runs-');
@@ -841,7 +841,7 @@ describe('core: mergeLanes — --lanes all и отказ на укороченн
 
   it('all на прогоне без единой метки lane отказывает, называя это, не трогая дерева', async () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 version: 1
 kind: pipeline
 name: без-дорожек
@@ -882,7 +882,7 @@ jobs:
   });
 
   it('укороченный явный перечень отказывает, называя недостающую дорожку и оба способа выразить намерение, дерево не тронуто', async () => {
-    const project = makeProject({ 'stepcast.yml': twoLanePipeline(SUCCESS_A, SUCCESS_B) });
+    const project = makeProject({ 'burnex.yml': twoLanePipeline(SUCCESS_A, SUCCESS_B) });
     gitInit(project);
     commit(project, 'начальный');
     const runsRoot = tempDir('lanes-runs-');
@@ -919,7 +919,7 @@ jobs:
   });
 
   it('полный явный перечень работает как прежде', async () => {
-    const project = makeProject({ 'stepcast.yml': twoLanePipeline(SUCCESS_A, SUCCESS_B) });
+    const project = makeProject({ 'burnex.yml': twoLanePipeline(SUCCESS_A, SUCCESS_B) });
     gitInit(project);
     commit(project, 'начальный');
     const runsRoot = tempDir('lanes-runs-');
@@ -944,7 +944,7 @@ jobs:
 
   it('цепочка без метки lane упоминания в all не требует', async () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 version: 1
 kind: pipeline
 name: две-дорожки-и-без-метки
@@ -988,7 +988,7 @@ jobs:
 describe('core: mergeLanes — отбор годности', () => {
   it('дорожка с провалившейся работой пропускается, не мешая следующей', async () => {
     const project = makeProject({
-      'stepcast.yml': twoLanePipeline('exit 1', SUCCESS_B),
+      'burnex.yml': twoLanePipeline('exit 1', SUCCESS_B),
     });
     gitInit(project);
     commit(project, 'начальный');
@@ -1022,7 +1022,7 @@ describe('core: mergeLanes — отбор годности', () => {
 
   it('работа, пропущенная условием, сведению не мешает', async () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 version: 1
 kind: pipeline
 name: смешанная-дорожка
@@ -1067,7 +1067,7 @@ jobs:
 
   it('дорожка, все работы которой skipped, пропускается без отказа и без правки очереди', async () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 version: 1
 kind: pipeline
 name: пустой-слот
@@ -1104,7 +1104,7 @@ jobs:
 
   it('когда пусты все дорожки, каждая отдаёт empty, коммитов нет, очередь не тронута', async () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 version: 1
 kind: pipeline
 name: пустые-слоты
@@ -1147,7 +1147,7 @@ jobs:
   });
 
   it('неизвестная дорожка отказывает кодом 2 (StepcastError), перечисляя известные, ничего не накладывая', async () => {
-    const project = makeProject({ 'stepcast.yml': twoLanePipeline(SUCCESS_A, SUCCESS_B) });
+    const project = makeProject({ 'burnex.yml': twoLanePipeline(SUCCESS_A, SUCCESS_B) });
     gitInit(project);
     commit(project, 'начальный');
     const runsRoot = tempDir('lanes-runs-');
@@ -1183,7 +1183,7 @@ jobs:
     // Работы дорожки называются нарочно иначе, чем «verify»/«verify-a»: тест
     // падает, если evaluateLane вернётся к склейке имени со строкой.
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 version: 1
 kind: pipeline
 name: имена-не-по-шаблону
@@ -1219,7 +1219,7 @@ jobs:
 
 describe('core: mergeLanes — красная проверка', () => {
   it('откатывает дерево к коммиту до наложения, дорожка получает failed, код 1 на уровне CLI', async () => {
-    const project = makeProject({ 'stepcast.yml': twoLanePipeline(SUCCESS_A, SUCCESS_B) });
+    const project = makeProject({ 'burnex.yml': twoLanePipeline(SUCCESS_A, SUCCESS_B) });
     gitInit(project);
     commit(project, 'начальный');
     const runsRoot = tempDir('lanes-runs-');
@@ -1255,7 +1255,7 @@ describe('core: mergeLanes — красная проверка', () => {
   });
 
   it('красная проверка первой дорожки не мешает второй свестись', async () => {
-    const project = makeProject({ 'stepcast.yml': twoLanePipeline(SUCCESS_A, SUCCESS_B) });
+    const project = makeProject({ 'burnex.yml': twoLanePipeline(SUCCESS_A, SUCCESS_B) });
     gitInit(project);
     commit(project, 'начальный');
     const runsRoot = tempDir('lanes-runs-');
@@ -1293,7 +1293,7 @@ describe('core: mergeLanes — красная проверка', () => {
 
   it('игнорируемый путь переживает откат красной проверки', async () => {
     const project = makeProject({
-      'stepcast.yml': twoLanePipeline(SUCCESS_A, SUCCESS_B),
+      'burnex.yml': twoLanePipeline(SUCCESS_A, SUCCESS_B),
       '.gitignore': 'сборка/\n',
     });
     gitInit(project);
@@ -1330,7 +1330,7 @@ describe('core: mergeLanes — красная проверка', () => {
     // дорожки b откатывает дерево — вместе с отслеживаемым `backlog.md`.
     // Отметка дорожки a обязана уцелеть: иначе её пункт остался бы
     // `in_progress` с потерянной различимой причиной.
-    const project = makeProject({ 'stepcast.yml': twoLanePipeline('exit 1', SUCCESS_B) });
+    const project = makeProject({ 'burnex.yml': twoLanePipeline('exit 1', SUCCESS_B) });
     gitInit(project);
     commit(project, 'начальный');
     const runsRoot = tempDir('lanes-runs-');
@@ -1365,7 +1365,7 @@ describe('core: mergeLanes — красная проверка', () => {
 
   it('обход продолжается после отката: игнорируемое цело, HEAD не сдвинут лишним коммитом, исход дорожки без вклада уцелел, отметка отката уехала в коммит следующей', async () => {
     const project = makeProject({
-      'stepcast.yml': threeLanePipeline('exit 1', SUCCESS_B, SUCCESS_C),
+      'burnex.yml': threeLanePipeline('exit 1', SUCCESS_B, SUCCESS_C),
       '.gitignore': 'сборка/\n',
     });
     gitInit(project);
@@ -1426,7 +1426,7 @@ describe('core: mergeLanes — красная проверка', () => {
 
 describe('core: mergeLanes — дорожка без взятого пункта', () => {
   it('годная дорожка без item-файла пропускается до наложения, не мешая следующей', async () => {
-    const project = makeProject({ 'stepcast.yml': twoLanePipeline(SUCCESS_A, SUCCESS_B) });
+    const project = makeProject({ 'burnex.yml': twoLanePipeline(SUCCESS_A, SUCCESS_B) });
     gitInit(project);
     commit(project, 'начальный');
     const runsRoot = tempDir('lanes-runs-');
@@ -1455,7 +1455,7 @@ describe('core: mergeLanes — дорожка без взятого пункта
   });
 
   it('файл пункта без слага отказывает до наложения, не оставляя дифф в дереве', async () => {
-    const project = makeProject({ 'stepcast.yml': twoLanePipeline(SUCCESS_A, SUCCESS_B) });
+    const project = makeProject({ 'burnex.yml': twoLanePipeline(SUCCESS_A, SUCCESS_B) });
     gitInit(project);
     commit(project, 'начальный');
     const runsRoot = tempDir('lanes-runs-');
@@ -1493,7 +1493,7 @@ describe('core: mergeLanes — дорожка без взятого пункта
 
 describe('core: mergeLanes — режим файла очереди', () => {
   it('сведение не сужает права backlog.md', async () => {
-    const project = makeProject({ 'stepcast.yml': twoLanePipeline(SUCCESS_A, SUCCESS_B) });
+    const project = makeProject({ 'burnex.yml': twoLanePipeline(SUCCESS_A, SUCCESS_B) });
     gitInit(project);
     commit(project, 'начальный');
     const runsRoot = tempDir('lanes-runs-');
@@ -1521,7 +1521,7 @@ describe('core: mergeLanes — конфликт наложения', () => {
   it('дерево не тронуто, обход прекращён, причина называет дорожку и её рабочее дерево', async () => {
     const project = makeProject({
       'спорный.txt': 'строка один\nстрока два\nстрока три\n',
-      'stepcast.yml': `
+      'burnex.yml': `
 version: 1
 kind: pipeline
 name: конфликт-дорожки
@@ -2185,10 +2185,10 @@ describe('core: mergeLanes — предусловие чистого дерев�
   }
 
   it('незакоммиченная правка отказывает до первого наложения', async () => {
-    const project = makeProject({ 'stepcast.yml': twoLanePipeline(SUCCESS_A, SUCCESS_B) });
+    const project = makeProject({ 'burnex.yml': twoLanePipeline(SUCCESS_A, SUCCESS_B) });
     gitInit(project);
     commit(project, 'начальный');
-    writeFileSync(project.path('stepcast.yml'), `${twoLanePipeline(SUCCESS_A, SUCCESS_B)}\n# правка\n`);
+    writeFileSync(project.path('burnex.yml'), `${twoLanePipeline(SUCCESS_A, SUCCESS_B)}\n# правка\n`);
 
     await assert.rejects(
       () =>
@@ -2204,7 +2204,7 @@ describe('core: mergeLanes — предусловие чистого дерев�
   });
 
   it('неотслеживаемый файл отказывает тем же образом', async () => {
-    const project = makeProject({ 'stepcast.yml': twoLanePipeline(SUCCESS_A, SUCCESS_B) });
+    const project = makeProject({ 'burnex.yml': twoLanePipeline(SUCCESS_A, SUCCESS_B) });
     gitInit(project);
     commit(project, 'начальный');
     writeFileSync(project.path('новый.txt'), 'новое\n');
@@ -2226,7 +2226,7 @@ describe('core: mergeLanes — предусловие чистого дерев�
     // Голова петли ставит пункту `in_progress` в начале прогона, а сведение
     // идёт в конце того же прогона: к этому мигу файл очереди закономерно
     // расходится с последним коммитом, и отказывать из-за него нельзя.
-    const project = makeProject({ 'stepcast.yml': twoLanePipeline(SUCCESS_A, SUCCESS_B) });
+    const project = makeProject({ 'burnex.yml': twoLanePipeline(SUCCESS_A, SUCCESS_B) });
     gitInit(project);
     commit(project, 'начальный');
     const runsRoot = tempDir('lanes-runs-');
@@ -2252,13 +2252,13 @@ describe('core: mergeLanes — предусловие чистого дерев�
   });
 
   it('правка вне файла очереди отказывает и при исключённой очереди', async () => {
-    const project = makeProject({ 'stepcast.yml': twoLanePipeline(SUCCESS_A, SUCCESS_B) });
+    const project = makeProject({ 'burnex.yml': twoLanePipeline(SUCCESS_A, SUCCESS_B) });
     gitInit(project);
     commit(project, 'начальный');
 
     const backlogFile = project.path('backlog.md');
     writeFileSync(backlogFile, backlogItem('a-item'));
-    writeFileSync(project.path('stepcast.yml'), `${twoLanePipeline(SUCCESS_A, SUCCESS_B)}\n# правка\n`);
+    writeFileSync(project.path('burnex.yml'), `${twoLanePipeline(SUCCESS_A, SUCCESS_B)}\n# правка\n`);
 
     await assert.rejects(
       () =>
@@ -2277,7 +2277,7 @@ describe('core: mergeLanes — предусловие чистого дерев�
     // `reset --hard` снёс бы `started_at`, проставленный головой петли и
     // никаким коммитом не закреплённый: снимок очереди до наложения обязан
     // вернуть его на место, а исход дорожки лечь уже поверх.
-    const project = makeProject({ 'stepcast.yml': twoLanePipeline(SUCCESS_A, SUCCESS_B) });
+    const project = makeProject({ 'burnex.yml': twoLanePipeline(SUCCESS_A, SUCCESS_B) });
     gitInit(project);
     commit(project, 'начальный');
     const runsRoot = tempDir('lanes-runs-');
@@ -2320,7 +2320,7 @@ describe('core: mergeLanes — предусловие чистого дерев�
   });
 
   it('грязный вложенный репозиторий при чистом корне отказывает до первого наложения', async () => {
-    const project = makeProject({ 'stepcast.yml': twoLanePipeline(SUCCESS_A, SUCCESS_B) });
+    const project = makeProject({ 'burnex.yml': twoLanePipeline(SUCCESS_A, SUCCESS_B) });
     gitInit(project);
     writeFileSync(project.path('.gitignore'), 'backend/\n');
     commit(project, 'начальный');
@@ -2367,7 +2367,7 @@ describe('core: mergeLanes — предусловие чистого дерев�
   // коммитится последним, неся отметку `done`; корневой вклад дорожки ложится
   // отдельным, более ранним коммитом.
   it('очередь внутри вложенного репозитория коммитится последней, неся отметку done', async () => {
-    const project = makeProject({ 'stepcast.yml': twoLanePipeline(SUCCESS_A, SUCCESS_B) });
+    const project = makeProject({ 'burnex.yml': twoLanePipeline(SUCCESS_A, SUCCESS_B) });
     gitInit(project);
     writeFileSync(project.path('.gitignore'), 'backend/\n');
     commit(project, 'начальный');
@@ -2405,7 +2405,7 @@ describe('core: mergeLanes — предусловие чистого дерев�
   });
 
   it('очередь в корне многорепного дерева сведению не мешает', async () => {
-    const project = makeProject({ 'stepcast.yml': twoLanePipeline(SUCCESS_A, SUCCESS_B) });
+    const project = makeProject({ 'burnex.yml': twoLanePipeline(SUCCESS_A, SUCCESS_B) });
     gitInit(project);
     writeFileSync(project.path('.gitignore'), 'backend/\n');
     commit(project, 'начальный');
@@ -2445,7 +2445,7 @@ describe('core: mergeLanes — дорожка без вклада', () => {
   it('годная дорожка, не изменившая дерево, не даёт коммита, помечается failed, обход продолжается', async () => {
     const project = makeProject({
       // work-a ничего не пишет в дерево — applyRun вернёт nothing-to-apply.
-      'stepcast.yml': twoLanePipeline(':', SUCCESS_B),
+      'burnex.yml': twoLanePipeline(':', SUCCESS_B),
     });
     gitInit(project);
     commit(project, 'начальный');
@@ -2480,7 +2480,7 @@ describe('core: mergeLanes — дорожка без вклада', () => {
 
 describe('core: mergeLanes — запись исхода дорожки в каталог прогона', () => {
   it('сведённая дорожка: запись merged с коммитами', async () => {
-    const project = makeProject({ 'stepcast.yml': oneLanePipeline(SUCCESS_A) });
+    const project = makeProject({ 'burnex.yml': oneLanePipeline(SUCCESS_A) });
     gitInit(project);
     commit(project, 'начальный');
     const runsRoot = tempDir('lanes-runs-');
@@ -2506,7 +2506,7 @@ describe('core: mergeLanes — запись исхода дорожки в ка�
   });
 
   it('откачённая дорожка: запись check_failed с причиной', async () => {
-    const project = makeProject({ 'stepcast.yml': twoLanePipeline(SUCCESS_A, SUCCESS_B) });
+    const project = makeProject({ 'burnex.yml': twoLanePipeline(SUCCESS_A, SUCCESS_B) });
     gitInit(project);
     commit(project, 'начальный');
     const runsRoot = tempDir('lanes-runs-');
@@ -2535,7 +2535,7 @@ describe('core: mergeLanes — запись исхода дорожки в ка�
 
   it('дорожка, до которой обход не дошёл: запись not_reached, отличимая от отсутствия записи', async () => {
     const project = makeProject({
-      'stepcast.yml': twoLanePipeline(
+      'burnex.yml': twoLanePipeline(
         'printf "общий файл, правка a\\n" > конфликт.txt',
         SUCCESS_B,
       ),
@@ -2575,7 +2575,7 @@ describe('core: mergeLanes — already_merged', () => {
     // Дорожка c негодна (работа падает) — она не сведётся ни при каком
     // обходе, и второй вызов должен вычислить её исход заново, не путая с
     // already_merged.
-    const project = makeProject({ 'stepcast.yml': threeLanePipeline(SUCCESS_A, SUCCESS_B, 'exit 1') });
+    const project = makeProject({ 'burnex.yml': threeLanePipeline(SUCCESS_A, SUCCESS_B, 'exit 1') });
     gitInit(project);
     commit(project, 'начальный');
     const runsRoot = tempDir('lanes-runs-');
@@ -2648,9 +2648,9 @@ jobs:
 
   it('единица, записанная дорожкой, остаётся зелёной на дереве проекта после сведения', async () => {
     const project = makeProject({
-      '.stepcast/config.yml': 'project:\n  knowledge:\n    provider: fs\n    dir: knowledge\n',
+      '.burnex/config.yml': 'project:\n  knowledge:\n    provider: fs\n    dir: knowledge\n',
       'src/a.ts': 'export const a = 1;\n',
-      'stepcast.yml': RECORDING_LANE_PIPELINE,
+      'burnex.yml': RECORDING_LANE_PIPELINE,
     });
     gitInit(project);
     commit(project, 'начальный');
@@ -2682,7 +2682,7 @@ jobs:
 
 describe('core: applyRun --lane — отказ повторного наложения сведённой дорожки', () => {
   it('отказывает, называя коммиты сведения, дерева не тронув', async () => {
-    const project = makeProject({ 'stepcast.yml': oneLanePipeline(SUCCESS_A) });
+    const project = makeProject({ 'burnex.yml': oneLanePipeline(SUCCESS_A) });
     gitInit(project);
     commit(project, 'начальный');
     const runsRoot = tempDir('lanes-runs-');
@@ -2714,7 +2714,7 @@ describe('core: applyRun --lane — отказ повторного наложе
   });
 
   it('--force снимает отказ и накладывает дорожку', async () => {
-    const project = makeProject({ 'stepcast.yml': oneLanePipeline(SUCCESS_A) });
+    const project = makeProject({ 'burnex.yml': oneLanePipeline(SUCCESS_A) });
     gitInit(project);
     commit(project, 'начальный');
     const runsRoot = tempDir('lanes-runs-');
@@ -2741,7 +2741,7 @@ describe('core: applyRun --lane — отказ повторного наложе
   });
 
   it('дорожка с исходом, отличным от merged, накладывается свободно', async () => {
-    const project = makeProject({ 'stepcast.yml': oneLanePipeline(SUCCESS_A) });
+    const project = makeProject({ 'burnex.yml': oneLanePipeline(SUCCESS_A) });
     gitInit(project);
     commit(project, 'начальный');
     const runsRoot = tempDir('lanes-runs-');
@@ -2783,13 +2783,13 @@ describe('CLI: burnex merge-lanes', () => {
   /** Прогон, чей runsRoot виден команде через глобальный конфиг в project.home. */
   async function preparedRun(project: Project): Promise<{ result: RunResult; runsRoot: string }> {
     const runsRoot = tempDir('lanes-runs-');
-    writeFileSync(join(project.home, '.stepcast', 'config.yml'), `runs:\n  root: ${runsRoot}\n`);
+    writeFileSync(join(project.home, '.burnex', 'config.yml'), `runs:\n  root: ${runsRoot}\n`);
     const result = await runLanes(project, runsRoot);
     return { result, runsRoot };
   }
 
   it('обе дорожки зелёные: код 0, отчёт по каждой и итог', async () => {
-    const project = makeProject({ 'stepcast.yml': twoLanePipeline(SUCCESS_A, SUCCESS_B) });
+    const project = makeProject({ 'burnex.yml': twoLanePipeline(SUCCESS_A, SUCCESS_B) });
     gitInit(project);
     commit(project, 'начальный');
     const { result } = await preparedRun(project);
@@ -2817,7 +2817,7 @@ describe('CLI: burnex merge-lanes', () => {
   });
 
   it('повторный обход: итог не числит уже сведённые дорожки несведёнными', async () => {
-    const project = makeProject({ 'stepcast.yml': twoLanePipeline(SUCCESS_A, SUCCESS_B) });
+    const project = makeProject({ 'burnex.yml': twoLanePipeline(SUCCESS_A, SUCCESS_B) });
     gitInit(project);
     commit(project, 'начальный');
     const { result } = await preparedRun(project);
@@ -2848,7 +2848,7 @@ describe('CLI: burnex merge-lanes', () => {
   });
 
   it('красная проверка одной дорожки не мешает следующей: код 1, отчёт различает сведённую и откачённую', async () => {
-    const project = makeProject({ 'stepcast.yml': twoLanePipeline(SUCCESS_A, SUCCESS_B) });
+    const project = makeProject({ 'burnex.yml': twoLanePipeline(SUCCESS_A, SUCCESS_B) });
     gitInit(project);
     commit(project, 'начальный');
     const { result } = await preparedRun(project);
@@ -2876,7 +2876,7 @@ describe('CLI: burnex merge-lanes', () => {
   });
 
   it('перечень из одних негодных дорожек по-прежнему даёт код 0', async () => {
-    const project = makeProject({ 'stepcast.yml': twoLanePipeline('exit 1', 'exit 1') });
+    const project = makeProject({ 'burnex.yml': twoLanePipeline('exit 1', 'exit 1') });
     gitInit(project);
     commit(project, 'начальный');
     const { result } = await preparedRun(project);
@@ -2906,7 +2906,7 @@ describe('CLI: burnex merge-lanes', () => {
     // (обход прекращается), c до наложения не доходит вовсе.
     const project = makeProject({
       'спорный.txt': 'строка один\nстрока два\nстрока три\n',
-      'stepcast.yml': threeLanePipeline(
+      'burnex.yml': threeLanePipeline(
         SUCCESS_A,
         'printf "строка один\\nправка прогона\\nстрока три\\n" > спорный.txt',
         SUCCESS_C,
@@ -2947,7 +2947,7 @@ describe('CLI: burnex merge-lanes', () => {
   });
 
   it('неизвестная дорожка: код 2, дерево и очередь не тронуты', async () => {
-    const project = makeProject({ 'stepcast.yml': twoLanePipeline(SUCCESS_A, SUCCESS_B) });
+    const project = makeProject({ 'burnex.yml': twoLanePipeline(SUCCESS_A, SUCCESS_B) });
     gitInit(project);
     commit(project, 'начальный');
     const { result } = await preparedRun(project);
@@ -2973,7 +2973,7 @@ describe('CLI: burnex merge-lanes', () => {
   });
 
   it('пустой перечень дорожек, повтор имени и пустой --check — отказ кодом 2 до правки дерева', async () => {
-    const project = makeProject({ 'stepcast.yml': twoLanePipeline(SUCCESS_A, SUCCESS_B) });
+    const project = makeProject({ 'burnex.yml': twoLanePipeline(SUCCESS_A, SUCCESS_B) });
     gitInit(project);
     commit(project, 'начальный');
     const { result } = await preparedRun(project);
@@ -3021,9 +3021,9 @@ describe('CLI: burnex merge-lanes', () => {
    * worktree-пайплайн (изолированное дерево объявленных частей не содержит).
    */
   it('состав из конфигурации доходит до предусловия: грязный вложенный — код 2', async () => {
-    const project = makeProject({ 'stepcast.yml': twoLanePipeline(SUCCESS_A, SUCCESS_B) });
+    const project = makeProject({ 'burnex.yml': twoLanePipeline(SUCCESS_A, SUCCESS_B) });
     gitInit(project);
-    writeFileSync(project.path('.gitignore'), '.stepcast/\nbackend/\n');
+    writeFileSync(project.path('.gitignore'), '.burnex/\nbackend/\n');
     commit(project, 'начальный');
 
     const nestedDir = project.path('backend');
@@ -3039,8 +3039,8 @@ describe('CLI: burnex merge-lanes', () => {
     commit(project, 'добавлена очередь');
     writeItem(result.journal.paths.dir, 'a', 'a-item', 'A');
 
-    mkdirSync(project.path('.stepcast'), { recursive: true });
-    writeFileSync(project.path('.stepcast/config.yml'), 'project:\n  nested_repos: [backend]\n');
+    mkdirSync(project.path('.burnex'), { recursive: true });
+    writeFileSync(project.path('.burnex/config.yml'), 'project:\n  nested_repos: [backend]\n');
     writeFileSync(join(nestedDir, 'seed.txt'), 'незакоммиченная правка backend\n');
     const before = commitCount(project);
 
@@ -3061,7 +3061,7 @@ describe('CLI: burnex merge-lanes', () => {
   });
 
   it('прогон не назван вовсе — отказ кодом 2, ничего не тронуто', async () => {
-    const project = makeProject({ 'stepcast.yml': twoLanePipeline(SUCCESS_A, SUCCESS_B) });
+    const project = makeProject({ 'burnex.yml': twoLanePipeline(SUCCESS_A, SUCCESS_B) });
     gitInit(project);
     commit(project, 'начальный');
     await preparedRun(project);
@@ -3093,7 +3093,7 @@ describe('CLI: burnex merge-lanes', () => {
   });
 
   it('прогон из BURNEX_RUN_ID: позиционный аргумент не задан', async () => {
-    const project = makeProject({ 'stepcast.yml': twoLanePipeline(SUCCESS_A, SUCCESS_B) });
+    const project = makeProject({ 'burnex.yml': twoLanePipeline(SUCCESS_A, SUCCESS_B) });
     gitInit(project);
     commit(project, 'начальный');
     const { result } = await preparedRun(project);

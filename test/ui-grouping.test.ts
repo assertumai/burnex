@@ -25,8 +25,8 @@ function project(runs: readonly RunLike[]): { key: string; path: string; runs: r
 describe('ui-grouping: прогоны под своими пайплайнами', () => {
   it('кладёт прогон под пайплайн по файлу, которым он запущен', () => {
     const groups = groupProjects(
-      [pipeline('stepcast.yml', 'demo')],
-      [project([run('a', { pipelineFile: 'stepcast.yml' })])],
+      [pipeline('burnex.yml', 'demo')],
+      [project([run('a', { pipelineFile: 'burnex.yml' })])],
     );
 
     assert.equal(groups.length, 1);
@@ -42,8 +42,8 @@ describe('ui-grouping: прогоны под своими пайплайнами
   // что файл как раз найден и показан своей карточкой.
   it('неразбираемый пайплайн сохраняет свои прогоны', () => {
     const groups = groupProjects(
-      [pipeline('stepcast.yml', 'stepcast.yml', 'не разбирается: нет jobs')],
-      [project([run('a', { pipeline: 'demo', pipelineFile: 'stepcast.yml' })])],
+      [pipeline('burnex.yml', 'burnex.yml', 'не разбирается: нет jobs')],
+      [project([run('a', { pipeline: 'demo', pipelineFile: 'burnex.yml' })])],
     );
 
     assert.deepEqual(
@@ -56,11 +56,11 @@ describe('ui-grouping: прогоны под своими пайплайнами
 
   it('два файла с одним именем делят прогоны по файлам, а не поровну', () => {
     const groups = groupProjects(
-      [pipeline('stepcast.yml', 'demo'), pipeline('.stepcast/pipelines/копия.yml', 'demo')],
+      [pipeline('burnex.yml', 'demo'), pipeline('.burnex/pipelines/копия.yml', 'demo')],
       [
         project([
-          run('a', { pipelineFile: 'stepcast.yml' }),
-          run('b', { pipelineFile: '.stepcast/pipelines/копия.yml' }),
+          run('a', { pipelineFile: 'burnex.yml' }),
+          run('b', { pipelineFile: '.burnex/pipelines/копия.yml' }),
         ]),
       ],
     );
@@ -73,8 +73,8 @@ describe('ui-grouping: прогоны под своими пайплайнами
 
   it('прогон исчезнувшего файла идёт отдельной группой, а не к тёзке', () => {
     const groups = groupProjects(
-      [pipeline('stepcast.yml', 'demo')],
-      [project([run('a', { pipeline: 'demo', pipelineFile: '.stepcast/pipelines/удалён.yml' })])],
+      [pipeline('burnex.yml', 'demo')],
+      [project([run('a', { pipeline: 'demo', pipelineFile: '.burnex/pipelines/удалён.yml' })])],
     );
 
     assert.deepEqual(groups[0]?.pipelines[0]?.runs, []);
@@ -86,7 +86,7 @@ describe('ui-grouping: прогоны под своими пайплайнами
 
   it('прогон с непрочитанным манифестом находит пайплайн по имени', () => {
     const groups = groupProjects(
-      [pipeline('stepcast.yml', 'demo')],
+      [pipeline('burnex.yml', 'demo')],
       [project([run('a', { pipeline: 'demo' })])],
     );
 
@@ -112,12 +112,12 @@ describe('ui-grouping: прогоны под своими пайплайнами
 
   it('прогоны идут новейшими первыми, без отметки старта — в конце', () => {
     const groups = groupProjects(
-      [pipeline('stepcast.yml', 'demo')],
+      [pipeline('burnex.yml', 'demo')],
       [
         project([
-          run('старый', { pipelineFile: 'stepcast.yml', startedAt: '2026-08-01T00:00:00.000Z' }),
-          run('без-отметки', { pipelineFile: 'stepcast.yml' }),
-          run('новый', { pipelineFile: 'stepcast.yml', startedAt: '2026-08-20T00:00:00.000Z' }),
+          run('старый', { pipelineFile: 'burnex.yml', startedAt: '2026-08-01T00:00:00.000Z' }),
+          run('без-отметки', { pipelineFile: 'burnex.yml' }),
+          run('новый', { pipelineFile: 'burnex.yml', startedAt: '2026-08-20T00:00:00.000Z' }),
         ]),
       ],
     );
@@ -129,7 +129,7 @@ describe('ui-grouping: прогоны под своими пайплайнами
   });
 
   it('пайплайн без прогонов остаётся на экране с пустым списком', () => {
-    const groups = groupProjects([pipeline('stepcast.yml', 'demo')], []);
+    const groups = groupProjects([pipeline('burnex.yml', 'demo')], []);
 
     assert.equal(groups.length, 1);
     assert.equal(groups[0]?.projectPath, '/дом/proj');
@@ -137,7 +137,7 @@ describe('ui-grouping: прогоны под своими пайплайнами
   });
 
   it('проект с прогонами, но без найденных файлов, с экрана не пропадает', () => {
-    const groups = groupProjects([], [project([run('a', { pipelineFile: 'stepcast.yml' })])]);
+    const groups = groupProjects([], [project([run('a', { pipelineFile: 'burnex.yml' })])]);
 
     assert.deepEqual(groups[0]?.pipelines, []);
     assert.deepEqual(

@@ -376,7 +376,7 @@ describe('cursor-backend: исполнение шага на подменённ�
    * Шебанг — абсолютный путь к node: PATH шага не обязан его содержать.
    */
   function fakeCursorProject(pipeline: string) {
-    const project = makeProject({ 'stepcast.yml': pipeline });
+    const project = makeProject({ 'burnex.yml': pipeline });
     const bin = tempDir('cursor-bin-');
     const calls = join(bin, 'calls');
     const script = join(bin, 'cursor-agent');
@@ -398,7 +398,7 @@ process.stdout.write(fs.readFileSync(path.join(${JSON.stringify(FIXTURES)}, name
     chmodSync(script, 0o755);
     // `command` допустим только в глобальной конфигурации.
     writeFileSync(
-      join(project.home, '.stepcast', 'config.yml'),
+      join(project.home, '.burnex', 'config.yml'),
       `plugins: [${JSON.stringify(MODULE)}]\nbackends:\n  cursor-agent:\n    command: ${JSON.stringify(script)}\n`,
     );
     const recorded = (): Array<{ argv: string[]; stdin: string }> =>
@@ -415,14 +415,14 @@ process.stdout.write(fs.readFileSync(path.join(${JSON.stringify(FIXTURES)}, name
       {
         cwd: project.root,
         home: project.home,
-        globalPath: join(project.home, '.stepcast', 'config.yml'),
-        projectPath: join(project.root, '.stepcast', 'config.yml'),
+        globalPath: join(project.home, '.burnex', 'config.yml'),
+        projectPath: join(project.root, '.burnex', 'config.yml'),
       },
       {},
     );
     const config = { ...resolved.config, runs: { ...resolved.config.runs, root: tempDir('runs-') } };
     return runPipeline({
-      expanded: expandPipeline({ pipelinePath: project.path('stepcast.yml'), config, registry }),
+      expanded: expandPipeline({ pipelinePath: project.path('burnex.yml'), config, registry }),
       config,
       registry,
       projectRoot: project.root,
@@ -461,7 +461,7 @@ process.stdout.write(fs.readFileSync(path.join(${JSON.stringify(FIXTURES)}, name
     const { project, recorded } = fakeCursorProject(
       `name: p\njobs:\n  работа:\n    steps:\n${step('один')}`,
     );
-    project.write('.stepcast/config.yml', 'defaults:\n  effort: high\n');
+    project.write('.burnex/config.yml', 'defaults:\n  effort: high\n');
 
     const result = await run(project);
 
@@ -527,20 +527,20 @@ process.stdout.write(fs.readFileSync(path.join(${JSON.stringify(FIXTURES)}, name
         step('два').replace('expect: [{ exit_code: 0 }]', 'expect: [{ judge: "всё хорошо", agent: cursor-agent }]'),
     );
     project.write('schema.json', '{ "type": "object" }\n');
-    project.write('.stepcast/config.yml', 'backends:\n  cursor-agent: { structured_output: true, mcp: true }\n');
+    project.write('.burnex/config.yml', 'backends:\n  cursor-agent: { structured_output: true, mcp: true }\n');
     const { resolved, registry } = await resolveWithPlugins(
       {
         cwd: project.root,
         home: project.home,
-        globalPath: join(project.home, '.stepcast', 'config.yml'),
-        projectPath: join(project.root, '.stepcast', 'config.yml'),
+        globalPath: join(project.home, '.burnex', 'config.yml'),
+        projectPath: join(project.root, '.burnex', 'config.yml'),
       },
       {},
     );
     assert.equal(resolved.config.backends['cursor-agent']?.structuredOutput, true, 'флаг включён конфигурацией');
 
     const errors = lintPipeline(
-      expandPipeline({ pipelinePath: project.path('stepcast.yml'), config: resolved.config, registry }),
+      expandPipeline({ pipelinePath: project.path('burnex.yml'), config: resolved.config, registry }),
       { config: resolved.config, registry },
     ).filter((item) => item.severity === 'error');
 

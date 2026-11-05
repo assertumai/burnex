@@ -11,7 +11,7 @@
 топику нет: то, что движок загружает и исполняет, обязано быть названо.
 
 ```yaml
-# .stepcast/config.yml
+# .burnex/config.yml
 plugins:
   - burnex/backends/codex      # плагин, поставляемый самим пакетом (раздел «Второй бэкенд»)
   - burnex/backends/cursor     # то же для Cursor (раздел «Третий бэкенд»)
@@ -134,8 +134,8 @@ plugins:
 которой разрешается относительный путь. Пустой список отклоняется разбором:
 объявление, не объявляющее ничего, — забытая правка.
 
-Второй документ каждого слоя — **`plugins.patch.yml`** (`~/.stepcast/` и
-`.stepcast/`), даёт то, чего ключу не хватает: замену строки по `id` и
+Второй документ каждого слоя — **`plugins.patch.yml`** (`~/.burnex/` и
+`.burnex/`), даёт то, чего ключу не хватает: замену строки по `id` и
 позицию вставки.
 
 ```yaml
@@ -298,7 +298,7 @@ plugins:
 ## Плагины пакетов
 
 Каталожный плагин (`plugins/<id>/plugin.json`) может лежать и в пакете
-пользователя — `<проект>/.stepcast/packages/<имя>/plugins/<id>/` или в
+пользователя — `<проект>/.burnex/packages/<имя>/plugins/<id>/` или в
 `packages/` рядом с глобальным конфигом. Дерево получает такие каталоги теми же
 операциями, но с источником «пакет»: операции подаются в порядке встроенное →
 пакеты home → свободный home → ключ и патч home → пакеты проекта → свободный
@@ -1203,7 +1203,7 @@ export default function myConsumer(ctx) {
 существует. Подключение:
 
 ```yaml
-# ~/.stepcast/config.yml
+# ~/.burnex/config.yml
 plugins:
   - burnex/backends/codex
 defaults:
@@ -1294,7 +1294,7 @@ true`, `strict_permissions: false`, `mcp: true`, `concurrency: 2`,
 бэкенда `cursor-agent` не существует. Подключение:
 
 ```yaml
-# ~/.stepcast/config.yml
+# ~/.burnex/config.yml
 plugins:
   - burnex/backends/cursor
 ```
@@ -1373,7 +1373,7 @@ CLI записью `system`/`init`, продолжение — `--resume`); со
 бэкенда `copilot` не существует. Подключение:
 
 ```yaml
-# ~/.stepcast/config.yml
+# ~/.burnex/config.yml
 plugins:
   - burnex/backends/copilot
 ```
@@ -1670,8 +1670,8 @@ module.exports = function (input) {
 стороннего плагина эту схему не проходит: редактор, подключивший её,
 подсветит валидный ключ как неизвестный.
 
-`burnex schema` печатает схему проекта — `.stepcast/schema/pipeline.schema.json`
-и `.stepcast/schema/job.schema.json` — от того же реестра, каким проект
+`burnex schema` печатает схему проекта — `.burnex/schema/pipeline.schema.json`
+и `.burnex/schema/job.schema.json` — от того же реестра, каким проект
 разбирается: она знает предикаты и виды шага объявленных плагинов и форму их
 значения (схему вклада), а также действующий состав встроенных видов шага
 (`agent`, `run`, `script`, `uses`) — патч, отключивший строку одного из них,

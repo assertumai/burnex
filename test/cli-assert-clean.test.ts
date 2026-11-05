@@ -13,7 +13,7 @@ import { tempDir } from './tmp.js';
  * `burnex assert-clean` не зависит от каталога прогона и ничего не
  * коммитит — проверки идут `run(argv, io)` на настоящем git-дереве, с
  * фальшивым `HOME` (`withHome`), чтобы не подхватить настоящий
- * `~/.stepcast/config.yml` гоняющей машины.
+ * `~/.burnex/config.yml` гоняющей машины.
  */
 
 interface Result {
@@ -36,7 +36,7 @@ async function assertClean(cwd: string, home: string, argv: readonly string[] = 
 
 function makeHome(): string {
   const home = tempDir('assert-clean-home-');
-  mkdirSync(join(home, '.stepcast'), { recursive: true });
+  mkdirSync(join(home, '.burnex'), { recursive: true });
   return home;
 }
 
@@ -49,7 +49,7 @@ function makeRepo(): string {
 }
 
 /**
- * Многорепный проект: корень с закоммиченными `.gitignore`, `.stepcast/config.yml`
+ * Многорепный проект: корень с закоммиченными `.gitignore`, `.burnex/config.yml`
  * (объявляющим состав) и отслеживаемым каталогом `docs/`, плюс вложенный
  * репозиторий `backend`, который корень игнорирует. Корень и вложенный чисты —
  * грязь наводит каждый тест свою, и она не смешивается с шумом стенда.
@@ -59,8 +59,8 @@ function makeNestedProject(): string {
   gitInit(dir);
   writeFileSync(join(dir, '.gitignore'), 'backend/\n');
   writeFileSync(join(dir, 'seed.txt'), 'затравка\n');
-  mkdirSync(join(dir, '.stepcast'), { recursive: true });
-  writeFileSync(join(dir, '.stepcast', 'config.yml'), 'project:\n  nested_repos: [backend]\n');
+  mkdirSync(join(dir, '.burnex'), { recursive: true });
+  writeFileSync(join(dir, '.burnex', 'config.yml'), 'project:\n  nested_repos: [backend]\n');
   mkdirSync(join(dir, 'docs'), { recursive: true });
   writeFileSync(join(dir, 'docs', 'guide.md'), 'документ\n');
   gitCommit(dir, 'первый');

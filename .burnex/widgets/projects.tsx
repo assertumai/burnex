@@ -87,7 +87,7 @@ type HiddenReason = 'run-workspace' | 'temp';
 const TEMP_PREFIXES = ['/tmp/', '/private/tmp/', '/var/folders/', '/private/var/folders/'];
 
 function hiddenReasonOf(path: string): HiddenReason | undefined {
-  if (path.includes('/.stepcast/runs/')) return 'run-workspace';
+  if (path.includes('/.burnex/runs/')) return 'run-workspace';
   if (TEMP_PREFIXES.some((prefix) => path.startsWith(prefix))) return 'temp';
   return undefined;
 }

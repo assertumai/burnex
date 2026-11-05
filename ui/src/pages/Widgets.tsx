@@ -240,7 +240,7 @@ export function Widgets({ overview, widgets, catalog, catalogError }: WidgetsPro
         description={
           <>
             Small React components rendered on this dashboard. Add a bundled one to a project, or drop your own{' '}
-            <code>*.tsx</code> into <code>.stepcast/widgets/</code>.
+            <code>*.tsx</code> into <code>.burnex/widgets/</code>.
           </>
         }
       />
@@ -270,7 +270,7 @@ export function Widgets({ overview, widgets, catalog, catalogError }: WidgetsPro
             description={
               <>
                 Add one from the catalog above, or put a <code>*.tsx</code> file into the project’s{' '}
-                <code>.stepcast/widgets/</code> directory.
+                <code>.burnex/widgets/</code> directory.
               </>
             }
           />

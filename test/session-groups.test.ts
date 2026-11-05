@@ -20,7 +20,7 @@ import { tempDir } from './tmp.js';
  */
 
 function expand(project: Project) {
-  return expandPipeline({ pipelinePath: project.path('stepcast.yml'), config: project.config });
+  return expandPipeline({ pipelinePath: project.path('burnex.yml'), config: project.config });
 }
 
 function errorsOf(project: Project): string[] {
@@ -59,7 +59,7 @@ ${group}    context_upstream: none
 }
 
 async function runTwoJobs(source: string) {
-  const project = makeProject({ 'stepcast.yml': source });
+  const project = makeProject({ 'burnex.yml': source });
   const backend = createFakeBackend({ lines: () => [initLine(), resultLine({ text: 'ок' })] });
   const runsRoot = tempDir('runs-');
 
@@ -95,7 +95,7 @@ describe('session_group: диалог живёт дольше работы', () 
 
   it('два агента с одним псевдонимом не продолжают сессию друг друга', async () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 jobs:
   work:
@@ -107,7 +107,7 @@ jobs:
         agent: codex
         prompt: второй
 `,
-      '.stepcast/config.yml': `
+      '.burnex/config.yml': `
 backends:
   codex:
     command: codex
@@ -156,7 +156,7 @@ backends:
 describe('session_group: линт стережёт исполнимость группы', () => {
   it('работа с циклом until в группе отклоняется', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 name: probe
 jobs:
@@ -188,7 +188,7 @@ jobs:
 
   const groupWithAttempts = (max: number) =>
     makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 name: probe
 jobs:
@@ -227,7 +227,7 @@ jobs:
 
   it('две неупорядоченные работы одной группы отклоняются', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 name: probe
 jobs:
@@ -254,7 +254,7 @@ jobs:
 
   it('работа группы, заводящая своё рабочее дерево, отклоняется', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 name: probe
 workspace: { mode: worktree }
@@ -284,7 +284,7 @@ jobs:
 
   it('разные режимы рабочего дерева внутри группы отклоняются', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 name: probe
 workspace: { mode: worktree }
@@ -318,7 +318,7 @@ jobs:
 describe('session_group: ключ обвязки, а не поле работы', () => {
   it('объявление внутри файла работы отклоняется разбором', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 name: probe
 jobs:
@@ -501,7 +501,7 @@ const FIXED_JOB: Job = {
 
 const FIXED_PIPELINE: Pipeline = {
   name: 'baseline',
-  file: '/fixed/project/stepcast.yml',
+  file: '/fixed/project/stepcast.yml', // фиксированная фикстура: путь входит в замок, и хеш «до правки» считан с ним
   knowledge: {
     provider: undefined,
     command: undefined,
@@ -560,7 +560,7 @@ const FIXED_SERIALIZED =
 
 describe('session_group: попадает в замок и в ключ', () => {
   it('объявленная группа записывается в запись работы замка', () => {
-    const project = makeProject({ 'stepcast.yml': firstOnlyGroup('build') });
+    const project = makeProject({ 'burnex.yml': firstOnlyGroup('build') });
     const parsed = parseYaml(serializeLock(expand(project).pipeline)) as {
       jobs: readonly Record<string, unknown>[];
     };
@@ -569,7 +569,7 @@ describe('session_group: попадает в замок и в ключ', () => {
   });
 
   it('работа без объявленной группы не несёт ключа session_group вовсе', () => {
-    const project = makeProject({ 'stepcast.yml': firstOnlyGroup('build') });
+    const project = makeProject({ 'burnex.yml': firstOnlyGroup('build') });
     const parsed = parseYaml(serializeLock(expand(project).pipeline)) as {
       jobs: readonly Record<string, unknown>[];
     };
@@ -579,7 +579,7 @@ describe('session_group: попадает в замок и в ключ', () => {
   });
 
   it('пять работ двух групп восстанавливаются из разобранного замка без обращения к записям шагов', () => {
-    const project = makeProject({ 'stepcast.yml': FIVE_JOBS_TWO_GROUPS });
+    const project = makeProject({ 'burnex.yml': FIVE_JOBS_TWO_GROUPS });
     const parsed = parseYaml(serializeLock(expand(project).pipeline)) as {
       jobs: readonly Record<string, unknown>[];
     };
@@ -598,16 +598,16 @@ describe('session_group: попадает в замок и в ключ', () => {
   });
 
   it('группа меняет jobLockHash и ключ шага; переименование и снятие возвращают их к прежним', () => {
-    const project = makeProject({ 'stepcast.yml': soloJob() });
+    const project = makeProject({ 'burnex.yml': soloJob() });
     const withoutGroup = hashesFor(project);
 
-    project.write('stepcast.yml', soloJob('g1'));
+    project.write('burnex.yml', soloJob('g1'));
     const withG1 = hashesFor(project);
 
-    project.write('stepcast.yml', soloJob('g2'));
+    project.write('burnex.yml', soloJob('g2'));
     const withG2 = hashesFor(project);
 
-    project.write('stepcast.yml', soloJob());
+    project.write('burnex.yml', soloJob());
     const removed = hashesFor(project);
 
     assert.notEqual(withG1.lockHash, withoutGroup.lockHash);
@@ -624,10 +624,10 @@ describe('session_group: попадает в замок и в ключ', () => {
   });
 
   it('раскладка работ по группам меняет pipelineLockHash', () => {
-    const project = makeProject({ 'stepcast.yml': twoJobLayout({ firstGroup: 'x' }) });
+    const project = makeProject({ 'burnex.yml': twoJobLayout({ firstGroup: 'x' }) });
     const hashA = pipelineLockHash(expand(project).pipeline);
 
-    project.write('stepcast.yml', twoJobLayout({ secondGroup: 'x' }));
+    project.write('burnex.yml', twoJobLayout({ secondGroup: 'x' }));
     const hashB = pipelineLockHash(expand(project).pipeline);
 
     assert.notEqual(hashA, hashB);

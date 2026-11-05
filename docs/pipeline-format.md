@@ -1,7 +1,7 @@
 # Формат пайплайна
 
-`stepcast.yml` в корне репозитория — пайплайн по умолчанию. Несколько пайплайнов
-живут в `.stepcast/pipelines/<name>.yml`, работы — в `.stepcast/jobs/<name>.yml`.
+`burnex.yml` в корне репозитория — пайплайн по умолчанию. Несколько пайплайнов
+живут в `.burnex/pipelines/<name>.yml`, работы — в `.burnex/jobs/<name>.yml`.
 
 | Где | Что описано |
 |---|---|
@@ -22,14 +22,14 @@
   этому же правилу разрешается `file_exists`: файл создаёт шаг, и появляется он
   в рабочей директории, а не рядом с определением работы;
 - `script:` — третьим правилом, отдельным от первых двух. Голое имя
-  (`script: cleanup.py`) ищется слоями: `<корень проекта>/.stepcast/scripts/`,
-  затем `~/.stepcast/scripts/`, затем встроенный каталог пакета burnex —
+  (`script: cleanup.py`) ищется слоями: `<корень проекта>/.burnex/scripts/`,
+  затем `~/.burnex/scripts/`, затем встроенный каталог пакета burnex —
   побеждает первый слой, где файл нашёлся. Значение с явным префиксом `./` или
   `../` (`script: ./tools/cleanup.py`) разрешается от файла, где объявлено, —
   тем же правилом, что `uses:` и `prompt: file:…`, — и слоёв не касается.
   Абсолютное значение принимается как есть.
 
-  Пакеты пользователя (`.stepcast/packages/<имя>/scripts/`) встают в тот же
+  Пакеты пользователя (`.burnex/packages/<имя>/scripts/`) встают в тот же
   порядок: свободный проект → пакеты проекта → свободный home → пакеты home →
   встроенный каталог. Два пакета одного слоя с одним именем — промах с причиной
   `resource_conflict`, нижний слой не просматривается. То же верно для
@@ -48,7 +48,7 @@
 - `uses:` **шага** (не путать с `uses:` работы из первого правила) — четвёртым
   правилом, и путём это значение не бывает вовсе: это имя переиспользуемого
   шага, которое ищут те же три слоя, что и `script:` — `<корень
-  проекта>/.stepcast/steps/`, `~/.stepcast/steps/`, встроенный каталог пакета,
+  проекта>/.burnex/steps/`, `~/.burnex/steps/`, встроенный каталог пакета,
   — только внутри `steps/`, а не `scripts/`. Найденный каталог обязан нести
   манифест `step.yml`; каталог без него — не каталог шага, слой просматривается
   дальше. Пути внутри самого манифеста (`file`, `output_schema`) разрешаются
@@ -105,14 +105,14 @@ JSON Schema дефолтного состава: встроенные преди
 `step.yml` переиспользуемого шага, той же моделью, которой манифест
 проверяется при чтении.
 
-`burnex schema` печатает в проект `.stepcast/schema/pipeline.schema.json` и
-`.stepcast/schema/job.schema.json` от действующего реестра — эта схема следует
+`burnex schema` печатает в проект `.burnex/schema/pipeline.schema.json` и
+`.burnex/schema/job.schema.json` от действующего реестра — эта схема следует
 составу: знает предикаты объявленных плагинов и форму их значения, а ветвь
 отключённого встроенного вида шага в ней отсутствует. Подключить её к документу
 можно модельной строкой в самом файле:
 
 ```yaml
-# yaml-language-server: $schema=./.stepcast/schema/pipeline.schema.json
+# yaml-language-server: $schema=./.burnex/schema/pipeline.schema.json
 version: 1
 kind: pipeline
 ...
@@ -123,13 +123,13 @@ kind: pipeline
 ```json
 {
   "yaml.schemas": {
-    "./.stepcast/schema/pipeline.schema.json": ["stepcast.yml", ".stepcast/pipelines/*.yml"],
-    "./.stepcast/schema/job.schema.json": [".stepcast/jobs/*.yml"]
+    "./.burnex/schema/pipeline.schema.json": ["burnex.yml", ".burnex/pipelines/*.yml"],
+    "./.burnex/schema/job.schema.json": [".burnex/jobs/*.yml"]
   }
 }
 ```
 
-Файл `.stepcast/schema/*.json` устаревает так же, как устарел бы вручную
+Файл `.burnex/schema/*.json` устаревает так же, как устарел бы вручную
 подключённый файл пакета: состав плагинов поменялся, схему не
 перегенерировали. `burnex lint` называет это предупреждением.
 
@@ -161,7 +161,7 @@ context:
 project:                         # необязателен, перекрывает project.* конфигурации
   check: npm run check
   tools: [npm, npx, node]
-  spec: { dir: openspec/changes, rules: .stepcast/prompts/spec-rules.md, tool: openspec, check: 'openspec validate "$SPEC_CHANGE" --strict' }
+  spec: { dir: openspec/changes, rules: .burnex/prompts/spec-rules.md, tool: openspec, check: 'openspec validate "$SPEC_CHANGE" --strict' }
   edit_paths: [src/**, test/**, docs/**, package.json]
 
 defaults:
@@ -413,7 +413,7 @@ workspace:
 незакоммиченными изменениями. Дороже остальных по диску и времени старта.
 
 Логи и состояние прогона в любом режиме лежат вне проекта, в
-`~/.stepcast/runs/...` — рабочая директория и журнал прогона не смешиваются.
+`~/.burnex/runs/...` — рабочая директория и журнал прогона не смешиваются.
 
 ### Наследование рабочего дерева
 
@@ -990,7 +990,7 @@ jobs:
 `${project.check}`, `${project.tools}`, `${project.edit_paths}`,
 `${project.spec.dir}`, `${project.spec.rules}`, `${project.spec.tool}`,
 `${project.spec.check}` — там, где ключ не объявлен ни пайплайном, ни
-`.stepcast/config.yml`, — отказ
+`.burnex/config.yml`, — отказ
 разбора, а не пустая строка: наличие ключа не обязательно само по себе,
 обязательна только ссылка на него без объявления. Обращение к имени вне этого
 состава (`${project.name}`, `${project.spec.folder}`) называет доступные
@@ -1662,11 +1662,11 @@ expect: [{ script: checks/no-todo.py }]
     expect: [{ exit_code: 0 }]
 ```
 
-Каталог `.stepcast/steps/<имя>/` с манифестом `step.yml` внутри делает файл со
+Каталог `.burnex/steps/<имя>/` с манифестом `step.yml` внутри делает файл со
 своим кодом **именованным** шагом: у него есть имя, описание, объявленный
 контракт параметров и контракт выхода — то, что сегодня знает только автор
 скрипта. Имя разрешается теми же тремя слоями, что и `script`: `<корень
-проекта>/.stepcast/steps/`, `~/.stepcast/steps/`, встроенный каталог пакета —
+проекта>/.burnex/steps/`, `~/.burnex/steps/`, встроенный каталог пакета —
 раздел «Разрешение путей» выше, четвёртое правило. Каталог без `step.yml` не
 считается каталогом шага: слой просматривается дальше, как и при отсутствующем
 каталоге.
@@ -1751,7 +1751,7 @@ output_schema: ./output.schema.json
 
 Пакет поставляет встроенный образец `changed-files` — перечень файлов рабочего
 дерева, изменённых относительно `ref`, — доступный без единого каталога
-`.stepcast/steps/` в проекте или в домашнем каталоге.
+`.burnex/steps/` в проекте или в домашнем каталоге.
 
 ### decision
 
@@ -2564,8 +2564,8 @@ API», полезная как мера объёма работы, а не ка�
 **Оценка до запуска:**
 
 ```
-$ burnex lint --budget stepcast.yml
-ok: stepcast.yml
+$ burnex lint --budget burnex.yml
+ok: burnex.yml
 worst case: 2.9M токенов, ~78 мин
   implement   2.16M  (180k × 3 попытки × 4 итерации, потолок работы 900k → 900k)
   review        90k  (45k × 2 попытки)

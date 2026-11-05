@@ -32,19 +32,19 @@ kind: pipeline
 name: probe
 jobs:
   probe:
-    uses: ./.stepcast/jobs/probe.yml
+    uses: ./.burnex/jobs/probe.yml
 `;
 
 /** Проект, где файл работы лежит не в корне: только так основания различимы. */
 function expandJob(): Job {
   const project = makeProject({
-    'stepcast.yml': PIPELINE,
-    '.stepcast/jobs/probe.yml': JOB_FILE,
-    '.stepcast/schemas/probe.json': SCHEMA,
+    'burnex.yml': PIPELINE,
+    '.burnex/jobs/probe.yml': JOB_FILE,
+    '.burnex/schemas/probe.json': SCHEMA,
   });
 
   const { pipeline } = expandPipeline({
-    pipelinePath: project.path('stepcast.yml'),
+    pipelinePath: project.path('burnex.yml'),
     config: project.config,
   });
   return pipeline.jobs[0] as Job;
@@ -59,7 +59,7 @@ describe('pipeline-definition: разрешение путей предикат�
     assert.equal(predicate?.kind, 'schema');
     assert.match(
       predicate.kind === 'schema' ? predicate.path : '',
-      /[/\\]\.stepcast[/\\]schemas[/\\]probe\.json$/,
+      /[/\\]\.burnex[/\\]schemas[/\\]probe\.json$/,
     );
   });
 
@@ -69,7 +69,7 @@ describe('pipeline-definition: разрешение путей предикат�
     assert.equal(check?.kind, 'schema');
     assert.match(
       check?.kind === 'schema' ? check.path : '',
-      /[/\\]\.stepcast[/\\]schemas[/\\]probe\.json$/,
+      /[/\\]\.burnex[/\\]schemas[/\\]probe\.json$/,
     );
   });
 
@@ -116,18 +116,18 @@ kind: pipeline
 name: probe
 jobs:
   probe:
-    uses: ./.stepcast/jobs/probe.yml
+    uses: ./.burnex/jobs/probe.yml
 `;
 
 describe('pipeline-definition: ссылка burnex:<имя> в местах объявления схемы', () => {
   it('разрешается во всех трёх местах в один и тот же файл схемы пакета', () => {
     const project = makeProject({
-      'stepcast.yml': BURNEX_SCHEMA_PIPELINE,
-      '.stepcast/jobs/probe.yml': BURNEX_SCHEMA_JOB,
+      'burnex.yml': BURNEX_SCHEMA_PIPELINE,
+      '.burnex/jobs/probe.yml': BURNEX_SCHEMA_JOB,
     });
 
     const { pipeline } = expandPipeline({
-      pipelinePath: project.path('stepcast.yml'),
+      pipelinePath: project.path('burnex.yml'),
       config: project.config,
     });
     const job = pipeline.jobs[0]!;
@@ -142,8 +142,8 @@ describe('pipeline-definition: ссылка burnex:<имя> в местах об
 
   it('until.check принимает ту же форму и разрешает тот же файл', () => {
     const project = makeProject({
-      'stepcast.yml': BURNEX_SCHEMA_PIPELINE,
-      '.stepcast/jobs/probe.yml': `
+      'burnex.yml': BURNEX_SCHEMA_PIPELINE,
+      '.burnex/jobs/probe.yml': `
 version: 1
 kind: job
 name: probe
@@ -159,7 +159,7 @@ steps:
     });
 
     const { pipeline } = expandPipeline({
-      pipelinePath: project.path('stepcast.yml'),
+      pipelinePath: project.path('burnex.yml'),
       config: project.config,
     });
     const check = pipeline.jobs[0]!.until?.check.find((entry) => entry.kind === 'schema');

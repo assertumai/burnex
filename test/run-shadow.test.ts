@@ -26,7 +26,7 @@ const SECRET = 'токен-секрета-12345';
 const ENV_VALUE = 'значение-окружения-шага';
 
 function args(flags: ParsedArgs['flags']): ParsedArgs {
-  return { command: 'run', positional: ['stepcast.yml'], flags };
+  return { command: 'run', positional: ['burnex.yml'], flags };
 }
 
 interface Bed {
@@ -40,7 +40,7 @@ function bed(files: Record<string, string>): Bed {
   const project = makeProject(files);
   const runsRoot = tempDir('runs-');
   // `runs.root` допустим только в глобальной конфигурации.
-  writeFileSync(join(project.home, '.stepcast', 'config.yml'), `runs:\n  root: ${runsRoot}\n`);
+  writeFileSync(join(project.home, '.burnex', 'config.yml'), `runs:\n  root: ${runsRoot}\n`);
   const lines: string[] = [];
   return { project, runsRoot, lines, write: (line) => lines.push(line) };
 }
@@ -66,8 +66,8 @@ jobs:
 
 describe('run --shadow: проверка объявлений до старта', () => {
   it('одна ошибка называет все необъявленные шаги адресами <работа>.<шаг>', () => {
-    const project = makeProject({ 'stepcast.yml': UNDECLARED });
-    const expanded = expandPipeline({ pipelinePath: project.path('stepcast.yml'), config: project.config });
+    const project = makeProject({ 'burnex.yml': UNDECLARED });
+    const expanded = expandPipeline({ pipelinePath: project.path('burnex.yml'), config: project.config });
     assert.throws(
       () => assertShadowDeclarations(expanded.pipeline),
       (error) => {
@@ -81,22 +81,22 @@ describe('run --shadow: проверка объявлений до старта'
   });
 
   it('stepsMissingExternal называет те же шаги без броска, готовый пайплайн даёт пустой перечень', () => {
-    const project = makeProject({ 'stepcast.yml': UNDECLARED });
-    const expanded = expandPipeline({ pipelinePath: project.path('stepcast.yml'), config: project.config });
+    const project = makeProject({ 'burnex.yml': UNDECLARED });
+    const expanded = expandPipeline({ pipelinePath: project.path('burnex.yml'), config: project.config });
     assert.deepEqual(stepsMissingExternal(expanded.pipeline), ['build.compile', 'publish.push']);
 
     const ready = makeProject({
-      'stepcast.yml': UNDECLARED.replace("'echo built > built.txt'] }", "'echo built > built.txt'], external: false }").replace(
+      'burnex.yml': UNDECLARED.replace("'echo built > built.txt'] }", "'echo built > built.txt'], external: false }").replace(
         "'echo pushed > pushed.txt'] }",
         "'echo pushed > pushed.txt'], external: true }",
       ),
     });
-    const readyExpanded = expandPipeline({ pipelinePath: ready.path('stepcast.yml'), config: ready.config });
+    const readyExpanded = expandPipeline({ pipelinePath: ready.path('burnex.yml'), config: ready.config });
     assert.deepEqual(stepsMissingExternal(readyExpanded.pipeline), []);
   });
 
   it('отказ команды — ошибка конфигурации без каталога прогона, и при --dry-run тоже', async () => {
-    const b = bed({ 'stepcast.yml': UNDECLARED });
+    const b = bed({ 'burnex.yml': UNDECLARED });
     for (const flags of [{ shadow: true }, { shadow: true, 'dry-run': true }]) {
       b.lines.length = 0;
       assert.equal(await runCommand(b, flags), ExitCode.configError);
@@ -110,7 +110,7 @@ describe('run --shadow: проверка объявлений до старта'
 
   it('--shadow --dry-run с полными объявлениями проходит и ничего не исполняет', async () => {
     const b = bed({
-      'stepcast.yml': UNDECLARED.replace("'echo built > built.txt'] }", "'echo built > built.txt'], external: false }").replace(
+      'burnex.yml': UNDECLARED.replace("'echo built > built.txt'] }", "'echo built > built.txt'], external: false }").replace(
         "'echo pushed > pushed.txt'] }",
         "'echo pushed > pushed.txt'], external: true }",
       ),
@@ -121,7 +121,7 @@ describe('run --shadow: проверка объявлений до старта'
   });
 
   it('обычный прогон без external идёт как прежде, а run.json без mode', async () => {
-    const b = bed({ 'stepcast.yml': UNDECLARED });
+    const b = bed({ 'burnex.yml': UNDECLARED });
     assert.equal(await runCommand(b, {}), ExitCode.ok);
     assert.equal(readFileSync(b.project.path('pushed.txt'), 'utf8'), 'pushed\n');
     const id = listRuns(b.runsRoot, b.project.root)[0] as string;
@@ -173,7 +173,7 @@ async function runShadow(
   const config = { ...project.config, runs: { ...project.config.runs, root: tempDir('runs-') } };
   const never = createFakeBackend({ lines: [initLine(), resultLine({ text: 'готово' })] });
   return runPipeline({
-    expanded: expandPipeline({ pipelinePath: project.path('stepcast.yml'), config }),
+    expanded: expandPipeline({ pipelinePath: project.path('burnex.yml'), config }),
     config,
     projectRoot: project.root,
     cwd: project.root,
@@ -188,7 +188,7 @@ function shadowProject(): Project {
   const project = makeProject({
     '.env.local': `SVC_CRED=${SECRET}\n`,
     'publish.sh': '#!/bin/sh\necho published > published.txt\n',
-    'stepcast.yml': SHADOW_PIPELINE,
+    'burnex.yml': SHADOW_PIPELINE,
   });
   gitInit(project.root);
   gitCommit(project.root, 'init');
@@ -239,7 +239,7 @@ describe('run --shadow: исполнение', () => {
   it('env_names учитывает env работы и переопределения --env, но не окружение процесса', async () => {
     const project = shadowProject();
     writeFileSync(
-      project.path('stepcast.yml'),
+      project.path('burnex.yml'),
       SHADOW_PIPELINE.replace('  build:\n    steps:', '  build:\n    env: { JOB_LEVEL: x }\n    steps:'),
     );
     gitCommit(project.root, 'job env');
@@ -283,7 +283,7 @@ describe('run --shadow: исполнение', () => {
 
   it('ссылка ниже по графу на выход неисполненного шага — штатная ошибка отсутствующего выхода', async () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 version: 1
 kind: pipeline
 name: downstream
@@ -347,7 +347,7 @@ describe('run --shadow: resume наследует режим исходного 
     );
 
   it('возобновлённый shadow-прогон остаётся shadow: внешний шаг не исполняется, mode переписан в новый run.json', async () => {
-    const b = bed({ 'stepcast.yml': TWO_JOBS });
+    const b = bed({ 'burnex.yml': TWO_JOBS });
     assert.equal(await runCommand(b, { shadow: true }), ExitCode.ok);
     const sourceId = listRuns(b.runsRoot, b.project.root)[0] as string;
     assert.equal(existsSync(b.project.path('pushed.txt')), false);
@@ -361,7 +361,7 @@ describe('run --shadow: resume наследует режим исходного 
   });
 
   it('манифест без mode возобновляется в обычном режиме', async () => {
-    const b = bed({ 'stepcast.yml': TWO_JOBS });
+    const b = bed({ 'burnex.yml': TWO_JOBS });
     assert.equal(await runCommand(b, {}), ExitCode.ok);
     const sourceId = listRuns(b.runsRoot, b.project.root)[0] as string;
     rmSync(b.project.path('pushed.txt'));

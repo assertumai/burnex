@@ -37,14 +37,14 @@ async function cli(project: Project, argv: readonly string[]): Promise<Outcome> 
 }
 
 function withProjectPatch(project: Project, body: string): void {
-  mkdirSync(join(project.root, '.stepcast'), { recursive: true });
-  writeFileSync(join(project.root, '.stepcast', 'plugins.patch.yml'), body);
+  mkdirSync(join(project.root, '.burnex'), { recursive: true });
+  writeFileSync(join(project.root, '.burnex', 'plugins.patch.yml'), body);
 }
 
 /** Модуль плагина рядом с патчем: относительный `use` разрешается от каталога патча. */
 function withProjectModule(project: Project, name: string, body: string): void {
-  mkdirSync(join(project.root, '.stepcast'), { recursive: true });
-  writeFileSync(join(project.root, '.stepcast', name), body);
+  mkdirSync(join(project.root, '.burnex'), { recursive: true });
+  writeFileSync(join(project.root, '.burnex', name), body);
 }
 
 /** Декларативный плагин с одной командой — тот же контракт, что у всякого плагина. */
@@ -221,7 +221,7 @@ describe('plugin-tree: строка плагина вставлена перед
 describe('cli-commands-as-rows: каталог, названный идентификатором строки команды', () => {
   async function pluginsOutputFor(id: string): Promise<{ readonly project: Project; readonly outcome: Outcome }> {
     const project = makeProject({});
-    mkdirSync(join(project.root, '.stepcast', 'plugins', id), { recursive: true });
+    mkdirSync(join(project.root, '.burnex', 'plugins', id), { recursive: true });
     return { project, outcome: await cli(project, ['plugins']) };
   }
 
@@ -229,7 +229,7 @@ describe('cli-commands-as-rows: каталог, названный иденти�
     const { project, outcome } = await pluginsOutputFor('command-init');
 
     const lines = outcome.stdout.split('\n').filter((line) => line.includes('command-init'));
-    const directoryLine = lines.find((line) => line.includes(join(project.root, '.stepcast', 'plugins', 'command-init')));
+    const directoryLine = lines.find((line) => line.includes(join(project.root, '.burnex', 'plugins', 'command-init')));
     assert.ok(directoryLine !== undefined, `каталожная строка обязана быть напечатана: ${outcome.stdout}`);
     assert.match(directoryLine, /отказ: Каталог плагина command-init назван идентификатором встроенной строки/);
     assert.doesNotMatch(directoryLine, /не распоряжается/);
@@ -246,7 +246,7 @@ describe('cli-commands-as-rows: каталог, названный иденти�
 
     const directoryLine = outcome.stdout
       .split('\n')
-      .find((line) => line.includes(join(project.root, '.stepcast', 'plugins', 'command-run')));
+      .find((line) => line.includes(join(project.root, '.burnex', 'plugins', 'command-run')));
     assert.ok(directoryLine !== undefined, `каталожная строка обязана быть напечатана: ${outcome.stdout}`);
     assert.match(directoryLine, /отказ: Каталог плагина command-run назван идентификатором встроенной строки/);
   });

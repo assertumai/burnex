@@ -8,6 +8,7 @@ import { buildPackageIndex, lookupInPackages, resourceLayers, type PackageResour
 import { describeSchemaFailure } from '../../kernel/schema-failure.js';
 import { checkDashboardDocument, DashboardDocumentError, type DashboardDefinition } from './dashboards.js';
 import { isSafeSegment } from './routes.js';
+import { cabinetDir, homeRoot } from '../../kernel/dirs.js';
 
 /**
  * Файл дашборда и его два слоя (`ui-dashboards`, design.md Решение 1, 2, 9,
@@ -59,11 +60,11 @@ const DASHBOARD_EXTENSION = '.yml';
 const DASHBOARDS_DIR_NAME = 'dashboards';
 
 export function homeDashboardsDirPath(home: string): string {
-  return join(home, '.stepcast', DASHBOARDS_DIR_NAME);
+  return join(homeRoot(home), DASHBOARDS_DIR_NAME);
 }
 
 export function projectDashboardsDirPath(projectRoot: string): string {
-  return join(projectRoot, '.stepcast', DASHBOARDS_DIR_NAME);
+  return join(cabinetDir(projectRoot), DASHBOARDS_DIR_NAME);
 }
 
 export type DashboardLayerName = 'home' | 'project';
@@ -206,10 +207,10 @@ type DashboardSearchLayer =
 /**
  * Слои дашбордов в порядке поиска: свободный проект, пакеты проекта, свободный
  * home, пакеты home (`packages-directory-layer`, Решение 7). Пакеты home — в
- * `<home>/.stepcast/packages`, как и свободные дашборды home.
+ * `<home>/.burnex/packages`, как и свободные дашборды home.
  */
 function dashboardSearchLayers(options: DashboardBuildOptions): readonly DashboardSearchLayer[] {
-  const homeStepcastDir = join(options.home, '.stepcast');
+  const homeStepcastDir = homeRoot(options.home);
   const index = buildPackageIndex({
     ...(options.projectRoot === undefined ? {} : { projectRoot: options.projectRoot }),
     globalPath: join(homeStepcastDir, 'config.yml'),
@@ -260,7 +261,7 @@ export function buildDashboards(options: DashboardBuildOptions): DashboardsBuild
       if ('conflict' in located) {
         throw new StepcastError(
           `Dashboard ${id} is provided by two packages of one layer: ${located.conflict[0]} and ${located.conflict[1]}`,
-          { file: located.path, hint: 'Rename the dashboard in one package, remove one package, or put your own copy in .stepcast/dashboards' },
+          { file: located.path, hint: 'Rename the dashboard in one package, remove one package, or put your own copy in .burnex/dashboards' },
         );
       }
       dashboards.push(buildOneDashboard(id, located.layer, located.path, located.package));

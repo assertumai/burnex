@@ -1,6 +1,6 @@
 import { existsSync, realpathSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { join, relative, resolve } from 'node:path';
+import { relative, resolve } from 'node:path';
 
 import type { Config } from '../pipeline/config/resolve.js';
 import { listPipelineEntries } from '../pipeline/domain/project/pipelines.js';
@@ -18,6 +18,7 @@ import {
   type Failure,
   type KernelCache,
 } from './pipelines.js';
+import { homeRoot } from '../../kernel/dirs.js';
 
 /**
  * Расписания проектов для экрана «Schedule» (`ui-schedule-view`, design.md).
@@ -170,7 +171,7 @@ async function projectView(
   }
 
   const entries = listPipelineEntries(project.path, {
-    globalConfigDir: join(options.home ?? homedir(), '.stepcast'),
+    globalConfigDir: homeRoot(options.home ?? homedir()),
   });
 
   // Прогоны читаются лениво и один раз на проект: пайплайна с расписанием

@@ -21,7 +21,7 @@ async function run(
 ): Promise<RunResult> {
   const runsRoot = tempDir('runs-');
   return runPipeline({
-    expanded: expandPipeline({ pipelinePath: project.path('stepcast.yml'), config: project.config }),
+    expanded: expandPipeline({ pipelinePath: project.path('burnex.yml'), config: project.config }),
     config: { ...project.config, runs: { ...project.config.runs, root: runsRoot } },
     projectRoot: project.root,
     cwd: project.root,
@@ -65,7 +65,7 @@ jobs:
 describe('judge-attempt: жёсткий вердикт агентского шага', () => {
   // Сценарий: «Жёсткий вердикт отклоняет попытку»
   it('hard: true и pass: false отклоняют попытку', async () => {
-    const project = makeProject({ 'stepcast.yml': AGENT_STEP_HARD });
+    const project = makeProject({ 'burnex.yml': AGENT_STEP_HARD });
     const fake = createFakeBackend({ lines: [initLine(), resultLine({ text: 'план готов' })] });
     const critic = createFakeBackend({
       lines: [resultLine({ structured: { pass: false, reason: 'ретраи не покрыты' } })],
@@ -78,7 +78,7 @@ describe('judge-attempt: жёсткий вердикт агентского ша
   });
 
   it('hard: true и pass: true проводят попытку', async () => {
-    const project = makeProject({ 'stepcast.yml': AGENT_STEP_HARD });
+    const project = makeProject({ 'burnex.yml': AGENT_STEP_HARD });
     const fake = createFakeBackend({ lines: [initLine(), resultLine({ text: 'план готов' })] });
     const critic = createFakeBackend({
       lines: [resultLine({ structured: { pass: true, reason: 'план полный' } })],
@@ -108,7 +108,7 @@ jobs:
 
 describe('judge-attempt: совещательный вердикт не отклоняет попытку', () => {
   it('pass: false без hard записан как совещательный, но попытка проходит', async () => {
-    const project = makeProject({ 'stepcast.yml': AGENT_STEP_SOFT });
+    const project = makeProject({ 'burnex.yml': AGENT_STEP_SOFT });
     const fake = createFakeBackend({ lines: [initLine(), resultLine({ text: 'план готов' })] });
     const critic = createFakeBackend({
       lines: [resultLine({ structured: { pass: false, reason: 'неполный охват' } })],
@@ -147,7 +147,7 @@ jobs:
 
 describe('judge-attempt: непройденный совещательный вердикт не мешает следующему судье', () => {
   it('судья по второму предикату вызывается, несмотря на отказ первого', async () => {
-    const project = makeProject({ 'stepcast.yml': AGENT_STEP_TWO_JUDGES });
+    const project = makeProject({ 'burnex.yml': AGENT_STEP_TWO_JUDGES });
     const fake = createFakeBackend({ lines: [initLine(), resultLine({ text: 'план готов' })] });
     const criticSoft = createFakeBackend({
       lines: [resultLine({ structured: { pass: false, reason: 'первое не покрыто' } })],
@@ -202,7 +202,7 @@ jobs:
 
 describe('judge-attempt: причина непройденного вердикта уходит в следующую попытку', () => {
   it('reason жёсткого отказа входит в разбор прошлой неудачи следующей попытки', async () => {
-    const project = makeProject({ 'stepcast.yml': AGENT_STEP_ESCALATION });
+    const project = makeProject({ 'burnex.yml': AGENT_STEP_ESCALATION });
     const fake = createFakeBackend({ lines: [initLine(), resultLine({ text: 'план готов' })] });
     const critic = createFakeBackend({
       lines: [resultLine({ structured: { pass: false, reason: 'не покрыты крайние случаи' } })],
@@ -243,7 +243,7 @@ jobs:
 
 describe('judge-attempt: сессия судьи не попадает в реестр псевдонимов', () => {
   it('следующий шаг той же общей сессии продолжает диалог шага, а не судьи', async () => {
-    const project = makeProject({ 'stepcast.yml': AGENT_STEP_SHARED_SESSION });
+    const project = makeProject({ 'burnex.yml': AGENT_STEP_SHARED_SESSION });
     const fake = createFakeBackend({
       lines: [initLine(), resultLine({ text: 'готово' })],
     });
@@ -271,7 +271,7 @@ describe('judge-attempt: сессия судьи не попадает в рее
 
 describe('judge-attempt: сквозная нумерация растёт через попытки', () => {
   it('вторая попытка продолжает счётчик judge-<n>, а не начинает заново', async () => {
-    const project = makeProject({ 'stepcast.yml': AGENT_STEP_ESCALATION });
+    const project = makeProject({ 'burnex.yml': AGENT_STEP_ESCALATION });
     const fake = createFakeBackend({ lines: [initLine(), resultLine({ text: 'план готов' })] });
     const critic = createFakeBackend({
       lines: [resultLine({ structured: { pass: false, reason: 'не покрыты крайние случаи' } })],
@@ -298,7 +298,7 @@ describe('judge-attempt: сквозная нумерация растёт чер
 
 describe('judge-attempt: судья на шаге командной строки', () => {
   it('вызывается, а местом структурированного вывода служит stdout', async () => {
-    const project = makeProject({ 'stepcast.yml': RUN_STEP_JUDGE });
+    const project = makeProject({ 'burnex.yml': RUN_STEP_JUDGE });
     // Командному шагу собственный бэкенд не нужен: он не агентский. Имя
     // фигурирует только затем, чтобы adapterFor знал, кому какой ответ дать.
     const fake = createFakeBackend({ lines: [] });

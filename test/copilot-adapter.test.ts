@@ -226,7 +226,7 @@ describe('copilot-backend: исполнение шага на подменённ
    * его содержать.
    */
   function fakeCopilotProject(pipeline: string) {
-    const project = makeProject({ 'stepcast.yml': pipeline });
+    const project = makeProject({ 'burnex.yml': pipeline });
     const bin = tempDir('copilot-bin-');
     const calls = join(bin, 'calls');
     const script = join(bin, 'copilot');
@@ -247,7 +247,7 @@ process.stdout.write(fs.readFileSync(path.join(${JSON.stringify(FIXTURES)}, 'ans
     chmodSync(script, 0o755);
     // `command` допустим только в глобальной конфигурации.
     writeFileSync(
-      join(project.home, '.stepcast', 'config.yml'),
+      join(project.home, '.burnex', 'config.yml'),
       `plugins: [${JSON.stringify(MODULE)}]\nbackends:\n  copilot:\n    command: ${JSON.stringify(script)}\n`,
     );
     const recorded = (): Array<{ argv: string[]; stdin: string }> =>
@@ -264,14 +264,14 @@ process.stdout.write(fs.readFileSync(path.join(${JSON.stringify(FIXTURES)}, 'ans
       {
         cwd: project.root,
         home: project.home,
-        globalPath: join(project.home, '.stepcast', 'config.yml'),
-        projectPath: join(project.root, '.stepcast', 'config.yml'),
+        globalPath: join(project.home, '.burnex', 'config.yml'),
+        projectPath: join(project.root, '.burnex', 'config.yml'),
       },
       {},
     );
     const config = { ...resolved.config, runs: { ...resolved.config.runs, root: tempDir('runs-') } };
     return runPipeline({
-      expanded: expandPipeline({ pipelinePath: project.path('stepcast.yml'), config, registry }),
+      expanded: expandPipeline({ pipelinePath: project.path('burnex.yml'), config, registry }),
       config,
       registry,
       projectRoot: project.root,
@@ -336,7 +336,7 @@ process.stdout.write(fs.readFileSync(path.join(${JSON.stringify(FIXTURES)}, 'ans
 
   it('defaults.effort: прогон идёт, команда без effort, в журнале backend.degraded', async () => {
     const { project, recorded } = fakeCopilotProject(`name: p\njobs:\n  работа:\n    steps:\n${step('один')}`);
-    project.write('.stepcast/config.yml', 'defaults:\n  effort: high\n');
+    project.write('.burnex/config.yml', 'defaults:\n  effort: high\n');
 
     const result = await run(project);
 
@@ -403,22 +403,22 @@ process.stdout.write(fs.readFileSync(path.join(${JSON.stringify(FIXTURES)}, 'ans
     );
     project.write('schema.json', '{ "type": "object" }\n');
     project.write(
-      '.stepcast/config.yml',
+      '.burnex/config.yml',
       'backends:\n  copilot: { structured_output: true, mcp: true, strict_permissions: true }\n',
     );
     const { resolved, registry } = await resolveWithPlugins(
       {
         cwd: project.root,
         home: project.home,
-        globalPath: join(project.home, '.stepcast', 'config.yml'),
-        projectPath: join(project.root, '.stepcast', 'config.yml'),
+        globalPath: join(project.home, '.burnex', 'config.yml'),
+        projectPath: join(project.root, '.burnex', 'config.yml'),
       },
       {},
     );
     assert.equal(resolved.config.backends.copilot?.structuredOutput, true, 'флаг включён конфигурацией');
 
     const errors = lintPipeline(
-      expandPipeline({ pipelinePath: project.path('stepcast.yml'), config: resolved.config, registry }),
+      expandPipeline({ pipelinePath: project.path('burnex.yml'), config: resolved.config, registry }),
       { config: resolved.config, registry },
     ).filter((item) => item.severity === 'error');
 
@@ -439,8 +439,8 @@ process.stdout.write(fs.readFileSync(path.join(${JSON.stringify(FIXTURES)}, 'ans
       {
         cwd: project.root,
         home: project.home,
-        globalPath: join(project.home, '.stepcast', 'config.yml'),
-        projectPath: join(project.root, '.stepcast', 'config.yml'),
+        globalPath: join(project.home, '.burnex', 'config.yml'),
+        projectPath: join(project.root, '.burnex', 'config.yml'),
       },
       {},
     );

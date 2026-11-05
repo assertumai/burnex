@@ -17,12 +17,12 @@ import { makeJournalBed, seedRun } from './helpers.js';
 function bed() {
   const { runsRoot, projectRoot, home } = makeJournalBed();
   seedRun(runsRoot, projectRoot, { runId: 'a' });
-  mkdirSync(join(projectRoot, '.stepcast', 'pipelines'), { recursive: true });
+  mkdirSync(join(projectRoot, '.burnex', 'pipelines'), { recursive: true });
   return { runsRoot, projectRoot, home };
 }
 
 function write(projectRoot: string, name: string, body: string): void {
-  writeFileSync(join(projectRoot, '.stepcast', 'pipelines', name), body);
+  writeFileSync(join(projectRoot, '.burnex', 'pipelines', name), body);
 }
 
 const JOB = `kind: pipeline
@@ -160,9 +160,9 @@ jobs:
   async function viewWith(globalConfig: string, projectConfig?: string) {
     const { runsRoot, projectRoot, home } = bed();
     write(projectRoot, 'p.yml', AGENT_PIPELINE);
-    mkdirSync(join(home, '.stepcast'), { recursive: true });
-    writeFileSync(join(home, '.stepcast', 'config.yml'), globalConfig);
-    if (projectConfig !== undefined) writeFileSync(join(projectRoot, '.stepcast', 'config.yml'), projectConfig);
+    mkdirSync(join(home, '.burnex'), { recursive: true });
+    writeFileSync(join(home, '.burnex', 'config.yml'), globalConfig);
+    if (projectConfig !== undefined) writeFileSync(join(projectRoot, '.burnex', 'config.yml'), projectConfig);
     const { config } = resolveConfig({ cwd: home, home, projectPath: null });
     const view = (await buildPipelines(runsRoot, config, { home })).pipelines.find((entry) => entry.file.endsWith('p.yml'));
     assert.equal(view?.error, undefined);
@@ -183,7 +183,7 @@ jobs:
   it('при fallback запись побеждает и называет файл, а политика — свой источник', async () => {
     const { view, home } = await viewWith('agent_policy: fallback\nstep_agents:\n  p:\n    work:\n      a: { model: sonnet }\n');
     const step = view?.jobs[0]?.steps.find((candidate) => candidate.id === 'a');
-    const file = join(home, '.stepcast', 'config.yml');
+    const file = join(home, '.burnex', 'config.yml');
     assert.equal(step?.model, 'sonnet');
     assert.deepEqual(step?.modelOrigin, { layer: 'step_agents', file });
     assert.equal(step?.agentEntry?.mark, undefined);
@@ -195,7 +195,7 @@ jobs:
     const { view, home } = await viewWith(`${CODEX}pipeline_agents:\n  p: { agent: codex }\n`);
     const step = view?.jobs[0]?.steps.find((candidate) => candidate.id === 'b');
     assert.equal(step?.agent, 'codex');
-    assert.deepEqual(step?.agentOrigin, { layer: 'pipeline_agents', file: join(home, '.stepcast', 'config.yml') });
+    assert.deepEqual(step?.agentOrigin, { layer: 'pipeline_agents', file: join(home, '.burnex', 'config.yml') });
     assert.equal(view?.agentEntry?.key, 'pipeline_agents.p');
     assert.equal(view?.agentEntry?.agent?.value, 'codex');
     assert.equal(view?.agentEntry?.mark, undefined);
@@ -228,8 +228,8 @@ jobs:
     const { runsRoot, projectRoot, home } = bed();
     write(projectRoot, 'p.yml', body);
     if (globalConfig !== undefined) {
-      mkdirSync(join(home, '.stepcast'), { recursive: true });
-      writeFileSync(join(home, '.stepcast', 'config.yml'), globalConfig);
+      mkdirSync(join(home, '.burnex'), { recursive: true });
+      writeFileSync(join(home, '.burnex', 'config.yml'), globalConfig);
     }
     const { config } = resolveConfig({ cwd: home, home, projectPath: null });
     const view = (await buildPipelines(runsRoot, config, { home })).pipelines.find((entry) => entry.file.endsWith('p.yml'));

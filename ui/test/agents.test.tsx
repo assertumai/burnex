@@ -120,7 +120,7 @@ describe('ui-agents: вкладка из адреса и область дейс
   });
 
   it('scopeOf различает затронутые, объявившие сами, перекрытые ближним файлом и неразобранные', () => {
-    const settingsFile = '/home/me/.stepcast/config.yml';
+    const settingsFile = '/home/me/.burnex/config.yml';
     const pipeline = (name: string, steps: readonly { readonly layer: string; readonly file?: string }[]): PipelineView =>
       ({
         projectKey: 'p', projectPath: '/p', file: `${name}.yml`, name, inputs: [],
@@ -138,7 +138,7 @@ describe('ui-agents: вкладка из адреса и область дейс
       pipeline('a', [
         { layer: 'step' }, { layer: 'job' }, { layer: 'pipeline' },
         { layer: 'config', file: settingsFile },
-        { layer: 'config', file: '/p/.stepcast/config.yml' },
+        { layer: 'config', file: '/p/.burnex/config.yml' },
         { layer: 'backend' }, { layer: 'none' },
       ]),
       broken,

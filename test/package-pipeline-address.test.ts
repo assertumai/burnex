@@ -41,15 +41,15 @@ function writePackage(packagesDir: string, name: string, pipelines: Record<strin
 }
 
 function projectPackages(project: Project): string {
-  return join(project.root, '.stepcast', 'packages');
+  return join(project.root, '.burnex', 'packages');
 }
 
 function homePackages(project: Project): string {
-  return join(project.home, '.stepcast', 'packages');
+  return join(project.home, '.burnex', 'packages');
 }
 
 function options(project: Project): { globalConfigDir: string } {
-  return { globalConfigDir: join(project.home, '.stepcast') };
+  return { globalConfigDir: join(project.home, '.burnex') };
 }
 
 function failureOf(fn: () => unknown): StepcastError {
@@ -122,7 +122,7 @@ describe('package address: разрешение цели', () => {
   it('пакетов нет вовсе: отказ называет, где искали', () => {
     const project = makeProject();
     const error = failureOf(() => resolvePipelineTarget(project.root, 'nope:greet', options(project)));
-    assert.match(error.hint ?? '', /\.stepcast\/packages/);
+    assert.match(error.hint ?? '', /\.burnex\/packages/);
   });
 
   it('пакет сломан: отказ называет причину и файл манифеста', () => {
@@ -156,10 +156,10 @@ jobs:
 
   function writeLocalStep(project: Project): void {
     project.write(
-      '.stepcast/steps/local-step/step.yml',
+      '.burnex/steps/local-step/step.yml',
       'version: 1\nkind: step\nname: local-step\ndescription: Шаг проекта.\nfile: ./main.sh\n',
     );
-    project.write('.stepcast/steps/local-step/main.sh', '#!/bin/sh\necho ok\n');
+    project.write('.burnex/steps/local-step/main.sh', '#!/bin/sh\necho ok\n');
   }
 
   it('lint адресом пакета проекта: слои шагов идут от каталога запуска', () => {
@@ -238,7 +238,7 @@ jobs:
     const project = makeProject();
     const runsRoot = tempDir('runs-');
     // `runs.root` допустим только в глобальной конфигурации.
-    writeFileSync(join(project.home, '.stepcast', 'config.yml'), `runs:\n  root: ${runsRoot}\n`);
+    writeFileSync(join(project.home, '.burnex', 'config.yml'), `runs:\n  root: ${runsRoot}\n`);
     const lines: string[] = [];
     return { project, runsRoot, lines, write: (line) => lines.push(line) };
   }
@@ -280,10 +280,10 @@ jobs:
     const dir = writePackage(homePackages(b.project), 'tools', { 'report.yml': TWO_JOBS });
     // Шаг первой работы — шаг проекта, пакет приносит только пайплайн.
     b.project.write(
-      '.stepcast/steps/greet-step/step.yml',
+      '.burnex/steps/greet-step/step.yml',
       'version: 1\nkind: step\nname: greet-step\ndescription: Шаг проекта.\nfile: ./main.sh\n',
     );
-    b.project.write('.stepcast/steps/greet-step/main.sh', '#!/bin/sh\necho ok\n');
+    b.project.write('.burnex/steps/greet-step/main.sh', '#!/bin/sh\necho ok\n');
 
     const first = await withHome(b.project.home, () =>
       runRunCommand(args('run', 'tools:report'), b.write, b.project.root),
@@ -306,9 +306,9 @@ jobs:
 
   it('манифест прежнего журнала без адреса читается как прежде', async () => {
     const b = bed();
-    b.project.write('stepcast.yml', PIPELINE);
+    b.project.write('burnex.yml', PIPELINE);
     const code = await withHome(b.project.home, () =>
-      runRunCommand(args('run', 'stepcast.yml'), b.write, b.project.root),
+      runRunCommand(args('run', 'burnex.yml'), b.write, b.project.root),
     );
     assert.equal(code, ExitCode.ok, b.lines.join('\n'));
     const runId = listRuns(b.runsRoot, b.project.root)[0] as string;

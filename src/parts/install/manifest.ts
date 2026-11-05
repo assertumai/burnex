@@ -5,9 +5,10 @@ import { z } from 'zod';
 
 import { StepcastError } from '../../kernel/errors.js';
 import { readEngineEnv } from '../../kernel/env-names.js';
+import { homeRoot } from '../../kernel/dirs.js';
 
 /**
- * Паспорт установки `~/.stepcast/install.json`: как поставлен движок и,
+ * Паспорт установки `~/.burnex/install.json`: как поставлен движок и,
  * следовательно, чем его обновлять.
  *
  * Лишние ключи допускаются (`.loose()`): более новый `install.sh` может
@@ -44,17 +45,17 @@ const FILE_NAME = 'install.json';
 
 /**
  * Домашний каталог движка: `$BURNEX_HOME` (переходно — `$STEPCAST_HOME`),
- * иначе `~/.stepcast`. Пустая переменная считается отсутствующей — как
+ * иначе `~/.burnex`. Пустая переменная считается отсутствующей — как
  * `${BURNEX_HOME:-…}` в install.sh.
  */
 export function stepcastHome(
   env: Readonly<Record<string, string | undefined>> = process.env,
   home: string = homedir(),
 ): string {
-  return readEngineEnv(env, 'HOME') ?? join(home, '.stepcast');
+  return readEngineEnv(env, 'HOME') ?? homeRoot(home);
 }
 
-/** Путь паспорта: `$BURNEX_HOME/install.json`, иначе `~/.stepcast/install.json`. */
+/** Путь паспорта: `$BURNEX_HOME/install.json`, иначе `~/.burnex/install.json`. */
 export function installManifestPath(
   env: Readonly<Record<string, string | undefined>> = process.env,
   home: string = homedir(),

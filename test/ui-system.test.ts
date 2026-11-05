@@ -33,7 +33,7 @@ const MANAGED = JSON.stringify({
   repo: '/srv/stepcast.git',
   ref: 'v0.4.0',
   version: '0.4.0',
-  releases_dir: '/h/.stepcast/releases',
+  releases_dir: '/h/.burnex/releases',
   installed_at: '2026-10-01T00:00:00Z',
 });
 
@@ -61,11 +61,11 @@ function fakeHost(over: Partial<SystemHost> = {}): SystemHost {
   return {
     now: () => 1_000_000,
     launchd: launchdHost(),
-    engineRoot: '/h/.stepcast/releases/0.4.0',
+    engineRoot: '/h/.burnex/releases/0.4.0',
     engineVersion: () => '0.4.0',
-    manifestPath: '/h/.stepcast/install.json',
+    manifestPath: '/h/.burnex/install.json',
     readManifest: () => MANAGED,
-    installProbes: { releasesDir: '/h/.stepcast/releases', isGitTree: () => false, readPackageName: () => undefined },
+    installProbes: { releasesDir: '/h/.burnex/releases', isGitTree: () => false, readPackageName: () => undefined },
     currentRelease: () => '0.4.0',
     findCommand: () => undefined,
     heldProbe: () => undefined,
@@ -79,7 +79,7 @@ function fakeHost(over: Partial<SystemHost> = {}): SystemHost {
 function bed(config = ''): { runsRoot: string; projectRoot: string; home: string } {
   const fixture = makeJournalBed();
   if (config !== '') {
-    writeFileSync(join(fixture.home, '.stepcast', 'config.yml'), `runs:\n  root: ${fixture.runsRoot}\n${config}`);
+    writeFileSync(join(fixture.home, '.burnex', 'config.yml'), `runs:\n  root: ${fixture.runsRoot}\n${config}`);
   }
   return fixture;
 }
@@ -125,7 +125,7 @@ describe('ui-system: версия и способ установки', () => {
       fakeHost({
         readManifest: () => undefined,
         engineRoot: '/work/stepcast',
-        installProbes: { releasesDir: '/h/.stepcast/releases', isGitTree: () => true, readPackageName: () => undefined },
+        installProbes: { releasesDir: '/h/.burnex/releases', isGitTree: () => true, readPackageName: () => undefined },
       }),
     );
 

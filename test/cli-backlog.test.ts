@@ -15,7 +15,7 @@ import { gitCommit, gitInit, withHome } from './helpers.js';
 import { tempDir } from './tmp.js';
 
 /**
- * `burnex backlog` не требует ни `stepcast.yml`, ни `.stepcast/`, ни
+ * `burnex backlog` не требует ни `burnex.yml`, ни `.burnex/`, ни
  * конфигурации — проверки идут `run(argv, io)` в обычном временном каталоге,
  * без каркаса `makeProject`, который заводит их специально для команд,
  * зависящих от проекта.
@@ -107,10 +107,10 @@ describe('CLI: burnex backlog list', () => {
     assert.match(result.stderr, /backlog\.md/);
   });
 
-  it('в каталоге без stepcast.yml и .stepcast/ отрабатывает штатно', async () => {
+  it('в каталоге без burnex.yml и .burnex/ отрабатывает штатно', async () => {
     const dir = bed(item('an-item', COMPLETE));
-    assert.equal(existsSync(join(dir, 'stepcast.yml')), false);
-    assert.equal(existsSync(join(dir, '.stepcast')), false);
+    assert.equal(existsSync(join(dir, 'burnex.yml')), false);
+    assert.equal(existsSync(join(dir, '.burnex')), false);
 
     const result = await backlog(dir, ['list']);
     assert.equal(result.code, ExitCode.ok);
@@ -799,7 +799,7 @@ describe('CLI: владелец пункта --owner', () => {
   }
 
   function runsRootOf(home: string): string {
-    return join(home, '.stepcast', 'runs');
+    return join(home, '.burnex', 'runs');
   }
 
   /** Прогон проекта очереди в журнале под HOME; `pid` живой — свой, мёртвый — несуществующий. */
@@ -814,7 +814,7 @@ describe('CLI: владелец пункта --owner', () => {
     journal.writeManifest({
       run_id: runId,
       pipeline: 'demo',
-      pipeline_file: join(projectRoot, 'stepcast.yml'),
+      pipeline_file: join(projectRoot, 'burnex.yml'),
       lock_hash: 'abc',
       project_root: projectRoot,
       workspace: { mode: 'cwd' },
@@ -914,7 +914,7 @@ describe('CLI: владелец пункта --owner', () => {
 
     it('очередь без владельцев работает в каталоге без конфигурации проекта', async () => {
       const dir = bed(item('an-item', { ...COMPLETE, status: 'in_progress', started_at: OLD }));
-      assert.equal(existsSync(join(dir, '.stepcast')), false);
+      assert.equal(existsSync(join(dir, '.burnex')), false);
 
       const result = await backlog(dir, ['pick', '--owner', 'run:R2']);
 

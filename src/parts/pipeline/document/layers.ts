@@ -9,6 +9,7 @@ import {
   type ResourceKind,
 } from '../../packages/index.js';
 import type { ScriptRoots } from './expand.js';
+import { homeRoot } from '../../../kernel/dirs.js';
 
 /**
  * Слои разрешения имени для шагов `uses` и скриптов `script`
@@ -33,13 +34,13 @@ export type LayerSearch =
 
 /**
  * Указатель, построенный от корней вызова. Пакеты home лежат рядом с глобальным
- * конфигом `<home>/.stepcast/`, как и свободные ресурсы того же корня: тест с
+ * конфигом `<home>/.burnex/`, как и свободные ресурсы того же корня: тест с
  * подставным `home` получает пустой слой пакетов, а не пакеты машины.
  */
 export function packageIndexFor(roots: ScriptRoots): PackageIndex {
   return (
     roots.packages ??
-    buildPackageIndex({ projectRoot: roots.project, globalPath: join(roots.home, '.stepcast', 'config.yml') })
+    buildPackageIndex({ projectRoot: roots.project, globalPath: join(homeRoot(roots.home), 'config.yml') })
   );
 }
 
@@ -56,7 +57,7 @@ export function findInLayers(
   exists: (candidate: string) => boolean,
 ): LayerSearch {
   const index = packageIndexFor(roots);
-  const layers = resourceLayers(index, kind, { projectRoot: roots.project, homeStepcastDir: join(roots.home, '.stepcast') });
+  const layers = resourceLayers(index, kind, { projectRoot: roots.project, homeStepcastDir: homeRoot(roots.home) });
   const searched: string[] = [];
   // Промах шага перечисляет каталоги кандидатов (`<слой>/steps/<имя>`), промах
   // скрипта — каталоги слоёв: так перечни выглядели до пакетов, и на них

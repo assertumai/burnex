@@ -115,19 +115,19 @@
 
 #### Scenario: Промпт рядом с файлом работы
 
-- **WHEN** файл `.stepcast/jobs/implement.yml` объявляет `prompt: file:../prompts/implement.md`
-- **THEN** читается `.stepcast/prompts/implement.md`
+- **WHEN** файл `.burnex/jobs/implement.yml` объявляет `prompt: file:../prompts/implement.md`
+- **THEN** читается `.burnex/prompts/implement.md`
 
 #### Scenario: Контекст от корня рабочей директории
 
 - **WHEN** тот же файл работы объявляет `context: [AGENTS.md]`
-- **THEN** читается `AGENTS.md` из корня рабочей директории, а не из `.stepcast/jobs/`
+- **THEN** читается `AGENTS.md` из корня рабочей директории, а не из `.burnex/jobs/`
 
 #### Scenario: Схема предиката рядом с файлом работы
 
-- **WHEN** файл `.stepcast/jobs/implement.yml` объявляет предикат
+- **WHEN** файл `.burnex/jobs/implement.yml` объявляет предикат
   `expect: [{ schema: ../schemas/implement.json }]`
-- **THEN** читается `.stepcast/schemas/implement.json`
+- **THEN** читается `.burnex/schemas/implement.json`
 
 #### Scenario: Схема предиката в условии сходимости
 

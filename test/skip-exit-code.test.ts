@@ -20,7 +20,7 @@ async function run(project: Project): Promise<RunResult> {
   const runsRoot = tempDir('runs-');
   return runPipeline({
     expanded: expandPipeline({
-      pipelinePath: project.path('stepcast.yml'),
+      pipelinePath: project.path('burnex.yml'),
       config: project.config,
       scriptRoots: { project: project.root, home: tempDir('script-home-'), builtin: tempDir('script-builtin-') },
     }),
@@ -53,7 +53,7 @@ jobs:
 
 describe('skip-exit-code: работа', () => {
   it('первый шаг выходит кодом пропуска — остальные не идут, работа skipped/declared', async () => {
-    const project = makeProject({ 'stepcast.yml': THREE_STEPS });
+    const project = makeProject({ 'burnex.yml': THREE_STEPS });
     const result = await run(project);
 
     assert.equal(result.status, 'success');
@@ -75,7 +75,7 @@ describe('skip-exit-code: работа', () => {
   it('run с output_schema, судьёй и пустым stdout: судья не зван, промаха output_schema нет', async () => {
     const project = makeProject({
       'out.json': '{"type":"object"}',
-      'stepcast.yml': `
+      'burnex.yml': `
 version: 1
 kind: pipeline
 name: пропуск-схема
@@ -108,8 +108,8 @@ jobs:
   it('script без файла выхода — skipped, а не отказ контракта', async () => {
     const project = makeProject({
       'out.json': '{"type":"object"}',
-      '.stepcast/scripts/probe.sh': '#!/bin/sh\nexit "$BURNEX_SKIP_EXIT_CODE"\n',
-      'stepcast.yml': `
+      '.burnex/scripts/probe.sh': '#!/bin/sh\nexit "$BURNEX_SKIP_EXIT_CODE"\n',
+      'burnex.yml': `
 version: 1
 kind: pipeline
 name: пропуск-скрипт
@@ -132,7 +132,7 @@ jobs:
 
   it('другой ненулевой код при объявленном коде пропуска — отказ как прежде', async () => {
     const project = makeProject({
-      'stepcast.yml': THREE_STEPS.replace('exit 78', 'exit 3'),
+      'burnex.yml': THREE_STEPS.replace('exit 78', 'exit 3'),
     });
     const result = await run(project);
     assert.equal(result.status, 'failed');
@@ -141,7 +141,7 @@ jobs:
 
   it('attempts.max: 3 — одна попытка', async () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 version: 1
 kind: pipeline
 name: пропуск-попытки
@@ -163,7 +163,7 @@ jobs:
 describe('skip-exit-code: окружение', () => {
   it('BURNEX_SKIP_EXIT_CODE есть у шага и в окружении check, когда код унаследован', async () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 version: 1
 kind: pipeline
 name: окружение
@@ -184,7 +184,7 @@ jobs:
 
   it('без объявленного кода переменной нет', async () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 version: 1
 kind: pipeline
 name: окружение-пусто
@@ -230,7 +230,7 @@ jobs:
 
   for (const failFast of [true, false]) {
     it(`fail_fast: ${failFast} — пропуск не отказ: сосед идёт, прогон success, код 0`, async () => {
-      const project = makeProject({ 'stepcast.yml': GRAPH(failFast) });
+      const project = makeProject({ 'burnex.yml': GRAPH(failFast) });
       const result = await run(project);
 
       assert.equal(result.status, 'success');
@@ -242,7 +242,7 @@ jobs:
   }
 
   it('зависимая с единственной пропущенной зависимостью пропускается условием', async () => {
-    const project = makeProject({ 'stepcast.yml': GRAPH(true) });
+    const project = makeProject({ 'burnex.yml': GRAPH(true) });
     const result = await run(project);
     const job = jobOf(result, 'единственная');
     assert.equal(job?.status, 'skipped');
@@ -251,7 +251,7 @@ jobs:
   });
 
   it('зависимая от пропущенной и успешной работ on: success исполняется', async () => {
-    const project = makeProject({ 'stepcast.yml': GRAPH(true) });
+    const project = makeProject({ 'burnex.yml': GRAPH(true) });
     const result = await run(project);
     assert.equal(jobOf(result, 'обе')?.status, 'success');
     assert.equal(existsSync(project.path('обе.txt')), true);
@@ -261,7 +261,7 @@ jobs:
 describe('skip-exit-code: годность дорожки', () => {
   it('смесь success и declared на одной дорожке — годная дорожка', async () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 version: 1
 kind: pipeline
 name: дорожка
@@ -291,7 +291,7 @@ describe('skip-exit-code: цикл until', () => {
   it('пропуск на второй итерации кончает цикл: третьей нет, check не зовётся', async () => {
     const project = makeProject({
       'счётчик.txt': '0\n',
-      'stepcast.yml': `
+      'burnex.yml': `
 version: 1
 kind: pipeline
 name: цикл-пропуск

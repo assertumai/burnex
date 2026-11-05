@@ -56,7 +56,7 @@ async function start(
   const config = configIn(project, runsRoot);
   const result = await runPipeline({
     expanded: expandPipeline({
-      pipelinePath: project.path('stepcast.yml'),
+      pipelinePath: project.path('burnex.yml'),
       config,
       ...(options.registry === undefined ? {} : { registry: options.registry }),
     }),
@@ -109,26 +109,26 @@ describe('secrets: разрешение до каталога прогона', (
   const USING = '      - { id: a, run: [echo, ok], secrets: [svc] }\n';
 
   it('короткое значение: отказ называет секрет и порог в 8 символов', async () => {
-    const error = await refused({ '.env.local': 'SVC_CRED=short\n', 'stepcast.yml': pipeline(USING) });
+    const error = await refused({ '.env.local': 'SVC_CRED=short\n', 'burnex.yml': pipeline(USING) });
     assert.match(error.message, /svc/);
     assert.match(error.message, /короче 8 символов/);
   });
 
   it('значение ровно в 8 символов принимается', async () => {
-    const project = makeProject({ '.env.local': 'SVC_CRED=12345678\n', 'stepcast.yml': pipeline(USING) });
+    const project = makeProject({ '.env.local': 'SVC_CRED=12345678\n', 'burnex.yml': pipeline(USING) });
     assert.equal((await start(project)).result.status, 'success');
   });
 
   it('отсутствующий файл и отсутствующий ключ env-file', async () => {
-    const noFile = await refused({ 'stepcast.yml': pipeline(USING) });
+    const noFile = await refused({ 'burnex.yml': pipeline(USING) });
     assert.match(noFile.message, /\.env\.local/);
-    const noKey = await refused({ '.env.local': 'OTHER=значение-значение\n', 'stepcast.yml': pipeline(USING) });
+    const noKey = await refused({ '.env.local': 'OTHER=значение-значение\n', 'burnex.yml': pipeline(USING) });
     assert.match(noKey.message, /SVC_CRED/);
   });
 
   it('неизвестный провайдер', async () => {
     const error = await refused({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 secrets:
   svc: { provider: vault }
@@ -142,7 +142,7 @@ ${USING}`,
 
   it('параметры против схемы провайдера', async () => {
     const error = await refused({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 secrets:
   svc: { provider: env-file, extra: 1 }
@@ -171,7 +171,7 @@ jobs:
 
     it('значение берётся из resolve плагина', async () => {
       const registry = await registryWith(withResolve(async () => 'значение-из-vault'));
-      const project = makeProject({ 'stepcast.yml': decl.replace('$SVC', '$SVC').replace('svc: { provider: vault }', 'svc: { provider: vault, env: SVC }') });
+      const project = makeProject({ 'burnex.yml': decl.replace('$SVC', '$SVC').replace('svc: { provider: vault }', 'svc: { provider: vault, env: SVC }') });
       const { result } = await start(project, { registry });
       assert.equal(result.status, 'success');
       assert.equal(read(result, 'jobs/build/steps/01-a/stdout.log'), '***\n');
@@ -185,7 +185,7 @@ jobs:
     ] as const) {
       it(`${title}: отказ запуска без каталога прогона`, async () => {
         const registry = await registryWith(withResolve(resolve));
-        const error = await refused({ 'stepcast.yml': decl }, registry);
+        const error = await refused({ 'burnex.yml': decl }, registry);
         assert.match(error.message, /svc/);
         assert.match(error.message, expected);
       });
@@ -193,12 +193,12 @@ jobs:
   });
 
   it('секрет, который никто не называет, не разрешается: отсутствующий файл не мешает старту', async () => {
-    const project = makeProject({ 'stepcast.yml': pipeline('      - { id: a, run: [echo, ok] }\n') });
+    const project = makeProject({ 'burnex.yml': pipeline('      - { id: a, run: [echo, ok] }\n') });
     assert.equal((await start(project)).result.status, 'success');
   });
 
   it('значения не попадают ни в манифест, ни в замок прогона', async () => {
-    const project = makeProject({ ...ENV_FILE, 'stepcast.yml': pipeline(USING) });
+    const project = makeProject({ ...ENV_FILE, 'burnex.yml': pipeline(USING) });
     const { result } = await start(project);
     const dir = result.journal.paths.dir;
     assert.doesNotMatch(readFileSync(join(dir, 'pipeline.lock.yml'), 'utf8'), new RegExp(SECRET));
@@ -211,7 +211,7 @@ describe('secrets: возобновление', () => {
   const PIPELINE = pipeline('      - { id: a, run: [echo, ok], secrets: [svc] }\n');
 
   it('ротация значения не меняет ключ шага: шаг переиспользуется', async () => {
-    const project = makeProject({ ...ENV_FILE, 'stepcast.yml': PIPELINE, '.gitignore': '.env.local\n' });
+    const project = makeProject({ ...ENV_FILE, 'burnex.yml': PIPELINE, '.gitignore': '.env.local\n' });
     gitInit(project.root);
     gitCommit(project.root, 'init');
     const runsRoot = tempDir('runs-');
@@ -229,7 +229,7 @@ describe('secrets: возобновление', () => {
   });
 
   it('возобновление разрешает секреты заново; пропавший файл — отказ без нового каталога', async () => {
-    const project = makeProject({ ...ENV_FILE, 'stepcast.yml': PIPELINE, '.gitignore': '.env.local\n' });
+    const project = makeProject({ ...ENV_FILE, 'burnex.yml': PIPELINE, '.gitignore': '.env.local\n' });
     gitInit(project.root);
     gitCommit(project.root, 'init');
     const runsRoot = tempDir('runs-');
@@ -268,7 +268,7 @@ describe('secrets: окружение шага', () => {
   it('объявивший шаг получает значение, соседний шаг — нет, хотя переменная есть в окружении процесса', async () => {
     const project = makeProject({
       ...ENV_FILE,
-      'stepcast.yml': pipeline(dump('named', ', secrets: [svc]') + dump('neighbour')),
+      'burnex.yml': pipeline(dump('named', ', secrets: [svc]') + dump('neighbour')),
     });
     const { result } = await start(project, {
       baseEnv: { ...testBaseEnv(), SVC_CRED: 'из-окружения-процесса' },
@@ -281,7 +281,7 @@ describe('secrets: окружение шага', () => {
   it('секрет с env, подпадающим под env_deny, доходит и не порождает env.denied', async () => {
     const project = makeProject({
       '.env.local': `GITHUB_TOKEN=${SECRET}\n`,
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 secrets:
   gh: { provider: env-file, file: .env.local, env: GITHUB_TOKEN }
@@ -303,7 +303,7 @@ jobs:
   it('env.withheld: пишется один раз на пару «переменная, шаг», только если переменная была', async () => {
     const project = makeProject({
       ...ENV_FILE,
-      'stepcast.yml': pipeline(
+      'burnex.yml': pipeline(
         dump('named', ', secrets: [svc]') + dump('neighbour') + dump('neighbour-again'),
         { header: 'env_files: [.from-file.env]\n' },
       ),
@@ -326,7 +326,7 @@ jobs:
   it('переменной не было в окружении — события env.withheld нет', async () => {
     const project = makeProject({
       ...ENV_FILE,
-      'stepcast.yml': pipeline(dump('named', ', secrets: [svc]') + dump('neighbour')),
+      'burnex.yml': pipeline(dump('named', ', secrets: [svc]') + dump('neighbour')),
     });
     const base = testBaseEnv();
     delete base.SVC_CRED;
@@ -338,7 +338,7 @@ jobs:
   it('проверка expect шага секрета не получает: cmd видит окружение без значения', async () => {
     const project = makeProject({
       ...ENV_FILE,
-      'stepcast.yml': pipeline(
+      'burnex.yml': pipeline(
         `      - id: a\n        run: [sh, -c, 'test -n "$SVC_CRED"']\n        secrets: [svc]\n        expect: [{ exit_code: 0 }, { cmd: 'test -z "$SVC_CRED"' }]\n`,
       ),
     });
@@ -348,7 +348,7 @@ jobs:
   it('проверка цикла until идёт с вычеркнутыми переменными секретов', async () => {
     const project = makeProject({
       ...ENV_FILE,
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 secrets:
   svc: { provider: env-file, file: .env.local, env: SVC_CRED }
@@ -383,7 +383,7 @@ jobs:
     it('получает пустой набор секретов: переменная из окружения процесса вычеркнута', async () => {
       const project = makeProject({
         ...ENV_FILE,
-        'stepcast.yml': pipeline('      - { id: think, agent: fake, prompt: подумай }\n'),
+        'burnex.yml': pipeline('      - { id: think, agent: fake, prompt: подумай }\n'),
       });
       const { result } = await start(project, {
         baseEnv: { ...testBaseEnv(), SVC_CRED: 'из-окружения-процесса' },
@@ -415,7 +415,7 @@ jobs:
       });
       const project = makeProject({
         ...ENV_FILE,
-        'stepcast.yml': pipeline('      - { id: n, notify: hello, secrets: [svc] }\n'),
+        'burnex.yml': pipeline('      - { id: n, notify: hello, secrets: [svc] }\n'),
       });
       const { result } = await start(project, { registry });
       assert.equal(result.status, 'success');
@@ -437,7 +437,7 @@ ${step}`;
   it('${env.<env секрета>}: работа отказывает до первого шага, называя секрет', async () => {
     const project = makeProject({
       ...ENV_FILE,
-      'stepcast.yml': job('', '      - { id: a, run: [echo, "${env.SVC_CRED}"], secrets: [svc] }\n'),
+      'burnex.yml': job('', '      - { id: a, run: [echo, "${env.SVC_CRED}"], secrets: [svc] }\n'),
     });
     const { result } = await start(project);
     assert.equal(result.status, 'failed');
@@ -452,7 +452,7 @@ ${step}`;
   it('переменная со встроенным значением секрета: отказ с объяснением', async () => {
     const project = makeProject({
       ...ENV_FILE,
-      'stepcast.yml': job(
+      'burnex.yml': job(
         `    env: { DATABASE_URL: "postgres://user:${SECRET}@db/app" }\n`,
         // Секрет назван шагом, поэтому разрешён и его значение известно движку.
         '      - { id: a, run: [echo, "${env.DATABASE_URL}"], secrets: [svc] }\n',
@@ -472,7 +472,7 @@ ${step}`;
   it('обычная объявленная переменная без секрета подставляется как прежде', async () => {
     const project = makeProject({
       ...ENV_FILE,
-      'stepcast.yml': job('    env: { GREETING: hello }\n', '      - { id: a, run: [echo, "${env.GREETING}"] }\n'),
+      'burnex.yml': job('    env: { GREETING: hello }\n', '      - { id: a, run: [echo, "${env.GREETING}"] }\n'),
     });
     const { result } = await start(project);
     assert.equal(result.status, 'success');
@@ -485,7 +485,7 @@ describe('secrets: маскирование в журнале', () => {
     pipeline(`      - { id: a, run: [sh, -c, '${command}'], secrets: [svc], expect: [{ exit_code: 0 }] }\n`);
 
   it('секрет в stdout.log и stderr.log заменён на ***', async () => {
-    const project = makeProject({ ...ENV_FILE, 'stepcast.yml': NAMED('echo "токен $SVC_CRED"; echo "err $SVC_CRED" >&2') });
+    const project = makeProject({ ...ENV_FILE, 'burnex.yml': NAMED('echo "токен $SVC_CRED"; echo "err $SVC_CRED" >&2') });
     const { result } = await start(project);
     assert.equal(result.status, 'success');
     assert.equal(read(result, 'jobs/build/steps/01-a/stdout.log'), 'токен ***\n');
@@ -496,7 +496,7 @@ describe('secrets: маскирование в журнале', () => {
     const half = Math.floor(SECRET.length / 2);
     const project = makeProject({
       ...ENV_FILE,
-      'stepcast.yml': NAMED(
+      'burnex.yml': NAMED(
         `printf "%s" "${SECRET.slice(0, half)}"; sleep 0.4; printf "%s\\n" "${SECRET.slice(half)}"`,
       ),
     });
@@ -507,7 +507,7 @@ describe('secrets: маскирование в журнале', () => {
   });
 
   it('хвост без перевода строки сбрасывается на конце потока замаскированным', async () => {
-    const project = makeProject({ ...ENV_FILE, 'stepcast.yml': NAMED('printf "%s" "$SVC_CRED"') });
+    const project = makeProject({ ...ENV_FILE, 'burnex.yml': NAMED('printf "%s" "$SVC_CRED"') });
     const { result } = await start(project);
     assert.equal(read(result, 'jobs/build/steps/01-a/stdout.log'), '***');
   });
@@ -515,7 +515,7 @@ describe('secrets: маскирование в журнале', () => {
   it('значение из выхода прошлой работы в промпте агентского шага: prompt.txt несёт ***', async () => {
     const project = makeProject({
       ...ENV_FILE,
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 secrets:
   svc: { provider: env-file, file: .env.local, env: SVC_CRED }
@@ -536,11 +536,11 @@ jobs:
   });
 
   it('событие со значением в тексте пишется маскированным и в файл, и наблюдателю', async () => {
-    const project = makeProject({ ...ENV_FILE, 'stepcast.yml': NAMED('echo ok') });
+    const project = makeProject({ ...ENV_FILE, 'burnex.yml': NAMED('echo ok') });
     const delivered: string[] = [];
     const config = configIn(project, tempDir('runs-'));
     const result = await runPipeline({
-      expanded: expandPipeline({ pipelinePath: project.path('stepcast.yml'), config }),
+      expanded: expandPipeline({ pipelinePath: project.path('burnex.yml'), config }),
       config,
       projectRoot: project.root,
       cwd: project.root,
@@ -557,7 +557,7 @@ jobs:
 
   it('без секретов вывод идёт как есть', async () => {
     const project = makeProject({
-      'stepcast.yml': 'kind: pipeline\njobs:\n  b:\n    steps:\n      - { id: a, run: [sh, -c, "echo токен-12345678"] }\n',
+      'burnex.yml': 'kind: pipeline\njobs:\n  b:\n    steps:\n      - { id: a, run: [sh, -c, "echo токен-12345678"] }\n',
     });
     const { result } = await start(project);
     assert.equal(read(result, 'jobs/b/steps/01-a/stdout.log'), 'токен-12345678\n');
@@ -576,7 +576,7 @@ describe('secrets: провайдер keychain не на macOS', () => {
       secretProviders: [{ ...linux, name: 'keychain-linux' }],
     });
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 secrets:
   gh-token: { provider: keychain-linux, service: github.com, account: alice, env: GH_TOKEN }

@@ -31,7 +31,7 @@ function bed(files: Readonly<Record<string, string>>): Bed {
 
 async function run(b: Bed): Promise<RunResult> {
   return runPipeline({
-    expanded: expandPipeline({ pipelinePath: b.project.path('stepcast.yml'), config: b.project.config }),
+    expanded: expandPipeline({ pipelinePath: b.project.path('burnex.yml'), config: b.project.config }),
     config: { ...b.project.config, runs: { ...b.project.config.runs, root: b.runsRoot } },
     projectRoot: b.project.root,
     cwd: b.project.root,
@@ -72,7 +72,7 @@ jobs:
 describe('run-diff: сопоставление по ключам', () => {
   // Сценарий: «Идентичные прогоны»
   it('сообщает об отсутствии различий для совпавших прогонов', async () => {
-    const b = bed({ 'сырьё.txt': 'вход', 'stepcast.yml': PIPELINE });
+    const b = bed({ 'сырьё.txt': 'вход', 'burnex.yml': PIPELINE });
     const first = await run(b);
     const second = await run(b);
 
@@ -84,7 +84,7 @@ describe('run-diff: сопоставление по ключам', () => {
   // Сценарий: «Два прогона работы с подстановкой директории прогона»
   it('относит шаги неизменной работы с ${run.dir} к совпавшим', async () => {
     const b = bed({
-      'stepcast.yml': `
+      'burnex.yml': `
 version: 1
 kind: pipeline
 name: run-dir
@@ -107,7 +107,7 @@ jobs:
 
   // Сценарий: «Шаг изменился»
   it('относит шаг с разошедшимся ключом к различающимся', async () => {
-    const b = bed({ 'сырьё.txt': 'вход', 'stepcast.yml': PIPELINE });
+    const b = bed({ 'сырьё.txt': 'вход', 'burnex.yml': PIPELINE });
     const first = await run(b);
 
     b.project.write('сырьё.txt', 'другой вход');
@@ -120,11 +120,11 @@ jobs:
 
   // Сценарий: «Шаг есть только в одном прогоне»
   it('различает шаги, появившиеся только в одном прогоне', async () => {
-    const b = bed({ 'сырьё.txt': 'вход', 'stepcast.yml': PIPELINE });
+    const b = bed({ 'сырьё.txt': 'вход', 'burnex.yml': PIPELINE });
     const first = await run(b);
 
     b.project.write(
-      'stepcast.yml',
+      'burnex.yml',
       PIPELINE.replace(
         '        expect: [{ exit_code: 0 }]',
         `        expect: [{ exit_code: 0 }]
@@ -147,7 +147,7 @@ jobs:
   it('выводит шаги в порядке исполнения', async () => {
     const b = bed({
       'сырьё.txt': 'вход',
-      'stepcast.yml': `
+      'burnex.yml': `
 version: 1
 kind: pipeline
 name: порядок
@@ -179,7 +179,7 @@ jobs:
 describe('run-diff: чем именно различаются шаги', () => {
   // Сценарий: «Шаг команды без контекста»
   it('помечает отсутствующий источник отсутствующим, а не пустым', async () => {
-    const b = bed({ 'сырьё.txt': 'вход', 'stepcast.yml': PIPELINE });
+    const b = bed({ 'сырьё.txt': 'вход', 'burnex.yml': PIPELINE });
     const first = await run(b);
     b.project.write('сырьё.txt', 'другой вход');
     const second = await run(b);
@@ -195,7 +195,7 @@ describe('run-diff: чем именно различаются шаги', () => 
   it('перечисляет различающиеся пути деревьев', async () => {
     const b = bed({
       'сырьё.txt': 'вход',
-      'stepcast.yml': `
+      'burnex.yml': `
 version: 1
 kind: pipeline
 name: деревья
@@ -225,7 +225,7 @@ jobs:
   // Совпавший источник не выводится вовсе: показывать «проверки: без
   // изменений» значит топить настоящее различие в шуме.
   it('группирует различия по источнику и молчит о совпавших', async () => {
-    const b = bed({ 'сырьё.txt': 'вход', 'stepcast.yml': PIPELINE });
+    const b = bed({ 'сырьё.txt': 'вход', 'burnex.yml': PIPELINE });
     const first = await run(b);
     b.project.write('сырьё.txt', 'другой');
     const second = await run(b);
@@ -264,10 +264,10 @@ ${decl}    steps:
 describe('run-diff: раскладка сессий — отдельный источник', () => {
   // Сценарий: «Разошлась раскладка сессий»
   it('прогоны, различающиеся только объявлением группы, называют источник раскладки', async () => {
-    const b = bed({ 'сырьё.txt': 'вход', 'stepcast.yml': groupPipeline() });
+    const b = bed({ 'сырьё.txt': 'вход', 'burnex.yml': groupPipeline() });
     const first = await run(b);
 
-    b.project.write('stepcast.yml', groupPipeline('build'));
+    b.project.write('burnex.yml', groupPipeline('build'));
     const second = await run(b);
 
     const comparison = compare(b, first, second);
@@ -282,7 +282,7 @@ describe('run-diff: раскладка сессий — отдельный ис�
 
   // Сценарий: «Раскладка совпала»
   it('источник не появляется, когда объявленная группа совпала в обоих прогонах', async () => {
-    const b = bed({ 'сырьё.txt': 'вход', 'stepcast.yml': groupPipeline('build') });
+    const b = bed({ 'сырьё.txt': 'вход', 'burnex.yml': groupPipeline('build') });
     const first = await run(b);
 
     b.project.write('сырьё.txt', 'другой вход');
@@ -298,10 +298,10 @@ describe('run-diff: раскладка сессий — отдельный ис�
 
   // Сценарий: «Замок снят уборкой»
   it('замок, снятый уборкой у одного из прогонов, помечает источник отсутствующим', async () => {
-    const b = bed({ 'сырьё.txt': 'вход', 'stepcast.yml': groupPipeline() });
+    const b = bed({ 'сырьё.txt': 'вход', 'burnex.yml': groupPipeline() });
     const first = await run(b);
 
-    b.project.write('stepcast.yml', groupPipeline('build'));
+    b.project.write('burnex.yml', groupPipeline('build'));
     const second = await run(b);
     cleanupRun(first.journal.paths);
 
@@ -314,10 +314,10 @@ describe('run-diff: раскладка сессий — отдельный ис�
 
   // Сценарий: «Замок не читается»
   it('испорченный замок помечает источник отсутствующим, а не пустой группой', async () => {
-    const b = bed({ 'сырьё.txt': 'вход', 'stepcast.yml': groupPipeline() });
+    const b = bed({ 'сырьё.txt': 'вход', 'burnex.yml': groupPipeline() });
     const first = await run(b);
 
-    b.project.write('stepcast.yml', groupPipeline('build'));
+    b.project.write('burnex.yml', groupPipeline('build'));
     const second = await run(b);
 
     // Усечение файла на середине записи: YAML разбирается, но `jobs` списком
@@ -333,10 +333,10 @@ describe('run-diff: раскладка сессий — отдельный ис�
 
   // Сценарий: «Работы в замке нет»
   it('работа, которой в замке нет, помечает источник отсутствующим', async () => {
-    const b = bed({ 'сырьё.txt': 'вход', 'stepcast.yml': groupPipeline() });
+    const b = bed({ 'сырьё.txt': 'вход', 'burnex.yml': groupPipeline() });
     const first = await run(b);
 
-    b.project.write('stepcast.yml', groupPipeline('build'));
+    b.project.write('burnex.yml', groupPipeline('build'));
     const second = await run(b);
 
     // Замок читается, но работы в нём нет — так выглядит сравнение прогонов
@@ -354,8 +354,8 @@ describe('run-diff: раскладка сессий — отдельный ис�
 describe('run-diff: несравнимые прогоны', () => {
   // Сценарий: «Разные проекты»
   it('отклоняет сравнение прогонов разных проектов', async () => {
-    const one = bed({ 'сырьё.txt': 'вход', 'stepcast.yml': PIPELINE });
-    const two = bed({ 'сырьё.txt': 'вход', 'stepcast.yml': PIPELINE });
+    const one = bed({ 'сырьё.txt': 'вход', 'burnex.yml': PIPELINE });
+    const two = bed({ 'сырьё.txt': 'вход', 'burnex.yml': PIPELINE });
 
     const a = await run(one);
     const c = await run(two);
@@ -372,10 +372,10 @@ describe('run-diff: несравнимые прогоны', () => {
 
   // Сценарий: «Разные пайплайны»
   it('сравнивает прогоны разных пайплайнов, отмечая несовпадение', async () => {
-    const b = bed({ 'сырьё.txt': 'вход', 'stepcast.yml': PIPELINE });
+    const b = bed({ 'сырьё.txt': 'вход', 'burnex.yml': PIPELINE });
     const first = await run(b);
 
-    b.project.write('stepcast.yml', PIPELINE.replace('name: сравнение', 'name: другое-имя'));
+    b.project.write('burnex.yml', PIPELINE.replace('name: сравнение', 'name: другое-имя'));
     const second = await run(b);
 
     const comparison = compare(b, first, second);
@@ -414,7 +414,7 @@ function compositeBed(files: Readonly<Record<string, string>>, parts: readonly s
 async function runWithNested(b: Bed, nestedRepos: readonly string[]): Promise<RunResult> {
   const config = { ...b.project.config, project: { ...b.project.config.project, nestedRepos } };
   return runPipeline({
-    expanded: expandPipeline({ pipelinePath: b.project.path('stepcast.yml'), config }),
+    expanded: expandPipeline({ pipelinePath: b.project.path('burnex.yml'), config }),
     config: { ...config, runs: { ...config.runs, root: b.runsRoot } },
     projectRoot: b.project.root,
     cwd: b.project.root,
@@ -425,7 +425,7 @@ describe('run-diff: несравнимый состав вложенных ре�
   // Задача 11 / Сценарий: два прогона составного якоря разного состава.
   it('два прогона разного состава дают помеченную несравнимость деревьев, а промпт и контекст сравниваются', async () => {
     const b = compositeBed(
-      { 'сырьё.txt': 'вход', 'public-site/.gitkeep': '', 'vendor-sdk/.gitkeep': '', 'stepcast.yml': PIPELINE },
+      { 'сырьё.txt': 'вход', 'public-site/.gitkeep': '', 'vendor-sdk/.gitkeep': '', 'burnex.yml': PIPELINE },
       ['public-site', 'vendor-sdk'],
     );
 
@@ -461,7 +461,7 @@ describe('run-diff: несравнимый состав вложенных ре�
   // ничего — это должно быть помеченной несравнимостью, а не сырой ошибкой git.
   it('составные прогоны, разбираемые якорем без объявленного состава, помечены несравнимыми', async () => {
     const b = compositeBed(
-      { 'сырьё.txt': 'вход', 'public-site/.gitkeep': '', 'stepcast.yml': PIPELINE },
+      { 'сырьё.txt': 'вход', 'public-site/.gitkeep': '', 'burnex.yml': PIPELINE },
       ['public-site'],
     );
 
@@ -488,7 +488,7 @@ describe('run-diff: несравнимый состав вложенных ре�
 
 describe('run-diff: адресация прогонов', () => {
   it('разрешает короткий идентификатор и указатель на последний', async () => {
-    const b = bed({ 'сырьё.txt': 'вход', 'stepcast.yml': PIPELINE });
+    const b = bed({ 'сырьё.txt': 'вход', 'burnex.yml': PIPELINE });
     const first = await run(b);
 
     const short = first.journal.paths.runId.slice(first.journal.paths.runId.lastIndexOf('-') + 1);
@@ -524,7 +524,7 @@ jobs:
   async function runWith(b: Bed, registry: Registry | undefined): Promise<RunResult> {
     return runPipeline({
       expanded: expandPipeline({
-        pipelinePath: b.project.path('stepcast.yml'),
+        pipelinePath: b.project.path('burnex.yml'),
         config: b.project.config,
         ...(registry === undefined ? {} : { registry }),
       }),
@@ -548,7 +548,7 @@ jobs:
   }
 
   it('разный состав плагинов назван заметкой', async () => {
-    const b = bed({ 'stepcast.yml': SIMPLE });
+    const b = bed({ 'burnex.yml': SIMPLE });
     const first = await runWith(b, await withPlugin('example', '1.0.0'));
     const second = await runWith(b, builtinRegistry());
 
@@ -561,7 +561,7 @@ jobs:
   });
 
   it('одинаковый состав заметки не даёт', async () => {
-    const b = bed({ 'stepcast.yml': SIMPLE });
+    const b = bed({ 'burnex.yml': SIMPLE });
     const first = await runWith(b, await withPlugin('example', '1.0.0'));
     const second = await runWith(b, await withPlugin('example', '1.0.0'));
 
@@ -574,7 +574,7 @@ jobs:
   });
 
   it('смена версии плагина видна', async () => {
-    const b = bed({ 'stepcast.yml': SIMPLE });
+    const b = bed({ 'burnex.yml': SIMPLE });
     const first = await runWith(b, await withPlugin('example', '1.0.0'));
     const second = await runWith(b, await withPlugin('example', '2.0.0'));
 
@@ -600,7 +600,7 @@ jobs:
 
   async function runWith(b: Bed, registry: Registry): Promise<RunResult> {
     return runPipeline({
-      expanded: expandPipeline({ pipelinePath: b.project.path('stepcast.yml'), config: b.project.config, registry }),
+      expanded: expandPipeline({ pipelinePath: b.project.path('burnex.yml'), config: b.project.config, registry }),
       config: { ...b.project.config, runs: { ...b.project.config.runs, root: b.runsRoot } },
       projectRoot: b.project.root,
       cwd: b.project.root,
@@ -621,7 +621,7 @@ jobs:
   }
 
   it('манифест прогона записывает пакет-источник плагина', async () => {
-    const b = bed({ 'stepcast.yml': SIMPLE });
+    const b = bed({ 'burnex.yml': SIMPLE });
     const result = await runWith(b, await withPlugin('hello'));
     const manifest = JSON.parse(readFileSync(result.journal.paths.manifest, 'utf8')) as {
       plugins: { name: string; package?: string }[];
@@ -630,7 +630,7 @@ jobs:
   });
 
   it('смена источника на пакет видна в сравнении, смена пакета — тоже', async () => {
-    const b = bed({ 'stepcast.yml': SIMPLE });
+    const b = bed({ 'burnex.yml': SIMPLE });
     const free = await runWith(b, await withPlugin());
     const packaged = await runWith(b, await withPlugin('hello'));
     const other = await runWith(b, await withPlugin('tools'));
@@ -642,7 +642,7 @@ jobs:
   });
 
   it('прежний журнал без поля package читается и сравнивается без ошибок', async () => {
-    const b = bed({ 'stepcast.yml': SIMPLE });
+    const b = bed({ 'burnex.yml': SIMPLE });
     const old = await runWith(b, await withPlugin());
     const manifest = JSON.parse(readFileSync(old.journal.paths.manifest, 'utf8')) as {
       plugins: { package?: string }[];
@@ -660,8 +660,8 @@ describe('run-diff: временный каталог якоря сравнен�
   // workspace-anchor, «Сравнение прогонов»: каталог состояния якоря
   // (`stepcast-diff-*`), заведённый командой, не переживает её вызова.
   it('после burnex diff записей stepcast-diff-* в системном временном каталоге не остаётся', async () => {
-    const b = bed({ 'сырьё.txt': 'вход', 'stepcast.yml': PIPELINE });
-    writeFileSync(join(b.project.home, '.stepcast', 'config.yml'), `runs:\n  root: ${b.runsRoot}\n`);
+    const b = bed({ 'сырьё.txt': 'вход', 'burnex.yml': PIPELINE });
+    writeFileSync(join(b.project.home, '.burnex', 'config.yml'), `runs:\n  root: ${b.runsRoot}\n`);
     const first = await run(b);
     const second = await run(b);
 

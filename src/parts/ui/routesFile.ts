@@ -18,6 +18,7 @@ import {
   type RouteTable,
   type RouteTarget,
 } from './routes.js';
+import { cabinetDir, homeRoot } from '../../kernel/dirs.js';
 
 /**
  * Файл маршрутов и его три слоя (`ui-routes`, design.md Решение 1, 2, 9).
@@ -75,11 +76,11 @@ export function builtinRoutesPath(): string {
 }
 
 export function homeRoutesPath(home: string): string {
-  return join(home, '.stepcast', ROUTES_FILE_NAME);
+  return join(homeRoot(home), ROUTES_FILE_NAME);
 }
 
 export function projectRoutesPath(projectRoot: string): string {
-  return join(projectRoot, '.stepcast', ROUTES_FILE_NAME);
+  return join(cabinetDir(projectRoot), ROUTES_FILE_NAME);
 }
 
 function readRoutesDocument(path: string): readonly RouteRowDocument[] {
@@ -363,7 +364,7 @@ function readPackageLayers(
       packages: names,
       id,
       file: (list[1] as LayerFile).path,
-      message: `Route ${id} is declared by two packages of one layer: ${names.join(' and ')} (${list.map((file) => file.path).join(', ')}); rename the route in one package, remove one package, or override it in .stepcast/routes.yml`,
+      message: `Route ${id} is declared by two packages of one layer: ${names.join(' and ')} (${list.map((file) => file.path).join(', ')}); rename the route in one package, remove one package, or override it in .burnex/routes.yml`,
     });
   }
   if (conflicted.size === 0) return files;
@@ -385,7 +386,7 @@ export function buildRouteTable(options: RouteBuildOptions): RouteBuildResult {
   // проект (`packages-directory-layer`, Решение 7); верхний слой перекрывает
   // нижний по листьям. Пакетные слои отдаёт указатель в порядке поиска, поэтому
   // здесь они берутся по источнику, а не по позиции.
-  const homeStepcastDir = join(options.home, '.stepcast');
+  const homeStepcastDir = homeRoot(options.home);
   const index = buildPackageIndex({
     ...(options.projectRoot === undefined ? {} : { projectRoot: options.projectRoot }),
     globalPath: join(homeStepcastDir, 'config.yml'),

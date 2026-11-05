@@ -11,6 +11,7 @@ import { findProjectRoot } from '../../pipeline/run/journal/paths.js';
 import { buildPackageIndex, homePackagesDir, projectPackagesDir } from '../index.js';
 import { PACKAGE_MANIFEST_FILE, checkPackageName } from '../manifest.js';
 import { summarizePackages, type NeedsContext, type PackageSummary } from '../summary.js';
+import { homeRoot } from '../../../kernel/dirs.js';
 
 /**
  * `burnex package list|new` (`packages-directory-layer`, design.md, Решение 9).
@@ -25,7 +26,7 @@ const ACTIONS = ['list', 'new'] as const;
 
 export interface PackageCommandOptions {
   readonly cwd: string;
-  /** Каталог глобального конфига: пакеты home лежат рядом. По умолчанию `~/.stepcast`. */
+  /** Каталог глобального конфига: пакеты home лежат рядом. По умолчанию `~/.burnex`. */
   readonly globalConfigDir?: string;
   /** Имена зарегистрированных бэкендов, если состав собран; без них `needs.backends` не сверяется. */
   readonly backends?: ReadonlySet<string>;
@@ -57,7 +58,7 @@ function needsText(summary: PackageSummary): string | undefined {
 }
 
 function runList(args: ParsedArgs, io: CliIo, options: PackageCommandOptions): ExitCodeValue {
-  const globalConfigDir = options.globalConfigDir ?? join(homedir(), '.stepcast');
+  const globalConfigDir = options.globalConfigDir ?? homeRoot(homedir());
   const index = buildPackageIndex({
     projectRoot: findProjectRoot(options.cwd),
     globalPath: join(globalConfigDir, 'config.yml'),
@@ -121,7 +122,7 @@ function runNew(args: ParsedArgs, io: CliIo, options: PackageCommandOptions): Ex
   }
 
   const home = args.flags.home === true;
-  const globalConfigDir = options.globalConfigDir ?? join(homedir(), '.stepcast');
+  const globalConfigDir = options.globalConfigDir ?? homeRoot(homedir());
   const packagesDir = home
     ? homePackagesDir(join(globalConfigDir, 'config.yml'))
     : projectPackagesDir(findProjectRoot(options.cwd));

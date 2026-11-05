@@ -42,9 +42,9 @@ jobs:
 
 /** Лок, записанный тем же сериализатором, что пишет его движок при прогоне. */
 function lockFile(): string {
-  const project = makeProject({ 'stepcast.yml': PIPELINE });
+  const project = makeProject({ 'burnex.yml': PIPELINE });
   const expanded = expandPipeline({
-    pipelinePath: project.path('stepcast.yml'),
+    pipelinePath: project.path('burnex.yml'),
     config: project.config,
   });
   const path = project.path('pipeline.lock.yml');
@@ -91,7 +91,7 @@ describe('ui: мягкий разбор pipeline.lock.yml', () => {
 
   it('различает шаг script: путь, слой, раннер и argv', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 version: 1
 kind: pipeline
 name: витрина-script
@@ -105,9 +105,9 @@ jobs:
         output_schema: ./schema.json
 `,
     });
-    project.write('.stepcast/scripts/cleanup.sh', '#!/bin/sh\nexit 0\n');
+    project.write('.burnex/scripts/cleanup.sh', '#!/bin/sh\nexit 0\n');
     project.write('schema.json', JSON.stringify({ type: 'object' }));
-    const expanded = expandPipeline({ pipelinePath: project.path('stepcast.yml'), config: project.config });
+    const expanded = expandPipeline({ pipelinePath: project.path('burnex.yml'), config: project.config });
     const path = project.path('pipeline.lock.yml');
     writeFileSync(path, serializeLock(expanded.pipeline));
 
@@ -121,7 +121,7 @@ jobs:
 
   it('шаг script без входа и схемы выхода отличим от шага с контрактом', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 version: 1
 kind: pipeline
 name: витрина-script-без-контракта
@@ -132,8 +132,8 @@ jobs:
         script: cleanup.sh
 `,
     });
-    project.write('.stepcast/scripts/cleanup.sh', '#!/bin/sh\nexit 0\n');
-    const expanded = expandPipeline({ pipelinePath: project.path('stepcast.yml'), config: project.config });
+    project.write('.burnex/scripts/cleanup.sh', '#!/bin/sh\nexit 0\n');
+    const expanded = expandPipeline({ pipelinePath: project.path('burnex.yml'), config: project.config });
     const path = project.path('pipeline.lock.yml');
     writeFileSync(path, serializeLock(expanded.pipeline));
 
@@ -180,9 +180,9 @@ jobs:
 `;
 
 function laneAndGroupLockFile(): string {
-  const project = makeProject({ 'stepcast.yml': LANE_AND_GROUP_PIPELINE });
+  const project = makeProject({ 'burnex.yml': LANE_AND_GROUP_PIPELINE });
   const expanded = expandPipeline({
-    pipelinePath: project.path('stepcast.yml'),
+    pipelinePath: project.path('burnex.yml'),
     config: project.config,
   });
   const path = project.path('pipeline.lock.yml');

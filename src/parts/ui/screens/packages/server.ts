@@ -6,6 +6,7 @@ import { sendJson } from '../../daemon/http.js';
 import { buildPackageProblems } from '../../packages.js';
 import { screenRow, type ApiHandler } from '../registry.js';
 import { declaration } from './declaration.js';
+import { homeRoot } from '../../../../kernel/dirs.js';
 
 /**
  * `GET /api/packages` (`packages-directory-layer`, design.md, Решение 8;
@@ -17,7 +18,7 @@ import { declaration } from './declaration.js';
 const handleGet: ApiHandler = async (_req, res, env) => {
   try {
     const { problems, pluginsError } = await buildPackageProblems(env.watcher, env.kernelCache, env.home);
-    const globalPath = join(env.home ?? homedir(), '.stepcast', 'config.yml');
+    const globalPath = join(homeRoot(env.home ?? homedir()), 'config.yml');
     sendJson(res, 200, {
       packages: env.watcher.currentPackages(),
       problems,

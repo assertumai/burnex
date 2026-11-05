@@ -18,7 +18,7 @@ import { tempDir } from './tmp.js';
  * `merge-lanes --onto` на настоящих прогонах: временный репозиторий с веткой
  * `main`, два прогона от одной базы, настоящий `applyRun` и файл очереди.
  * Прогон B заводится вторым пайплайном `stepcast-b.yml`, закоммиченным в той же
- * базе: переписать `stepcast.yml` после старта значило бы испачкать копию.
+ * базе: переписать `burnex.yml` после старта значило бы испачкать копию.
  */
 
 function pipeline(lane: string, command: string): string {
@@ -74,9 +74,9 @@ function repository(files: Readonly<Record<string, string>>): Project {
   return project;
 }
 
-async function startRun(project: Project, file = 'stepcast.yml'): Promise<RunResult> {
+async function startRun(project: Project, file = 'burnex.yml'): Promise<RunResult> {
   const runsRoot = tempDir('onto-runs-');
-  writeFileSync(join(project.home, '.stepcast', 'config.yml'), `runs:\n  root: ${runsRoot}\n`);
+  writeFileSync(join(project.home, '.burnex', 'config.yml'), `runs:\n  root: ${runsRoot}\n`);
   const expanded = expandPipeline({ pipelinePath: project.path(file), config: project.config });
   return runPipeline({
     expanded,
@@ -130,7 +130,7 @@ const SUCCESS_B = 'printf "от b\\n" > b.txt';
 describe('mergeLanes --onto: сведение на текущую вершину ветки', () => {
   it('прогоны A и B от одной базы сводятся друг за другом: коммит B — потомок коммита A, копия чиста', async () => {
     const project = repository({
-      'stepcast.yml': pipeline('a', SUCCESS_A),
+      'burnex.yml': pipeline('a', SUCCESS_A),
       'stepcast-b.yml': pipeline('b', SUCCESS_B),
     });
     const base = main(project);
@@ -160,7 +160,7 @@ describe('mergeLanes --onto: сведение на текущую вершину
   });
 
   it('две дорожки одного прогона: второй коммит лежит на первом', async () => {
-    const project = repository({ 'stepcast.yml': twoLanes(SUCCESS_A, SUCCESS_B) });
+    const project = repository({ 'burnex.yml': twoLanes(SUCCESS_A, SUCCESS_B) });
     const base = main(project);
     const run = await startRun(project);
     takeItem(run, 'a', 'a-item');
@@ -176,7 +176,7 @@ describe('mergeLanes --onto: сведение на текущую вершину
 
   it('пересекающиеся диффы: B получает conflict, ветка остаётся на A; без --keep-claim пункт failed', async () => {
     const project = repository({
-      'stepcast.yml': pipeline('a', 'printf "A\\n" > shared.txt'),
+      'burnex.yml': pipeline('a', 'printf "A\\n" > shared.txt'),
       'stepcast-b.yml': pipeline('b', 'printf "B\\n" > shared.txt'),
     });
     const runA = await startRun(project);
@@ -196,7 +196,7 @@ describe('mergeLanes --onto: сведение на текущую вершину
 
   it('с --keep-claim пункт несведённой дорожки остаётся in_progress, причина — в merge-<дорожка>.json', async () => {
     const project = repository({
-      'stepcast.yml': pipeline('a', 'printf "A\\n" > shared.txt'),
+      'burnex.yml': pipeline('a', 'printf "A\\n" > shared.txt'),
       'stepcast-b.yml': pipeline('b', 'printf "B\\n" > shared.txt'),
     });
     const runA = await startRun(project);
@@ -215,7 +215,7 @@ describe('mergeLanes --onto: сведение на текущую вершину
   });
 
   it('ветку сдвинули между чтением вершины и публикацией: publication_conflict, повтор с --keep-claim сводит', async () => {
-    const project = repository({ 'stepcast.yml': pipeline('a', SUCCESS_A) });
+    const project = repository({ 'burnex.yml': pipeline('a', SUCCESS_A) });
     const run = await startRun(project);
     takeItem(run, 'a', 'a-item');
     const base = main(project);
@@ -242,7 +242,7 @@ describe('mergeLanes --onto: сведение на текущую вершину
   });
 
   it('publication_conflict без --keep-claim: пункт failed с причиной', async () => {
-    const project = repository({ 'stepcast.yml': pipeline('a', SUCCESS_A) });
+    const project = repository({ 'burnex.yml': pipeline('a', SUCCESS_A) });
     const run = await startRun(project);
     takeItem(run, 'a', 'a-item');
 
@@ -259,7 +259,7 @@ describe('mergeLanes --onto: сведение на текущую вершину
 
   it('дорожка, правящая файлы очереди, не сводится; соседняя дорожка обхода сводится', async () => {
     const project = repository({
-      'stepcast.yml': twoLanes(`printf "\\n## new-item\\n\\nstatus: todo\\n" >> backlog.md`, SUCCESS_B),
+      'burnex.yml': twoLanes(`printf "\\n## new-item\\n\\nstatus: todo\\n" >> backlog.md`, SUCCESS_B),
     });
     const base = main(project);
     const run = await startRun(project);
@@ -278,7 +278,7 @@ describe('mergeLanes --onto: сведение на текущую вершину
   });
 
   it('правка archived.md дорожкой тоже отклоняется: копия не расходится с веткой', async () => {
-    const project = repository({ 'stepcast.yml': pipeline('a', 'printf "# Архив\\n" > archived.md') });
+    const project = repository({ 'burnex.yml': pipeline('a', 'printf "# Архив\\n" > archived.md') });
     const base = main(project);
     const run = await startRun(project);
     takeItem(run, 'a', 'a-item');
@@ -294,7 +294,7 @@ describe('mergeLanes --onto: сведение на текущую вершину
 
   it('чужой незакоммиченный in_progress не попадает в коммит и остаётся в живом файле', async () => {
     const backlog = `# Очередь\n\n${item('a-item', 'todo')}\n${item('b-item', 'todo')}`;
-    const project = repository({ 'stepcast.yml': pipeline('a', SUCCESS_A), 'backlog.md': backlog });
+    const project = repository({ 'burnex.yml': pipeline('a', SUCCESS_A), 'backlog.md': backlog });
     const run = await startRun(project);
     takeItem(run, 'a', 'a-item');
     const live = `# Очередь\n\n${item('a-item')}\n${item('b-item', 'in_progress', 'claimed_by: run-b\n')}`;
@@ -317,7 +317,7 @@ describe('mergeLanes --onto: сведение на текущую вершину
 
 describe('mergeLanes --onto: грязная копия ветки', () => {
   it('грязный файл вне очереди: ожидание с событиями, очистка без коммита — публикация', async () => {
-    const project = repository({ 'stepcast.yml': pipeline('a', SUCCESS_A) });
+    const project = repository({ 'burnex.yml': pipeline('a', SUCCESS_A) });
     const run = await startRun(project);
     takeItem(run, 'a', 'a-item');
     const base = main(project);
@@ -364,7 +364,7 @@ describe('mergeLanes --onto: грязная копия ветки', () => {
   });
 
   it('грязен только backlog.md: без ожидания и без событий', async () => {
-    const project = repository({ 'stepcast.yml': pipeline('a', SUCCESS_A) });
+    const project = repository({ 'burnex.yml': pipeline('a', SUCCESS_A) });
     const run = await startRun(project);
     takeItem(run, 'a', 'a-item');
     writeFileSync(project.path('backlog.md'), `${BACKLOG}\n${item('c-item')}`);
@@ -379,7 +379,7 @@ describe('mergeLanes --onto: грязная копия ветки', () => {
 describe('mergeLanes --onto: merge lock', () => {
   it('два одновременных сведения выстраиваются lock-ом: второй читает вершину первого', async () => {
     const project = repository({
-      'stepcast.yml': pipeline('a', SUCCESS_A),
+      'burnex.yml': pipeline('a', SUCCESS_A),
       'stepcast-b.yml': pipeline('b', SUCCESS_B),
     });
     const runA = await startRun(project);
@@ -406,7 +406,7 @@ describe('mergeLanes --onto: отказы кодом 2 до первой пра�
     run: RunResult;
     snapshot: () => string;
   }> {
-    const project = repository({ 'stepcast.yml': pipeline('a', SUCCESS_A), ...extraFiles });
+    const project = repository({ 'burnex.yml': pipeline('a', SUCCESS_A), ...extraFiles });
     const run = await startRun(project);
     takeItem(run, 'a', 'a-item');
     const snapshot = (): string =>
@@ -485,7 +485,7 @@ jobs:
     lane: a
     steps: [{ id: шаг, run: [sh, -c, '${SUCCESS_A}'], expect: [{ exit_code: 0 }] }]
 `;
-    await refused(await prepared({ 'stepcast.yml': pipelineWithNotes, 'notes.md': 'заметки\n' }), {}, /notes\.md/u);
+    await refused(await prepared({ 'burnex.yml': pipelineWithNotes, 'notes.md': 'заметки\n' }), {}, /notes\.md/u);
   });
 });
 
@@ -499,7 +499,7 @@ describe('CLI: merge-lanes --onto', () => {
   }
 
   it('--keep-claim без --onto отклоняется кодом 2', async () => {
-    const project = repository({ 'stepcast.yml': pipeline('a', SUCCESS_A) });
+    const project = repository({ 'burnex.yml': pipeline('a', SUCCESS_A) });
     const run = await startRun(project);
     takeItem(run, 'a', 'a-item');
 
@@ -510,7 +510,7 @@ describe('CLI: merge-lanes --onto', () => {
   });
 
   it('publication_conflict даёт код отказа работы', async () => {
-    const project = repository({ 'stepcast.yml': pipeline('a', SUCCESS_A) });
+    const project = repository({ 'burnex.yml': pipeline('a', SUCCESS_A) });
     const run = await startRun(project);
     takeItem(run, 'a', 'a-item');
 

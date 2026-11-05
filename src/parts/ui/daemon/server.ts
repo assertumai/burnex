@@ -1,7 +1,7 @@
 import { createServer, type IncomingMessage, type ServerResponse, type Server } from 'node:http';
 import { existsSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { join } from 'node:path';
+
 
 import { listProjects } from '../../pipeline/run/journal/reader.js';
 import { backfillUsageStore } from '../../pipeline/run/journal/usageStore.js';
@@ -40,6 +40,7 @@ import {
 } from '../widgets.js';
 import { SHARED_MODULE_BY_SEGMENT, sharedModuleText } from './sharedModules.js';
 import { directoryFingerprint, type PluginsOverview } from '../plugins.js';
+import { homeRoot } from '../../../kernel/dirs.js';
 
 /**
  * HTTP-витрина журнала.
@@ -115,7 +116,7 @@ export interface UiServerOptions {
   /**
    * Процессы обслуживания экрана System (`POST /api/system/update` и
    * `/autostart`). По умолчанию — отсоединённые процессы с журналом под
-   * `~/.stepcast`; подмена нужна проверкам по той же причине, что и у `launchRun`.
+   * `~/.burnex`; подмена нужна проверкам по той же причине, что и у `launchRun`.
    */
   readonly launchMaintenance?: LaunchMaintenance;
   /** Системные вызовы экрана System; подмена — чтобы проверка не трогала настоящие launchd, git и npm. */
@@ -402,7 +403,7 @@ export function createUiServer(options: UiServerOptions): Promise<UiServer> {
   }
   const startedAt = Date.now();
   let boundPort = options.port;
-  const launchMaintenance = options.launchMaintenance ?? createMaintenance(join(homeDir, '.stepcast'));
+  const launchMaintenance = options.launchMaintenance ?? createMaintenance(homeRoot(homeDir));
   const systemHost = options.systemHost ?? systemSystemHost();
   const updateHold = createUpdateHold();
   const watcher =

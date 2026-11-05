@@ -73,7 +73,7 @@ function bed(): Bed {
   const { runsRoot, projectRoot, home } = makeJournalBed();
   seedRun(runsRoot, projectRoot, { runId: 'a' });
 
-  const stepcast = join(projectRoot, '.stepcast');
+  const stepcast = join(projectRoot, '.burnex');
   mkdirSync(join(stepcast, 'plugins'), { recursive: true });
   const stub = join(stepcast, 'plugins', 'security-stub');
   writeFileSync(stub, `#!${process.execPath}\nprocess.exit(44);\n`);
@@ -82,13 +82,13 @@ function bed(): Bed {
   writeFileSync(join(stepcast, 'config.yml'), 'plugins: ["./plugins/fake.mjs"]\n');
 
   writeFileSync(join(projectRoot, '.env.local'), `FOUND_TOKEN=${MARKER}\n`);
-  writeFileSync(join(projectRoot, 'stepcast.yml'), PIPELINE);
+  writeFileSync(join(projectRoot, 'burnex.yml'), PIPELINE);
 
   // Учётные данные бэкендов — только глобальный слой; относительный путь
   // параметров разрешается от каталога глобального конфига.
-  writeFileSync(join(home, '.stepcast', '.env.keys'), `CLAUDE_KEY=${MARKER}\n`);
+  writeFileSync(join(home, '.burnex', '.env.keys'), `CLAUDE_KEY=${MARKER}\n`);
   writeFileSync(
-    join(home, '.stepcast', 'config.yml'),
+    join(home, '.burnex', 'config.yml'),
     `runs:\n  root: ${runsRoot}\nbackends:\n  claude:\n    credentials:\n      CLAUDE_KEY: { provider: env-file, file: .env.keys }\n  codex:\n    credentials:\n      OPENAI_API_KEY: { provider: env-file, file: .env.keys }\n`,
   );
   return { runsRoot, projectRoot, home };
@@ -135,7 +135,7 @@ describe('ui-secrets: GET /api/secrets', () => {
     assert.equal(secret('found')?.status, 'resolved');
     assert.equal(secret('found')?.provider, 'env-file');
     assert.equal(secret('found')?.env, 'FOUND_TOKEN');
-    assert.deepEqual(secret('found')?.usedBy, [{ pipeline: 'stepcast.yml', steps: ['build/a', 'check/b'] }]);
+    assert.deepEqual(secret('found')?.usedBy, [{ pipeline: 'burnex.yml', steps: ['build/a', 'check/b'] }]);
     assert.equal(secret('found')?.unused, false);
     assert.equal(secret('found')?.reason, undefined);
 
@@ -189,8 +189,8 @@ describe('ui-secrets: GET /api/secrets', () => {
 
   it('пайплайн, который не раскрылся, идёт строкой ошибки без секретов', async (t) => {
     const fixture = bed();
-    mkdirSync(join(fixture.projectRoot, '.stepcast', 'pipelines'), { recursive: true });
-    writeFileSync(join(fixture.projectRoot, '.stepcast', 'pipelines', 'broken.yml'), 'kind: pipeline\nname: broken\njobs: 5\n');
+    mkdirSync(join(fixture.projectRoot, '.burnex', 'pipelines'), { recursive: true });
+    writeFileSync(join(fixture.projectRoot, '.burnex', 'pipelines', 'broken.yml'), 'kind: pipeline\nname: broken\njobs: 5\n');
     const server = await startServer(t, fixture);
 
     const { body } = await fetchBody(server, '/api/secrets');
@@ -204,7 +204,7 @@ describe('ui-secrets: GET /api/secrets', () => {
 
   it('нечитаемая конфигурация проекта: строка проекта с ошибкой, без записей', async (t) => {
     const fixture = bed();
-    writeFileSync(join(fixture.projectRoot, '.stepcast', 'config.yml'), 'plugins: ["./plugins/нет-такого.mjs"]\n');
+    writeFileSync(join(fixture.projectRoot, '.burnex', 'config.yml'), 'plugins: ["./plugins/нет-такого.mjs"]\n');
     const server = await startServer(t, fixture);
 
     const { code, body } = await fetchBody(server, '/api/secrets');
@@ -217,7 +217,7 @@ describe('ui-secrets: GET /api/secrets', () => {
 
   it('провайдер без таймаута: срок проб отвечает за него, остальные записи — своими статусами', async () => {
     const fixture = bed();
-    const stepcast = join(fixture.projectRoot, '.stepcast');
+    const stepcast = join(fixture.projectRoot, '.burnex');
     writeFileSync(
       join(stepcast, 'plugins', 'hung.mjs'),
       `export default {
@@ -228,7 +228,7 @@ describe('ui-secrets: GET /api/secrets', () => {
     );
     writeFileSync(join(stepcast, 'config.yml'), 'plugins: ["./plugins/fake.mjs", "./plugins/hung.mjs"]\n');
     writeFileSync(
-      join(fixture.projectRoot, 'stepcast.yml'),
+      join(fixture.projectRoot, 'burnex.yml'),
       PIPELINE.replace('secrets:\n', 'secrets:\n  hung: { provider: hung }\n'),
     );
     const { config } = resolveConfig({ cwd: fixture.home, home: fixture.home, projectPath: null });
@@ -261,7 +261,7 @@ describe('ui-secrets: GET /api/secrets', () => {
     const overrides = await projectSection(fixture.projectRoot, fixture.home, undefined);
     const forProject = withProjectSection(config, overrides);
     const { pipeline } = expandPipeline({
-      pipelinePath: join(fixture.projectRoot, 'stepcast.yml'),
+      pipelinePath: join(fixture.projectRoot, 'burnex.yml'),
       config: forProject,
       registry: overrides.registry,
       inputs: {},

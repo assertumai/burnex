@@ -27,7 +27,7 @@ function plistOptions(env: PlistOptions['env']): PlistOptions {
     execPath: '/usr/local/bin/node',
     binPath: '/opt/stepcast/bin.js',
     workingDirectory: '/work/proj',
-    logFile: '/home/.stepcast/ui.log',
+    logFile: '/home/.burnex/ui.log',
     env,
   };
 }
@@ -153,28 +153,28 @@ describe('launchd: устойчивый путь входа через current',
 
   it('managed и движок внутри releases_dir — путь через current', () => {
     const entry = daemonEntryPath({
-      engineRoot: '/h/.stepcast/releases/0.3.0',
-      manifest: MANAGED('/h/.stepcast/releases'),
-      fallback: '/h/.stepcast/releases/0.3.0/dist/src/bin.js',
+      engineRoot: '/h/.burnex/releases/0.3.0',
+      manifest: MANAGED('/h/.burnex/releases'),
+      fallback: '/h/.burnex/releases/0.3.0/dist/src/bin.js',
       realpath: identity,
     });
-    assert.equal(entry, '/h/.stepcast/releases/current/dist/src/bin.js');
+    assert.equal(entry, '/h/.burnex/releases/current/dist/src/bin.js');
   });
 
   it('движок вне releases_dir, другой способ или нет паспорта — прежний путь', () => {
     const fallback = '/work/stepcast/dist/src/bin.js';
     const base = { engineRoot: '/work/stepcast', fallback, realpath: identity };
-    assert.equal(daemonEntryPath({ ...base, manifest: MANAGED('/h/.stepcast/releases') }), fallback);
+    assert.equal(daemonEntryPath({ ...base, manifest: MANAGED('/h/.burnex/releases') }), fallback);
     assert.equal(daemonEntryPath({ ...base, manifest: { method: 'checkout', dir: '/work/stepcast' } }), fallback);
     assert.equal(daemonEntryPath({ ...base, manifest: undefined }), fallback);
   });
 
   it('up --install кладёт в ProgramArguments путь через current при managed', async () => {
     const { host, home } = fakeHost('darwin');
-    const releases = join(home, '.stepcast', 'releases');
+    const releases = join(home, '.burnex', 'releases');
     const engineRoot = join(releases, '0.3.0');
     mkdirSync(engineRoot, { recursive: true });
-    writeFileSync(join(home, '.stepcast', 'install.json'), JSON.stringify(MANAGED(releases)));
+    writeFileSync(join(home, '.burnex', 'install.json'), JSON.stringify(MANAGED(releases)));
 
     await withoutStepcastHome(() =>
       runUpCommand(args('up', { install: true }), () => undefined, tempDir('cwd-'), host, engineRoot),
@@ -186,8 +186,8 @@ describe('launchd: устойчивый путь входа через current',
 
   it('без паспорта в ProgramArguments прежний путь, а битый паспорт up не ломает', async () => {
     const { host, home } = fakeHost('darwin');
-    mkdirSync(join(home, '.stepcast'), { recursive: true });
-    writeFileSync(join(home, '.stepcast', 'install.json'), '{не json');
+    mkdirSync(join(home, '.burnex'), { recursive: true });
+    writeFileSync(join(home, '.burnex', 'install.json'), '{не json');
 
     await withoutStepcastHome(() =>
       runUpCommand(args('up', { install: true }), () => undefined, tempDir('cwd-'), host),
@@ -216,14 +216,14 @@ describe('launchd: agentState по выводу launchctl print', () => {
 
   it('загружен, с pid и путём через current', () => {
     const { host, calls, home } = hostPrinting(0, PRINTED);
-    writePlist(home, '/h/.stepcast/releases/current/dist/src/bin.js');
+    writePlist(home, '/h/.burnex/releases/current/dist/src/bin.js');
 
     assert.deepEqual(agentState(host), {
       supported: true,
       plist: true,
       loaded: true,
       pid: 4242,
-      entry: '/h/.stepcast/releases/current/dist/src/bin.js',
+      entry: '/h/.burnex/releases/current/dist/src/bin.js',
       entryStable: true,
     });
     assert.deepEqual(calls, [['print', 'gui/501/ai.stepcast.daemon']]);
@@ -251,11 +251,11 @@ describe('launchd: agentState по выводу launchctl print', () => {
 
   it('путь в конкретный релиз — entryStable ложно', () => {
     const { host, home } = hostPrinting(0, PRINTED);
-    writePlist(home, '/h/.stepcast/releases/0.3.0/dist/src/bin.js');
+    writePlist(home, '/h/.burnex/releases/0.3.0/dist/src/bin.js');
 
     const state = agentState(host);
     assert.equal(state.supported && state.entryStable, false);
-    assert.equal(state.supported && state.entry, '/h/.stepcast/releases/0.3.0/dist/src/bin.js');
+    assert.equal(state.supported && state.entry, '/h/.burnex/releases/0.3.0/dist/src/bin.js');
   });
 
   it('вне macOS — отказ словами requireMacos и ни одного вызова launchctl', () => {

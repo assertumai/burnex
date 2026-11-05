@@ -27,7 +27,7 @@ import { tempDir } from './tmp.js';
  */
 
 function pluginsDir(home: string): string {
-  const dir = join(home, '.stepcast', 'plugins');
+  const dir = join(home, '.burnex', 'plugins');
   mkdirSync(dir, { recursive: true });
   return dir;
 }
@@ -434,7 +434,7 @@ describe('ui-plugins: адрес /plugins/<id>.js в диспетчере', () =
     const { runsRoot, home } = makeJournalBed();
     writePluginDir(home, 'demo', { browser: 'index.tsx' }, { 'index.tsx': SIMPLE_HALF });
     writeFileSync(
-      join(home, '.stepcast', 'plugins.patch.yml'),
+      join(home, '.burnex', 'plugins.patch.yml'),
       'version: 1\nkind: plugins-patch\nplugins:\n  - id: demo\n    use: irrelevant\n    enabled: false\n',
     );
     const server = await startServer(t, { runsRoot, home });
@@ -456,8 +456,8 @@ describe('ui-plugins: адрес /plugins/<id>.js в диспетчере', () =
 describe('ui-plugins: действующий состав у ядра демона', () => {
   it('каталог плагина с браузерной половиной попадает в состав', async () => {
     const home = tempDir('ui-plugins-kernel-');
-    mkdirSync(join(home, '.stepcast'), { recursive: true });
-    writeFileSync(join(home, '.stepcast', 'config.yml'), 'runs:\n  root: /tmp\n');
+    mkdirSync(join(home, '.burnex'), { recursive: true });
+    writeFileSync(join(home, '.burnex', 'config.yml'), 'runs:\n  root: /tmp\n');
     writePluginDir(home, 'demo', { browser: 'index.tsx' }, { 'index.tsx': SIMPLE_HALF });
 
     const resolved = resolveConfig({ cwd: home, home, projectPath: null, builtinRows: UI_ROWS.map((row) => row.id) });
@@ -485,7 +485,7 @@ describe('ui-plugins: действующий состав у ядра демон
     assert.equal(before.code, 200);
 
     writeFileSync(
-      join(home, '.stepcast', 'plugins.patch.yml'),
+      join(home, '.burnex', 'plugins.patch.yml'),
       'version: 1\nkind: plugins-patch\nplugins:\n  - id: demo\n    use: irrelevant\n    enabled: false\n',
     );
 
@@ -496,15 +496,15 @@ describe('ui-plugins: действующий состав у ядра демон
   it('строка, объявленная патчем вне каталога плагинов, отдаётся по своему каталогу из манифеста', async (t) => {
     const { runsRoot, home } = makeJournalBed();
     // Каталожная строка вправе лежать где угодно: путь называет патч, а не
-    // имя каталога внутри `~/.stepcast/plugins/`. Состав обязан нести тот
+    // имя каталога внутри `~/.burnex/plugins/`. Состав обязан нести тот
     // каталог, который назвал манифест, иначе отпечаток считался бы по
     // несуществующему пути, а половина искалась бы не там, где она есть.
-    const dir = join(home, '.stepcast', 'elsewhere', 'demo');
+    const dir = join(home, '.burnex', 'elsewhere', 'demo');
     mkdirSync(dir, { recursive: true });
     writeFileSync(join(dir, 'plugin.json'), JSON.stringify({ browser: 'index.tsx' }));
     writeFileSync(join(dir, 'index.tsx'), 'export default function plugin() { return "elsewhere"; }\n');
     writeFileSync(
-      join(home, '.stepcast', 'plugins.patch.yml'),
+      join(home, '.burnex', 'plugins.patch.yml'),
       'version: 1\nkind: plugins-patch\nplugins:\n  - id: demo\n    use: ./elsewhere/demo\n',
     );
     const server = await startServer(t, { runsRoot, home });
@@ -595,7 +595,7 @@ describe('ui-plugins: событие plugins потока /api/events', () => {
     writePluginDir(home, 'demo', { browser: 'index.tsx' }, { 'index.tsx': SIMPLE_HALF });
     writePluginDir(home, 'kept', { browser: 'index.tsx' }, { 'index.tsx': SIMPLE_HALF });
     writeFileSync(
-      join(home, '.stepcast', 'plugins.patch.yml'),
+      join(home, '.burnex', 'plugins.patch.yml'),
       'version: 1\nkind: plugins-patch\nplugins:\n  - id: demo\n    use: irrelevant\n    enabled: false\n',
     );
     const watcher = createWatcher({ runsRoot, home, intervalMs: 10_000 });

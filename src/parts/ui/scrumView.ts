@@ -22,7 +22,7 @@ import { withCurrentOption, type FilterOption } from './filters.js';
  * почти пустых вместо одной читаемой.
  *
  * Прочие колонки проект заводит сам — по одной на свой статус, в файле
- * `.stepcast/board.yml` (`src/parts/ui/boardFile.ts`). Встроенные в этом
+ * `.burnex/board.yml` (`src/parts/ui/boardFile.ts`). Встроенные в этом
  * файле обязаны быть все: без `todo` некуда было бы положить новый пункт, без
  * `archive` — вынести решённый.
  */

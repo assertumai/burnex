@@ -23,6 +23,7 @@ import { StepcastError } from '../../../kernel/errors.js';
 import { buildPackageIndex, type PackageEntry } from '../../packages/index.js';
 import { summarizePackages, type PackageSummary } from '../../packages/summary.js';
 import type { JournalProblem } from '../../pipeline/run/journal/reader.js';
+import { homeRoot } from '../../../kernel/dirs.js';
 
 /**
  * Наблюдатель за корнем прогонов — и за файлом очереди в корне каждого
@@ -45,13 +46,13 @@ export interface WatcherOptions {
   readonly intervalMs?: number;
   /**
    * Куда печатать отказ разбора файла журнала — по умолчанию поток ошибок
-   * демона: `startDetached` отводит его в `~/.stepcast/ui.log`, а в
+   * демона: `startDetached` отводит его в `~/.burnex/ui.log`, а в
    * `--foreground` то же уходит в терминал. Печать передаётся параметром,
    * чтобы проверка собирала строки, а не писала в общий поток.
    */
   readonly log?: (line: string) => void;
   /**
-   * Домашний каталог: определяет, чей `.stepcast/plugins/` наблюдатель
+   * Домашний каталог: определяет, чей `.burnex/plugins/` наблюдатель
    * отпечатывает (design.md изменения `hot-swap-preserves-data`, задача 12).
    * По умолчанию — `homedir()`, тем же умолчанием, что у `currentDaemonKernel`
    * (`src/parts/ui/daemon/kernel.ts`).
@@ -181,7 +182,7 @@ interface Fingerprint {
  * с содержимым почти всегда (design.md, Решение 4). Отсутствие файла — такое
  * же законное состояние отпечатка, как и его наличие.
  *
- * Часть `widgets` — виджеты `.stepcast/widgets/` каждого проекта с известным
+ * Часть `widgets` — виджеты `.burnex/widgets/` каждого проекта с известным
  * путём, тем же приёмом «`mtime` и размер» (design.md изменения
  * `ui-runtime-widget-spike`, Решение 7). Отдельная часть, а не слияние с
  * `backlog`: цена перечитывания разная — очередь весит сотни килобайт разбора
@@ -209,7 +210,7 @@ interface Fingerprint {
  * путей, как у `routes`), потому что дашбордов может быть сколько угодно и
  * какой файл появится — заранее не известно.
  *
- * Часть `proposals` — каталог очереди предложений `.stepcast/proposals/`
+ * Часть `proposals` — каталог очереди предложений `.burnex/proposals/`
  * каждого проекта с известным путём, имя и `mtime`+размер каждой записи
  * (`ui-proposals`, «Состав очереди идёт потоком событий»): отдельная часть,
  * тем же приёмом, что `widgets` и `dashboards` — принятая или отклонённая
@@ -227,7 +228,7 @@ function statPart(path: string): string {
 }
 
 /**
- * Пакеты обоих корней (`<проект>/.stepcast/packages` и `packages/` рядом с
+ * Пакеты обоих корней (`<проект>/.burnex/packages` и `packages/` рядом с
  * глобальным конфигом): имя, слой, состояние и `mtime`+размер манифеста
  * каждого. Правка `package.yml`, делающая пакет сломанным, сдвигает отпечаток,
  * даже когда файлы ресурсов не тронуты (`packages-directory-layer`, Решение 8).
@@ -235,7 +236,7 @@ function statPart(path: string): string {
 function packageIndexOf(home: string, projectRoot: string | undefined): readonly PackageEntry[] {
   return buildPackageIndex({
     ...(projectRoot === undefined ? {} : { projectRoot }),
-    globalPath: join(home, '.stepcast', 'config.yml'),
+    globalPath: join(homeRoot(home), 'config.yml'),
   }).packages;
 }
 
@@ -310,7 +311,7 @@ function fingerprint(
       // файлу оставлял бы перенесённый пункт видимым на прежнем месте до
       // следующей правки очереди.
       //
-      // Раскладка колонок доски (`.stepcast/board.yml`) едет тем же отпечатком:
+      // Раскладка колонок доски (`.burnex/board.yml`) едет тем же отпечатком:
       // колонка, заведённая с доски, обязана появиться тем же тактом, что и
       // перенос карточки, а вид очереди несёт её вместе с пунктами.
       for (const name of ['backlog.md', 'archived.md', BOARD_FILE]) {
@@ -421,7 +422,7 @@ export function createWatcher(options: WatcherOptions): Watcher {
         // В лог идёт отказ разбора, а не отсутствие файла: между записью
         // манифеста и первой записью состояния лежат секунды, и опрос раз в
         // секунду успевает застать здоровый прогон без `status.json`. Строка
-        // о нём осталась бы в `~/.stepcast/ui.log` навсегда и обесценила бы
+        // о нём осталась бы в `~/.burnex/ui.log` навсегда и обесценила бы
         // правило «одна строка на беду».
         if (run.problem.kind === 'missing') continue;
         const key = `${run.runId} ${run.problem.file} ${run.problem.detail}`;

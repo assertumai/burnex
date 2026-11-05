@@ -410,7 +410,7 @@ function resolveKnowledge(
 ): void {
   if (options.knowledge === undefined) {
     throw new StepcastError('Запись контекста knowledge объявлена без источника знания', {
-      hint: 'Объявите project.knowledge в .stepcast/config.yml',
+      hint: 'Объявите project.knowledge в .burnex/config.yml',
     });
   }
 

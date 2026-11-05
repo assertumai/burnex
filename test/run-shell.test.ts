@@ -16,7 +16,7 @@ import { tempDir } from './tmp.js';
  */
 
 const expand = (project: Project) =>
-  expandPipeline({ pipelinePath: project.path('stepcast.yml'), config: project.config });
+  expandPipeline({ pipelinePath: project.path('burnex.yml'), config: project.config });
 
 type RunLike = { readonly kind: string; readonly shell?: readonly string[] };
 const shells = (project: Project, jobIndex = 0): Array<readonly string[] | undefined> =>
@@ -25,7 +25,7 @@ const shells = (project: Project, jobIndex = 0): Array<readonly string[] | undef
 describe('pipeline-definition: shell', () => {
   it('без объявления поля нет нигде', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 jobs:
   build:
@@ -38,7 +38,7 @@ jobs:
 
   it('пайплайн, тело работы, место подключения и шаг — каждый уровень по отдельности', () => {
     const pipelineLevel = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 shell: [bash, -lc]
 jobs:
@@ -50,7 +50,7 @@ jobs:
     assert.deepEqual(shells(pipelineLevel), [['bash', '-lc']]);
 
     const bodyLevel = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 jobs:
   build:
@@ -62,7 +62,7 @@ jobs:
     assert.deepEqual(shells(bodyLevel), [['zsh', '-c']]);
 
     const siteLevel = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 jobs:
   build:
@@ -78,7 +78,7 @@ steps:
     assert.deepEqual(shells(siteLevel), [['dash', '-c']]);
 
     const stepLevel = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 jobs:
   build:
@@ -92,7 +92,7 @@ jobs:
 
   it('ближайший уровень перекрывает дальние: шаг, место подключения, тело работы, пайплайн', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 shell: [p, -c]
 jobs:
@@ -127,20 +127,20 @@ steps:
       "{ id: a, agent: claude, prompt: hi, shell: [bash, -c] }",
     ]) {
       const project = makeProject({
-        'stepcast.yml': `
+        'burnex.yml': `
 kind: pipeline
 jobs:
   build:
     steps:
       - ${step}
 `,
-        '.stepcast/scripts/probe.sh': '#!/bin/sh\nexit 0\n',
+        '.burnex/scripts/probe.sh': '#!/bin/sh\nexit 0\n',
       });
       assert.throws(() => expand(project), /shell/);
     }
 
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 shell: [bash, -lc]
 jobs:
@@ -208,7 +208,7 @@ describe('step-execution: shell', () => {
 describe('pipeline-definition: shell и lint', () => {
   const lint = (shell: string, stepShell = '') => {
     const project = makeProject({
-      'stepcast.yml': `kind: pipeline
+      'burnex.yml': `kind: pipeline
 ${shell}jobs:
   build:
     steps:

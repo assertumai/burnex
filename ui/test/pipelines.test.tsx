@@ -20,7 +20,7 @@ import {
  * клиента с подставным `fetch` — то же, что делает кнопка «Apply».
  */
 
-const FILE = '/home/me/.stepcast/config.yml';
+const FILE = '/home/me/.burnex/config.yml';
 
 function jobOf(step: Record<string, unknown>): PipelineJobView {
   return {
@@ -92,7 +92,7 @@ describe('ui-pipelines: выбор агента на карточке шага',
       const job = response.pipelines[0]!.jobs[0]!;
       const html = renderToStaticMarkup(<JobCard job={job} pipeline="p" agentPolicy="force" choices={CHOICES} onApply={() => undefined} />);
       assert.match(html, /claude · sonnet/);
-      assert.match(html, /step_agents · \/home\/me\/\.stepcast\/config\.yml/);
+      assert.match(html, /step_agents · \/home\/me\/\.burnex\/config\.yml/);
     } finally {
       fake.restore();
     }

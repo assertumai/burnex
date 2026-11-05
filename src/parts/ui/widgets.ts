@@ -10,9 +10,10 @@ import { listProjects } from '../pipeline/run/journal/reader.js';
 import { isSafeSegment } from './routes.js';
 import { SHARED_MODULE_IMPORT_MAP, SHARED_MODULE_LIST, WIDGET_ERROR_EXPORT, WIDGET_STYLE_EXPORT } from './daemon/sharedModules.js';
 import { parseWidgetImports, unresolvedSharedNames, type UnresolvedSharedKind } from './widgetImports.js';
+import { cabinetDir, homeRoot } from '../../kernel/dirs.js';
 
 /**
- * Виджет пользователя — файл `<проект>/.stepcast/widgets/<id>.tsx`.
+ * Виджет пользователя — файл `<проект>/.burnex/widgets/<id>.tsx`.
  *
  * Три обязанности этого модуля: перечислить виджеты проекта (тем же обходом
  * `projects.json`, каким `buildSteps` читает каталог переиспользуемых шагов,
@@ -30,7 +31,7 @@ import { parseWidgetImports, unresolvedSharedNames, type UnresolvedSharedKind } 
 const WIDGET_EXTENSION = '.tsx';
 
 export function widgetsDirPath(projectPath: string): string {
-  return join(projectPath, '.stepcast', 'widgets');
+  return join(cabinetDir(projectPath), 'widgets');
 }
 
 /**
@@ -50,7 +51,7 @@ export function listProjectWidgetIds(projectPath: string, options: WidgetSourceO
 
 /**
  * Откуда читаются пакеты home. Витрина знает домашний каталог машины, а не
- * путь глобального конфига: пакеты лежат в `<home>/.stepcast/packages`, как
+ * путь глобального конфига: пакеты лежат в `<home>/.burnex/packages`, как
  * и остальные свободные ресурсы home (`packages-directory-layer`, Решение 1).
  */
 export interface WidgetSourceOptions {
@@ -70,7 +71,7 @@ interface WidgetPackageLayer {
 
 /** Слои пакетов виджетов в порядке поиска: пакеты проекта, затем пакеты home. Свободный каталог home у виджетов не читается. */
 function widgetLayers(projectPath: string, options: WidgetSourceOptions): readonly WidgetPackageLayer[] {
-  const homeStepcastDir = join(options.home ?? homedir(), '.stepcast');
+  const homeStepcastDir = homeRoot(options.home ?? homedir());
   const index = buildPackageIndex({ projectRoot: projectPath, globalPath: join(homeStepcastDir, 'config.yml') });
   const layers: WidgetPackageLayer[] = [];
   for (const layer of resourceLayers(index, 'widgets', { projectRoot: projectPath, homeStepcastDir })) {
@@ -393,7 +394,7 @@ export type InstallWidgetOutcome =
   | { readonly status: 'unknown' };
 
 /**
- * Копия виджета поставки в `<проект>/.stepcast/widgets/<id>.tsx`. Файл на
+ * Копия виджета поставки в `<проект>/.burnex/widgets/<id>.tsx`. Файл на
  * месте не перезаписывается: пользователь мог его править, и «добавить» не
  * значит «сбросить».
  */
@@ -482,7 +483,7 @@ async function importEsbuild(): Promise<EsbuildTransformApi> {
  * демона (требование ui-daemon). Строка нужна потому, что ответ с ошибкой
  * видит только тот, кто открыл экран виджетов, а причина у отказа общая для
  * демона — зависимости нет или она не собрана для этой платформы, — и
- * искать её будут в `~/.stepcast/ui.log`. Логируется один раз: результат
+ * искать её будут в `~/.burnex/ui.log`. Логируется один раз: результат
  * подъёма кеширован вызывающим, и повторный запрос виджета берёт тот же
  * отказавший промис, а не зовёт этот код заново.
  */

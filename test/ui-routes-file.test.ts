@@ -8,7 +8,7 @@ import { parseRoute } from '../src/parts/ui/routes.js';
 import { buildRouteTable, homeRoutesPath, projectRoutesPath, writeRouteRow } from '../src/parts/ui/routesFile.js';
 import { tempDir } from './tmp.js';
 
-/** Домашний и проектный каталоги для трёх слоёв — без .stepcast/routes.yml, если тест его не пишет. */
+/** Домашний и проектный каталоги для трёх слоёв — без .burnex/routes.yml, если тест его не пишет. */
 function layerDirs(): { home: string; projectRoot: string } {
   const home = tempDir('routes-home-');
   const projectRoot = tempDir('routes-project-');
@@ -17,13 +17,13 @@ function layerDirs(): { home: string; projectRoot: string } {
 
 function writeHomeRoutes(home: string, content: string): void {
   const path = homeRoutesPath(home);
-  mkdirSync(join(home, '.stepcast'), { recursive: true });
+  mkdirSync(join(home, '.burnex'), { recursive: true });
   writeFileSync(path, content);
 }
 
 function writeProjectRoutes(projectRoot: string, content: string): void {
   const path = projectRoutesPath(projectRoot);
-  mkdirSync(join(projectRoot, '.stepcast'), { recursive: true });
+  mkdirSync(join(projectRoot, '.burnex'), { recursive: true });
   writeFileSync(path, content);
 }
 
@@ -372,7 +372,7 @@ describe('ui-routes-file: запись строки в слой через Docum
   it('добавляет новую строку, сохраняя комментарии и прочие строки файла', () => {
     const { home } = layerDirs();
     const path = homeRoutesPath(home);
-    mkdirSync(join(home, '.stepcast'), { recursive: true });
+    mkdirSync(join(home, '.burnex'), { recursive: true });
     writeFileSync(path, '# мои маршруты\nroutes:\n  - id: screen-cleanup # правил вручную\n    enabled: false\n');
 
     writeRouteRow('home', { id: 'my-route', path: '/mine', target: { screen: 'screen-runs' } }, { home });
@@ -390,7 +390,7 @@ describe('ui-routes-file: запись строки в слой через Docum
   it('файл с повтором ключа не переписывается — отказ называет место разбора', () => {
     const { home } = layerDirs();
     const path = homeRoutesPath(home);
-    mkdirSync(join(home, '.stepcast'), { recursive: true });
+    mkdirSync(join(home, '.burnex'), { recursive: true });
     // Повтор ключа `routes:` YAML не разбирает, но разбор «как получится» даёт
     // схемно верный объект: без проверки `doc.errors` запись прошла бы поверх
     // файла, который чтение слоя считает сломанным, и унесла бы первый блок.
@@ -426,7 +426,7 @@ describe('ui-routes-file: запись строки в слой через Docum
 
 /** Пакет с манифестом и, при желании, своим `routes.yml`. */
 function writePackageRoutes(root: string, name: string, routes: string | undefined, broken = false): string {
-  const dir = join(root, '.stepcast', 'packages', name);
+  const dir = join(root, '.burnex', 'packages', name);
   mkdirSync(dir, { recursive: true });
   writeFileSync(
     join(dir, 'package.yml'),

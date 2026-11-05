@@ -698,7 +698,7 @@ export type BacklogLockView =
  */
 export interface BacklogFailure {
   /** Файл очереди либо раскладка колонок доски. */
-  readonly sourceFile: BacklogSourceFile | '.stepcast/board.yml';
+  readonly sourceFile: BacklogSourceFile | '.burnex/board.yml';
   readonly error: string;
   readonly errorAt?: string;
 }
@@ -710,7 +710,7 @@ export interface BacklogProjectView {
   readonly items: readonly BacklogItemView[];
   /** Отказ разбора — по одному на не разобравшийся файл; пустой список — оба разобрались (или отсутствуют). */
   readonly failures: readonly BacklogFailure[];
-  /** Раскладка колонок доски (`.stepcast/board.yml`); без файла — встроенная. */
+  /** Раскладка колонок доски (`.burnex/board.yml`); без файла — встроенная. */
   readonly columns: readonly BoardColumnSpec[];
   /** Блокировка очереди проекта — тем же кадром, что и пункты. */
   readonly lock: BacklogLockView;

@@ -10,7 +10,7 @@ const keep = (process.env['BURNEX_TEST_KEEP'] ?? process.env['STEPCAST_TEST_KEEP
 // Заводится один раз на процесс — импорт модуля кэшируется рантаймом ESM.
 // Прямо в настоящем `$TMPDIR`, поэтому свойства пути (символьные ссылки
 // платформы вроде `/var` → `/private/var` на macOS) не меняются.
-const root = mkdtempSync(join(tmpdir(), keep ? 'stepcast-test-keep-' : 'stepcast-test-'));
+const root = mkdtempSync(join(tmpdir(), keep ? 'burnex-test-keep-' : 'burnex-test-'));
 
 // Перевод происходит до тела любого теста: импорты вычисляются раньше него,
 // а прямое создание запрещено линтом — значит всякий, кому нужен временный

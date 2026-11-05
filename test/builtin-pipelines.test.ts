@@ -216,7 +216,7 @@ describe('builtin pipelines: прогон migrate-widgets с поддельны�
         const payload = `${resultLine({ text: 'исправил gauge' })}\n`;
         const script = [
           `require('fs').writeFileSync(${JSON.stringify(draft)}, ${JSON.stringify(fixed)});`,
-          `require('child_process').execFileSync(process.execPath, [${JSON.stringify(cliBin)}, 'propose', '.stepcast/widgets/gauge.tsx', '--from', ${JSON.stringify(draft)}, '--reason', 'имя ушло из таблицы'], { cwd: ${JSON.stringify(invocation.cwd)}, stdio: 'inherit' });`,
+          `require('child_process').execFileSync(process.execPath, [${JSON.stringify(cliBin)}, 'propose', '.burnex/widgets/gauge.tsx', '--from', ${JSON.stringify(draft)}, '--reason', 'имя ушло из таблицы'], { cwd: ${JSON.stringify(invocation.cwd)}, stdio: 'inherit' });`,
           `process.stdout.write(${JSON.stringify(payload)});`,
         ].join('\n');
         return { command: [process.execPath, '-e', script], stdin: invocation.prompt };
@@ -307,14 +307,14 @@ describe('builtin pipelines: прогон migrate-widgets с поддельны�
     const proj = makeProject();
     const widgetPath = join(widgetsDirPath(proj.root), 'gauge.tsx');
     const original = "import { NotAName } from '@burnex/ui';\nexport default function G() { return null; }\n";
-    proj.write('.stepcast/widgets/gauge.tsx', original);
+    proj.write('.burnex/widgets/gauge.tsx', original);
 
     await withHome(proj.home, () => runMigration(migratingAdapter(), proj));
 
     assert.equal(readFileSync(widgetPath, 'utf8'), original);
     const result = readProposalsDir(proj.root);
     assert.equal(result.records.length, 1);
-    assert.equal(result.records[0]?.target, '.stepcast/widgets/gauge.tsx');
+    assert.equal(result.records[0]?.target, '.burnex/widgets/gauge.tsx');
     assert.equal(result.records[0]?.state, 'pending');
     assert.match(result.records[0]?.reason ?? '', /имя ушло/);
   });
@@ -329,7 +329,7 @@ describe('builtin pipelines: прогон migrate-widgets с поддельны�
   it('вход widget доходит до агента промптом', async () => {
     const proj = makeProject();
     proj.write(
-      '.stepcast/widgets/clock.tsx',
+      '.burnex/widgets/clock.tsx',
       "import { useState } from 'react';\nexport default function C() { return null; }\n",
     );
 
@@ -343,7 +343,7 @@ describe('builtin pipelines: прогон migrate-widgets с поддельны�
   it('без входа промпт называет вход пустым, а не подстановкой', async () => {
     const proj = makeProject();
     proj.write(
-      '.stepcast/widgets/clock.tsx',
+      '.burnex/widgets/clock.tsx',
       "import { useState } from 'react';\nexport default function C() { return null; }\n",
     );
 
@@ -357,7 +357,7 @@ describe('builtin pipelines: прогон migrate-widgets с поддельны�
   it('проект без устаревших виджетов: успех без единой записи в очереди', async () => {
     const proj = makeProject();
     proj.write(
-      '.stepcast/widgets/clock.tsx',
+      '.burnex/widgets/clock.tsx',
       "import { useState } from 'react';\nexport default function C() { return null; }\n",
     );
 

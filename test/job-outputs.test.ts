@@ -23,7 +23,7 @@ import { tempDir } from './tmp.js';
 const POLICY: OutputPolicy = { envDeny: ['*_TOKEN', '*_SECRET'], secretEnvs: ['DEPLOY_PASS'] };
 
 function expand(project: Project) {
-  return expandPipeline({ pipelinePath: project.path('stepcast.yml'), config: project.config });
+  return expandPipeline({ pipelinePath: project.path('burnex.yml'), config: project.config });
 }
 
 async function runProject(project: Project): Promise<RunResult> {
@@ -71,18 +71,18 @@ ${outputs}
 `;
 
   it('принимает допустимые имена', () => {
-    const project = makeProject({ 'stepcast.yml': doc('    outputs: [sha, branch_name]') });
+    const project = makeProject({ 'burnex.yml': doc('    outputs: [sha, branch_name]') });
     assert.deepEqual(expand(project).pipeline.jobs[0]?.outputs, ['sha', 'branch_name']);
   });
 
   it('работа без объявления получает пустой набор', () => {
-    const project = makeProject({ 'stepcast.yml': doc('') });
+    const project = makeProject({ 'burnex.yml': doc('') });
     assert.deepEqual(expand(project).pipeline.jobs[0]?.outputs, []);
   });
 
   for (const bad of ['1sha', 'git-sha']) {
     it(`отклоняет «${bad}», называя работу и имя`, () => {
-      const project = makeProject({ 'stepcast.yml': doc(`    outputs: [${bad}]`) });
+      const project = makeProject({ 'burnex.yml': doc(`    outputs: [${bad}]`) });
       assert.throws(() => expand(project), (error: Error) => {
         assert.match(error.message, /Работа build/);
         assert.ok(error.message.includes(`«${bad}»`));
@@ -102,7 +102,7 @@ steps:
     run: [echo, ok]
     expect: [{ exit_code: 0 }]
 `,
-      'stepcast.yml': `
+      'burnex.yml': `
 version: 1
 kind: pipeline
 name: обвязка
@@ -181,7 +181,7 @@ describe('job-outputs: журнал', () => {
 
   it('запись с outputs проходит круг записи и чтения', async () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 version: 1
 kind: pipeline
 name: журнал
@@ -201,7 +201,7 @@ jobs:
 describe('job-outputs: исполнение', () => {
   it('два шага пишут в один файл, повтор ключа даёт последнее значение, необъявленный ключ принят', async () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 version: 1
 kind: pipeline
 name: два-шага
@@ -218,7 +218,7 @@ jobs:
 
   it('вторая попытка attempts начинает с пустого файла', async () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 version: 1
 kind: pipeline
 name: попытки
@@ -249,7 +249,7 @@ jobs:
     extra = '',
   ): Promise<{ status?: string | undefined; reason?: string | undefined }> => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 version: 1
 kind: pipeline
 name: нарушение
@@ -297,7 +297,7 @@ jobs:
 
   it('нарушение не повторяется попытками', async () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 version: 1
 kind: pipeline
 name: без-повтора
@@ -313,7 +313,7 @@ jobs:
 
   it('объявленный и неопубликованный ключ роняет работу, называя его', async () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 version: 1
 kind: pipeline
 name: недостача
@@ -332,7 +332,7 @@ jobs:
 
   it('в shadow-режиме работа с шагом shadow не падает на неопубликованном ключе', async () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 version: 1
 kind: pipeline
 name: тень
@@ -361,7 +361,7 @@ jobs:
     // Второй шаг переписывает файл через `>`: в файле 32 ключа, у работы — 64.
     const keys = (prefix: string): string => Array.from({ length: 32 }, (_, i) => `${prefix}${i}=v`).join('\\n');
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 version: 1
 kind: pipeline
 name: объединение
@@ -382,7 +382,7 @@ jobs:
 
   it('работа с until публикует объявленный ключ на сошедшейся итерации и не падает на ранней', async () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 version: 1
 kind: pipeline
 name: until
@@ -408,7 +408,7 @@ jobs:
 
   it('работа с until, так и не опубликовавшая объявленный ключ, падает после сошедшейся итерации', async () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 version: 1
 kind: pipeline
 name: until-недостача
@@ -434,7 +434,7 @@ jobs:
 
   it('новый проход loops начинает с пустого файла и без выходов прошлого прохода', async () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 loops:
   l:
@@ -473,7 +473,7 @@ describe('job-outputs: передача зависимым', () => {
 
   it('прямой зависимый видит NEEDS_<РАБОТА>_<КЛЮЧ>', async () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 version: 1
 kind: pipeline
 name: передача
@@ -490,7 +490,7 @@ jobs:
 
   it('needs: all тоже получает выходы', async () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 version: 1
 kind: pipeline
 name: все
@@ -507,7 +507,7 @@ jobs:
 
   it('транзитивный производитель переменных не даёт', async () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 version: 1
 kind: pipeline
 name: транзит
@@ -530,7 +530,7 @@ jobs:
 
   it('упавший производитель при on: always переменных не даёт', async () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 version: 1
 kind: pipeline
 name: упавший
@@ -548,7 +548,7 @@ jobs:
 
   it('env: потребителя значение не перекрывает', async () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 version: 1
 kind: pipeline
 name: перекрытие
@@ -566,7 +566,7 @@ jobs:
   it('две зависимости с одной переменной роняют потребителя до первого шага', async () => {
     // Линт такое отклоняет заранее; движок отказывает сам, если линт обойдён.
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 version: 1
 kind: pipeline
 name: коллизия
@@ -618,7 +618,7 @@ jobs:
   type Env = Readonly<Record<string, string>>;
 
   async function resume(from: string, firstEnv: Env, secondEnv: Env) {
-    const project = makeProject({ 'stepcast.yml': PIPELINE });
+    const project = makeProject({ 'burnex.yml': PIPELINE });
     const runsRoot = tempDir('runs-');
     initRepo(project);
     const config = { ...project.config, runs: { ...project.config.runs, root: runsRoot } };
@@ -685,7 +685,7 @@ jobs:
 
 describe('job-outputs: линт', () => {
   function errors(pipeline: string): readonly string[] {
-    const project = makeProject({ 'stepcast.yml': pipeline });
+    const project = makeProject({ 'burnex.yml': pipeline });
     return lintPipeline(expand(project), { config: project.config, cwd: project.root })
       .filter((item) => item.severity === 'error')
       .map((item) => item.message);
@@ -757,7 +757,7 @@ jobs:
 
   it('ключ не объявлен — ошибка с перечнем объявленных', () => {
     const project = makeProject({
-      'stepcast.yml': withConsumer('\n    outputs: [sha]', 'echo $NEEDS_BUILD_nope'),
+      'burnex.yml': withConsumer('\n    outputs: [sha]', 'echo $NEEDS_BUILD_nope'),
     });
     const found = lintPipeline(expand(project), { config: project.config, cwd: project.root }).find((item) =>
       /не объявлен в outputs/.test(item.message),

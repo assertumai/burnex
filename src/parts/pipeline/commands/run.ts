@@ -1,6 +1,7 @@
 import { resolveConfig, type Config } from '../config/resolve.js';
 import type { Registry } from '../../../kernel/registry.js';
 import { ExitCode, isStepcastError, StepcastError, type ExitCodeValue } from '../../../kernel/errors.js';
+import { defaultPipelineName } from '../../../kernel/dirs.js';
 import { findProjectRoot, projectKey, runPaths, shortRunId } from '../run/journal/paths.js';
 import { readStatus } from '../run/journal/reader.js';
 import type { Event, RunManifest } from '../run/journal/schema.js';
@@ -36,7 +37,7 @@ export async function runRunCommand(
   registry?: Registry,
   resolvedConfig?: Config,
 ): Promise<ExitCodeValue> {
-  const target = args.positional[0] ?? 'stepcast.yml';
+  const target = args.positional[0] ?? defaultPipelineName(cwd);
   // `burnex:<имя>` называет пайплайн поставки, а не файл каталога запуска
   // (`pipeline-definition`, «Ссылка на поставку называет и пайплайн, а не
   // только схему»), `<пакет>:<имя>` — пайплайн пакета: путь разрешается не от

@@ -3,6 +3,7 @@ import { hasErrors, lintPipeline, type Diagnostic } from '../domain/lint.js';
 import { resolveConfig, type Config } from '../config/resolve.js';
 import type { Registry } from '../../../kernel/registry.js';
 import { ExitCode, isStepcastError, type ExitCodeValue } from '../../../kernel/errors.js';
+import { defaultPipelineName, hasLegacyCabinet, legacyCabinetDiagnostic } from '../../../kernel/dirs.js';
 import { resolvePipelineTarget } from '../domain/package-schema.js';
 import type { PipelineCommandEnv } from '../contract.js';
 import { commandRow } from '../../../kernel/cli/commandRow.js';
@@ -32,7 +33,7 @@ export function runLintCommand(
   registry?: Registry,
   resolvedConfig?: Config,
 ): ExitCodeValue {
-  const target = args.positional[0] ?? 'stepcast.yml';
+  const target = args.positional[0] ?? defaultPipelineName(cwd);
   const config = resolvedConfig ?? resolveConfig({ cwd }).config;
   const { pipelinePath, outsideProject } = resolvePipelineTarget(cwd, target, {
     globalConfigDir: config.globalConfigDir,
@@ -65,6 +66,7 @@ export function runLintCommand(
   }
 
   const diagnostics = lintPipeline(expanded, { config, cwd, ...(registry === undefined ? {} : { registry }) });
+  if (hasLegacyCabinet(cwd)) diagnostics.push(legacyCabinetDiagnostic(cwd));
 
   for (const diagnostic of diagnostics) {
     for (const line of formatDiagnostic(diagnostic)) write(line);

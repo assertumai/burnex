@@ -24,7 +24,7 @@ interface Bed {
 
 /** `resolveConfig` внутри команды читает `runs.root` только из глобального
  * конфига (это GLOBAL_ONLY-ключ), поэтому изоляция теста идёт через
- * подменённый HOME, а не через .stepcast/config.yml в проекте. */
+ * подменённый HOME, а не через .burnex/config.yml в проекте. */
 function bed(): Bed {
   const base = tempDir('gc-');
   const runsRoot = join(base, 'runs');
@@ -32,8 +32,8 @@ function bed(): Bed {
   const home = join(base, 'home');
   mkdirSync(runsRoot, { recursive: true });
   mkdirSync(projectRoot, { recursive: true });
-  mkdirSync(join(home, '.stepcast'), { recursive: true });
-  writeFileSync(join(home, '.stepcast', 'config.yml'), `runs:\n  root: ${runsRoot}\n`);
+  mkdirSync(join(home, '.burnex'), { recursive: true });
+  writeFileSync(join(home, '.burnex', 'config.yml'), `runs:\n  root: ${runsRoot}\n`);
   return { runsRoot, projectRoot, home };
 }
 
@@ -59,7 +59,7 @@ function makeRun(
   journal.writeManifest({
     run_id: journal.paths.runId,
     pipeline: 'demo',
-    pipeline_file: '/tmp/stepcast.yml',
+    pipeline_file: '/tmp/burnex.yml',
     lock_hash: 'abc',
     project_root: projectRoot,
     workspace: { mode: 'cwd' },
@@ -156,7 +156,7 @@ describe('CLI: burnex gc', () => {
     journal.writeManifest({
       run_id: journal.paths.runId,
       pipeline: 'demo',
-      pipeline_file: '/tmp/stepcast.yml',
+      pipeline_file: '/tmp/burnex.yml',
       lock_hash: 'abc',
       project_root: projectRoot,
       workspace: { mode: 'worktree' },
@@ -233,7 +233,7 @@ describe('CLI: burnex gc', () => {
     adopter.writeManifest({
       run_id: adopter.paths.runId,
       pipeline: 'demo',
-      pipeline_file: '/tmp/stepcast.yml',
+      pipeline_file: '/tmp/burnex.yml',
       lock_hash: 'abc',
       project_root: projectRoot,
       workspace: { mode: 'worktree' },

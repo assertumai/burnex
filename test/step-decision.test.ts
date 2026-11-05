@@ -148,7 +148,7 @@ describe('step-decision: исполнитель', () => {
 describe('step-decision: раскрытие документа', () => {
   it('шаг decision раскрывается и печатается в замок одним ключом с полями', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 version: 1
 kind: pipeline
 name: решение
@@ -163,7 +163,7 @@ jobs:
 `,
     });
     const { pipeline } = expandPipeline({
-      pipelinePath: project.path('stepcast.yml'),
+      pipelinePath: project.path('burnex.yml'),
       config: project.config,
       registry: builtinRegistry(),
     });
@@ -179,7 +179,7 @@ jobs:
 
   it('пайплайн с негодным объявлением decision отвергается burnex lint без единой исполненной работы', async () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 version: 1
 kind: pipeline
 name: решение-негодная
@@ -194,7 +194,7 @@ jobs:
     });
     const registry = builtinRegistry();
     const diagnostics = lintPipeline(
-      expandPipeline({ pipelinePath: project.path('stepcast.yml'), config: project.config, registry }),
+      expandPipeline({ pipelinePath: project.path('burnex.yml'), config: project.config, registry }),
       { config: project.config, registry },
     );
     assert.ok(diagnostics.some((d) => d.severity === 'error' && /пустой перечень/.test(d.message)));
@@ -202,7 +202,7 @@ jobs:
 
   it('timeout на ожидающем шаге предупреждён, а attempts > 1 отклонён', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 version: 1
 kind: pipeline
 name: решение-таймаут
@@ -220,7 +220,7 @@ jobs:
     });
     const registry = builtinRegistry();
     const diagnostics = lintPipeline(
-      expandPipeline({ pipelinePath: project.path('stepcast.yml'), config: project.config, registry }),
+      expandPipeline({ pipelinePath: project.path('burnex.yml'), config: project.config, registry }),
       { config: project.config, registry },
     );
     assert.ok(diagnostics.some((d) => d.severity === 'warning' && /timeout/.test(d.message)));

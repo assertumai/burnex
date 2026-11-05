@@ -81,7 +81,7 @@ export interface BacklogItemView {
  * поля несли бы одно и то же значение.
  */
 export interface BacklogFailure {
-  /** Файл очереди либо раскладка колонок доски (`.stepcast/board.yml`). */
+  /** Файл очереди либо раскладка колонок доски (`.burnex/board.yml`). */
   readonly sourceFile: BacklogSourceFile | typeof BOARD_FILE;
   readonly error: string;
   readonly errorAt?: string;
@@ -118,7 +118,7 @@ export interface BacklogProjectView {
   /** Отказ разбора — по одному на файл, не разобравшийся по формату; пустой список — оба разобрались (или отсутствуют). */
   readonly failures: readonly BacklogFailure[];
   /**
-   * Раскладка колонок доски (`.stepcast/board.yml`); без файла — встроенная.
+   * Раскладка колонок доски (`.burnex/board.yml`); без файла — встроенная.
    * Несётся вместе с пунктами, а не отдельным запросом: колонка и пункты
    * одного статуса обязаны появиться на доске одним кадром.
    */

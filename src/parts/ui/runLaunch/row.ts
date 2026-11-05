@@ -1,5 +1,5 @@
 import { homedir } from 'node:os';
-import { join, relative } from 'node:path';
+import { relative } from 'node:path';
 import { z } from 'zod';
 
 import { listProjects } from '../../pipeline/run/journal/reader.js';
@@ -8,6 +8,7 @@ import { packagedPipelineNames } from '../../pipeline/domain/package-schema.js';
 import { listPipelineEntries } from '../../pipeline/domain/project/pipelines.js';
 import { readBody, sendJson } from '../daemon/http.js';
 import { screenRow, type ApiHandler } from '../screens/registry.js';
+import { homeRoot } from '../../../kernel/dirs.js';
 
 /**
  * Строка состава без экрана: `POST /api/run` (`ui-daemon`, design.md Решение
@@ -124,7 +125,7 @@ const handlePost: ApiHandler = async (req, res, env) => {
     // `<пакет>:<имя>`: путь пакета home лежит вне проекта, и запуск им отказал
     // бы как «путь наружу». Произвольный путь вне перечня по-прежнему отказывает.
     const files = listPipelineEntries(project.path, {
-      globalConfigDir: join(env.home ?? homedir(), '.stepcast'),
+      globalConfigDir: homeRoot(env.home ?? homedir()),
     }).map((entry) => entry.address ?? relative(project.path as string, entry.path).replace(/\\/g, '/'));
     if (!files.includes(parsed.data.pipeline)) {
       sendJson(res, 400, {

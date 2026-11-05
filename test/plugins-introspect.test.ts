@@ -25,13 +25,13 @@ function bed(): Bed {
   const base = tempDir('introspect-');
   const root = join(base, 'work');
   const home = join(base, 'home');
-  mkdirSync(join(root, '.stepcast'), { recursive: true });
-  mkdirSync(join(home, '.stepcast'), { recursive: true });
+  mkdirSync(join(root, '.burnex'), { recursive: true });
+  mkdirSync(join(home, '.burnex'), { recursive: true });
   return {
     root,
     home,
-    globalPath: join(home, '.stepcast', 'config.yml'),
-    projectPath: join(root, '.stepcast', 'config.yml'),
+    globalPath: join(home, '.burnex', 'config.yml'),
+    projectPath: join(root, '.burnex', 'config.yml'),
   };
 }
 
@@ -175,11 +175,11 @@ describe('introspect: приписывание вклада строке дер�
   it('замена встроенной строки патчем меняет автора вклада', async () => {
     const place = bed();
     writeFileSync(
-      join(place.root, '.stepcast', 'replacement.mjs'),
+      join(place.root, '.burnex', 'replacement.mjs'),
       "export default { name: 'replacement', backends: { claude: { create: () => ({}) } } };\n",
     );
     writeFileSync(
-      join(place.root, '.stepcast', 'plugins.patch.yml'),
+      join(place.root, '.burnex', 'plugins.patch.yml'),
       'version: 1\nkind: plugins-patch\nplugins:\n  - id: backend-claude\n    use: ./replacement.mjs\n',
     );
     const config = resolved(place, '');
@@ -198,7 +198,7 @@ describe('introspect: приписывание вклада строке дер�
   it('отключённая строка присутствует со своим состоянием и без вкладов', async () => {
     const place = bed();
     writeFileSync(
-      join(place.root, '.stepcast', 'plugins.patch.yml'),
+      join(place.root, '.burnex', 'plugins.patch.yml'),
       'version: 1\nkind: plugins-patch\nplugins:\n  - id: backend-claude\n    use: burnex:backend-claude\n    enabled: false\n',
     );
     const config = resolved(place, '');
@@ -273,7 +273,7 @@ describe('introspect: встроенное вне строк дерева', () =
   it('отключённая строка вида шага снимает свой вклад из реестра, оставаясь видимой отключённой, прочие виды на месте', async () => {
     const place = bed();
     writeFileSync(
-      join(place.root, '.stepcast', 'plugins.patch.yml'),
+      join(place.root, '.burnex', 'plugins.patch.yml'),
       'version: 1\nkind: plugins-patch\nplugins:\n  - id: step-script\n    use: burnex:step-script\n    enabled: false\n',
     );
     const config = resolved(place, '');

@@ -13,7 +13,7 @@ import { tempDir } from './tmp.js';
 async function run(project: Project, engineLocator?: () => EngineLocation): Promise<RunResult> {
   const runsRoot = tempDir('runs-');
   return runPipeline({
-    expanded: expandPipeline({ pipelinePath: project.path('stepcast.yml'), config: project.config }),
+    expanded: expandPipeline({ pipelinePath: project.path('burnex.yml'), config: project.config }),
     config: { ...project.config, runs: { ...project.config.runs, root: runsRoot } },
     projectRoot: project.root,
     cwd: project.root,
@@ -29,7 +29,7 @@ async function run(project: Project, engineLocator?: () => EngineLocation): Prom
 describe('job-iteration: окружение проверки цикла', () => {
   it('проверка цикла видит номер попытки работы: 1 из 1 без объявления', async () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 version: 1
 kind: pipeline
 name: попытка-в-проверке
@@ -52,7 +52,7 @@ jobs:
   it('env_files из корня проекта доступны шагу и проверке в отдельном worktree', async () => {
     const project = makeProject({
       '.gitignore': '.machine.env\n',
-      'stepcast.yml': `
+      'burnex.yml': `
 version: 1
 kind: pipeline
 name: checked
@@ -86,7 +86,7 @@ jobs:
    */
   it('команда проверки находит инструменты из PATH', async () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 version: 1
 kind: pipeline
 name: checked
@@ -111,7 +111,7 @@ jobs:
 
   it('переменные пайплайна и работы доходят до проверки цикла', async () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 version: 1
 kind: pipeline
 name: checked
@@ -138,7 +138,7 @@ jobs:
 
   it('BURNEX_BIN доходит до проверки цикла', async () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 version: 1
 kind: pipeline
 name: checked
@@ -168,7 +168,7 @@ jobs:
    */
   it('BURNEX_BIN проверки цикла ведёт в каталог прогона, когда движок снят снимком', async () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 version: 1
 kind: pipeline
 name: checked
@@ -199,7 +199,7 @@ jobs:
 
   it('переменная уровня шага проверке цикла не объявляется', async () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 version: 1
 kind: pipeline
 name: checked
@@ -222,7 +222,7 @@ jobs:
 
   it('непройденная проверка по-прежнему исчерпывает итерации', async () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 version: 1
 kind: pipeline
 name: checked

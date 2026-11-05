@@ -52,7 +52,7 @@ describe('backlogLockPath', () => {
     const fromTree = backlogLockPath(join(tree, 'backlog.md'));
 
     assert.equal(fromMain, fromTree);
-    assert.equal(fromMain, join(realpathSync(main), '.git', 'stepcast-backlog.lock'));
+    assert.equal(fromMain, join(realpathSync(main), '.git', 'burnex-backlog.lock'));
   });
 
   it('archived.md того же каталога делит lock с backlog.md', () => {

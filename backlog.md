@@ -754,7 +754,7 @@ done_when: Движок выставляет шагам и дочерним пр
 
 ## rename-dirs-burnex
 
-status: todo
+status: done
 title: Каталоги .burnex/ и ~/.burnex, файл burnex.yml, лаунчер burnex
 group: rename-burnex
 needs: rename-env-burnex

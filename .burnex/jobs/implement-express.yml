@@ -123,14 +123,14 @@ steps:
           # ${params.spec_dir}/**, — он может лежать вне каталога документов
           # изменения.
           - ${params.spec_rules}
-          # Устройство петли: каталог .stepcast/ задаёт движок, а не
+          # Устройство петли: каталог .burnex/ задаёт движок, а не
           # репозиторий, и в объявлении границ репозитория ему не место —
           # тот же критерий, по которому литералом осталось Bash(git status*).
-          - .stepcast/config.yml
-          - .stepcast/jobs/**
-          - .stepcast/pipelines/**
-          - .stepcast/prompts/**
-          - .stepcast/schemas/**
+          - .burnex/config.yml
+          - .burnex/jobs/**
+          - .burnex/pipelines/**
+          - .burnex/prompts/**
+          - .burnex/schemas/**
     attempts:
       max: 3
       escalation:

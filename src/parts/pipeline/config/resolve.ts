@@ -44,6 +44,7 @@ import {
   type Layer,
   type Source,
 } from './merge.js';
+import { cabinetDir, homeRoot } from '../../../kernel/dirs.js';
 
 /** Объявление вложенного репозитория объектной формой — то, что не несёт строковая форма. */
 export interface NestedRepoDeclaration {
@@ -277,9 +278,9 @@ export interface ResolvedConfig {
 }
 
 export interface ResolveOptions {
-  /** Каталог проекта. Проектный конфиг ищется в `<cwd>/.stepcast/config.yml`. */
+  /** Каталог проекта. Проектный конфиг ищется в `<cwd>/.burnex/config.yml`. */
   readonly cwd: string;
-  /** Домашний каталог. Глобальный конфиг ищется в `<home>/.stepcast/config.yml`. */
+  /** Домашний каталог. Глобальный конфиг ищется в `<home>/.burnex/config.yml`. */
   readonly home?: string;
   /** Значения из флагов в виде «точечный путь → значение». */
   readonly flags?: Readonly<Record<string, unknown>>;
@@ -288,7 +289,7 @@ export interface ResolveOptions {
   /**
    * Явный путь к проектному конфигу. `null` — проектного слоя нет вовсе:
    * так конфигурацию читает демон витрины, который не привязан к проекту и
-   * иначе подхватил бы чужой `.stepcast/config.yml` по случайному `cwd`.
+   * иначе подхватил бы чужой `.burnex/config.yml` по случайному `cwd`.
    */
   readonly projectPath?: string | null;
   /**
@@ -439,7 +440,7 @@ function rejectGlobalOnlyKeys(config: RawConfig, path: string): void {
         throw new StepcastError(`Ключ ${keyPath} допустим только в глобальной конфигурации`, {
           file: path,
           at: keyPath,
-          hint: 'Проектный конфиг попадает в репозиторий — перенесите значение в ~/.stepcast/config.yml',
+          hint: 'Проектный конфиг попадает в репозиторий — перенесите значение в ~/.burnex/config.yml',
         });
       }
     }
@@ -459,7 +460,7 @@ function rejectGlobalOnlyPluginKeys(values: Record<string, unknown>, plugin: str
       throw new StepcastError(`Умолчания плагина ${plugin} объявляют ключ ${keyPath}, допустимый только в глобальной конфигурации`, {
         ...(file === undefined ? {} : { file }),
         at: keyPath,
-        hint: 'Плагин описывает возможности адаптера; источник учётных данных задаёт ~/.stepcast/config.yml',
+        hint: 'Плагин описывает возможности адаптера; источник учётных данных задаёт ~/.burnex/config.yml',
       });
     }
   }
@@ -473,7 +474,7 @@ function rejectProjectOnlyKeys(config: RawConfig, path: string): void {
         throw new StepcastError(`Ключ ${keyPath} допустим только в проектной конфигурации`, {
           file: path,
           at: keyPath,
-          hint: 'Перенесите значение в .stepcast/config.yml',
+          hint: 'Перенесите значение в .burnex/config.yml',
         });
       }
     }
@@ -799,7 +800,7 @@ function buildRunnersByExtension(
  * берёт каталог пакетов отсюда, а не от своего умолчания.
  */
 export function globalConfigPath(options: Pick<ResolveOptions, 'home' | 'globalPath'>): string {
-  return options.globalPath ?? join(options.home ?? homedir(), '.stepcast', 'config.yml');
+  return options.globalPath ?? join(homeRoot(options.home ?? homedir()), 'config.yml');
 }
 
 export function resolveConfig(options: ResolveOptions): ResolvedConfig {
@@ -808,7 +809,7 @@ export function resolveConfig(options: ResolveOptions): ResolvedConfig {
   const projectPath =
     options.projectPath === null
       ? undefined
-      : (options.projectPath ?? join(options.cwd, '.stepcast', 'config.yml'));
+      : (options.projectPath ?? join(cabinetDir(options.cwd), 'config.yml'));
 
   const layers: Layer[] = [{ source: { kind: 'builtin' }, values: BUILTIN_CONFIG as Record<string, unknown> }];
 
@@ -857,7 +858,7 @@ export function resolveConfig(options: ResolveOptions): ResolvedConfig {
   // Каталог плагинов домашнего слоя — рядом с глобальным конфигом, а не под
   // домашним каталогом машины: сборка с подставным путём конфигурации
   // (запасное встроенное ядро демона, `src/parts/ui/daemon/kernel.ts`) обязана остаться
-  // встроенной и не подхватывать настоящие `~/.stepcast/plugins`.
+  // встроенной и не подхватывать настоящие `~/.burnex/plugins`.
   //
   // Пакеты (`packages-directory-layer`, Решение 6) встают в порядок слоёв, как в
   // поиске прочих ресурсов: пакеты home ниже свободного каталога home, пакеты

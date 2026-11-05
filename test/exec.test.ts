@@ -581,7 +581,7 @@ describe('step-execution: шаг целиком', () => {
 describe('step-execution: BURNEX_SCRATCH в прогоне', () => {
   it('доходит до командного шага', async () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 version: 1
 kind: pipeline
 name: scratch-env
@@ -596,7 +596,7 @@ jobs:
     });
     const runsRoot = tempDir('runs-');
     const result = await runPipeline({
-      expanded: expandPipeline({ pipelinePath: project.path('stepcast.yml'), config: project.config }),
+      expanded: expandPipeline({ pipelinePath: project.path('burnex.yml'), config: project.config }),
       config: { ...project.config, runs: { ...project.config.runs, root: runsRoot } },
       projectRoot: project.root,
       cwd: project.root,
@@ -615,7 +615,7 @@ jobs:
   // забрать его на следующем шаге.
   it('открывает следующему шагу работы то, что записал предыдущий', async () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 version: 1
 kind: pipeline
 name: scratch-shared
@@ -633,7 +633,7 @@ jobs:
     });
     const runsRoot = tempDir('runs-');
     const result = await runPipeline({
-      expanded: expandPipeline({ pipelinePath: project.path('stepcast.yml'), config: project.config }),
+      expanded: expandPipeline({ pipelinePath: project.path('burnex.yml'), config: project.config }),
       config: { ...project.config, runs: { ...project.config.runs, root: runsRoot } },
       projectRoot: project.root,
       cwd: project.root,
@@ -648,7 +648,7 @@ jobs:
   // видеть один и тот же путь на каждом проходе цикла.
   it('остаётся тем же путём на каждой итерации работы', async () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 version: 1
 kind: pipeline
 name: scratch-env-loop
@@ -667,7 +667,7 @@ jobs:
     });
     const runsRoot = tempDir('runs-');
     const result = await runPipeline({
-      expanded: expandPipeline({ pipelinePath: project.path('stepcast.yml'), config: project.config }),
+      expanded: expandPipeline({ pipelinePath: project.path('burnex.yml'), config: project.config }),
       config: { ...project.config, runs: { ...project.config.runs, root: runsRoot } },
       projectRoot: project.root,
       cwd: project.root,

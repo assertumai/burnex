@@ -8,7 +8,7 @@ import { describeSchemaFailure } from '../../kernel/schema-failure.js';
 import { DEFAULT_BOARD_COLUMNS, columnsProblem, type BoardColumnSpec } from './scrumView.js';
 
 /**
- * Раскладка колонок доски проекта — файл `.stepcast/board.yml`.
+ * Раскладка колонок доски проекта — файл `.burnex/board.yml`.
  *
  * Модуль демона: он один читает и пишет диск. Модель колонок и её проверка —
  * в `scrumView.ts`, общем демону и браузеру.
@@ -44,7 +44,7 @@ const BoardDocumentSchema = z
   .strict();
 
 /** Путь файла относительно корня проекта — им же отказ подписывается на экранах. */
-export const BOARD_FILE = '.stepcast/board.yml';
+export const BOARD_FILE = '.burnex/board.yml';
 
 export function boardFilePath(projectRoot: string): string {
   return join(projectRoot, BOARD_FILE);

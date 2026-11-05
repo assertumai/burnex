@@ -2,6 +2,7 @@ import { existsSync, readdirSync, realpathSync, statSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 
 import { describePackageFailure, readPackageManifest, type PackageFailure, type PackageManifest } from './manifest.js';
+import { cabinetDir } from '../../kernel/dirs.js';
 
 /**
  * Указатель пакетов (`packages-directory-layer`, design.md, Решения 1, 3, 4):
@@ -35,13 +36,13 @@ export interface PackageIndex {
 export interface PackageRoots {
   /** Корень проекта; без него (демон вне проекта) слой пакетов проекта пуст. */
   readonly projectRoot?: string;
-  /** Путь глобального конфига: пакеты home лежат рядом с ним, а не в `~/.stepcast` (Решение 1). */
+  /** Путь глобального конфига: пакеты home лежат рядом с ним, а не в `~/.burnex` (Решение 1). */
   readonly globalPath: string;
 }
 
 /** Каталог пакетов слоя проекта. */
 export function projectPackagesDir(projectRoot: string): string {
-  return join(projectRoot, '.stepcast', 'packages');
+  return join(cabinetDir(projectRoot), 'packages');
 }
 
 /** Каталог пакетов home — рядом с глобальным конфигом, чтобы подставной путь конфигурации оставался без пользовательских пакетов. */
@@ -134,7 +135,7 @@ export function findPackage(
 
 export type ResourceKind = 'steps' | 'scripts' | 'plugins' | 'widgets' | 'dashboards' | 'routes' | 'pipelines';
 
-/** Подкаталог ресурса в свободной раскладке `.stepcast/` и в пакете; у маршрутов — один файл. */
+/** Подкаталог ресурса в свободной раскладке `.burnex/` и в пакете; у маршрутов — один файл. */
 const RESOURCE_PATH: Readonly<Record<ResourceKind, string>> = {
   steps: 'steps',
   scripts: 'scripts',
@@ -194,7 +195,7 @@ export function resourceLayers(index: PackageIndex, kind: ResourceKind, roots: R
 
   const layers: ResourceLayer[] = [];
   if (free.project && roots.projectRoot !== undefined) {
-    layers.push({ source: 'project', path: join(roots.projectRoot, '.stepcast', relative) });
+    layers.push({ source: 'project', path: join(cabinetDir(roots.projectRoot), relative) });
   }
   layers.push({ source: 'project-packages', packages: packagesOf('project') });
   if (free.home) layers.push({ source: 'home', path: join(roots.homeStepcastDir, relative) });

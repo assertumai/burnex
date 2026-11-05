@@ -1,4 +1,5 @@
 import { fileURLToPath } from 'node:url';
+import { hasLegacyCabinet, legacyCabinetDiagnostic, migrateHomeRoot } from '../../../kernel/dirs.js';
 
 import { enginePackageRoot } from '../../pipeline/document/packagePaths.js';
 import { daemonEntryPath, readManifestQuietly } from '../../install/entry.js';
@@ -42,7 +43,16 @@ export async function runUpCommand(
   // Отказ вне macOS раньше чтения конфигурации: причина не зависит от неё.
   if (args.flags.install === true) requireMacos(host, '--install');
 
+  // Перенос ~/.stepcast → ~/.burnex делают команды, трогающие домашний каталог
+  // намеренно (`up`, `update`, install.sh), а не каждое чтение путей.
+  const migrated = migrateHomeRoot(host.home);
+  if (migrated !== undefined) write(`домашний каталог ${migrated.from} переименован в ${migrated.to}; на прежнем месте оставлена ссылка для установленного релиза`);
+
   const { config } = resolveConfig({ cwd });
+  if (hasLegacyCabinet(cwd)) {
+    const warning = legacyCabinetDiagnostic(cwd);
+    write(`предупреждение: ${warning.message} (${warning.file}). ${warning.hint}`);
+  }
   const paths = daemonPaths(host.home);
   // Один путь и для агента, и для отсоединённого демона: иначе `update` поднимал бы разные версии.
   const entry = daemonEntryPath({

@@ -72,13 +72,13 @@ function bed(): Bed {
   const base = tempDir('kernel-');
   const root = join(base, 'work');
   const home = join(base, 'home');
-  mkdirSync(join(root, '.stepcast'), { recursive: true });
-  mkdirSync(join(home, '.stepcast'), { recursive: true });
+  mkdirSync(join(root, '.burnex'), { recursive: true });
+  mkdirSync(join(home, '.burnex'), { recursive: true });
   return {
     root,
     home,
-    globalPath: join(home, '.stepcast', 'config.yml'),
-    projectPath: join(root, '.stepcast', 'config.yml'),
+    globalPath: join(home, '.burnex', 'config.yml'),
+    projectPath: join(root, '.burnex', 'config.yml'),
   };
 }
 
@@ -426,7 +426,7 @@ export default waiter;
 
   it('отказ называет плагин, недостающее имя и файл объявления', async () => {
     const place = bed();
-    writeModule(join(place.root, '.stepcast', 'plugins', 'waiter.mjs'), WAITER);
+    writeModule(join(place.root, '.burnex', 'plugins', 'waiter.mjs'), WAITER);
     const config = resolved(place, 'plugins: ["./plugins/waiter.mjs"]\n');
 
     await assert.rejects(
@@ -446,8 +446,8 @@ export default waiter;
 
   it('команда не доходит до диспетчеризации: код возврата — код ошибки конфигурации', async () => {
     const project = makeProject({});
-    project.write('.stepcast/plugins/waiter.mjs', WAITER);
-    project.write('.stepcast/config.yml', 'plugins: ["./plugins/waiter.mjs"]\n');
+    project.write('.burnex/plugins/waiter.mjs', WAITER);
+    project.write('.burnex/config.yml', 'plugins: ["./plugins/waiter.mjs"]\n');
 
     const stdout: string[] = [];
     const stderr: string[] = [];
@@ -482,8 +482,8 @@ export default deferred;
 
   it('бэкенд, зарегистрированный после ожидания чужого сервиса, есть в реестре и участвует во втором проходе', async () => {
     const place = bed();
-    writeModule(join(place.root, '.stepcast', 'plugins', 'provider.mjs'), PROVIDER);
-    writeModule(join(place.root, '.stepcast', 'plugins', 'deferred.mjs'), DEFERRED);
+    writeModule(join(place.root, '.burnex', 'plugins', 'provider.mjs'), PROVIDER);
+    writeModule(join(place.root, '.burnex', 'plugins', 'deferred.mjs'), DEFERRED);
     const options = {
       cwd: place.root,
       home: place.home,
@@ -546,7 +546,7 @@ export default function broken(ctx) {
 }
 broken.inject = ['backends', 'predicates', 'commands'];
 `;
-    writeModule(join(place.root, '.stepcast', 'plugins', 'broken.mjs'), BROKEN);
+    writeModule(join(place.root, '.burnex', 'plugins', 'broken.mjs'), BROKEN);
     const config = resolved(place, 'plugins: ["./plugins/broken.mjs"]\n');
 
     let caught: unknown;
@@ -628,7 +628,7 @@ describe('plugin-kernel: две формы плагина', () => {
     // `default` в перечне, в манифесте прогона и в тексте отказа о конфликте, а
     // два таких плагина стали бы неразличимы.
     writeModule(
-      join(place.root, '.stepcast', 'plugins', 'anonymous.mjs'),
+      join(place.root, '.burnex', 'plugins', 'anonymous.mjs'),
       'export default function (ctx) { ctx.provide("nameless"); }\n',
     );
     const config = resolved(place, 'plugins: ["./plugins/anonymous.mjs"]\n');
@@ -647,7 +647,7 @@ describe('plugin-kernel: две формы плагина', () => {
 
   it('экспорт, не опознанный ни одной формой, отказывает, называя обе формы', async () => {
     const place = bed();
-    writeModule(join(place.root, '.stepcast', 'plugins', 'string.mjs'), "export default 'просто строка';\n");
+    writeModule(join(place.root, '.burnex', 'plugins', 'string.mjs'), "export default 'просто строка';\n");
     const config = resolved(place, 'plugins: ["./plugins/string.mjs"]\n');
 
     await assert.rejects(
@@ -682,7 +682,7 @@ export default function withOwnService(ctx) {
 }
 withOwnService.inject = ['commands'];
 `;
-    writeModule(join(place.root, '.stepcast', 'plugins', 'own-service.mjs'), PLUGIN);
+    writeModule(join(place.root, '.burnex', 'plugins', 'own-service.mjs'), PLUGIN);
     const options = {
       cwd: place.root,
       home: place.home,

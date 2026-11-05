@@ -18,7 +18,7 @@ import { tempDir } from './tmp.js';
 
 // Ключ шага и хеш работы не должны зависеть от места установки движка:
 // каждый `scripts/release-local.sh` кладёт пакет в новый каталог
-// `~/.stepcast/releases/<ts>-<sha>/`, и абсолютный путь схемы
+// `~/.burnex/releases/<ts>-<sha>/`, и абсолютный путь схемы
 // `burnex:<имя>` в ключе пересчитывал бы весь граф после каждого выпуска.
 
 const SCHEMA = join('schema', 'backlog-slots.schema.json');
@@ -39,8 +39,8 @@ jobs:
 `;
 
 function expanded(): { pipeline: Pipeline; job: Job } {
-  const project = makeProject({ 'stepcast.yml': PIPELINE });
-  const { pipeline } = expandPipeline({ pipelinePath: project.path('stepcast.yml'), config: project.config });
+  const project = makeProject({ 'burnex.yml': PIPELINE });
+  const { pipeline } = expandPipeline({ pipelinePath: project.path('burnex.yml'), config: project.config });
   const job = pipeline.jobs.find((item) => item.id === 'slots');
   assert.ok(job !== undefined);
   return { pipeline, job };

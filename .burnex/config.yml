@@ -2,8 +2,8 @@
 # спецификации и границы правок.
 #
 # Раньше секция project целиком жила верхним ключом документа
-# .stepcast/pipelines/self-improve.yml — единственная причина была в том, что
-# заход петли не мог завести этот файл сам (.stepcast/config.yml не входил в
+# .burnex/pipelines/self-improve.yml — единственная причина была в том, что
+# заход петли не мог завести этот файл сам (.burnex/config.yml не входил в
 # edit_paths implement/fix-review). Перенос сюда — тот самый следующий заход,
 # который был назван в пайплайне заранее.
 #
@@ -58,7 +58,7 @@ project:
   # не эта строка.
   spec:
     dir: openspec/changes
-    rules: .stepcast/prompts/spec-rules.md
+    rules: .burnex/prompts/spec-rules.md
     tool: openspec
     check: openspec validate "$SPEC_CHANGE" --strict
   # Практика памяти — встроенный источник fs. Объявлена тем же порядком, что
@@ -73,7 +73,7 @@ project:
   knowledge:
     provider: fs
     dir: knowledge
-    rules: .stepcast/prompts/knowledge-rules.md
+    rules: .burnex/prompts/knowledge-rules.md
     # Умолчания 2k не хватает, и причина не в единицах знания, а в
     # незакрытых изменениях: их у этого репозитория два с половиной десятка,
     # и одних их заголовков — две тысячи токенов. Предел поднят до трёх
@@ -120,10 +120,10 @@ project:
     # движком. Текущему заходу расширение не помогает: предикат фиксируется
     # вместе с раскрытым пайплайном, поэтому оно действует со следующего
     # прогона — тем же порядком, каким configurable-check-command заводил
-    # .stepcast/config.yml.
+    # .burnex/config.yml.
     - examples/**
     # Каталог виджетов спайка ui-runtime-widget-spike. Строка добавлена этим
     # же заходом, который её и читает, — как и всякая правка edit_paths, она
     # действует со следующего прогона; образец виджета поэтому лежит в
     # examples/widgets/, объявленном заранее, а не здесь.
-    - .stepcast/widgets/**
+    - .burnex/widgets/**

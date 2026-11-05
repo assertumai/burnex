@@ -293,7 +293,7 @@ export function Proposals({
       title="Proposals"
       description={
         <>
-          Changes an agent proposed to a project’s <code>.stepcast/</code> files — widgets, dashboards, plugins.
+          Changes an agent proposed to a project’s <code>.burnex/</code> files — widgets, dashboards, plugins.
           Nothing is written until you accept. Agents queue a change with{' '}
           <code>burnex propose &lt;target&gt; --from &lt;file&gt;</code>.
         </>
@@ -315,7 +315,7 @@ export function Proposals({
         {header}
         <EmptyState
           title="No proposals yet"
-          description="When an agent proposes a change to a project’s .stepcast/ files, it shows up here with a diff and Accept / Reject buttons."
+          description="When an agent proposes a change to a project’s .burnex/ files, it shows up here with a diff and Accept / Reject buttons."
         />
       </>
     );

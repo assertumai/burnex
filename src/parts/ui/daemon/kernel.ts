@@ -10,6 +10,7 @@ import { resolveWithCachedKernel, type KernelCache } from '../pipelines.js';
 import { UI_ROWS, UI_SHELL_ROW } from '../rows.js';
 import { NO_ROUTES, type ActiveScreen, type ApiRoutes, type ApiService, type ScreensService } from '../screens/registry.js';
 import type { ActivePluginRow } from '../plugins.js';
+import { homeRoot } from '../../../kernel/dirs.js';
 
 /**
  * Единственная точка получения действующего ядра демона (`ui-daemon`,
@@ -122,7 +123,7 @@ async function builtinOnlyKernel(home: string): Promise<Built> {
   const resolved = resolveConfig({
     cwd: home,
     home,
-    globalPath: join(home, '.stepcast', '__builtin-fallback__', 'config.yml'),
+    globalPath: join(homeRoot(home), '__builtin-fallback__', 'config.yml'),
     projectPath: null,
     builtinRows: UI_ROWS.map((row) => row.id),
   });
@@ -187,7 +188,7 @@ export async function currentDaemonKernel(
       ({ row, manifest }) => {
         if (manifest.browser === undefined) return;
         // Каталог и путь половины — из манифеста, а не из `id`: каталожная
-        // строка вправе лежать вне `~/.stepcast/plugins/` (`use: ./путь`), и
+        // строка вправе лежать вне `~/.burnex/plugins/` (`use: ./путь`), и
         // предполагаемый путь дал бы отпечаток несуществующего каталога и
         // поиск половины не там, где она есть.
         collectedPlugins.push({ id: row.id, dir: manifest.dir, browser: manifest.browser });

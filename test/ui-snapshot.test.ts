@@ -47,9 +47,9 @@ jobs:
 
 /** Лок, записанный тем же сериализатором, что пишет движок при прогоне. */
 function lockText(): string {
-  const project = makeProject({ 'stepcast.yml': PIPELINE });
+  const project = makeProject({ 'burnex.yml': PIPELINE });
   return serializeLock(
-    expandPipeline({ pipelinePath: project.path('stepcast.yml'), config: project.config }).pipeline,
+    expandPipeline({ pipelinePath: project.path('burnex.yml'), config: project.config }).pipeline,
   );
 }
 
@@ -199,7 +199,7 @@ describe('ui-dashboard: детальный снимок прогона', () => {
 
   it('показывает путь и раннер шага script', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 version: 1
 kind: pipeline
 name: витрина-script
@@ -212,10 +212,10 @@ jobs:
         output_schema: ./schema.json
 `,
     });
-    project.write('.stepcast/scripts/cleanup.sh', '#!/bin/sh\nexit 0\n');
+    project.write('.burnex/scripts/cleanup.sh', '#!/bin/sh\nexit 0\n');
     project.write('schema.json', JSON.stringify({ type: 'object' }));
     const lock = serializeLock(
-      expandPipeline({ pipelinePath: project.path('stepcast.yml'), config: project.config }).pipeline,
+      expandPipeline({ pipelinePath: project.path('burnex.yml'), config: project.config }).pipeline,
     );
 
     const bed = makeJournalBed();
@@ -243,7 +243,7 @@ jobs:
   // Сценарий ui-dashboard: «Шаг назван именем» + «Переданные параметры видны»
   it('карточка шага uses называет имя, слой и переданные параметры', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 version: 1
 kind: pipeline
 name: витрина-uses
@@ -256,7 +256,7 @@ jobs:
 `,
     });
     project.write(
-      '.stepcast/steps/greet/step.yml',
+      '.burnex/steps/greet/step.yml',
       `
 version: 1
 kind: step
@@ -269,9 +269,9 @@ params:
     name: { type: string, default: world }
 `,
     );
-    project.write('.stepcast/steps/greet/main.cjs', 'module.exports = () => {};\n');
+    project.write('.burnex/steps/greet/main.cjs', 'module.exports = () => {};\n');
     const lock = serializeLock(
-      expandPipeline({ pipelinePath: project.path('stepcast.yml'), config: project.config }).pipeline,
+      expandPipeline({ pipelinePath: project.path('burnex.yml'), config: project.config }).pipeline,
     );
 
     const bed = makeJournalBed();
@@ -559,7 +559,7 @@ params:
 
   it('несёт объявленные дорожку и группу сессий у работы', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 version: 1
 kind: pipeline
 name: витрина-раскладки
@@ -582,7 +582,7 @@ jobs:
 `,
     });
     const lockText = serializeLock(
-      expandPipeline({ pipelinePath: project.path('stepcast.yml'), config: project.config }).pipeline,
+      expandPipeline({ pipelinePath: project.path('burnex.yml'), config: project.config }).pipeline,
     );
 
     const bed = makeJournalBed();
@@ -747,9 +747,9 @@ jobs:
 `;
 
   function lockTextWithModel(): string {
-    const project = makeProject({ 'stepcast.yml': PIPELINE_MODEL });
+    const project = makeProject({ 'burnex.yml': PIPELINE_MODEL });
     return serializeLock(
-      expandPipeline({ pipelinePath: project.path('stepcast.yml'), config: project.config }).pipeline,
+      expandPipeline({ pipelinePath: project.path('burnex.yml'), config: project.config }).pipeline,
     );
   }
 

@@ -18,7 +18,7 @@ bindRouterKernel({ routes: { get: () => ({ table: [] }) } } as unknown as Contex
 function record(overrides: Partial<ProposalApiRecord> = {}): ProposalApiRecord {
   return {
     id: '2026-09-12T17-15-26Z-widgets-clock',
-    target: '.stepcast/widgets/clock.tsx',
+    target: '.burnex/widgets/clock.tsx',
     action: 'update',
     content: 'export default 1;\n',
     currentContent: 'export default 0;\n',

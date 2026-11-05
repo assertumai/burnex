@@ -35,7 +35,7 @@ async function run(
 ): Promise<RunResult> {
   const runsRoot = tempDir('runs-');
   return runPipeline({
-    expanded: expandPipeline({ pipelinePath: project.path('stepcast.yml'), config: project.config }),
+    expanded: expandPipeline({ pipelinePath: project.path('burnex.yml'), config: project.config }),
     config: { ...project.config, runs: { ...project.config.runs, root: runsRoot } },
     projectRoot: project.root,
     cwd: project.root,
@@ -92,7 +92,7 @@ jobs:
 
 describe('job-attempts: успех со второй попытки', () => {
   it('откатывает дерево, сбрасывает данные и показывает зависимым один исход', async () => {
-    const project = repo({ 'stepcast.yml': FLAKY });
+    const project = repo({ 'burnex.yml': FLAKY });
     const result = await run(project);
 
     assert.equal(result.status, 'success');
@@ -113,7 +113,7 @@ describe('job-attempts: успех со второй попытки', () => {
   });
 
   it('раскладывает журнал по попыткам и пишет пары событий', async () => {
-    const result = await run(repo({ 'stepcast.yml': FLAKY }));
+    const result = await run(repo({ 'burnex.yml': FLAKY }));
 
     const steps = join(jobDir(result.journal.paths, 'work'), 'steps');
     assert.ok(existsSync(join(steps, 'attempt-1', '01-write')));
@@ -141,7 +141,7 @@ describe('job-attempts: успех со второй попытки', () => {
       `>> ${LOG}; [ "$BURNEX_JOB_ATTEMPT" = 2 ] && cp "$BURNEX_RUN_DIR/status.json" "$BURNEX_RUN_DIR/mid.json";`,
     );
     assert.notEqual(pipeline, FLAKY);
-    const result = await run(repo({ 'stepcast.yml': pipeline }));
+    const result = await run(repo({ 'burnex.yml': pipeline }));
     assert.equal(result.status, 'success');
 
     const mid = JSON.parse(readFileSync(join(result.journal.paths.dir, 'mid.json'), 'utf8')) as {
@@ -156,7 +156,7 @@ describe('job-attempts: успех со второй попытки', () => {
   });
 
   it('ключ шага не зависит от номера попытки работы', async () => {
-    const result = await run(repo({ 'stepcast.yml': FLAKY }));
+    const result = await run(repo({ 'burnex.yml': FLAKY }));
     const keyIn = (attempt: number): unknown =>
       JSON.parse(
         readFileSync(
@@ -170,7 +170,7 @@ describe('job-attempts: успех со второй попытки', () => {
 
   it('fail_fast дожидается последней попытки', async () => {
     const project = repo({
-      'stepcast.yml': `
+      'burnex.yml': `
 version: 1
 kind: pipeline
 name: быстрый-отказ
@@ -200,7 +200,7 @@ describe('job-attempts: исчерпание и неповторяемые ис�
   it('исчерпав попытки, работа отдаёт причину последней', async () => {
     const result = await run(
       repo({
-        'stepcast.yml': `
+        'burnex.yml': `
 version: 1
 kind: pipeline
 name: исчерпание
@@ -229,7 +229,7 @@ jobs:
   it('пропуск по skip_exit_code не повторяется', async () => {
     const result = await run(
       repo({
-        'stepcast.yml': `
+        'burnex.yml': `
 version: 1
 kind: pipeline
 name: пропуск
@@ -251,7 +251,7 @@ jobs:
   it('until_not_met повторяется с первой итерации', async () => {
     const result = await run(
       repo({
-        'stepcast.yml': `
+        'burnex.yml': `
 version: 1
 kind: pipeline
 name: цикл-и-попытки
@@ -283,7 +283,7 @@ jobs:
     // Не репозиторий git: якорь — хеш-манифест, содержимого он не хранит.
     const result = await run(
       makeProject({
-        'stepcast.yml': `
+        'burnex.yml': `
 version: 1
 kind: pipeline
 name: без-отката
@@ -328,7 +328,7 @@ ${extra}
 
   it('вторая попытка начинает новую сессию, а не продолжает первую', async () => {
     const fake = createFakeBackend({ lines: [initLine(), resultLine({ text: 'готово' })] });
-    const result = await run(repo({ 'stepcast.yml': AGENT('') }), { fake });
+    const result = await run(repo({ 'burnex.yml': AGENT('') }), { fake });
 
     assert.equal(fake.invocations.length, 2);
     assert.notEqual(fake.invocations[0]?.sessionId, fake.invocations[1]?.sessionId);
@@ -340,7 +340,7 @@ ${extra}
     const fake = createFakeBackend({
       lines: [initLine(), resultLine({ text: 'дорого', tokensIn: 80, tokensOut: 0 })],
     });
-    const result = await run(repo({ 'stepcast.yml': AGENT('    budget: { tokens: 50 }') }), { fake });
+    const result = await run(repo({ 'burnex.yml': AGENT('    budget: { tokens: 50 }') }), { fake });
 
     assert.equal(fake.invocations.length, 1);
     const work = jobOf(result, 'work');
@@ -373,7 +373,7 @@ ${stepExtra}`;
 
   it('отмена не повторяется', async () => {
     const project = repo({
-      'stepcast.yml': `
+      'burnex.yml': `
 version: 1
 kind: pipeline
 name: отмена
@@ -402,7 +402,7 @@ jobs:
     const fake = createFakeBackend({
       lines: [initLine(), resultLine({ text: 'дорого', tokensIn: 80, tokensOut: 0 })],
     });
-    const result = await run(repo({ 'stepcast.yml': agentJob('        budget: { tokens: 50 }\n') }), { fake });
+    const result = await run(repo({ 'burnex.yml': agentJob('        budget: { tokens: 50 }\n') }), { fake });
 
     assert.equal(fake.invocations.length, 1);
     const work = jobOf(result, 'work');
@@ -416,7 +416,7 @@ jobs:
 
   it('упор в лимит подписки не повторяется', async () => {
     const fake = createFakeBackend({ lines: [initLine(), rateLimitRefusalLine({ resetText: 'подождите' })] });
-    const result = await run(repo({ 'stepcast.yml': agentJob() }), { fake });
+    const result = await run(repo({ 'burnex.yml': agentJob() }), { fake });
 
     assert.equal(fake.invocations.length, 1);
     const work = jobOf(result, 'work');
@@ -427,7 +427,7 @@ jobs:
 
   it('отказ аутентификации не повторяется', async () => {
     const fake = createFakeBackend({ lines: [initLine(), authRefusalLine()], exitCode: 1 });
-    const result = await run(repo({ 'stepcast.yml': agentJob() }), { fake });
+    const result = await run(repo({ 'burnex.yml': agentJob() }), { fake });
 
     assert.equal(fake.invocations.length, 1);
     const work = jobOf(result, 'work');
@@ -444,7 +444,7 @@ jobs:
     const fake = createFakeBackend({ lines: [initLine(), resultLine({ text: 'готово' })] });
     const result = await run(
       repo({
-        'stepcast.yml': `
+        'burnex.yml': `
 version: 1
 kind: pipeline
 name: исключение

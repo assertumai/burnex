@@ -27,27 +27,27 @@ async function cli(project: Project, argv: readonly string[]): Promise<Outcome> 
   return { code, stdout: stdout.join('\n'), stderr: stderr.join('\n') };
 }
 
-/** Проект с проектным `.stepcast/config.yml`, не разбирающимся как YAML. */
+/** Проект с проектным `.burnex/config.yml`, не разбирающимся как YAML. */
 function withBrokenProjectConfig(): Project {
-  return makeProject({ '.stepcast/config.yml': 'plugins: [нет закрывающей\n' });
+  return makeProject({ '.burnex/config.yml': 'plugins: [нет закрывающей\n' });
 }
 
-/** Проект с глобальным `.stepcast/config.yml`, не соответствующим схеме. */
+/** Проект с глобальным `.burnex/config.yml`, не соответствующим схеме. */
 function withBrokenGlobalConfig(): Project {
   const project = makeProject({});
   writeFileSync(
-    join(project.home, '.stepcast', 'config.yml'),
+    join(project.home, '.burnex', 'config.yml'),
     'совсем_не_ключ_конфигурации: да\n',
   );
   return project;
 }
 
 /**
- * Корень прогонов умолчания для проекта теста: `~/.stepcast/runs` при
+ * Корень прогонов умолчания для проекта теста: `~/.burnex/runs` при
  * подменённом `HOME`. Именно его убирала бы `gc`, разреши она конфигурацию.
  */
 function defaultRunsRoot(project: Project): string {
-  return join(project.home, '.stepcast', 'runs');
+  return join(project.home, '.burnex', 'runs');
 }
 
 /** Плагин с командой `hello`: тот же контракт, что у настоящих плагинов. */
@@ -120,8 +120,8 @@ describe('config-error-breaks-every-command: команды перечня ис�
     // тест ничего не обновил на деле: без паспорта `update` вывел бы
     // `checkout` из пути движка и пошёл бы тянуть настоящее дерево.
     const project = withBrokenProjectConfig();
-    mkdirSync(join(project.home, '.stepcast'), { recursive: true });
-    writeFileSync(join(project.home, '.stepcast', 'install.json'), '{"method":"brew"}');
+    mkdirSync(join(project.home, '.burnex'), { recursive: true });
+    writeFileSync(join(project.home, '.burnex', 'install.json'), '{"method":"brew"}');
 
     const outcome = await cli(project, ['update']);
 
@@ -133,18 +133,18 @@ describe('config-error-breaks-every-command: команды перечня ис�
     // runs.root допустим только в глобальной конфигурации — этот же ключ в
     // проектном слое отказывает разбором ещё до того, как известно, что
     // звали init.
-    const project = makeProject({ '.stepcast/config.yml': 'runs:\n  root: /куда-то\n' });
+    const project = makeProject({ '.burnex/config.yml': 'runs:\n  root: /куда-то\n' });
 
     const outcome = await cli(project, ['init']);
 
     assert.equal(outcome.code, ExitCode.ok);
-    assert.ok(existsSync(project.path('stepcast.yml')));
-    assert.ok(existsSync(project.path('.stepcast/jobs/example.yml')));
+    assert.ok(existsSync(project.path('burnex.yml')));
+    assert.ok(existsSync(project.path('.burnex/jobs/example.yml')));
     assert.equal(outcome.stderr, '');
   });
 
   it('data get исполняется, когда валидная конфигурация объявляет несуществующий модуль плагина, — модуль не импортируется', async () => {
-    const project = makeProject({ '.stepcast/config.yml': 'plugins: ["./plugins/нет.mjs"]\n' });
+    const project = makeProject({ '.burnex/config.yml': 'plugins: ["./plugins/нет.mjs"]\n' });
     const jobDir = makeJobDir([]);
 
     const outcome = await withJobDir(jobDir, () => cli(project, ['data', 'get']));
@@ -176,14 +176,14 @@ describe('config-error-breaks-every-command: зависимые команды �
       const outcome = await cli(project, argv);
 
       assert.equal(outcome.code, ExitCode.configError);
-      assert.match(outcome.stderr, /\.stepcast[/\\]config\.yml/);
+      assert.match(outcome.stderr, /\.burnex[/\\]config\.yml/);
       assert.equal(outcome.stdout, '');
     });
   }
 
   it('gc --older-than не сносит прогон из корня умолчания при сломанной конфигурации', async () => {
     // Отказ обязан наступить раньше, чем станет известен `runs.root`, поэтому
-    // прогон заводится там, куда `gc` пошла бы по умолчанию — `~/.stepcast/runs`
+    // прогон заводится там, куда `gc` пошла бы по умолчанию — `~/.burnex/runs`
     // подменённого `HOME`, — и заведомо старше порога вызова. Уцелеть обязан
     // артефакт: сама директория прогона уборку переживает всегда (`gc` бережёт
     // `run.json`, `status.json` и `usage.json`), и её существование не отличило
@@ -208,14 +208,14 @@ describe('config-error-breaks-every-command: зависимые команды �
     // Плагин объявлен разбираемым проектным слоем, ломается глобальный: имя
     // `hello` в этом проекте настоящее — что и отличает случай от неизвестной
     // команды, — но при неразобранной конфигурации о нём неизвестно ничего.
-    const project = makeProject({ '.stepcast/config.yml': 'plugins: ["./plugins/hello.mjs"]\n' });
-    project.write('.stepcast/plugins/hello.mjs', HELLO_PLUGIN);
+    const project = makeProject({ '.burnex/config.yml': 'plugins: ["./plugins/hello.mjs"]\n' });
+    project.write('.burnex/plugins/hello.mjs', HELLO_PLUGIN);
 
     const whole = await cli(project, ['hello']);
     assert.equal(whole.code, ExitCode.ok);
     assert.match(whole.stdout, /привет/);
 
-    writeFileSync(join(project.home, '.stepcast', 'config.yml'), 'совсем_не_ключ: да\n');
+    writeFileSync(join(project.home, '.burnex', 'config.yml'), 'совсем_не_ключ: да\n');
     const broken = await cli(project, ['hello']);
 
     assert.equal(broken.code, ExitCode.configError);
@@ -293,9 +293,9 @@ describe('config-error-breaks-every-command: команда перечня, об
 
 /** Патч, отключающий одну названную строку. */
 function withDisabledRowPatch(project: Project, id: string): void {
-  mkdirSync(join(project.root, '.stepcast'), { recursive: true });
+  mkdirSync(join(project.root, '.burnex'), { recursive: true });
   writeFileSync(
-    join(project.root, '.stepcast', 'plugins.patch.yml'),
+    join(project.root, '.burnex', 'plugins.patch.yml'),
     `version: 1\nkind: plugins-patch\nplugins:\n  - id: ${id}\n    use: burnex:${id}\n    enabled: false\n`,
   );
 }
@@ -324,7 +324,7 @@ describe('cli-commands-as-rows: составу не принадлежит ст�
     const outcome = await cli(project, ['init']);
 
     assert.equal(outcome.code, ExitCode.ok);
-    assert.ok(existsSync(project.path('stepcast.yml')));
+    assert.ok(existsSync(project.path('burnex.yml')));
   });
 
   it('burnex plugins печатает дерево целиком, строка-виновница несёт причину', async () => {
@@ -346,10 +346,10 @@ describe('cli-commands-as-rows: составу не принадлежит ст�
 
   it('своя команда под другим именем заводится как обычно — независимость не мешает замене чужим именем', async () => {
     const project = makeProject({
-      '.stepcast/config.yml': 'plugins: ["./plugins/hello.mjs"]\n',
+      '.burnex/config.yml': 'plugins: ["./plugins/hello.mjs"]\n',
     });
     project.write(
-      '.stepcast/plugins/hello.mjs',
+      '.burnex/plugins/hello.mjs',
       "export default { name: 'hello-plugin', commands: [{ name: 'hello', spec: { description: 'привет' }, run: (args, io) => { io.out('привет'); return 0; } }] };\n",
     );
 
@@ -377,12 +377,12 @@ jobs:
 `;
 
   function projectWith(globalConfig: string, projectConfig = '', pipeline = PIPELINE): Project {
-    const project = makeProject({ 'p.yml': pipeline, '.stepcast/config.yml': projectConfig });
-    writeFileSync(join(project.home, '.stepcast', 'config.yml'), globalConfig);
+    const project = makeProject({ 'p.yml': pipeline, '.burnex/config.yml': projectConfig });
+    writeFileSync(join(project.home, '.burnex', 'config.yml'), globalConfig);
     return project;
   }
 
-  const globalFile = (project: Project): string => join(project.home, '.stepcast', 'config.yml');
+  const globalFile = (project: Project): string => join(project.home, '.burnex', 'config.yml');
 
   it('называет источник у каждого значения при fallback', async () => {
     const project = projectWith(

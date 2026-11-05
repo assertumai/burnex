@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 
 /**
  * Виджет пакета: лежит в `widgets/` пакета и адресуется голым `clock`, как
- * виджет свободного каталога `.stepcast/widgets/`. Витрина только читает его;
+ * виджет свободного каталога `.burnex/widgets/`. Витрина только читает его;
  * пакет правится на диске.
  */
 export default function Clock() {

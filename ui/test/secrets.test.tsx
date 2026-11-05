@@ -35,7 +35,7 @@ function overview(): SecretsOverview {
             env: 'GH_TOKEN',
             provider: 'env-file',
             params: { file: '.env.local' },
-            usedBy: [{ pipeline: 'stepcast.yml', steps: ['build/a', 'check/b'] }],
+            usedBy: [{ pipeline: 'burnex.yml', steps: ['build/a', 'check/b'] }],
             unused: false,
             status: 'resolved' as const,
           }),
@@ -44,7 +44,7 @@ function overview(): SecretsOverview {
             env: 'NO_KEY',
             provider: 'env-file',
             params: { file: '.env.local' },
-            usedBy: [{ pipeline: 'stepcast.yml', steps: ['build/a'] }],
+            usedBy: [{ pipeline: 'burnex.yml', steps: ['build/a'] }],
             unused: false,
             status: 'not-found' as const,
             reason: 'Секрет no-key не разрешён: в файле .env.local нет ключа NO_KEY',
@@ -74,9 +74,9 @@ function overview(): SecretsOverview {
         ],
         pipelineErrors: [
           {
-            pipeline: '.stepcast/pipelines/broken.yml',
+            pipeline: '.burnex/pipelines/broken.yml',
             error: 'jobs: ожидался объект',
-            errorFile: '.stepcast/jobs/shared.yml',
+            errorFile: '.burnex/jobs/shared.yml',
             errorAt: 'jobs.build',
             errorHint: 'Опишите работу словарём с ключом steps',
           },
@@ -86,7 +86,7 @@ function overview(): SecretsOverview {
         projectKey: 'b',
         projectPath: '/work/b',
         error: 'Не удалось загрузить плагин',
-        errorFile: '.stepcast/config.yml',
+        errorFile: '.burnex/config.yml',
         errorAt: 'plugins[0]',
         errorHint: 'Проверьте путь плагина',
         providers: [],
@@ -118,7 +118,7 @@ describe('Secrets: разметка по ответу API', () => {
     assert.ok(html.includes('GH_TOKEN'));
     assert.ok(html.includes('file=.env.local'));
     assert.ok(html.includes('service=github.com account=alice'));
-    assert.ok(html.includes('stepcast.yml'));
+    assert.ok(html.includes('burnex.yml'));
     assert.ok(html.includes('build/a, check/b'));
   });
 
@@ -139,16 +139,16 @@ describe('Secrets: разметка по ответу API', () => {
   });
 
   it('пайплайн, который не раскрылся, и проект с ошибкой — строками ошибки', () => {
-    assert.ok(html.includes('.stepcast/pipelines/broken.yml'));
+    assert.ok(html.includes('.burnex/pipelines/broken.yml'));
     assert.ok(html.includes('jobs: ожидался объект'));
     assert.ok(html.includes('Не удалось загрузить плагин'));
   });
 
   it('у отказа пайплайна и проекта — файл, место и подсказка, как на «Pipelines»', () => {
-    assert.ok(html.includes('.stepcast/jobs/shared.yml'));
+    assert.ok(html.includes('.burnex/jobs/shared.yml'));
     assert.ok(html.includes('jobs.build'));
     assert.ok(html.includes('Опишите работу словарём с ключом steps'));
-    assert.ok(html.includes('.stepcast/config.yml'));
+    assert.ok(html.includes('.burnex/config.yml'));
     assert.ok(html.includes('plugins[0]'));
     assert.ok(html.includes('Проверьте путь плагина'));
   });

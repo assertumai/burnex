@@ -1,9 +1,9 @@
 # Burnex
 
 Движок пайплайнов для разработки с ИИ-агентами. Прежнее имя проекта —
-Stepcast: каталоги `.stepcast/` пока носят его, бинарник `stepcast` остаётся
-псевдонимом `burnex`, а переменные `STEPCAST_*`, подпути `stepcast/…` и
-адреса `stepcast:<имя>` один выпуск читаются наравне с новыми
+Stepcast: бинарник `stepcast` остаётся псевдонимом `burnex`, а переменные
+`STEPCAST_*`, подпути `stepcast/…`, адреса `stepcast:<имя>`, каталоги
+`.stepcast/` и `~/.stepcast` один выпуск читаются наравне с новыми
 ([docs/release.md](docs/release.md), «Переход со stepcast»).
 
 Агент — это тип шага, а не оркестратор. Топология работ, условия перехода,
@@ -19,7 +19,7 @@ Stepcast: каталоги `.stepcast/` пока носят его, бинарн
 реализовано через группу процессов POSIX.
 
 Движок применён к собственной разработке: петля саморазвития
-[`.stepcast/pipelines/self-improve.yml`](.stepcast/pipelines/self-improve.yml)
+[`.burnex/pipelines/self-improve.yml`](.burnex/pipelines/self-improve.yml)
 берёт очередное улучшение из [очереди](backlog.md), заводит под него
 OpenSpec-изменение, реализует до зелёной сборки, ревьюит отдельной сессией и
 коммитит — по коммиту на улучшение. Первые пункты очереди нужны в первую
@@ -32,7 +32,7 @@ OpenSpec-изменение, реализует до зелёной сборки
 - [Плагины](docs/plugins.md) — свои бэкенды, предикаты и команды без правки движка
 - [Целевая архитектура](docs/microkernel-target.md) — ядро-регистратор, строки состава, порядок работ
 - [Тестирование](docs/testing.md) — песочница временных файлов, уборка, замер утечки
-- [Запускаемый пример](examples/minimal/stepcast.yml)
+- [Запускаемый пример](examples/minimal/burnex.yml)
 
 ## Как это выглядит
 
@@ -60,7 +60,7 @@ jobs:
 
 ```bash
 npm install && npm run build
-node dist/src/bin.js run examples/minimal/stepcast.yml --input topic=сессии
+node dist/src/bin.js run examples/minimal/burnex.yml --input topic=сессии
 ```
 
 ## Установка
@@ -72,8 +72,8 @@ curl -fsSL https://raw.githubusercontent.com/assertumai/stepcast/main/scripts/in
 ```
 
 Скрипт берёт последний тег `vX.Y.Z`, собирает его и раскладывает релиз в
-`~/.stepcast/releases/<версия>`; ссылка `current` указывает на действующий
-релиз, а лаунчер `~/.local/bin/stepcast` — на `current`. Нужны `git`, `npm` и
+`~/.burnex/releases/<версия>`; ссылка `current` указывает на действующий
+релиз, а лаунчер `~/.local/bin/burnex` (и ссылка `stepcast` рядом) — на `current`. Нужны `git`, `npm` и
 Node ≥ 22. Если `~/.local/bin` не в `PATH`, скрипт печатает строку
 `export PATH=…` и профиль не правит.
 
@@ -82,11 +82,11 @@ Node ≥ 22. Если `~/.local/bin` не в `PATH`, скрипт печатае
   `… | bash -s -- --ref main`.
 - `--repo <адрес или путь>` — другой репозиторий (форк, `git@…`, локальный путь).
 - `--force` — заменить чужой файл на месте лаунчера (например, `npm link`).
-- `BURNEX_HOME` (по умолчанию `~/.stepcast`) и `BURNEX_BIN_DIR` (по
+- `BURNEX_HOME` (по умолчанию `~/.burnex`) и `BURNEX_BIN_DIR` (по
   умолчанию `~/.local/bin`) переносят каталог релизов и лаунчер.
 
 Сбой на любом шаге оставляет прежний `current` нетронутым. Скрипт пишет
-паспорт установки `~/.stepcast/install.json`, по которому `burnex update`
+паспорт установки `~/.burnex/install.json`, по которому `burnex update`
 знает, чем обновлять.
 
 ### Обновление
@@ -121,10 +121,10 @@ burnex update --no-restart # не перезапускать демон витр
 
 ### Откат релиза
 
-Прежние релизы остаются в `~/.stepcast/releases/`; откат — переключение ссылки:
+Прежние релизы остаются в `~/.burnex/releases/`; откат — переключение ссылки:
 
 ```bash
-ln -sfn ~/.stepcast/releases/<прежняя> ~/.stepcast/releases/current
+ln -sfn ~/.burnex/releases/<прежняя> ~/.burnex/releases/current
 ```
 
 Порядок выпуска версии — [docs/release.md](docs/release.md).
@@ -215,7 +215,7 @@ lint` предупреждает, если записанная схема ус�
 один демон наблюдает за прогонами всех проектов сразу, подхватывает новые по
 мере появления и показывает их живьём — вход и выход каждой работы, файлы
 журнала, разрез контекста агентских шагов. Останавливается `burnex down`.
-Экспериментально: свой виджет — файл `.tsx` в `.stepcast/widgets/` проекта —
+Экспериментально: свой виджет — файл `.tsx` в `.burnex/widgets/` проекта —
 демон компилирует и показывает на экране «Виджеты», заменяя на лету по
 правке файла (см. [`docs/widgets.md`](docs/widgets.md)).
 
@@ -224,10 +224,10 @@ lint` предупреждает, если записанная схема ус�
 | | |
 |---|---|
 | Бинарник | `burnex`, псевдоним `stepcast` (на `PATH` после `npm link`, см. [Установку](#установка)) |
-| Пайплайн | `stepcast.yml` или `.stepcast/pipelines/*.yml` |
-| Работы | `.stepcast/jobs/*.yml` |
-| Переиспользуемые шаги | `.stepcast/steps/<имя>/step.yml` |
-| Пакеты | `.stepcast/packages/<имя>/package.yml` и `~/.stepcast/packages/<имя>/` — [docs/packages.md](docs/packages.md) |
-| Конфиг | `~/.stepcast/config.yml` и `.stepcast/config.yml` |
-| Прогоны | `~/.stepcast/runs/<project>/<run>/` |
+| Пайплайн | `burnex.yml` или `.burnex/pipelines/*.yml` |
+| Работы | `.burnex/jobs/*.yml` |
+| Переиспользуемые шаги | `.burnex/steps/<имя>/step.yml` |
+| Пакеты | `.burnex/packages/<имя>/package.yml` и `~/.burnex/packages/<имя>/` — [docs/packages.md](docs/packages.md) |
+| Конфиг | `~/.burnex/config.yml` и `.burnex/config.yml` |
+| Прогоны | `~/.burnex/runs/<project>/<run>/` |
 | Переменные | `BURNEX_*` (переходно читаются и `STEPCAST_*`) |

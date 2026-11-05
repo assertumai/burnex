@@ -28,7 +28,7 @@ function isolatedScriptRoots(project: Project): ScriptRoots {
 
 function expandUses(project: Project, stepRoots: ScriptRoots, scriptRoots?: ScriptRoots) {
   return expandPipeline({
-    pipelinePath: project.path('stepcast.yml'),
+    pipelinePath: project.path('burnex.yml'),
     config: project.config,
     stepRoots,
     scriptRoots: scriptRoots ?? isolatedScriptRoots(project),
@@ -92,9 +92,9 @@ ${withBlock}
 
 describe('reusable-step: разрешение имени тремя слоями', () => {
   it('находит шаг проектного слоя', () => {
-    const project = makeProject({ 'stepcast.yml': pipelineWithUses('greet') });
+    const project = makeProject({ 'burnex.yml': pipelineWithUses('greet') });
     const stepRoots = isolatedStepRoots(project);
-    writeStepDir(join(stepRoots.project, '.stepcast', 'steps'), 'greet', GREET_MANIFEST, {
+    writeStepDir(join(stepRoots.project, '.burnex', 'steps'), 'greet', GREET_MANIFEST, {
       'main.cjs': GREET_MAIN,
       'output.schema.json': GREET_OUTPUT_SCHEMA,
     });
@@ -104,17 +104,17 @@ describe('reusable-step: разрешение имени тремя слоями
     assert.equal(step.unresolved, undefined);
     assert.equal(step.uses?.name, 'greet');
     assert.equal(step.uses?.layer, 'project');
-    assert.equal(step.resolved?.absolutePath, join(stepRoots.project, '.stepcast', 'steps', 'greet', 'main.cjs'));
+    assert.equal(step.resolved?.absolutePath, join(stepRoots.project, '.burnex', 'steps', 'greet', 'main.cjs'));
   });
 
   it('проектный слой перекрывает домашний', () => {
-    const project = makeProject({ 'stepcast.yml': pipelineWithUses('greet') });
+    const project = makeProject({ 'burnex.yml': pipelineWithUses('greet') });
     const stepRoots = isolatedStepRoots(project);
-    writeStepDir(join(stepRoots.project, '.stepcast', 'steps'), 'greet', GREET_MANIFEST, {
+    writeStepDir(join(stepRoots.project, '.burnex', 'steps'), 'greet', GREET_MANIFEST, {
       'main.cjs': GREET_MAIN,
       'output.schema.json': GREET_OUTPUT_SCHEMA,
     });
-    writeStepDir(join(stepRoots.home, '.stepcast', 'steps'), 'greet', GREET_MANIFEST, {
+    writeStepDir(join(stepRoots.home, '.burnex', 'steps'), 'greet', GREET_MANIFEST, {
       'main.cjs': GREET_MAIN,
       'output.schema.json': GREET_OUTPUT_SCHEMA,
     });
@@ -122,17 +122,17 @@ describe('reusable-step: разрешение имени тремя слоями
     const { pipeline } = expandUses(project, stepRoots);
     const step = asScript(pipeline.jobs[0]!.steps[0]!);
     assert.equal(step.uses?.layer, 'project');
-    assert.equal(step.resolved?.absolutePath, join(stepRoots.project, '.stepcast', 'steps', 'greet', 'main.cjs'));
+    assert.equal(step.resolved?.absolutePath, join(stepRoots.project, '.burnex', 'steps', 'greet', 'main.cjs'));
   });
 
   it('домашний слой перекрывает встроенный', () => {
-    const project = makeProject({ 'stepcast.yml': pipelineWithUses('greet') });
+    const project = makeProject({ 'burnex.yml': pipelineWithUses('greet') });
     const stepRoots = isolatedStepRoots(project);
     writeStepDir(stepRoots.builtin, 'greet', GREET_MANIFEST, {
       'main.cjs': GREET_MAIN,
       'output.schema.json': GREET_OUTPUT_SCHEMA,
     });
-    writeStepDir(join(stepRoots.home, '.stepcast', 'steps'), 'greet', GREET_MANIFEST, {
+    writeStepDir(join(stepRoots.home, '.burnex', 'steps'), 'greet', GREET_MANIFEST, {
       'main.cjs': GREET_MAIN,
       'output.schema.json': GREET_OUTPUT_SCHEMA,
     });
@@ -143,7 +143,7 @@ describe('reusable-step: разрешение имени тремя слоями
   });
 
   it('встроенный слой разрешает шаг без единого каталога шагов у проекта', () => {
-    const project = makeProject({ 'stepcast.yml': pipelineWithUses('greet') });
+    const project = makeProject({ 'burnex.yml': pipelineWithUses('greet') });
     const stepRoots = isolatedStepRoots(project);
     writeStepDir(stepRoots.builtin, 'greet', GREET_MANIFEST, {
       'main.cjs': GREET_MAIN,
@@ -157,12 +157,12 @@ describe('reusable-step: разрешение имени тремя слоями
   });
 
   it('каталог без step.yml пропускается слоем, как отсутствующий', () => {
-    const project = makeProject({ 'stepcast.yml': pipelineWithUses('notes') });
+    const project = makeProject({ 'burnex.yml': pipelineWithUses('notes') });
     const stepRoots = isolatedStepRoots(project);
     // Каталог проектного слоя есть, но манифеста в нём нет.
-    mkdirSync(join(stepRoots.project, '.stepcast', 'steps', 'notes'), { recursive: true });
-    writeFileSync(join(stepRoots.project, '.stepcast', 'steps', 'notes', 'readme.txt'), 'не манифест');
-    writeStepDir(join(stepRoots.home, '.stepcast', 'steps'), 'notes', GREET_MANIFEST.replace('greet', 'notes'), {
+    mkdirSync(join(stepRoots.project, '.burnex', 'steps', 'notes'), { recursive: true });
+    writeFileSync(join(stepRoots.project, '.burnex', 'steps', 'notes', 'readme.txt'), 'не манифест');
+    writeStepDir(join(stepRoots.home, '.burnex', 'steps'), 'notes', GREET_MANIFEST.replace('greet', 'notes'), {
       'main.cjs': GREET_MAIN,
       'output.schema.json': GREET_OUTPUT_SCHEMA,
     });
@@ -174,7 +174,7 @@ describe('reusable-step: разрешение имени тремя слоями
   });
 
   it('ненайденное имя — unresolved step_not_found с перечнем просмотренных каталогов', () => {
-    const project = makeProject({ 'stepcast.yml': pipelineWithUses('no-such-step') });
+    const project = makeProject({ 'burnex.yml': pipelineWithUses('no-such-step') });
     const stepRoots = isolatedStepRoots(project);
 
     const { pipeline } = expandUses(project, stepRoots);
@@ -183,14 +183,14 @@ describe('reusable-step: разрешение имени тремя слоями
     assert.equal(step.unresolved?.reason, 'step_not_found');
     if (step.unresolved?.reason === 'step_not_found') {
       assert.equal(step.unresolved.searched.length, 3);
-      assert.ok(step.unresolved.searched[0]!.includes(join('.stepcast', 'steps', 'no-such-step')));
+      assert.ok(step.unresolved.searched[0]!.includes(join('.burnex', 'steps', 'no-such-step')));
     }
   });
 });
 
 describe('reusable-step: форма имени uses', () => {
   it('отклоняет форму автор/имя', () => {
-    const project = makeProject({ 'stepcast.yml': pipelineWithUses('alice/lint-fix') });
+    const project = makeProject({ 'burnex.yml': pipelineWithUses('alice/lint-fix') });
     assert.throws(
       () => expandUses(project, isolatedStepRoots(project)),
       (error: unknown) => {
@@ -202,7 +202,7 @@ describe('reusable-step: форма имени uses', () => {
   });
 
   it('отклоняет путь вместо имени, называя script нужным ключом', () => {
-    const project = makeProject({ 'stepcast.yml': pipelineWithUses('./tools/step.yml') });
+    const project = makeProject({ 'burnex.yml': pipelineWithUses('./tools/step.yml') });
     assert.throws(
       () => expandUses(project, isolatedStepRoots(project)),
       (error: unknown) => {
@@ -214,22 +214,22 @@ describe('reusable-step: форма имени uses', () => {
   });
 
   it('отклоняет пустое имя', () => {
-    const project = makeProject({ 'stepcast.yml': pipelineWithUses('""') });
+    const project = makeProject({ 'burnex.yml': pipelineWithUses('""') });
     assert.throws(() => expandUses(project, isolatedStepRoots(project)), StepcastError);
   });
 
   it('отклоняет имя с пробелом', () => {
-    const project = makeProject({ 'stepcast.yml': pipelineWithUses('"lint fix"') });
+    const project = makeProject({ 'burnex.yml': pipelineWithUses('"lint fix"') });
     assert.throws(() => expandUses(project, isolatedStepRoots(project)), StepcastError);
   });
 });
 
 describe('reusable-step: манифест', () => {
   it('несовпадение name с именем каталога — unresolved name_mismatch', () => {
-    const project = makeProject({ 'stepcast.yml': pipelineWithUses('greet') });
+    const project = makeProject({ 'burnex.yml': pipelineWithUses('greet') });
     const stepRoots = isolatedStepRoots(project);
     writeStepDir(
-      join(stepRoots.project, '.stepcast', 'steps'),
+      join(stepRoots.project, '.burnex', 'steps'),
       'greet',
       GREET_MANIFEST.replace('name: greet', 'name: list-changes'),
       { 'main.cjs': GREET_MAIN, 'output.schema.json': GREET_OUTPUT_SCHEMA },
@@ -245,10 +245,10 @@ describe('reusable-step: манифест', () => {
   });
 
   it('незнакомое поле манифеста — unresolved manifest_invalid', () => {
-    const project = makeProject({ 'stepcast.yml': pipelineWithUses('greet') });
+    const project = makeProject({ 'burnex.yml': pipelineWithUses('greet') });
     const stepRoots = isolatedStepRoots(project);
     writeStepDir(
-      join(stepRoots.project, '.stepcast', 'steps'),
+      join(stepRoots.project, '.burnex', 'steps'),
       'greet',
       `${GREET_MANIFEST}\nunexpected_field: 1\n`,
       { 'main.cjs': GREET_MAIN, 'output.schema.json': GREET_OUTPUT_SCHEMA },
@@ -263,10 +263,10 @@ describe('reusable-step: манифест', () => {
   });
 
   it('file за пределами каталога шага — unresolved manifest_invalid', () => {
-    const project = makeProject({ 'stepcast.yml': pipelineWithUses('greet') });
+    const project = makeProject({ 'burnex.yml': pipelineWithUses('greet') });
     const stepRoots = isolatedStepRoots(project);
     writeStepDir(
-      join(stepRoots.project, '.stepcast', 'steps'),
+      join(stepRoots.project, '.burnex', 'steps'),
       'greet',
       GREET_MANIFEST.replace('file: ./main.cjs', 'file: ../../../tools/cleanup.py'),
       { 'output.schema.json': GREET_OUTPUT_SCHEMA },
@@ -281,9 +281,9 @@ describe('reusable-step: манифест', () => {
   });
 
   it('отсутствующий file — unresolved step_file_missing с ожидаемым путём', () => {
-    const project = makeProject({ 'stepcast.yml': pipelineWithUses('greet') });
+    const project = makeProject({ 'burnex.yml': pipelineWithUses('greet') });
     const stepRoots = isolatedStepRoots(project);
-    writeStepDir(join(stepRoots.project, '.stepcast', 'steps'), 'greet', GREET_MANIFEST, {
+    writeStepDir(join(stepRoots.project, '.burnex', 'steps'), 'greet', GREET_MANIFEST, {
       'output.schema.json': GREET_OUTPUT_SCHEMA,
     });
 
@@ -293,15 +293,15 @@ describe('reusable-step: манифест', () => {
     if (step.unresolved?.reason === 'step_file_missing') {
       assert.equal(
         step.unresolved.expectedPath,
-        join(stepRoots.project, '.stepcast', 'steps', 'greet', 'main.cjs'),
+        join(stepRoots.project, '.burnex', 'steps', 'greet', 'main.cjs'),
       );
     }
   });
 
   it('раннер выбирается расширением файла манифеста', () => {
-    const project = makeProject({ 'stepcast.yml': pipelineWithUses('greet') });
+    const project = makeProject({ 'burnex.yml': pipelineWithUses('greet') });
     const stepRoots = isolatedStepRoots(project);
-    writeStepDir(join(stepRoots.project, '.stepcast', 'steps'), 'greet', GREET_MANIFEST, {
+    writeStepDir(join(stepRoots.project, '.burnex', 'steps'), 'greet', GREET_MANIFEST, {
       'main.cjs': GREET_MAIN,
       'output.schema.json': GREET_OUTPUT_SCHEMA,
     });
@@ -314,10 +314,10 @@ describe('reusable-step: манифест', () => {
 
 describe('reusable-step: схема параметров', () => {
   it('схема параметров не объектная — unresolved manifest_invalid', () => {
-    const project = makeProject({ 'stepcast.yml': pipelineWithUses('greet') });
+    const project = makeProject({ 'burnex.yml': pipelineWithUses('greet') });
     const stepRoots = isolatedStepRoots(project);
     writeStepDir(
-      join(stepRoots.project, '.stepcast', 'steps'),
+      join(stepRoots.project, '.burnex', 'steps'),
       'greet',
       GREET_MANIFEST.replace(/params:[\s\S]*?output_schema:/, 'params: { type: array }\noutput_schema:'),
       { 'main.cjs': GREET_MAIN, 'output.schema.json': GREET_OUTPUT_SCHEMA },
@@ -332,10 +332,10 @@ describe('reusable-step: схема параметров', () => {
   });
 
   it('дефектная схема параметров — unresolved manifest_invalid, называющий шаг и файл', () => {
-    const project = makeProject({ 'stepcast.yml': pipelineWithUses('greet') });
+    const project = makeProject({ 'burnex.yml': pipelineWithUses('greet') });
     const stepRoots = isolatedStepRoots(project);
     writeStepDir(
-      join(stepRoots.project, '.stepcast', 'steps'),
+      join(stepRoots.project, '.burnex', 'steps'),
       'greet',
       GREET_MANIFEST.replace(
         /params:[\s\S]*?output_schema:/,
@@ -355,11 +355,11 @@ describe('reusable-step: схема параметров', () => {
 
   it('шаг без params — непустой with отказывает params_invalid', () => {
     const project = makeProject({
-      'stepcast.yml': pipelineWithUses('greet', '        with: { slug: bug-42 }'),
+      'burnex.yml': pipelineWithUses('greet', '        with: { slug: bug-42 }'),
     });
     const stepRoots = isolatedStepRoots(project);
     writeStepDir(
-      join(stepRoots.project, '.stepcast', 'steps'),
+      join(stepRoots.project, '.burnex', 'steps'),
       'greet',
       GREET_MANIFEST.replace(/params:[\s\S]*?description: Кого приветствовать }\n/, ''),
       { 'main.cjs': GREET_MAIN, 'output.schema.json': GREET_OUTPUT_SCHEMA },
@@ -371,9 +371,9 @@ describe('reusable-step: схема параметров', () => {
   });
 
   it('умолчание подставляется при раскрытии', () => {
-    const project = makeProject({ 'stepcast.yml': pipelineWithUses('greet') });
+    const project = makeProject({ 'burnex.yml': pipelineWithUses('greet') });
     const stepRoots = isolatedStepRoots(project);
-    writeStepDir(join(stepRoots.project, '.stepcast', 'steps'), 'greet', GREET_MANIFEST, {
+    writeStepDir(join(stepRoots.project, '.burnex', 'steps'), 'greet', GREET_MANIFEST, {
       'main.cjs': GREET_MAIN,
       'output.schema.json': GREET_OUTPUT_SCHEMA,
     });
@@ -388,10 +388,10 @@ describe('reusable-step: схема параметров', () => {
 describe('reusable-step: сведение параметров вызова', () => {
   it('неизвестный параметр — params_invalid с перечнем объявленных', () => {
     const project = makeProject({
-      'stepcast.yml': pipelineWithUses('greet', '        with: { nam: bug-42 }'),
+      'burnex.yml': pipelineWithUses('greet', '        with: { nam: bug-42 }'),
     });
     const stepRoots = isolatedStepRoots(project);
-    writeStepDir(join(stepRoots.project, '.stepcast', 'steps'), 'greet', GREET_MANIFEST, {
+    writeStepDir(join(stepRoots.project, '.burnex', 'steps'), 'greet', GREET_MANIFEST, {
       'main.cjs': GREET_MAIN,
       'output.schema.json': GREET_OUTPUT_SCHEMA,
     });
@@ -406,10 +406,10 @@ describe('reusable-step: сведение параметров вызова', ()
   });
 
   it('непереданный обязательный — params_invalid, называющий параметр', () => {
-    const project = makeProject({ 'stepcast.yml': pipelineWithUses('greet') });
+    const project = makeProject({ 'burnex.yml': pipelineWithUses('greet') });
     const stepRoots = isolatedStepRoots(project);
     writeStepDir(
-      join(stepRoots.project, '.stepcast', 'steps'),
+      join(stepRoots.project, '.burnex', 'steps'),
       'greet',
       GREET_MANIFEST.replace('type: object\n  properties:', 'type: object\n  required: [name]\n  properties:')
         .replace('name: { type: string, default: world, description: Кого приветствовать }', 'name: { type: string }'),
@@ -426,10 +426,10 @@ describe('reusable-step: сведение параметров вызова', ()
 
   it('значение не по схеме — params_invalid с замечанием валидатора', () => {
     const project = makeProject({
-      'stepcast.yml': pipelineWithUses('greet', '        with: { name: 42 }'),
+      'burnex.yml': pipelineWithUses('greet', '        with: { name: 42 }'),
     });
     const stepRoots = isolatedStepRoots(project);
-    writeStepDir(join(stepRoots.project, '.stepcast', 'steps'), 'greet', GREET_MANIFEST, {
+    writeStepDir(join(stepRoots.project, '.burnex', 'steps'), 'greet', GREET_MANIFEST, {
       'main.cjs': GREET_MAIN,
       'output.schema.json': GREET_OUTPUT_SCHEMA,
     });
@@ -463,13 +463,13 @@ params:
 
   it('отложенная подстановка в одном параметре не отменяет проверки соседнего', () => {
     const project = makeProject({
-      'stepcast.yml': pipelineWithUses(
+      'burnex.yml': pipelineWithUses(
         'greet',
         '        with: { name: 42, note: "${jobs.plan.output.note}" }',
       ),
     });
     const stepRoots = isolatedStepRoots(project);
-    writeStepDir(join(stepRoots.project, '.stepcast', 'steps'), 'greet', TWO_PARAMS_MANIFEST, {
+    writeStepDir(join(stepRoots.project, '.burnex', 'steps'), 'greet', TWO_PARAMS_MANIFEST, {
       'main.cjs': GREET_MAIN,
     });
 
@@ -483,13 +483,13 @@ params:
 
   it('само отложенное значение схемой не проверяется, и обязательность им не нарушается', () => {
     const project = makeProject({
-      'stepcast.yml': pipelineWithUses(
+      'burnex.yml': pipelineWithUses(
         'greet',
         '        with: { name: "${jobs.plan.output.name}", note: заметка }',
       ),
     });
     const stepRoots = isolatedStepRoots(project);
-    writeStepDir(join(stepRoots.project, '.stepcast', 'steps'), 'greet', TWO_PARAMS_MANIFEST, {
+    writeStepDir(join(stepRoots.project, '.burnex', 'steps'), 'greet', TWO_PARAMS_MANIFEST, {
       'main.cjs': GREET_MAIN,
     });
 
@@ -500,11 +500,11 @@ params:
 
   it('параметр-объект принимается объектом целиком', () => {
     const project = makeProject({
-      'stepcast.yml': pipelineWithUses('greet', '        with: { name: { first: Ann } }'),
+      'burnex.yml': pipelineWithUses('greet', '        with: { name: { first: Ann } }'),
     });
     const stepRoots = isolatedStepRoots(project);
     writeStepDir(
-      join(stepRoots.project, '.stepcast', 'steps'),
+      join(stepRoots.project, '.burnex', 'steps'),
       'greet',
       GREET_MANIFEST.replace(
         'name: { type: string, default: world, description: Кого приветствовать }',
@@ -523,7 +523,7 @@ params:
 describe('reusable-step: параметр не отображением', () => {
   it('отклоняет with списком', () => {
     const project = makeProject({
-      'stepcast.yml': pipelineWithUses('greet', '        with: [a, b]'),
+      'burnex.yml': pipelineWithUses('greet', '        with: [a, b]'),
     });
     assert.throws(() => expandUses(project, isolatedStepRoots(project)), StepcastError);
   });
@@ -532,7 +532,7 @@ describe('reusable-step: параметр не отображением', () => 
 describe('reusable-step: общие ключи и запрет объявляемых манифестом', () => {
   it('принимает общие ключи шага рядом с uses', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 budget: { tokens: 100k }
 jobs:
@@ -547,7 +547,7 @@ jobs:
 `,
     });
     const stepRoots = isolatedStepRoots(project);
-    writeStepDir(join(stepRoots.project, '.stepcast', 'steps'), 'greet', GREET_MANIFEST, {
+    writeStepDir(join(stepRoots.project, '.burnex', 'steps'), 'greet', GREET_MANIFEST, {
       'main.cjs': GREET_MAIN,
       'output.schema.json': GREET_OUTPUT_SCHEMA,
     });
@@ -563,7 +563,7 @@ jobs:
     it(`отклоняет ${key.split(':')[0]} рядом с uses`, () => {
       const [field] = key.split(':') as [string];
       const project = makeProject({
-        'stepcast.yml': `
+        'burnex.yml': `
 kind: pipeline
 jobs:
   build:
@@ -590,7 +590,7 @@ jobs:
 
   it('отклоняет uses вместе со script, называя script объявляемым манифестом', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 jobs:
   build:
@@ -613,7 +613,7 @@ jobs:
 
   it('отклоняет uses вместе с run', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 jobs:
   build:
@@ -628,7 +628,7 @@ jobs:
 
   it('отклоняет uses вместе с prompt', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 jobs:
   build:
@@ -662,9 +662,9 @@ function packageStep(packageDir: string, name = 'greet'): void {
 
 describe('reusable-step: шаги из пакетов', () => {
   it('шаг пакета проекта разрешается по голому имени, происхождение называет пакет и слой', () => {
-    const project = makeProject({ 'stepcast.yml': pipelineWithUses('greet') });
+    const project = makeProject({ 'burnex.yml': pipelineWithUses('greet') });
     const stepRoots = isolatedStepRoots(project);
-    const dir = writePackage(join(stepRoots.project, '.stepcast', 'packages'), 'hello');
+    const dir = writePackage(join(stepRoots.project, '.burnex', 'packages'), 'hello');
     packageStep(dir);
 
     const step = asScript(expandUses(project, stepRoots).pipeline.jobs[0]!.steps[0]!);
@@ -676,9 +676,9 @@ describe('reusable-step: шаги из пакетов', () => {
   });
 
   it('шаг пакета home находится, когда выше ничего нет', () => {
-    const project = makeProject({ 'stepcast.yml': pipelineWithUses('greet') });
+    const project = makeProject({ 'burnex.yml': pipelineWithUses('greet') });
     const stepRoots = isolatedStepRoots(project);
-    packageStep(writePackage(join(stepRoots.home, '.stepcast', 'packages'), 'tools'));
+    packageStep(writePackage(join(stepRoots.home, '.burnex', 'packages'), 'tools'));
 
     const step = asScript(expandUses(project, stepRoots).pipeline.jobs[0]!.steps[0]!);
     assert.equal(step.uses?.layer, 'home');
@@ -686,14 +686,14 @@ describe('reusable-step: шаги из пакетов', () => {
   });
 
   it('без явных корней пакеты home читаются рядом с подставным путём глобального конфига', () => {
-    const project = makeProject({ 'stepcast.yml': pipelineWithUses('greet') });
+    const project = makeProject({ 'burnex.yml': pipelineWithUses('greet') });
     const globalConfigDir = tempDir('custom-global-');
     const dir = writePackage(join(globalConfigDir, 'packages'), 'tools');
     packageStep(dir);
 
     const step = asScript(
       expandPipeline({
-        pipelinePath: project.path('stepcast.yml'),
+        pipelinePath: project.path('burnex.yml'),
         config: { ...project.config, globalConfigDir, globalConfigFile: join(globalConfigDir, 'config.yml') },
       }).pipeline.jobs[0]!.steps[0]!,
     );
@@ -704,54 +704,54 @@ describe('reusable-step: шаги из пакетов', () => {
   });
 
   it('свободный каталог проекта перекрывает пакет проекта', () => {
-    const project = makeProject({ 'stepcast.yml': pipelineWithUses('greet') });
+    const project = makeProject({ 'burnex.yml': pipelineWithUses('greet') });
     const stepRoots = isolatedStepRoots(project);
-    packageStep(writePackage(join(stepRoots.project, '.stepcast', 'packages'), 'hello'));
-    writeStepDir(join(stepRoots.project, '.stepcast', 'steps'), 'greet', GREET_MANIFEST, {
+    packageStep(writePackage(join(stepRoots.project, '.burnex', 'packages'), 'hello'));
+    writeStepDir(join(stepRoots.project, '.burnex', 'steps'), 'greet', GREET_MANIFEST, {
       'main.cjs': GREET_MAIN,
       'output.schema.json': GREET_OUTPUT_SCHEMA,
     });
 
     const step = asScript(expandUses(project, stepRoots).pipeline.jobs[0]!.steps[0]!);
     assert.equal(step.uses?.package, undefined);
-    assert.equal(step.resolved?.absolutePath, join(stepRoots.project, '.stepcast', 'steps', 'greet', 'main.cjs'));
+    assert.equal(step.resolved?.absolutePath, join(stepRoots.project, '.burnex', 'steps', 'greet', 'main.cjs'));
   });
 
   it('пакет проекта выше свободного home, пакет home выше встроенного', () => {
-    const project = makeProject({ 'stepcast.yml': pipelineWithUses('greet') });
+    const project = makeProject({ 'burnex.yml': pipelineWithUses('greet') });
     const stepRoots = isolatedStepRoots(project);
-    const own = writePackage(join(stepRoots.project, '.stepcast', 'packages'), 'hello');
+    const own = writePackage(join(stepRoots.project, '.burnex', 'packages'), 'hello');
     packageStep(own);
-    writeStepDir(join(stepRoots.home, '.stepcast', 'steps'), 'greet', GREET_MANIFEST, {
+    writeStepDir(join(stepRoots.home, '.burnex', 'steps'), 'greet', GREET_MANIFEST, {
       'main.cjs': GREET_MAIN,
       'output.schema.json': GREET_OUTPUT_SCHEMA,
     });
     assert.equal(asScript(expandUses(project, stepRoots).pipeline.jobs[0]!.steps[0]!).uses?.package, 'hello');
 
-    const other = makeProject({ 'stepcast.yml': pipelineWithUses('greet') });
+    const other = makeProject({ 'burnex.yml': pipelineWithUses('greet') });
     const roots = isolatedStepRoots(other);
-    packageStep(writePackage(join(roots.home, '.stepcast', 'packages'), 'tools'));
+    packageStep(writePackage(join(roots.home, '.burnex', 'packages'), 'tools'));
     writeStepDir(roots.builtin, 'greet', GREET_MANIFEST, { 'main.cjs': GREET_MAIN, 'output.schema.json': GREET_OUTPUT_SCHEMA });
     assert.equal(asScript(expandUses(other, roots).pipeline.jobs[0]!.steps[0]!).uses?.package, 'tools');
   });
 
   it('пакет проекта затеняет одноимённый пакет home целиком: шаг, которого нет в проектном, не находится', () => {
-    const project = makeProject({ 'stepcast.yml': pipelineWithUses('farewell') });
+    const project = makeProject({ 'burnex.yml': pipelineWithUses('farewell') });
     const stepRoots = isolatedStepRoots(project);
-    writePackage(join(stepRoots.project, '.stepcast', 'packages'), 'hello');
-    packageStep(writePackage(join(stepRoots.home, '.stepcast', 'packages'), 'hello'), 'farewell');
+    writePackage(join(stepRoots.project, '.burnex', 'packages'), 'hello');
+    packageStep(writePackage(join(stepRoots.home, '.burnex', 'packages'), 'hello'), 'farewell');
 
     const step = asScript(expandUses(project, stepRoots).pipeline.jobs[0]!.steps[0]!);
     assert.equal(step.unresolved?.reason, 'step_not_found');
   });
 
   it('конфликт двух пакетов слоя — значение ScriptUnresolved, называющее оба; нижний слой не просматривается', () => {
-    const project = makeProject({ 'stepcast.yml': pipelineWithUses('greet') });
+    const project = makeProject({ 'burnex.yml': pipelineWithUses('greet') });
     const stepRoots = isolatedStepRoots(project);
-    const packages = join(stepRoots.project, '.stepcast', 'packages');
+    const packages = join(stepRoots.project, '.burnex', 'packages');
     packageStep(writePackage(packages, 'a'));
     packageStep(writePackage(packages, 'b'));
-    writeStepDir(join(stepRoots.home, '.stepcast', 'steps'), 'greet', GREET_MANIFEST, {
+    writeStepDir(join(stepRoots.home, '.burnex', 'steps'), 'greet', GREET_MANIFEST, {
       'main.cjs': GREET_MAIN,
       'output.schema.json': GREET_OUTPUT_SCHEMA,
     });
@@ -766,9 +766,9 @@ describe('reusable-step: шаги из пакетов', () => {
   });
 
   it('промах при сломанном пакете называет пакет и его причину', () => {
-    const project = makeProject({ 'stepcast.yml': pipelineWithUses('greet') });
+    const project = makeProject({ 'burnex.yml': pipelineWithUses('greet') });
     const stepRoots = isolatedStepRoots(project);
-    const packages = join(stepRoots.project, '.stepcast', 'packages');
+    const packages = join(stepRoots.project, '.burnex', 'packages');
     const broken = writePackage(packages, 'broken', 'name: [oops\n');
     packageStep(broken);
     packageStep(writePackage(packages, 'good'), 'other');
@@ -783,7 +783,7 @@ describe('reusable-step: шаги из пакетов', () => {
   });
 
   it('без пакетов поведение прежнее: перечень просмотренных каталогов — три слоя', () => {
-    const project = makeProject({ 'stepcast.yml': pipelineWithUses('greet') });
+    const project = makeProject({ 'burnex.yml': pipelineWithUses('greet') });
     const step = asScript(expandUses(project, isolatedStepRoots(project)).pipeline.jobs[0]!.steps[0]!);
     assert.equal(step.unresolved?.reason, 'step_not_found');
     if (step.unresolved?.reason === 'step_not_found') {

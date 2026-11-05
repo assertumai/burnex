@@ -113,7 +113,7 @@ function requireComplete(
   if (missing !== undefined) {
     throw new StepcastError(
       `пункт «${itemSlug}»: репозиторий «${label}» не объявляет ${missing}`,
-      { at: itemSlug, hint: 'Объявите его в .stepcast/config.yml' },
+      { at: itemSlug, hint: 'Объявите его в .burnex/config.yml' },
     );
   }
 

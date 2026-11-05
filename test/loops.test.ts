@@ -20,7 +20,7 @@ import { tempDir } from './tmp.js';
 
 async function run(project: Project, adapter?: ReturnType<typeof createFakeBackend>['adapter']): Promise<RunResult> {
   return runPipeline({
-    expanded: expandPipeline({ pipelinePath: project.path('stepcast.yml'), config: project.config }),
+    expanded: expandPipeline({ pipelinePath: project.path('burnex.yml'), config: project.config }),
     config: { ...project.config, runs: { ...project.config.runs, root: tempDir('runs-') } },
     projectRoot: project.root,
     cwd: project.root,
@@ -60,7 +60,7 @@ describe('job-group-loops: проходы в рабочем дереве cwd', (
   it('повторяет проход, пока проверка не пройдёт; дерево переходит между проходами', async () => {
     const project = makeProject({
       'counter.txt': '0\n',
-      'stepcast.yml': checkFix({
+      'burnex.yml': checkFix({
         threshold: 2,
         max: 4,
         extra: `  after:
@@ -129,7 +129,7 @@ describe('job-group-loops: проходы в рабочем дереве cwd', (
     // Дерево между проходами не меняется, иначе ключ различил бы проходы по
     // отпечатку входов, как различает итерации until.
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 loops:
   l:
@@ -158,7 +158,7 @@ jobs:
   it('исчерпание предела: loop_exhausted, итог failed, разбор по on: failure исполняется', async () => {
     const project = makeProject({
       'counter.txt': '0\n',
-      'stepcast.yml': checkFix({
+      'burnex.yml': checkFix({
         threshold: 100,
         max: 2,
         extra: `  triage:
@@ -184,7 +184,7 @@ jobs:
 
   it('исчерпание при одних успехах последнего прохода: подсказка resume ведёт на точку входа', async () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 loops:
   l:
@@ -214,7 +214,7 @@ jobs:
 
   it('данные первого прохода не видны во втором', async () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 loops:
   l:
@@ -244,7 +244,7 @@ jobs:
 
   it('переменные цикла есть только у участников', async () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 loops:
   l: { jobs: [inside], max_iterations: 2, cost: 1 }
@@ -296,7 +296,7 @@ jobs:
 `;
 
   it('новый проход начинает сессию агента заново', async () => {
-    const project = makeProject({ 'counter.txt': '0\n', 'stepcast.yml': agentLoop });
+    const project = makeProject({ 'counter.txt': '0\n', 'burnex.yml': agentLoop });
     const backend = createFakeBackend({ lines: () => [initLine(), resultLine({ text: 'ок' })] });
     const result = await run(project, backend.adapter);
 
@@ -310,7 +310,7 @@ jobs:
 
   it('cost цикла останавливает шаг посреди прохода', async () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 loops:
   l:
@@ -347,7 +347,7 @@ jobs:
 
 describe('job-group-loops: изолированные деревья', () => {
   function repoProject(pipeline: string): Project {
-    const project = makeProject({ 'counter.txt': '0\n', '.gitignore': 'trace.txt\n', 'stepcast.yml': pipeline });
+    const project = makeProject({ 'counter.txt': '0\n', '.gitignore': 'trace.txt\n', 'burnex.yml': pipeline });
     gitInit(project.root);
     gitCommit(project.root, 'начало');
     return project;
@@ -423,10 +423,10 @@ jobs:
 
 describe('job-group-loops: читатели журнала', () => {
   it('burnex status и usage читают прогон с проходами', async () => {
-    const project = makeProject({ 'counter.txt': '0\n', 'stepcast.yml': checkFix({ threshold: 1, max: 3 }) });
+    const project = makeProject({ 'counter.txt': '0\n', 'burnex.yml': checkFix({ threshold: 1, max: 3 }) });
     // Корень прогонов остаётся умолчанием конфигурации проекта: команды ищут прогон по нему.
     const result = await runPipeline({
-      expanded: expandPipeline({ pipelinePath: project.path('stepcast.yml'), config: project.config }),
+      expanded: expandPipeline({ pipelinePath: project.path('burnex.yml'), config: project.config }),
       config: project.config,
       projectRoot: project.root,
       cwd: project.root,

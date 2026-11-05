@@ -57,7 +57,7 @@ function trigger(entry: number, cron: string, timezone: string | undefined, mome
 
 async function build() {
   const { runsRoot, projectRoot, home } = makeJournalBed();
-  const dir = join(projectRoot, '.stepcast', 'pipelines');
+  const dir = join(projectRoot, '.burnex', 'pipelines');
   mkdirSync(dir, { recursive: true });
   writeFileSync(join(dir, 'nightly.yml'), SCHEDULED);
   writeFileSync(join(dir, 'plain.yml'), PLAIN);
@@ -103,7 +103,7 @@ async function build() {
 describe('ui-schedule: buildSchedule', () => {
   it('в ответ попадают только пайплайны с расписанием', async () => {
     const { project } = await build();
-    assert.deepEqual(project.pipelines.map((entry) => entry.pipeline), ['.stepcast/pipelines/nightly.yml']);
+    assert.deepEqual(project.pipelines.map((entry) => entry.pipeline), ['.burnex/pipelines/nightly.yml']);
   });
 
   it('запись с явным поясом и запись с умолчательным различимы, у обеих есть ближайший момент', async () => {
@@ -129,7 +129,7 @@ describe('ui-schedule: buildSchedule', () => {
 
   it('нераскрывшийся пайплайн даёт строку с причиной', async () => {
     const { project } = await build();
-    assert.deepEqual(project.pipelineErrors.map((entry) => entry.pipeline), ['.stepcast/pipelines/broken.yml']);
+    assert.deepEqual(project.pipelineErrors.map((entry) => entry.pipeline), ['.burnex/pipelines/broken.yml']);
     assert.ok((project.pipelineErrors[0]?.error ?? '') !== '');
   });
 
@@ -148,7 +148,7 @@ describe('ui-schedule: buildSchedule', () => {
 
   it('прогон, записавший путь к пайплайну через симлинк, засчитывается записи', async () => {
     const { runsRoot, projectRoot, home } = makeJournalBed();
-    const dir = join(projectRoot, '.stepcast', 'pipelines');
+    const dir = join(projectRoot, '.burnex', 'pipelines');
     mkdirSync(dir, { recursive: true });
     writeFileSync(join(dir, 'nightly.yml'), SCHEDULED);
     // Тот же проект под другим написанием пути — как `/var` и `/private/var` на macOS.
@@ -158,7 +158,7 @@ describe('ui-schedule: buildSchedule', () => {
       runId: '2026-10-31T03-00-00Z-alias',
       manifest: {
         pipeline: 'nightly',
-        pipeline_file: join(alias, '.stepcast', 'pipelines', 'nightly.yml'),
+        pipeline_file: join(alias, '.burnex', 'pipelines', 'nightly.yml'),
         started_at: '2026-10-31T03:00:01.000Z',
         trigger: trigger(0, '0 4 * * *', 'Europe/Berlin', '2026-10-31T03:00:00Z', false),
       },

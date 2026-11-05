@@ -79,9 +79,9 @@ describe('ui-proposals: GET /api/proposals', () => {
   it('отдаёт очередь проекта вместе с текущим содержимым цели', async (t) => {
     const { runsRoot, projectRoot } = makeJournalBed();
     seedRun(runsRoot, projectRoot, { runId: 'a' });
-    mkdirSync(join(projectRoot, '.stepcast', 'widgets'), { recursive: true });
-    writeFileSync(join(projectRoot, '.stepcast', 'widgets', 'clock.tsx'), 'export default 0;\n');
-    proposeEntry(projectRoot, { target: '.stepcast/widgets/clock.tsx', content: 'export default 1;\n' });
+    mkdirSync(join(projectRoot, '.burnex', 'widgets'), { recursive: true });
+    writeFileSync(join(projectRoot, '.burnex', 'widgets', 'clock.tsx'), 'export default 0;\n');
+    proposeEntry(projectRoot, { target: '.burnex/widgets/clock.tsx', content: 'export default 1;\n' });
 
     const server = await startServer(t, { runsRoot });
     const { code, json } = await fetchJson(server, '/api/proposals');
@@ -91,14 +91,14 @@ describe('ui-proposals: GET /api/proposals', () => {
     assert.equal(projects.length, 1);
     const records = projects[0]?.records as Array<Json>;
     assert.equal(records.length, 1);
-    assert.equal(records[0]?.target, '.stepcast/widgets/clock.tsx');
+    assert.equal(records[0]?.target, '.burnex/widgets/clock.tsx');
     assert.equal(records[0]?.currentContent, 'export default 0;\n');
     assert.equal(records[0]?.content, 'export default 1;\n');
     assert.equal(pick(projects[0], 'mode'), 'queue');
   });
 
   /**
-   * Режим доставки берётся из `.stepcast/config.yml` проекта, и неразбираемый
+   * Режим доставки берётся из `.burnex/config.yml` проекта, и неразбираемый
    * файл одного проекта не вправе гасить очереди остальных: причина идёт
    * негодной записью с именем файла — тем же правилом, каким показывается
    * негодная запись очереди.
@@ -106,8 +106,8 @@ describe('ui-proposals: GET /api/proposals', () => {
   it('неразбираемая конфигурация проекта не гасит очередь: режим queue и названная причина', async (t) => {
     const { runsRoot, projectRoot } = makeJournalBed();
     seedRun(runsRoot, projectRoot, { runId: 'a' });
-    proposeEntry(projectRoot, { target: '.stepcast/widgets/clock.tsx', content: 'export default 1;\n' });
-    writeFileSync(join(projectRoot, '.stepcast', 'config.yml'), 'project: [не отображение вовсе]\n');
+    proposeEntry(projectRoot, { target: '.burnex/widgets/clock.tsx', content: 'export default 1;\n' });
+    writeFileSync(join(projectRoot, '.burnex', 'config.yml'), 'project: [не отображение вовсе]\n');
 
     const server = await startServer(t, { runsRoot });
     const { code, json } = await fetchJson(server, '/api/proposals');
@@ -118,14 +118,14 @@ describe('ui-proposals: GET /api/proposals', () => {
     assert.equal(project.mode, 'queue');
     const invalid = project.invalid as Array<Json>;
     assert.equal(invalid.length, 1);
-    assert.equal(invalid[0]?.file, '.stepcast/config.yml');
+    assert.equal(invalid[0]?.file, '.burnex/config.yml');
     assert.match(String(invalid[0]?.reason), /cannot be parsed/);
   });
 
   it('предложение создания файла ещё не существующего — currentContent пуст (null)', async (t) => {
     const { runsRoot, projectRoot } = makeJournalBed();
     seedRun(runsRoot, projectRoot, { runId: 'a' });
-    proposeEntry(projectRoot, { target: '.stepcast/dashboards/release.yml', content: 'title: r\n' });
+    proposeEntry(projectRoot, { target: '.burnex/dashboards/release.yml', content: 'title: r\n' });
 
     const server = await startServer(t, { runsRoot });
     const { json } = await fetchJson(server, '/api/proposals');
@@ -139,7 +139,7 @@ describe('ui-proposals: POST /api/proposals — принятие', () => {
     const { runsRoot, projectRoot } = makeJournalBed();
     seedRun(runsRoot, projectRoot, { runId: 'a' });
     const record = proposeEntry(projectRoot, {
-      target: '.stepcast/widgets/clock.tsx',
+      target: '.burnex/widgets/clock.tsx',
       content: 'export default 1;\n',
     });
 
@@ -153,7 +153,7 @@ describe('ui-proposals: POST /api/proposals — принятие', () => {
       body: JSON.stringify({ project: projectKeyValue, id: record.id, decision: 'accept' }),
     });
     assert.equal(written.code, 200);
-    assert.equal(readFileSync(join(projectRoot, '.stepcast', 'widgets', 'clock.tsx'), 'utf8'), 'export default 1;\n');
+    assert.equal(readFileSync(join(projectRoot, '.burnex', 'widgets', 'clock.tsx'), 'utf8'), 'export default 1;\n');
 
     const after = await fetchJson(server, '/api/proposals');
     const records = (after.json.projects as Array<Json>)[0]?.records as Array<Json>;
@@ -163,8 +163,8 @@ describe('ui-proposals: POST /api/proposals — принятие', () => {
   it('принятие создаёт недостающий каталог дашбордов', async (t) => {
     const { runsRoot, projectRoot } = makeJournalBed();
     seedRun(runsRoot, projectRoot, { runId: 'a' });
-    const record = proposeEntry(projectRoot, { target: '.stepcast/dashboards/release.yml', content: 'title: r\n' });
-    assert.equal(existsSync(join(projectRoot, '.stepcast', 'dashboards')), false);
+    const record = proposeEntry(projectRoot, { target: '.burnex/dashboards/release.yml', content: 'title: r\n' });
+    assert.equal(existsSync(join(projectRoot, '.burnex', 'dashboards')), false);
 
     const server = await startServer(t, { runsRoot });
     const overview = await fetchJson(server, '/api/proposals');
@@ -176,17 +176,17 @@ describe('ui-proposals: POST /api/proposals — принятие', () => {
       body: JSON.stringify({ project: projectKeyValue, id: record.id, decision: 'accept' }),
     });
     assert.equal(written.code, 200);
-    assert.equal(readFileSync(join(projectRoot, '.stepcast', 'dashboards', 'release.yml'), 'utf8'), 'title: r\n');
+    assert.equal(readFileSync(join(projectRoot, '.burnex', 'dashboards', 'release.yml'), 'utf8'), 'title: r\n');
   });
 
   it('принятие не изменяет ни одного иного файла проекта', async (t) => {
     const { runsRoot, projectRoot } = makeJournalBed();
     seedRun(runsRoot, projectRoot, { runId: 'a' });
     writeFileSync(join(projectRoot, 'backlog.md'), '# Очередь\n');
-    mkdirSync(join(projectRoot, '.stepcast', 'widgets'), { recursive: true });
-    writeFileSync(join(projectRoot, '.stepcast', 'widgets', 'other.tsx'), 'export default 0;\n');
+    mkdirSync(join(projectRoot, '.burnex', 'widgets'), { recursive: true });
+    writeFileSync(join(projectRoot, '.burnex', 'widgets', 'other.tsx'), 'export default 0;\n');
     const record = proposeEntry(projectRoot, {
-      target: '.stepcast/widgets/clock.tsx',
+      target: '.burnex/widgets/clock.tsx',
       content: 'export default 1;\n',
     });
 
@@ -194,7 +194,7 @@ describe('ui-proposals: POST /api/proposals — принятие', () => {
     const overview = await fetchJson(server, '/api/proposals');
     const projectKeyValue = (overview.json.projects as Array<Json>)[0]?.projectKey as string;
 
-    const beforeOther = readFileSync(join(projectRoot, '.stepcast', 'widgets', 'other.tsx'), 'utf8');
+    const beforeOther = readFileSync(join(projectRoot, '.burnex', 'widgets', 'other.tsx'), 'utf8');
     const beforeBacklog = readFileSync(join(projectRoot, 'backlog.md'), 'utf8');
 
     await sendJson(server, {
@@ -203,17 +203,17 @@ describe('ui-proposals: POST /api/proposals — принятие', () => {
       body: JSON.stringify({ project: projectKeyValue, id: record.id, decision: 'accept' }),
     });
 
-    assert.equal(readFileSync(join(projectRoot, '.stepcast', 'widgets', 'other.tsx'), 'utf8'), beforeOther);
+    assert.equal(readFileSync(join(projectRoot, '.burnex', 'widgets', 'other.tsx'), 'utf8'), beforeOther);
     assert.equal(readFileSync(join(projectRoot, 'backlog.md'), 'utf8'), beforeBacklog);
   });
 
   it('отказ по разошедшемуся отпечатку — запись остаётся открытой, файл не тронут', async (t) => {
     const { runsRoot, projectRoot } = makeJournalBed();
     seedRun(runsRoot, projectRoot, { runId: 'a' });
-    mkdirSync(join(projectRoot, '.stepcast', 'widgets'), { recursive: true });
-    writeFileSync(join(projectRoot, '.stepcast', 'widgets', 'clock.tsx'), 'original\n');
-    const record = proposeEntry(projectRoot, { target: '.stepcast/widgets/clock.tsx', content: 'proposed\n' });
-    writeFileSync(join(projectRoot, '.stepcast', 'widgets', 'clock.tsx'), 'изменено руками\n');
+    mkdirSync(join(projectRoot, '.burnex', 'widgets'), { recursive: true });
+    writeFileSync(join(projectRoot, '.burnex', 'widgets', 'clock.tsx'), 'original\n');
+    const record = proposeEntry(projectRoot, { target: '.burnex/widgets/clock.tsx', content: 'proposed\n' });
+    writeFileSync(join(projectRoot, '.burnex', 'widgets', 'clock.tsx'), 'изменено руками\n');
 
     const server = await startServer(t, { runsRoot });
     const overview = await fetchJson(server, '/api/proposals');
@@ -226,7 +226,7 @@ describe('ui-proposals: POST /api/proposals — принятие', () => {
     });
     assert.equal(written.code, 400);
     assert.match(String(written.json.error), /изменился с момента предложения/);
-    assert.equal(readFileSync(join(projectRoot, '.stepcast', 'widgets', 'clock.tsx'), 'utf8'), 'изменено руками\n');
+    assert.equal(readFileSync(join(projectRoot, '.burnex', 'widgets', 'clock.tsx'), 'utf8'), 'изменено руками\n');
 
     const after = await fetchJson(server, '/api/proposals');
     const records = (after.json.projects as Array<Json>)[0]?.records as Array<Json>;
@@ -236,9 +236,9 @@ describe('ui-proposals: POST /api/proposals — принятие', () => {
   it('отказ принятия создания файла, который к моменту решения уже появился', async (t) => {
     const { runsRoot, projectRoot } = makeJournalBed();
     seedRun(runsRoot, projectRoot, { runId: 'a' });
-    const record = proposeEntry(projectRoot, { target: '.stepcast/dashboards/release.yml', content: 'title: p\n' });
-    mkdirSync(join(projectRoot, '.stepcast', 'dashboards'), { recursive: true });
-    writeFileSync(join(projectRoot, '.stepcast', 'dashboards', 'release.yml'), 'title: созданный руками\n');
+    const record = proposeEntry(projectRoot, { target: '.burnex/dashboards/release.yml', content: 'title: p\n' });
+    mkdirSync(join(projectRoot, '.burnex', 'dashboards'), { recursive: true });
+    writeFileSync(join(projectRoot, '.burnex', 'dashboards', 'release.yml'), 'title: созданный руками\n');
 
     const server = await startServer(t, { runsRoot });
     const overview = await fetchJson(server, '/api/proposals');
@@ -251,7 +251,7 @@ describe('ui-proposals: POST /api/proposals — принятие', () => {
     });
     assert.equal(written.code, 400);
     assert.equal(
-      readFileSync(join(projectRoot, '.stepcast', 'dashboards', 'release.yml'), 'utf8'),
+      readFileSync(join(projectRoot, '.burnex', 'dashboards', 'release.yml'), 'utf8'),
       'title: созданный руками\n',
     );
   });
@@ -261,9 +261,9 @@ describe('ui-proposals: POST /api/proposals — отклонение', () => {
   it('отклонение переводит запись в rejected и не трогает цель', async (t) => {
     const { runsRoot, projectRoot } = makeJournalBed();
     seedRun(runsRoot, projectRoot, { runId: 'a' });
-    mkdirSync(join(projectRoot, '.stepcast', 'widgets'), { recursive: true });
-    writeFileSync(join(projectRoot, '.stepcast', 'widgets', 'clock.tsx'), 'original\n');
-    const record = proposeEntry(projectRoot, { target: '.stepcast/widgets/clock.tsx', content: 'proposed\n' });
+    mkdirSync(join(projectRoot, '.burnex', 'widgets'), { recursive: true });
+    writeFileSync(join(projectRoot, '.burnex', 'widgets', 'clock.tsx'), 'original\n');
+    const record = proposeEntry(projectRoot, { target: '.burnex/widgets/clock.tsx', content: 'proposed\n' });
 
     const server = await startServer(t, { runsRoot });
     const overview = await fetchJson(server, '/api/proposals');
@@ -275,7 +275,7 @@ describe('ui-proposals: POST /api/proposals — отклонение', () => {
       body: JSON.stringify({ project: projectKeyValue, id: record.id, decision: 'reject' }),
     });
     assert.equal(written.code, 200);
-    assert.equal(readFileSync(join(projectRoot, '.stepcast', 'widgets', 'clock.tsx'), 'utf8'), 'original\n');
+    assert.equal(readFileSync(join(projectRoot, '.burnex', 'widgets', 'clock.tsx'), 'utf8'), 'original\n');
 
     const after = await fetchJson(server, '/api/proposals');
     const records = (after.json.projects as Array<Json>)[0]?.records as Array<Json>;

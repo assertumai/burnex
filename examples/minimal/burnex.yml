@@ -1,7 +1,7 @@
 # Пример, который запускается текущим срезом движка целиком.
 #
-#   burnex lint examples/minimal/stepcast.yml
-#   burnex run  examples/minimal/stepcast.yml --input topic=сессии
+#   burnex lint examples/minimal/burnex.yml
+#   burnex run  examples/minimal/burnex.yml --input topic=сессии
 #
 # Показывает: общую сессию агентских шагов, структурированный выход работы,
 # автоматическую передачу выхода в контекст следующей работы, предикаты и

@@ -12,7 +12,7 @@ import { tempDir } from './tmp.js';
 async function run(project: Project): Promise<RunResult> {
   const runsRoot = tempDir('runs-');
   return runPipeline({
-    expanded: expandPipeline({ pipelinePath: project.path('stepcast.yml'), config: project.config }),
+    expanded: expandPipeline({ pipelinePath: project.path('burnex.yml'), config: project.config }),
     config: { ...project.config, runs: { ...project.config.runs, root: runsRoot } },
     projectRoot: project.root,
     cwd: project.root,
@@ -57,7 +57,7 @@ ${broken}
 describe('pipeline-execution: ошибка внутри работы не роняет прогон', () => {
   it('нечитаемый файл контекста роняет работу, а не прогон', async () => {
     const project = makeProject({
-      'stepcast.yml': pipeline(`    steps:
+      'burnex.yml': pipeline(`    steps:
       - id: think
         agent: claude
         prompt: ok
@@ -76,7 +76,7 @@ describe('pipeline-execution: ошибка внутри работы не рон
 
   it('прогон получает ненулевой код возврата', async () => {
     const project = makeProject({
-      'stepcast.yml': pipeline(`    steps:
+      'burnex.yml': pipeline(`    steps:
       - id: think
         agent: claude
         prompt: ok
@@ -94,7 +94,7 @@ describe('pipeline-execution: ошибка внутри работы не рон
 
   it('состояние прогона получает конечный статус, а не остаётся в running', async () => {
     const project = makeProject({
-      'stepcast.yml': pipeline(`    steps:
+      'burnex.yml': pipeline(`    steps:
       - id: think
         agent: claude
         prompt: ok
@@ -113,7 +113,7 @@ describe('pipeline-execution: ошибка внутри работы не рон
 
   it('работа с needs: all отрабатывает после такой ошибки', async () => {
     const project = makeProject({
-      'stepcast.yml': pipeline(`    steps:
+      'burnex.yml': pipeline(`    steps:
       - id: think
         agent: claude
         prompt: ok
@@ -130,7 +130,7 @@ describe('pipeline-execution: ошибка внутри работы не рон
 
   it('причина записывается событием в журнал', async () => {
     const project = makeProject({
-      'stepcast.yml': pipeline(`    steps:
+      'burnex.yml': pipeline(`    steps:
       - id: think
         agent: claude
         prompt: ok

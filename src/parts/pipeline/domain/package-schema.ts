@@ -9,6 +9,7 @@ import { PACKAGE_ADDRESS_PREFIX, packagedAddressName } from '../../../kernel/pac
 import { buildPackageIndex, findPackage, listPackagePipelineNames, packagePipelineFile } from '../../packages/index.js';
 import { describePackageFailure } from '../../packages/manifest.js';
 import { findProjectRoot } from '../run/journal/paths.js';
+import { homeRoot } from '../../../kernel/dirs.js';
 
 // Реэкспорт: сам `findPackageRoot` переехал в ядро
 // (`src/kernel/packageRoot.ts`, design.md, Решение 6), а публикуется — отсюда:
@@ -163,7 +164,7 @@ export interface ResolvedPipelineTarget {
 }
 
 export interface PipelineTargetOptions {
-  /** Каталог глобального конфига: пакеты home лежат рядом. По умолчанию `~/.stepcast`. */
+  /** Каталог глобального конфига: пакеты home лежат рядом. По умолчанию `~/.burnex`. */
   readonly globalConfigDir?: string;
 }
 
@@ -175,7 +176,7 @@ export interface PipelineTargetOptions {
 const PACKAGE_ADDRESS = /^([a-z0-9]+(?:-[a-z0-9]+)*):([A-Za-z0-9_-]+)$/;
 
 function resolvePackagePipeline(cwd: string, packageName: string, pipelineName: string, options: PipelineTargetOptions): string {
-  const globalConfigDir = options.globalConfigDir ?? join(homedir(), '.stepcast');
+  const globalConfigDir = options.globalConfigDir ?? homeRoot(homedir());
   const index = buildPackageIndex({
     projectRoot: findProjectRoot(cwd),
     globalPath: join(globalConfigDir, 'config.yml'),
@@ -186,7 +187,7 @@ function resolvePackagePipeline(cwd: string, packageName: string, pipelineName: 
   if (found === undefined) {
     const known = index.packages.filter((entry) => entry.shadowedBy === undefined).map((entry) => entry.name);
     throw new StepcastError(`Пакет ${packageName} не найден (цель ${address})`, {
-      hint: known.length > 0 ? `Известные пакеты: ${known.join(', ')}` : 'Пакетов нет ни в проекте (.stepcast/packages), ни в домашнем слое',
+      hint: known.length > 0 ? `Известные пакеты: ${known.join(', ')}` : 'Пакетов нет ни в проекте (.burnex/packages), ни в домашнем слое',
     });
   }
   if ('broken' in found) {

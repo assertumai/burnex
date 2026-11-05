@@ -33,7 +33,7 @@ async function runWithConfig(
   options: { readonly signal?: AbortSignal; readonly breakAnchor?: boolean } = {},
 ): Promise<RunResult> {
   const runsRoot = tempDir('runs-');
-  const expanded = expandPipeline({ pipelinePath: project.path('stepcast.yml'), config });
+  const expanded = expandPipeline({ pipelinePath: project.path('burnex.yml'), config });
 
   return runPipeline({
     expanded,
@@ -45,12 +45,12 @@ async function runWithConfig(
   });
 }
 
-/** Тот же проект, но с объявленным составом `project.nested_repos`, будто он объявлен в `.stepcast/config.yml`. */
+/** Тот же проект, но с объявленным составом `project.nested_repos`, будто он объявлен в `.burnex/config.yml`. */
 function withNestedRepos(project: Project, nestedRepos: readonly string[]): Config {
   return { ...project.config, project: { ...project.config.project, nestedRepos } };
 }
 
-/** Тот же проект, но с добавленными раннерами, будто они объявлены в `.stepcast/config.yml`. */
+/** Тот же проект, но с добавленными раннерами, будто они объявлены в `.burnex/config.yml`. */
 function withRunners(
   project: Project,
   runners: Readonly<Record<string, { readonly command: readonly string[]; readonly extensions?: readonly string[] }>>,
@@ -80,7 +80,7 @@ async function runWithScriptRoots(
   options: { readonly signal?: AbortSignal } = {},
 ): Promise<RunResult> {
   const runsRoot = tempDir('runs-');
-  const expanded = expandPipeline({ pipelinePath: project.path('stepcast.yml'), config, scriptRoots });
+  const expanded = expandPipeline({ pipelinePath: project.path('burnex.yml'), config, scriptRoots });
   return runPipeline({
     expanded,
     config: { ...config, runs: { ...config.runs, root: runsRoot } },
@@ -103,7 +103,7 @@ async function runWithStepRoots(
 ): Promise<RunResult> {
   const runsRoot = tempDir('runs-');
   const expanded = expandPipeline({
-    pipelinePath: project.path('stepcast.yml'),
+    pipelinePath: project.path('burnex.yml'),
     config,
     stepRoots,
     scriptRoots: isolatedScriptRoots(project),
@@ -152,7 +152,7 @@ describe('pipeline-execution: границы отказа', () => {
   // Сценарий: «Остановка по объявленному условию»
   it('останавливается, когда объявленный предикат не прошёл', async () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 version: 1
 kind: pipeline
 name: тесты-должны-проходить
@@ -185,7 +185,7 @@ jobs:
   // Сценарий: «Причина остановки называется пользователю»
   it('называет причину из закрытого перечня и указывает работу и шаг', async () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 version: 1
 kind: pipeline
 name: причина
@@ -211,7 +211,7 @@ jobs:
   // Сценарий: «Неисполнимость выявляется заранее»
   it('отклоняет неподготавливаемый режим рабочей директории до первой работы', async () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 version: 1
 kind: pipeline
 name: изоляция
@@ -237,7 +237,7 @@ jobs:
   // Сценарий: «Процесс шага не удалось запустить»
   it('различает незапустившийся процесс и непройденный предикат', async () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 version: 1
 kind: pipeline
 name: нет-команды
@@ -309,7 +309,7 @@ describe('run-exit-code: код возврата по статусу и прич
 
 describe('bookkeeping: неудача учёта не трогает статусы', () => {
   it('пишет событие и возвращает undefined', async () => {
-    const project = makeProject({ 'stepcast.yml': THREE_STEPS });
+    const project = makeProject({ 'burnex.yml': THREE_STEPS });
     const result = await run(project);
 
     const { bookkeep } = await import('../src/parts/pipeline/run/bookkeeping.js');
@@ -326,7 +326,7 @@ describe('bookkeeping: неудача учёта не трогает стату�
   });
 
   it('пропускает успешный результат без следа в журнале', async () => {
-    const project = makeProject({ 'stepcast.yml': THREE_STEPS });
+    const project = makeProject({ 'burnex.yml': THREE_STEPS });
     const result = await run(project);
 
     const { bookkeep } = await import('../src/parts/pipeline/run/bookkeeping.js');
@@ -346,7 +346,7 @@ describe('bookkeeping: неудача учёта не трогает стату�
 describe('pipeline-execution: пропуск не является остановкой', () => {
   it('не приписывает причину пропущенной работе', async () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 version: 1
 kind: pipeline
 name: пропуск
@@ -375,7 +375,7 @@ jobs:
 describe('workspace-anchor: якорь в журнале шага', () => {
   // Сценарий: «Якорь записан у успешного шага»
   it('записывает якорь и отпечаток входов каждому шагу', async () => {
-    const project = makeProject({ 'stepcast.yml': THREE_STEPS });
+    const project = makeProject({ 'burnex.yml': THREE_STEPS });
     const result = await run(project);
 
     for (const step of steps(result)) {
@@ -390,7 +390,7 @@ describe('workspace-anchor: якорь в журнале шага', () => {
   // Сценарий: «Якорь записан у упавшего шага»
   it('записывает якорь и у шага, завершившегося отказом', async () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 version: 1
 kind: pipeline
 name: отказ
@@ -414,7 +414,7 @@ jobs:
 
   // Сценарий: «Способ фиксации выбирается один раз на прогон»
   it('пишет способ фиксации в манифест прогона', async () => {
-    const project = makeProject({ 'stepcast.yml': THREE_STEPS });
+    const project = makeProject({ 'burnex.yml': THREE_STEPS });
     const result = await run(project);
 
     const manifest = JSON.parse(readFileSync(result.journal.paths.manifest, 'utf8')) as {
@@ -426,7 +426,7 @@ jobs:
   // Сценарий: «Шаг ничего не изменил» / «Шаг изменил дерево»
   it('пишет diff.patch только когда шаг изменил дерево', async () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 version: 1
 kind: pipeline
 name: диффы
@@ -454,7 +454,7 @@ jobs:
     const project = makeProject({
       'следят.txt': 'исходное',
       'не-следят.txt': 'исходное',
-      'stepcast.yml': `
+      'burnex.yml': `
 version: 1
 kind: pipeline
 name: объявленные-входы
@@ -485,7 +485,7 @@ jobs:
 describe('workspace-anchor: составной якорь работ и состав в манифесте', () => {
   // Задача 9 / Сценарий: объявленный состав даёт способ composite и записывает его в манифест.
   it('прогон в дереве с объявленным составом даёт anchor_kind composite и nested_repos в манифесте', async () => {
-    const project = makeProject({ 'stepcast.yml': THREE_STEPS, 'public-site/.gitkeep': '' });
+    const project = makeProject({ 'burnex.yml': THREE_STEPS, 'public-site/.gitkeep': '' });
     gitInit(project.root);
     gitInit(project.path('public-site'));
     gitCommit(project.path('public-site'), 'начало части');
@@ -508,7 +508,7 @@ describe('workspace-anchor: составной якорь работ и сост
 
   // Задача 9 / Сценарий: прогон без объявления не меняет форму записей.
   it('прогон без объявленного состава даёт прежний anchor_kind и манифест без nested_repos', async () => {
-    const project = makeProject({ 'stepcast.yml': THREE_STEPS });
+    const project = makeProject({ 'burnex.yml': THREE_STEPS });
     gitInit(project.root);
     gitCommit(project.root, 'первый');
 
@@ -527,7 +527,7 @@ describe('workspace-anchor: составной якорь работ и сост
 describe('run-journal: ключ шага', () => {
   // Сценарий: «Одинаковые условия дают одинаковый ключ»
   it('даёт одинаковый ключ на неизменном дереве с теми же входами', async () => {
-    const project = makeProject({ 'stepcast.yml': THREE_STEPS, 'src/a.ts': 'код' });
+    const project = makeProject({ 'burnex.yml': THREE_STEPS, 'src/a.ts': 'код' });
 
     const first = await run(project);
     const second = await run(project);
@@ -540,7 +540,7 @@ describe('run-journal: ключ шага', () => {
 
   // Сценарий: «Изменение рабочего дерева меняет ключ»
   it('меняет ключ, когда изменилось дерево', async () => {
-    const project = makeProject({ 'stepcast.yml': THREE_STEPS, 'src/a.ts': 'код' });
+    const project = makeProject({ 'burnex.yml': THREE_STEPS, 'src/a.ts': 'код' });
     const before = steps(await run(project)).map((step) => step.key);
 
     project.write('src/a.ts', 'другой код');
@@ -551,10 +551,10 @@ describe('run-journal: ключ шага', () => {
 
   // Сценарий: «Изменение промпта меняет ключ»
   it('меняет ключ, когда изменилось определение шага', async () => {
-    const project = makeProject({ 'stepcast.yml': THREE_STEPS });
+    const project = makeProject({ 'burnex.yml': THREE_STEPS });
     const before = steps(await run(project)).map((step) => step.key);
 
-    project.write('stepcast.yml', THREE_STEPS.replace('echo, один', 'echo, другой'));
+    project.write('burnex.yml', THREE_STEPS.replace('echo, один', 'echo, другой'));
     const after = steps(await run(project)).map((step) => step.key);
 
     assert.notEqual(after[0], before[0]);
@@ -609,11 +609,11 @@ jobs:
     // дали бы разные деревья git, и ключ разошёлся бы по вполне законной
     // причине — рабочее дерево изменилось, — заслонив собой то, что здесь
     // проверяется.
-    const project = makeProject({ 'stepcast.yml': pipeline });
+    const project = makeProject({ 'burnex.yml': pipeline });
     const runOnce = async (concurrency: number): Promise<RunResult> => {
       const backend = createFakeBackend({ lines: [resultLine({ text: 'ок', structured: { slug: 'x' } })] });
       return runPipeline({
-        expanded: expandPipeline({ pipelinePath: project.path('stepcast.yml'), config: project.config }),
+        expanded: expandPipeline({ pipelinePath: project.path('burnex.yml'), config: project.config }),
         config: {
           ...project.config,
           runs: { ...project.config.runs, root: tempDir('runs-') },
@@ -636,7 +636,7 @@ describe('step-context: блок предшественников берётся
   // того, кто из двух завершился раньше.
   it('не пускает в блок выход одновременной работы, не входящей в предшественники', async () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 version: 1
 kind: pipeline
 name: блок-по-графу
@@ -675,7 +675,7 @@ jobs:
     };
 
     const result = await runPipeline({
-      expanded: expandPipeline({ pipelinePath: project.path('stepcast.yml'), config: project.config }),
+      expanded: expandPipeline({ pipelinePath: project.path('burnex.yml'), config: project.config }),
       config: {
         ...project.config,
         runs: { ...project.config.runs, root: tempDir('runs-') },
@@ -727,7 +727,7 @@ jobs:
 
   // Сценарий: «Чередующийся поток сохраняет причинный порядок» — задача 5.3
   it('порядковые номера возрастают без повторов, а поток каждой работы читается как её последовательность', async () => {
-    const project = makeProject({ 'stepcast.yml': TWO_INDEPENDENT });
+    const project = makeProject({ 'burnex.yml': TWO_INDEPENDENT });
     const result = await run(project);
     const events = readEvents(result.journal.paths);
 
@@ -775,7 +775,7 @@ jobs:
 describe('bookkeeping: отказ фиксации якоря не роняет прогон', () => {
   // Сценарий: «Фиксация не удалась» / «Последствие ограничено возобновлением»
   it('доводит прогон до конца с теми же статусами, что и без отказов', async () => {
-    const project = makeProject({ 'stepcast.yml': THREE_STEPS });
+    const project = makeProject({ 'burnex.yml': THREE_STEPS });
 
     const clean = await run(project);
     const broken = await run(project, { breakAnchor: true });
@@ -802,7 +802,7 @@ describe('bookkeeping: отказ фиксации якоря не роняет 
 describe('pipeline-lanes: lane в записи работы', () => {
   it('запись работы с объявленной lane несёт её в status.json', async () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 name: p
 jobs:
@@ -829,7 +829,7 @@ describe('step-execution: BURNEX_BIN', () => {
     // под `node --test` argv[1] — файл теста, и движок он не называет
     // (merge-check-rebuilds-engine).
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 name: p
 jobs:
@@ -850,7 +850,7 @@ jobs:
 describe('step-execution: структурированный выход командного шага', () => {
   it('публикует выход командного шага через output.from', async () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 name: p
 jobs:
@@ -880,7 +880,7 @@ jobs:
 
   it('предикат schema на командном шаге проверяет разобранный выход', async () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 name: p
 jobs:
@@ -905,7 +905,7 @@ jobs:
 
   it('отказывает попытку с причиной, называющей шаг и неразбираемый вывод, и повторяет её', async () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 name: p
 jobs:
@@ -931,7 +931,7 @@ jobs:
 
   it('командный шаг без output_schema структурированного выхода не имеет', async () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 name: p
 jobs:
@@ -956,7 +956,7 @@ describe('step-execution: шаг script', () => {
   // Сценарий: «Рабочая директория и окружение»
   it('исполняется на sh в рабочей директории работы, с BURNEX_* и логами', async () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 name: p
 jobs:
@@ -968,7 +968,7 @@ jobs:
         expect: [{ exit_code: 0 }]
 `,
     });
-    project.write('.stepcast/scripts/greet.sh', '#!/bin/sh\necho "job=$BURNEX_JOB arg=$1"\npwd\n');
+    project.write('.burnex/scripts/greet.sh', '#!/bin/sh\necho "job=$BURNEX_JOB arg=$1"\npwd\n');
 
     const result = await runWithScriptRoots(project, project.config, isolatedScriptRoots(project));
     assert.equal(result.status, 'success');
@@ -982,7 +982,7 @@ jobs:
 
   it('исполняется на python3, разрешённом расширением .py', async () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 name: p
 jobs:
@@ -995,7 +995,7 @@ jobs:
 `,
     });
     project.write(
-      '.stepcast/scripts/report.py',
+      '.burnex/scripts/report.py',
       'import os, sys\nprint("job", os.environ.get("BURNEX_JOB"), "args", sys.argv[1:])\n',
     );
 
@@ -1010,7 +1010,7 @@ jobs:
   // Сценарий: «Файл без бита исполнения»
   it('исполняется обычным порядком, даже когда файл не помечен исполняемым', async () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 name: p
 jobs:
@@ -1021,7 +1021,7 @@ jobs:
         expect: [{ exit_code: 0 }]
 `,
     });
-    const path = project.write('.stepcast/scripts/noexec.py', 'print("ok")\n');
+    const path = project.write('.burnex/scripts/noexec.py', 'print("ok")\n');
     chmodSync(path, 0o644);
 
     const result = await runWithScriptRoots(project, project.config, isolatedScriptRoots(project));
@@ -1031,7 +1031,7 @@ jobs:
   // Сценарий: «Предикаты и попытки действуют так же»
   it('повторяет попытку по BURNEX_ATTEMPT и проходит вторым разом', async () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 name: p
 jobs:
@@ -1044,7 +1044,7 @@ jobs:
 `,
     });
     project.write(
-      '.stepcast/scripts/flaky.sh',
+      '.burnex/scripts/flaky.sh',
       '#!/bin/sh\n[ "$BURNEX_ATTEMPT" = "1" ] && exit 1\nexit 0\n',
     );
 
@@ -1061,7 +1061,7 @@ jobs:
   // (`describeOutcome`), — то есть рядом с таймаутом и отменой.
   it('таймаут отказывает шагу script тем же порядком, что и шагу run', async () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 name: p
 jobs:
@@ -1073,7 +1073,7 @@ jobs:
         expect: [{ exit_code: 0 }]
 `,
     });
-    project.write('.stepcast/scripts/slow.sh', '#!/bin/sh\nsleep 30\n');
+    project.write('.burnex/scripts/slow.sh', '#!/bin/sh\nsleep 30\n');
 
     const result = await runWithScriptRoots(project, project.config, isolatedScriptRoots(project));
     assert.equal(result.status, 'failed');
@@ -1086,7 +1086,7 @@ jobs:
 
   it('отмена прогона снимает шаг script с причиной отмены', async () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 name: p
 jobs:
@@ -1097,7 +1097,7 @@ jobs:
         expect: [{ exit_code: 0 }]
 `,
     });
-    project.write('.stepcast/scripts/sleep.sh', '#!/bin/sh\nsleep 30\n');
+    project.write('.burnex/scripts/sleep.sh', '#!/bin/sh\nsleep 30\n');
 
     const controller = new AbortController();
     setTimeout(() => controller.abort(), 200).unref();
@@ -1116,7 +1116,7 @@ jobs:
   // файл, исчезнувший между линтом и заходом.
   it('неразрешённый скрипт отказывает названно, не запуская процесса', async () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 name: p
 jobs:
@@ -1136,14 +1136,14 @@ jobs:
     const step = status.jobs.flatMap((job) => job.steps).find((entry) => entry.id === 'gone');
     assert.equal(step?.attempts.length, 1, 'запускать нечего — попытка одна и терминальная');
     assert.match(step?.reason ?? '', /Файл скрипта не найден/);
-    assert.match(step?.reason ?? '', new RegExp(join(roots.project, '.stepcast', 'scripts').replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+    assert.match(step?.reason ?? '', new RegExp(join(roots.project, '.burnex', 'scripts').replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
     assert.equal(step?.cause, HaltCause.spawnFailed);
   });
 
   // Сценарий: «Интерпретатора нет на машине»
   it('отсутствующий на машине раннер отказывает названно и расходует одну попытку из трёх', async () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 name: p
 jobs:
@@ -1155,9 +1155,9 @@ jobs:
         attempts: { max: 3 }
 `,
     });
-    project.write('.stepcast/scripts/build.py', 'print(1)\n');
+    project.write('.burnex/scripts/build.py', 'print(1)\n');
     const config = withRunners(project, {
-      uv: { command: ['stepcast-test-runner-that-does-not-exist-xyz'] },
+      uv: { command: ['burnex-test-runner-that-does-not-exist-xyz'] },
     });
 
     const result = await runWithScriptRoots(project, config, isolatedScriptRoots(project));
@@ -1167,7 +1167,7 @@ jobs:
     const step = status.jobs.flatMap((job) => job.steps).find((entry) => entry.id === 'build');
     assert.equal(step?.attempts.length, 1, 'попытка терминальна и не расходует оставшиеся две');
     assert.match(step?.reason ?? '', /uv/);
-    assert.match(step?.reason ?? '', /stepcast-test-runner-that-does-not-exist-xyz/);
+    assert.match(step?.reason ?? '', /burnex-test-runner-that-does-not-exist-xyz/);
     assert.equal(step?.cause, HaltCause.spawnFailed);
   });
 });
@@ -1176,7 +1176,7 @@ describe('result-contract: предикат script', () => {
   // Сценарий: «Проверка пройдена»
   it('код возврата 0 — предикат пройден', async () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 name: p
 jobs:
@@ -1187,7 +1187,7 @@ jobs:
         expect: [{ script: probe.sh }]
 `,
     });
-    project.write('.stepcast/scripts/probe.sh', '#!/bin/sh\nexit 0\n');
+    project.write('.burnex/scripts/probe.sh', '#!/bin/sh\nexit 0\n');
 
     const result = await runWithScriptRoots(project, project.config, isolatedScriptRoots(project));
     assert.equal(result.status, 'success');
@@ -1196,7 +1196,7 @@ jobs:
   // Сценарий: «Проверка не пройдена» / «Предикат всегда жёсткий»
   it('ненулевой код возврата проваливает попытку — без output.json причина называет код возврата', async () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 name: p
 jobs:
@@ -1207,7 +1207,7 @@ jobs:
         expect: [{ script: probe.sh }]
 `,
     });
-    project.write('.stepcast/scripts/probe.sh', '#!/bin/sh\nexit 3\n');
+    project.write('.burnex/scripts/probe.sh', '#!/bin/sh\nexit 3\n');
 
     const result = await runWithScriptRoots(project, project.config, isolatedScriptRoots(project));
     assert.equal(result.status, 'failed');
@@ -1220,7 +1220,7 @@ jobs:
   // Сценарий: «Скрипт называет причину»
   it('причина отказа берётся из output.json.reason, когда скрипт его записал', async () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 name: p
 jobs:
@@ -1232,7 +1232,7 @@ jobs:
 `,
     });
     project.write(
-      '.stepcast/scripts/probe.sh',
+      '.burnex/scripts/probe.sh',
       '#!/bin/sh\necho \'{"reason": "найден TODO в src/index.ts:42"}\' > "$BURNEX_OUTPUT"\nexit 1\n',
     );
 
@@ -1248,7 +1248,7 @@ jobs:
   // попытки — те же файлы, что и у самого шага, а не собственный вызов.
   it('input.json несёт код возврата попытки и пути к её stdout.log/stderr.log', async () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 name: p
 jobs:
@@ -1259,7 +1259,7 @@ jobs:
         expect: [{ script: probe.sh }]
 `,
     });
-    project.write('.stepcast/scripts/probe.sh', '#!/bin/sh\nexit 0\n');
+    project.write('.burnex/scripts/probe.sh', '#!/bin/sh\nexit 0\n');
 
     const result = await runWithScriptRoots(project, project.config, isolatedScriptRoots(project));
     assert.equal(result.status, 'success');
@@ -1279,7 +1279,7 @@ describe('run-journal: подкаталог script-<n> предиката script
   // Сценарий: «Один предикат, три попытки»
   it('нумерация сквозная через попытки: script-1, script-2, script-3', async () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 name: p
 jobs:
@@ -1291,7 +1291,7 @@ jobs:
         expect: [{ exit_code: 0 }, { script: probe.sh }]
 `,
     });
-    project.write('.stepcast/scripts/probe.sh', '#!/bin/sh\nexit 0\n');
+    project.write('.burnex/scripts/probe.sh', '#!/bin/sh\nexit 0\n');
 
     const result = await runWithScriptRoots(project, project.config, isolatedScriptRoots(project));
     assert.equal(result.status, 'success');
@@ -1305,7 +1305,7 @@ jobs:
   // Сценарий: «Несколько предикатов в одной попытке»
   it('несколько предикатов одной попытки делят общую сквозную нумерацию', async () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 name: p
 jobs:
@@ -1316,8 +1316,8 @@ jobs:
         expect: [{ script: a.sh }, { script: b.sh }]
 `,
     });
-    project.write('.stepcast/scripts/a.sh', '#!/bin/sh\nexit 0\n');
-    project.write('.stepcast/scripts/b.sh', '#!/bin/sh\nexit 0\n');
+    project.write('.burnex/scripts/a.sh', '#!/bin/sh\nexit 0\n');
+    project.write('.burnex/scripts/b.sh', '#!/bin/sh\nexit 0\n');
 
     const result = await runWithScriptRoots(project, project.config, isolatedScriptRoots(project));
     assert.equal(result.status, 'success');
@@ -1331,7 +1331,7 @@ jobs:
   // Сценарий: «Состав подкаталога» / «Скрипт записал причину отказа»
   it('подкаталог несёт input.json, stdout.log, stderr.log и output.json скрипта', async () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 name: p
 jobs:
@@ -1343,7 +1343,7 @@ jobs:
 `,
     });
     project.write(
-      '.stepcast/scripts/probe.sh',
+      '.burnex/scripts/probe.sh',
       '#!/bin/sh\necho out-line\necho err-line 1>&2\necho \'{"reason": "причина"}\' > "$BURNEX_OUTPUT"\nexit 1\n',
     );
 
@@ -1365,7 +1365,7 @@ describe('step-execution: контракт входа и выхода script', (
   // Сценарий: «Вход доезжает файлом» / «Выход доезжает файлом»
   it('sh видит BURNEX_INPUT/BURNEX_OUTPUT, читает вход и пишет выход, работа публикует его и следующая работа читает', async () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 name: p
 jobs:
@@ -1383,7 +1383,7 @@ jobs:
 `,
     });
     project.write(
-      '.stepcast/scripts/plan.sh',
+      '.burnex/scripts/plan.sh',
       '#!/bin/sh\n' +
         'echo "log line"\n' +
         'python3 -c "import json,os; d=json.load(open(os.environ[\'BURNEX_INPUT\'])); json.dump({\'slug\': d[\'slug\']+\'-planned\'}, open(os.environ[\'BURNEX_OUTPUT\'], \'w\'))"\n',
@@ -1409,7 +1409,7 @@ jobs:
   // Сценарий: «Вход не объявлен»
   it('input.json существует пустым отображением, когда input не объявлен', async () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 name: p
 jobs:
@@ -1419,7 +1419,7 @@ jobs:
         script: noop.sh
 `,
     });
-    project.write('.stepcast/scripts/noop.sh', '#!/bin/sh\ncat "$BURNEX_INPUT"\n');
+    project.write('.burnex/scripts/noop.sh', '#!/bin/sh\ncat "$BURNEX_INPUT"\n');
 
     const result = await runWithScriptRoots(project, project.config, isolatedScriptRoots(project));
     assert.equal(result.status, 'success');
@@ -1430,7 +1430,7 @@ jobs:
   // Сценарий: «Переменные контракта у прочих шагов»
   it('шаг run не получает BURNEX_INPUT/BURNEX_OUTPUT', async () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 name: p
 jobs:
@@ -1451,7 +1451,7 @@ jobs:
   // Сценарий: «Скрипт на Python без библиотеки»
   it('python без SDK читает вход, логирует в stdout, пишет выход и публикует данные через BURNEX_BIN', async () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 name: p
 jobs:
@@ -1465,7 +1465,7 @@ jobs:
 `,
     });
     project.write(
-      '.stepcast/scripts/work.py',
+      '.burnex/scripts/work.py',
       [
         'import json, os, subprocess',
         "d = json.load(open(os.environ['BURNEX_INPUT']))",
@@ -1496,7 +1496,7 @@ jobs:
   // а не своим строковым видом.
   it('объект из выхода работы доезжает до input соседней работы объектом', async () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 name: p
 jobs:
@@ -1516,11 +1516,11 @@ jobs:
 `,
     });
     project.write(
-      '.stepcast/scripts/plan.sh',
+      '.burnex/scripts/plan.sh',
       '#!/bin/sh\ncat > "$BURNEX_OUTPUT" <<\'JSON\'\n{"item": {"slug": "add-oauth", "repos": ["ui"]}}\nJSON\n',
     );
     project.write(
-      '.stepcast/scripts/take.py',
+      '.burnex/scripts/take.py',
       [
         'import json, os',
         "d = json.load(open(os.environ['BURNEX_INPUT']))",
@@ -1543,7 +1543,7 @@ jobs:
   // Три отказа проверки выхода
   it('файл выхода, не разбираемый как JSON, — отказ попытки', async () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 name: p
 jobs:
@@ -1554,7 +1554,7 @@ jobs:
         attempts: { max: 2 }
 `,
     });
-    project.write('.stepcast/scripts/bad.sh', '#!/bin/sh\necho "не json" > "$BURNEX_OUTPUT"\n');
+    project.write('.burnex/scripts/bad.sh', '#!/bin/sh\necho "не json" > "$BURNEX_OUTPUT"\n');
 
     const result = await runWithScriptRoots(project, project.config, isolatedScriptRoots(project));
     assert.equal(result.status, 'failed');
@@ -1567,7 +1567,7 @@ jobs:
 
   it('объявлен output_schema, а файла нет, — отказ попытки', async () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 name: p
 jobs:
@@ -1580,7 +1580,7 @@ jobs:
 `,
     });
     project.write('schema.json', JSON.stringify({ type: 'object' }));
-    project.write('.stepcast/scripts/silent.sh', '#!/bin/sh\ntrue\n');
+    project.write('.burnex/scripts/silent.sh', '#!/bin/sh\ntrue\n');
 
     const result = await runWithScriptRoots(project, project.config, isolatedScriptRoots(project));
     assert.equal(result.status, 'failed');
@@ -1593,7 +1593,7 @@ jobs:
 
   it('значение не по схеме — отказ с замечаниями валидатора', async () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 name: p
 jobs:
@@ -1609,7 +1609,7 @@ jobs:
       'schema.json',
       JSON.stringify({ type: 'object', required: ['ok'], properties: { ok: { const: true } } }),
     );
-    project.write('.stepcast/scripts/wrong.sh', '#!/bin/sh\necho \'{"ok": false}\' > "$BURNEX_OUTPUT"\n');
+    project.write('.burnex/scripts/wrong.sh', '#!/bin/sh\necho \'{"ok": false}\' > "$BURNEX_OUTPUT"\n');
 
     const result = await runWithScriptRoots(project, project.config, isolatedScriptRoots(project));
     assert.equal(result.status, 'failed');
@@ -1624,7 +1624,7 @@ jobs:
   // в памяти движка.
   it('выход первой попытки не становится выходом успешной второй, ничего не записавшей', async () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 name: p
 jobs:
@@ -1638,7 +1638,7 @@ jobs:
 `,
     });
     project.write(
-      '.stepcast/scripts/flaky.sh',
+      '.burnex/scripts/flaky.sh',
       '#!/bin/sh\n' +
         'if [ "$BURNEX_ATTEMPT" = "1" ]; then echo \'{"stale": true}\' > "$BURNEX_OUTPUT"; exit 1; fi\n' +
         'exit 0\n',
@@ -1659,7 +1659,7 @@ jobs:
   // предикат, а не отсутствие файла, которое он же и объясняет.
   it('упавший скрипт с объявленным output_schema отказывает по exit_code, а не по файлу', async () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 name: p
 jobs:
@@ -1673,7 +1673,7 @@ jobs:
 `,
     });
     project.write('schema.json', JSON.stringify({ type: 'object' }));
-    project.write('.stepcast/scripts/boom.sh', '#!/bin/sh\necho "упал" >&2\nexit 3\n');
+    project.write('.burnex/scripts/boom.sh', '#!/bin/sh\necho "упал" >&2\nexit 3\n');
 
     const result = await runWithScriptRoots(project, project.config, isolatedScriptRoots(project));
     assert.equal(result.status, 'failed');
@@ -1685,7 +1685,7 @@ jobs:
   // Сценарий: «Выход прошлой попытки не выдаётся за нынешний»
   it('стухший выход первой попытки не становится выходом второй', async () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 name: p
 jobs:
@@ -1703,7 +1703,7 @@ jobs:
       JSON.stringify({ type: 'object', required: ['ok'], properties: { ok: { const: true } } }),
     );
     project.write(
-      '.stepcast/scripts/stale.sh',
+      '.burnex/scripts/stale.sh',
       '#!/bin/sh\n' +
         'if [ "$BURNEX_ATTEMPT" = "1" ]; then echo \'{"ok": false}\' > "$BURNEX_OUTPUT"; exit 0; fi\n' +
         'exit 1\n',
@@ -1744,15 +1744,15 @@ fs.writeFileSync(process.env.BURNEX_OUTPUT, JSON.stringify({ greeting: 'прив
   });
 
   function writeGreetStep(project: Project): void {
-    project.write('.stepcast/steps/greet/step.yml', GREET_MANIFEST);
-    project.write('.stepcast/steps/greet/main.cjs', GREET_MAIN);
-    project.write('.stepcast/steps/greet/output.schema.json', GREET_OUTPUT_SCHEMA);
+    project.write('.burnex/steps/greet/step.yml', GREET_MANIFEST);
+    project.write('.burnex/steps/greet/main.cjs', GREET_MAIN);
+    project.write('.burnex/steps/greet/output.schema.json', GREET_OUTPUT_SCHEMA);
   }
 
   // Сценарий: «Параметры доезжают входом контракта» + «Выход доступен как у шага script»
   it('параметры доезжают в input.json, выход проверяется схемой манифеста и публикуется работой', async () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 name: p
 jobs:
@@ -1787,7 +1787,7 @@ jobs:
   // Сценарий: «Объект из выхода работы выше по графу» (pipeline-definition)
   it('объект из выхода работы выше по графу доезжает параметром целиком, а не строкой', async () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 name: p
 jobs:
@@ -1804,7 +1804,7 @@ jobs:
 `,
     });
     project.write(
-      '.stepcast/steps/echo-item/step.yml',
+      '.burnex/steps/echo-item/step.yml',
       `
 version: 1
 kind: step
@@ -1820,12 +1820,12 @@ params:
 `,
     );
     project.write(
-      '.stepcast/steps/echo-item/main.cjs',
+      '.burnex/steps/echo-item/main.cjs',
       "const fs = require('node:fs');\n" +
         "fs.copyFileSync(process.env.BURNEX_INPUT, process.env.BURNEX_OUTPUT);\n",
     );
     project.write(
-      '.stepcast/scripts/plan.sh',
+      '.burnex/scripts/plan.sh',
       '#!/bin/sh\necho \'{"item": {"slug": "bug-42", "count": 3}, "files": ["a.ts", "b.ts"]}\' > "$BURNEX_OUTPUT"\n',
     );
 
@@ -1841,7 +1841,7 @@ params:
   // Сценарий: «Умолчание попадает во вход»
   it('умолчание манифеста попадает во вход, когда with не передан', async () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 name: p
 jobs:
@@ -1860,7 +1860,7 @@ jobs:
   // Сценарий: «Выход проверяется схемой манифеста»
   it('выход не по output_schema манифеста отказывает попытке с замечаниями валидатора', async () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 name: p
 jobs:
@@ -1868,12 +1868,12 @@ jobs:
     steps: [{ id: c, uses: greet }]
 `,
     });
-    project.write('.stepcast/steps/greet/step.yml', GREET_MANIFEST);
+    project.write('.burnex/steps/greet/step.yml', GREET_MANIFEST);
     project.write(
-      '.stepcast/steps/greet/main.cjs',
+      '.burnex/steps/greet/main.cjs',
       "const fs = require('node:fs');\nfs.writeFileSync(process.env.BURNEX_OUTPUT, JSON.stringify({ wrong: true }));\n",
     );
-    project.write('.stepcast/steps/greet/output.schema.json', GREET_OUTPUT_SCHEMA);
+    project.write('.burnex/steps/greet/output.schema.json', GREET_OUTPUT_SCHEMA);
 
     const result = await runWithStepRoots(project, isolatedStepRoots(project));
     assert.equal(result.status, 'failed');
@@ -1884,7 +1884,7 @@ jobs:
   // Сценарий: «Гарантии исполнения те же»
   it('timeout, expect и attempts.max действуют у шага uses как у script', async () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 name: p
 jobs:
@@ -1907,7 +1907,7 @@ jobs:
   // Сценарий: «Прогон отказывает неразрешённому шагу»
   it('uses с неизвестным именем отказывает одной терминальной попыткой тем же текстом, что дал бы линт', async () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 name: p
 jobs:
@@ -1927,7 +1927,7 @@ jobs:
   // Сценарий: «Отложенный параметр не по схеме»
   it('параметр, пришедший выходом работы выше по графу не по схеме, отказывает одной терминальной попыткой', async () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 name: p
 jobs:
@@ -1945,10 +1945,10 @@ jobs:
     });
     writeGreetStep(project);
     project.write(
-      '.stepcast/steps/greet/step.yml',
+      '.burnex/steps/greet/step.yml',
       GREET_MANIFEST.replace('name: { type: string, default: world }', 'name: { type: integer }'),
     );
-    project.write('.stepcast/scripts/plan.sh', '#!/bin/sh\necho \'{"name": "not-a-number"}\' > "$BURNEX_OUTPUT"\n');
+    project.write('.burnex/scripts/plan.sh', '#!/bin/sh\necho \'{"name": "not-a-number"}\' > "$BURNEX_OUTPUT"\n');
 
     const result = await runWithStepRoots(project, isolatedStepRoots(project));
     assert.equal(result.status, 'failed');
@@ -1963,9 +1963,9 @@ jobs:
 });
 
 describe('step-execution: встроенный образец changed-files', () => {
-  it('перечисляет изменённые файлы рабочего дерева проекта без каталогов .stepcast/steps/', async () => {
+  it('перечисляет изменённые файлы рабочего дерева проекта без каталогов .burnex/steps/', async () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 name: p
 jobs:
@@ -1987,7 +1987,7 @@ jobs:
     // а не переопределяется здесь: тест обязан видеть настоящий пакетный
     // каталог `src/builtin/steps/changed-files`.
     const result = await runPipeline({
-      expanded: expandPipeline({ pipelinePath: project.path('stepcast.yml'), config: project.config }),
+      expanded: expandPipeline({ pipelinePath: project.path('burnex.yml'), config: project.config }),
       config: { ...project.config, runs: { ...project.config.runs, root: tempDir('runs-') } },
       projectRoot: project.root,
       cwd: project.root,
@@ -2003,7 +2003,7 @@ jobs:
 
   it('исполняется раннером node со снятой обёрткой (wrapper: none)', async () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 name: p
 jobs:
@@ -2028,7 +2028,7 @@ jobs:
       },
     };
     const result = await runPipeline({
-      expanded: expandPipeline({ pipelinePath: project.path('stepcast.yml'), config }),
+      expanded: expandPipeline({ pipelinePath: project.path('burnex.yml'), config }),
       config: { ...config, runs: { ...config.runs, root: tempDir('runs-') } },
       projectRoot: project.root,
       cwd: project.root,
@@ -2046,7 +2046,7 @@ jobs:
 describe('step-execution: обёртка burnex:step у раннера node', () => {
   it('default export модуля .mjs вызывается входом шага, а результат — выход шага', async () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 name: p
 jobs:
@@ -2059,7 +2059,7 @@ jobs:
 `,
     });
     project.write(
-      '.stepcast/scripts/pick.mjs',
+      '.burnex/scripts/pick.mjs',
       'export default function (input) {\n' +
         '  console.log("picking");\n' +
         '  return { sum: input.a + input.b };\n' +
@@ -2077,7 +2077,7 @@ jobs:
 
   it('модуль .mjs без default export исполняется как обычный скрипт', async () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 name: p
 jobs:
@@ -2087,7 +2087,7 @@ jobs:
         script: plain.mjs
 `,
     });
-    project.write('.stepcast/scripts/plain.mjs', 'console.log("plain ran");\n');
+    project.write('.burnex/scripts/plain.mjs', 'console.log("plain ran");\n');
 
     const result = await runWithScriptRoots(project, project.config, isolatedScriptRoots(project));
     assert.equal(result.status, 'success');
@@ -2099,7 +2099,7 @@ jobs:
 
   it('брошенная ошибка внутри default export даёт ненулевой код и сообщение в stderr', async () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 name: p
 jobs:
@@ -2111,7 +2111,7 @@ jobs:
 `,
     });
     project.write(
-      '.stepcast/scripts/throws.mjs',
+      '.burnex/scripts/throws.mjs',
       'export default function () {\n  throw new Error("боль");\n}\n',
     );
 
@@ -2125,7 +2125,7 @@ jobs:
   // Сценарий: «Асинхронная точка входа»
   it('обёртка дожидается промиса точки входа и пишет разрешённое значение', async () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 name: p
 jobs:
@@ -2138,7 +2138,7 @@ jobs:
 `,
     });
     project.write(
-      '.stepcast/scripts/slow.mjs',
+      '.burnex/scripts/slow.mjs',
       'export default async function (input) {\n' +
         '  await new Promise((resolve) => setTimeout(resolve, 10));\n' +
         '  return { doubled: input.n * 2 };\n' +
@@ -2153,7 +2153,7 @@ jobs:
 
   it('default export модуля .mjs не функцией — отказ с названной причиной', async () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 name: p
 jobs:
@@ -2164,7 +2164,7 @@ jobs:
         attempts: { max: 1 }
 `,
     });
-    project.write('.stepcast/scripts/table.mjs', 'export default { a: 1 };\n');
+    project.write('.burnex/scripts/table.mjs', 'export default { a: 1 };\n');
 
     const result = await runWithScriptRoots(project, project.config, isolatedScriptRoots(project));
     assert.equal(result.status, 'failed');
@@ -2179,7 +2179,7 @@ jobs:
   // обычному скрипту.
   it('скрипт .cjs без экспорта исполняется как обычный скрипт', async () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 name: p
 jobs:
@@ -2191,7 +2191,7 @@ jobs:
 `,
     });
     project.write(
-      '.stepcast/scripts/plain.cjs',
+      '.burnex/scripts/plain.cjs',
       'const fs = require("node:fs");\n' +
         'console.log("cjs ran");\n' +
         'fs.writeFileSync(process.env.BURNEX_OUTPUT, JSON.stringify({ from: "тело" }));\n',
@@ -2206,7 +2206,7 @@ jobs:
 
   it('скрипт .js без package.json рядом исполняется как обычный скрипт CommonJS', async () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 name: p
 jobs:
@@ -2217,7 +2217,7 @@ jobs:
         attempts: { max: 1 }
 `,
     });
-    project.write('.stepcast/scripts/plain.js', 'console.log("js ran");\n');
+    project.write('.burnex/scripts/plain.js', 'console.log("js ran");\n');
 
     const result = await runWithScriptRoots(project, project.config, isolatedScriptRoots(project));
     assert.equal(result.status, 'success');
@@ -2227,7 +2227,7 @@ jobs:
 
   it('module.exports функцией в .cjs — точка входа наравне с default export', async () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 name: p
 jobs:
@@ -2240,7 +2240,7 @@ jobs:
 `,
     });
     project.write(
-      '.stepcast/scripts/entry.cjs',
+      '.burnex/scripts/entry.cjs',
       'module.exports = function (input) {\n  return { twice: input.a * 2 };\n};\n',
     );
 
@@ -2252,7 +2252,7 @@ jobs:
 
   it('process.argv.slice(2) внутри модуля равен args шага', async () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 name: p
 jobs:
@@ -2264,7 +2264,7 @@ jobs:
 `,
     });
     project.write(
-      '.stepcast/scripts/argv.mjs',
+      '.burnex/scripts/argv.mjs',
       'console.log(JSON.stringify(process.argv.slice(2)));\n',
     );
 
@@ -2311,7 +2311,7 @@ jobs:
       [ONE_STEP, 'success'],
       [FAILING_STEP, 'failed'],
     ] as const) {
-      const project = makeProject({ 'stepcast.yml': pipeline });
+      const project = makeProject({ 'burnex.yml': pipeline });
       gitInit(project.root);
       gitCommit(project.root, 'первый');
 
@@ -2323,7 +2323,7 @@ jobs:
 
   it('снимает индексный файл якоря после отмены', async () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 version: 1
 kind: pipeline
 name: отмена
@@ -2348,7 +2348,7 @@ jobs:
   });
 
   it('не оставляет слушателей попытки на сигнале отмены прогона', async () => {
-    const project = makeProject({ 'stepcast.yml': THREE_STEPS });
+    const project = makeProject({ 'burnex.yml': THREE_STEPS });
     const controller = new AbortController();
 
     const result = await run(project, { signal: controller.signal });
@@ -2360,11 +2360,11 @@ jobs:
   });
 
   it('отказ снятия якоря работы не меняет её статус и виден событием учёта', async () => {
-    const project = makeProject({ 'stepcast.yml': ONE_STEP });
+    const project = makeProject({ 'burnex.yml': ONE_STEP });
     gitInit(project.root);
     gitCommit(project.root, 'первый');
     const runsRoot = tempDir('runs-');
-    const expanded = expandPipeline({ pipelinePath: project.path('stepcast.yml'), config: project.config });
+    const expanded = expandPipeline({ pipelinePath: project.path('burnex.yml'), config: project.config });
 
     const result = await runPipeline({
       expanded,
@@ -2398,7 +2398,7 @@ jobs:
 
   it('отмена с отказавшей обратной операцией даёт canceled и событие до завершения прогона', async () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 version: 1
 kind: pipeline
 name: отмена-с-отказом
@@ -2413,7 +2413,7 @@ jobs:
     gitInit(project.root);
     gitCommit(project.root, 'первый');
     const runsRoot = tempDir('runs-');
-    const expanded = expandPipeline({ pipelinePath: project.path('stepcast.yml'), config: project.config });
+    const expanded = expandPipeline({ pipelinePath: project.path('burnex.yml'), config: project.config });
     const controller = new AbortController();
     setTimeout(() => controller.abort(), 200).unref();
 
@@ -2455,7 +2455,7 @@ describe('run-progress: наблюдение onEvent в runPipeline', () => {
     onEvent: (event: Event, usage: UsageSnapshot) => void,
   ): Promise<RunResult> {
     const runsRoot = tempDir('runs-');
-    const expanded = expandPipeline({ pipelinePath: project.path('stepcast.yml'), config: project.config });
+    const expanded = expandPipeline({ pipelinePath: project.path('burnex.yml'), config: project.config });
     return runPipeline({
       expanded,
       config: { ...project.config, runs: { ...project.config.runs, root: runsRoot } },
@@ -2466,7 +2466,7 @@ describe('run-progress: наблюдение onEvent в runPipeline', () => {
   }
 
   it('наблюдатель получает run.started первым и run.finished последним', async () => {
-    const project = makeProject({ 'stepcast.yml': THREE_STEPS });
+    const project = makeProject({ 'burnex.yml': THREE_STEPS });
     const received: Event[] = [];
 
     await runObserved(project, (event) => received.push(event));
@@ -2476,7 +2476,7 @@ describe('run-progress: наблюдение onEvent в runPipeline', () => {
   });
 
   it('последовательность доставленных событий совпадает с events.ndjson', async () => {
-    const project = makeProject({ 'stepcast.yml': THREE_STEPS });
+    const project = makeProject({ 'burnex.yml': THREE_STEPS });
     const received: string[] = [];
 
     const result = await runObserved(project, (event) => received.push(event.kind));
@@ -2488,7 +2488,7 @@ describe('run-progress: наблюдение onEvent в runPipeline', () => {
   });
 
   it('снимок расхода не убывает по ходу прогона (по времени, дошедшему до второго исхода шага)', async () => {
-    const project = makeProject({ 'stepcast.yml': THREE_STEPS });
+    const project = makeProject({ 'burnex.yml': THREE_STEPS });
     const finishedSnapshots: UsageSnapshot[] = [];
 
     await runObserved(project, (event, usage) => {
@@ -2500,7 +2500,7 @@ describe('run-progress: наблюдение onEvent в runPipeline', () => {
   });
 
   it('прогон с бросающим наблюдателем даёт тот же статус, код возврата и записи работ, что и без него', async () => {
-    const project = makeProject({ 'stepcast.yml': THREE_STEPS });
+    const project = makeProject({ 'burnex.yml': THREE_STEPS });
 
     const clean = await run(project);
     const observed = await runObserved(project, () => {

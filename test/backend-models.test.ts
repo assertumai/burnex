@@ -18,8 +18,8 @@ import { tempDir } from './tmp.js';
 function configFrom(yaml: string): Config {
   const base = tempDir('models-config-');
   const home = join(base, 'home');
-  mkdirSync(join(home, '.stepcast'), { recursive: true });
-  const globalPath = join(home, '.stepcast', 'config.yml');
+  mkdirSync(join(home, '.burnex'), { recursive: true });
+  const globalPath = join(home, '.burnex', 'config.yml');
   writeFileSync(globalPath, yaml);
   return resolveConfig({ cwd: base, home, globalPath, projectPath: null }).config;
 }
@@ -294,9 +294,9 @@ describe('agent-backend: перечисление не ограничивает 
       models: [{ name: 'только-эта' }],
     });
 
-    const project = makeProject({ 'stepcast.yml': PIPELINE });
+    const project = makeProject({ 'burnex.yml': PIPELINE });
     const projectConfig = resolveConfig({ cwd: project.root, home: project.home }).config;
-    const expanded = expandPipeline({ pipelinePath: project.path('stepcast.yml'), config: projectConfig });
+    const expanded = expandPipeline({ pipelinePath: project.path('burnex.yml'), config: projectConfig });
 
     assert.equal(asAgent(expanded.pipeline.jobs[0]!.steps[0]!).model, 'заведомо-вне-перечисления');
     assert.deepEqual(
@@ -326,9 +326,9 @@ describe('agent-backend: перечисление не ограничивает 
     const registry = registryWith('probe', jsonNamesDiscovery([missing]));
     assert.equal((await discoverModels('probe', config, registry)).status, 'not_installed');
 
-    const project = makeProject({ 'stepcast.yml': PIPELINE });
+    const project = makeProject({ 'burnex.yml': PIPELINE });
     const projectConfig = resolveConfig({ cwd: project.root, home: project.home }).config;
-    const expanded = expandPipeline({ pipelinePath: project.path('stepcast.yml'), config: projectConfig });
+    const expanded = expandPipeline({ pipelinePath: project.path('burnex.yml'), config: projectConfig });
 
     assert.equal(asAgent(expanded.pipeline.jobs[0]!.steps[0]!).model, 'заведомо-вне-перечисления');
     assert.deepEqual(

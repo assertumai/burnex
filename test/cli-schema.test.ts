@@ -64,23 +64,23 @@ function pathPattern(path: string): RegExp {
 }
 
 function withPlugin(body: string, config = 'plugins: ["./plugins/probe.mjs"]\n'): Project {
-  const project = makeProject({ '.stepcast/config.yml': config });
-  const path = join(project.root, '.stepcast', 'plugins', 'probe.mjs');
+  const project = makeProject({ '.burnex/config.yml': config });
+  const path = join(project.root, '.burnex', 'plugins', 'probe.mjs');
   mkdirSync(dirname(path), { recursive: true });
   writeFileSync(path, body);
   return project;
 }
 
 describe('burnex schema: без плагинов', () => {
-  it('пишет .stepcast/schema/*.json, побайтово равные поставляемым пакетом, и печатает оба пути', async () => {
+  it('пишет .burnex/schema/*.json, побайтово равные поставляемым пакетом, и печатает оба пути', async () => {
     const project = makeProject({});
 
     const outcome = await cli(project, ['schema']);
 
     assert.equal(outcome.code, ExitCode.ok, outcome.stderr);
 
-    const pipelinePath = project.path(join('.stepcast', 'schema', 'pipeline.schema.json'));
-    const jobPath = project.path(join('.stepcast', 'schema', 'job.schema.json'));
+    const pipelinePath = project.path(join('.burnex', 'schema', 'pipeline.schema.json'));
+    const jobPath = project.path(join('.burnex', 'schema', 'job.schema.json'));
     assert.match(outcome.stdout, pathPattern(pipelinePath));
     assert.match(outcome.stdout, pathPattern(jobPath));
     // Встроенный вид шага decision (`user-decision-steps`) всегда в дереве, но
@@ -101,8 +101,8 @@ describe('burnex schema: без плагинов', () => {
 
     assert.equal(outcome.code, ExitCode.ok, outcome.stderr);
 
-    const pipelinePath = project.path(join('.stepcast', 'schema', 'pipeline.schema.json'));
-    const jobPath = project.path(join('.stepcast', 'schema', 'job.schema.json'));
+    const pipelinePath = project.path(join('.burnex', 'schema', 'pipeline.schema.json'));
+    const jobPath = project.path(join('.burnex', 'schema', 'job.schema.json'));
     assert.equal(readFileSync(pipelinePath, 'utf8'), readFileSync(`${ROOT}schema/pipeline.schema.json`, 'utf8'));
     assert.equal(readFileSync(jobPath, 'utf8'), readFileSync(`${ROOT}schema/job.schema.json`, 'utf8'));
   });
@@ -114,7 +114,7 @@ describe('burnex schema: без плагинов', () => {
     const outcome = await cli(project, ['schema']);
     assert.equal(outcome.code, ExitCode.ok, outcome.stderr);
 
-    const pipelinePath = project.path(join('.stepcast', 'schema', 'pipeline.schema.json'));
+    const pipelinePath = project.path(join('.burnex', 'schema', 'pipeline.schema.json'));
     const schema = JSON.parse(readFileSync(pipelinePath, 'utf8')) as object;
     const validate = new Ajv2020({ allErrors: true, strict: false }).compile(schema);
 
@@ -142,7 +142,7 @@ describe('burnex schema: проект с плагином', () => {
 
     assert.equal(outcome.code, ExitCode.ok, outcome.stderr);
 
-    const jobPath = project.path(join('.stepcast', 'schema', 'job.schema.json'));
+    const jobPath = project.path(join('.burnex', 'schema', 'job.schema.json'));
     const job = JSON.parse(readFileSync(jobPath, 'utf8')) as unknown;
     const validate = new Ajv2020({ allErrors: true, strict: false }).compile(job as object);
 
@@ -164,11 +164,11 @@ describe('burnex schema: проект с плагином', () => {
     const jobPath = project.path(join('schemas', 'job.schema.json'));
     assert.ok(existsSync(pipelinePath));
     assert.ok(existsSync(jobPath));
-    assert.ok(!existsSync(project.path(join('.stepcast', 'schema', 'pipeline.schema.json'))));
+    assert.ok(!existsSync(project.path(join('.burnex', 'schema', 'pipeline.schema.json'))));
 
     assert.match(outcome.stdout, pathPattern(pipelinePath));
     assert.match(outcome.stdout, pathPattern(jobPath));
-    assert.ok(!outcome.stdout.includes(join('.stepcast', 'schema')), outcome.stdout);
+    assert.ok(!outcome.stdout.includes(join('.burnex', 'schema')), outcome.stdout);
   });
 
   it('плагин, который не импортируется, отказывает конфигурационной ошибкой и не пишет ни одного файла', async () => {
@@ -177,6 +177,6 @@ describe('burnex schema: проект с плагином', () => {
     const outcome = await cli(project, ['schema']);
 
     assert.equal(outcome.code, ExitCode.configError);
-    assert.ok(!existsSync(project.path(join('.stepcast', 'schema'))));
+    assert.ok(!existsSync(project.path(join('.burnex', 'schema'))));
   });
 });

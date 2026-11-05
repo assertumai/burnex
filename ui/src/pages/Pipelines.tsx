@@ -442,7 +442,7 @@ export function Pipelines({
           title="No pipelines found"
           description={
             <>
-              The daemon looks for <code>stepcast.yml</code> and <code>.stepcast/pipelines/*.yml</code> in the
+              The daemon looks for <code>burnex.yml</code> and <code>.burnex/pipelines/*.yml</code> in the
               projects whose runs it can see.
             </>
           }

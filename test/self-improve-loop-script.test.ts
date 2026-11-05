@@ -146,7 +146,7 @@ describe('scripts/self-improve-loop.sh', () => {
     assert.match(result.stderr, /self-improve-loop: остановка — исчерпан MAX_RUNS \(итераций выполнено: 2\)/);
     const seen = calls(bed);
     assert.equal(seen.length, 2);
-    assert.deepEqual(seen[0]!.argv, ['run', '.stepcast/pipelines/self-improve.yml', '--input', 'onto=main']);
+    assert.deepEqual(seen[0]!.argv, ['run', '.burnex/pipelines/self-improve.yml', '--input', 'onto=main']);
   });
 
   it('нет коммита при коде прогона 0 → остановка с кодом 0', () => {
@@ -251,12 +251,12 @@ describe('scripts/self-improve-loop.sh', () => {
     assert.deepEqual(calls(bed), []);
   });
 
-  it('без BURNEX_LOOP_ENGINE_DIR worktree движка лежит в <git common dir>/stepcast-loop-engine', () => {
+  it('без BURNEX_LOOP_ENGINE_DIR worktree движка лежит в <git common dir>/burnex-loop-engine', () => {
     const bed = makeBed();
     const result = run(bed, ['none 0'], { BURNEX_LOOP_ENGINE_DIR: '' });
 
     assert.equal(result.status, 0);
-    assert.ok(existsSync(join(bed.repo, '.git/stepcast-loop-engine/dist/src/bin.js')));
+    assert.ok(existsSync(join(bed.repo, '.git/burnex-loop-engine/dist/src/bin.js')));
     assert.equal(calls(bed).length, 1);
   });
 

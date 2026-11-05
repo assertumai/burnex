@@ -2,6 +2,7 @@ import { readdirSync, type Dirent } from 'node:fs';
 import { join } from 'node:path';
 
 import { directoryOperations, type TreeOperation, type TreeOrigin, type TreeRowFailure } from './tree.js';
+import { cabinetDir } from '../dirs.js';
 
 /**
  * Обход каталога плагинов слоя (`user-plugins`, design.md, Решение 1, 2).
@@ -23,9 +24,9 @@ import { directoryOperations, type TreeOperation, type TreeOrigin, type TreeRowF
  * чужая папка делала бы неработоспособными все команды разом.
  */
 
-/** Каталог плагинов слоя: `<корень>/.stepcast/plugins/`. */
+/** Каталог плагинов слоя: `<корень>/.burnex/plugins/`. */
 export function pluginsDirPath(root: string): string {
-  return join(root, '.stepcast', 'plugins');
+  return join(cabinetDir(root), 'plugins');
 }
 
 /** Имена каталогов верхнего уровня, отсортированные; вложенность глубже уровня не обходится. */
@@ -54,7 +55,7 @@ export function reservedNameFailure(id: string): TreeRowFailure {
  * берёт его от каталога глобального конфига (`dirname(globalPath)`), а не от
  * домашнего каталога машины, иначе сборка с подставным путём конфигурации —
  * запасное ядро демона (`src/parts/ui/daemon/kernel.ts`) — читала бы настоящие
- * `~/.stepcast/plugins`, перестав быть встроенной.
+ * `~/.burnex/plugins`, перестав быть встроенной.
  */
 export function discoverPluginDirectories(
   pluginsDir: string,

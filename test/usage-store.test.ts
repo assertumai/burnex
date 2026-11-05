@@ -29,7 +29,7 @@ function manifestOf(runId: string, projectRoot: string, overrides: Partial<RunMa
   return {
     run_id: runId,
     pipeline: 'demo',
-    pipeline_file: `${projectRoot}/stepcast.yml`,
+    pipeline_file: `${projectRoot}/burnex.yml`,
     lock_hash: 'abc',
     project_root: projectRoot,
     workspace: { mode: 'cwd' },
@@ -588,9 +588,9 @@ describe('usage-store: попытки работы не сливаются в у
 
 describe('usage-store: движок дописывает запись по завершении прогона', () => {
   it('прогон, завершившийся любым исходом, получает строку в хранилище с величинами своего usage.json', async () => {
-    const project = makeProject({ 'stepcast.yml': MINIMAL_PIPELINE });
+    const project = makeProject({ 'burnex.yml': MINIMAL_PIPELINE });
     const runsRoot = tempDir('runs-');
-    const expanded = expandPipeline({ pipelinePath: project.path('stepcast.yml'), config: project.config });
+    const expanded = expandPipeline({ pipelinePath: project.path('burnex.yml'), config: project.config });
 
     const result = await runPipeline({
       expanded,
@@ -611,9 +611,9 @@ describe('usage-store: движок дописывает запись по за�
   });
 
   it('у идущего прогона записи в хранилище нет', async () => {
-    const project = makeProject({ 'stepcast.yml': MINIMAL_PIPELINE });
+    const project = makeProject({ 'burnex.yml': MINIMAL_PIPELINE });
     const runsRoot = tempDir('runs-');
-    const expanded = expandPipeline({ pipelinePath: project.path('stepcast.yml'), config: project.config });
+    const expanded = expandPipeline({ pipelinePath: project.path('burnex.yml'), config: project.config });
     const key = projectKey(project.root);
 
     let sawRunning = false;

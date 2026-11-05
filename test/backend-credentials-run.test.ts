@@ -117,7 +117,7 @@ async function start(
   });
   const adapter = options.adapter ?? dumpingAgent([initLine(), resultLine({ text: `ответ с ключом ${VALUE}` })]);
   const result = await runPipeline({
-    expanded: expandPipeline({ pipelinePath: project.path('stepcast.yml'), config, registry: vaultState.registry }),
+    expanded: expandPipeline({ pipelinePath: project.path('burnex.yml'), config, registry: vaultState.registry }),
     config,
     projectRoot: project.root,
     cwd: project.root,
@@ -146,7 +146,7 @@ ${steps}
 
 describe('backend-credentials: доставка процессу CLI', () => {
   it('значение доходит до процесса CLI поверх env_deny, вывод агента замаскирован', async () => {
-    const project = makeProject({ 'stepcast.yml': pipeline(AGENT) });
+    const project = makeProject({ 'burnex.yml': pipeline(AGENT) });
     const state = await vault();
     const { result } = await start(project, state, { envDeny: ['*_KEY'] });
 
@@ -163,7 +163,7 @@ describe('backend-credentials: доставка процессу CLI', () => {
 
   it('командный шаг того же прогона значения не получает', async () => {
     const project = makeProject({
-      'stepcast.yml': pipeline(
+      'burnex.yml': pipeline(
         AGENT + `      - { id: cmd, run: [sh, -c, 'printenv ${VARIABLE} || echo ABSENT'] }\n`,
       ),
     });
@@ -175,7 +175,7 @@ describe('backend-credentials: доставка процессу CLI', () => {
 
   it('${env.*}, чьё значение содержит учётные данные, не раскрывается', async () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 name: p
 jobs:
@@ -226,7 +226,7 @@ ${AGENT}      - { id: cmd, run: [echo, "\${env.WRAPPED}"] }
 
   it('судья в expect плагинного шага получает учётные данные своего бэкенда', async () => {
     const project = makeProject({
-      'stepcast.yml': pipeline(`      - id: probe
+      'burnex.yml': pipeline(`      - id: probe
         probe: {}
         expect:
           - judge: "ответ похож на здоровый"
@@ -252,7 +252,7 @@ ${AGENT}      - { id: cmd, run: [echo, "\${env.WRAPPED}"] }
 
 describe('backend-credentials: разрешение до старта', () => {
   it('учётные данные бэкенда, которым прогон не идёт, не разрешаются', async () => {
-    const project = makeProject({ 'stepcast.yml': pipeline(AGENT) });
+    const project = makeProject({ 'burnex.yml': pipeline(AGENT) });
     const state = await vault();
     const { result } = await start(project, state, { backends: ['fake', 'codex'] });
 
@@ -261,7 +261,7 @@ describe('backend-credentials: разрешение до старта', () => {
   });
 
   it('прогон без агентских шагов провайдера не вызывает', async () => {
-    const project = makeProject({ 'stepcast.yml': pipeline('      - { id: cmd, run: [echo, ok] }\n') });
+    const project = makeProject({ 'burnex.yml': pipeline('      - { id: cmd, run: [echo, ok] }\n') });
     const state = await vault();
     const { result } = await start(project, state);
 
@@ -270,7 +270,7 @@ describe('backend-credentials: разрешение до старта', () => {
   });
 
   it('сбой провайдера: отказ с путём записи, каталога прогона нет', async () => {
-    const project = makeProject({ 'stepcast.yml': pipeline(AGENT) });
+    const project = makeProject({ 'burnex.yml': pipeline(AGENT) });
     const state = await vault();
     state.fail = true;
     const runsRoot = tempDir('runs-');
@@ -286,7 +286,7 @@ describe('backend-credentials: разрешение до старта', () => {
   });
 
   it('возобновление разрешает учётные данные заново', async () => {
-    const project = makeProject({ 'stepcast.yml': pipeline(AGENT) });
+    const project = makeProject({ 'burnex.yml': pipeline(AGENT) });
     gitInit(project.root);
     gitCommit(project.root, 'init');
     const state = await vault();

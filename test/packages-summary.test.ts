@@ -27,11 +27,11 @@ function writePackage(packagesDir: string, name: string, files: Record<string, s
 function layers(): { projectPackages: string; homePackages: string; summarize: () => readonly PackageSummary[] } {
   const base = tempDir('packages-summary-');
   const projectRoot = join(base, 'work');
-  const homeDir = join(base, 'home', '.stepcast');
+  const homeDir = join(base, 'home', '.burnex');
   mkdirSync(projectRoot, { recursive: true });
   mkdirSync(homeDir, { recursive: true });
   return {
-    projectPackages: join(projectRoot, '.stepcast', 'packages'),
+    projectPackages: join(projectRoot, '.burnex', 'packages'),
     homePackages: join(homeDir, 'packages'),
     summarize: () => summarizePackages(buildPackageIndex({ projectRoot, globalPath: join(homeDir, 'config.yml') })),
   };

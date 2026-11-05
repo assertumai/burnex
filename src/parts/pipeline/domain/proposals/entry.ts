@@ -1,4 +1,5 @@
 import { isSafeSegment } from '../../../ui/routes.js';
+import { CABINET_DIR_NAME, LEGACY_CABINET_DIR_NAME } from '../../../../kernel/dirs.js';
 
 /**
  * Модель записи очереди предложений и разбор её цели — чистый модуль без
@@ -77,16 +78,17 @@ export function checkProposalContentSize(content: string): void {
 
 export type ProposalTargetKind = 'widget' | 'dashboard' | 'plugin';
 
-/** Цель, разобранная на вид кабинета и сегменты пути внутри `.stepcast/` (`ui-proposals`, Решение 3). */
+/** Цель, разобранная на вид кабинета и сегменты пути внутри `.burnex/` (`ui-proposals`, Решение 3). */
 export interface ParsedProposalTarget {
   readonly kind: ProposalTargetKind;
-  /** Сегменты пути внутри `.stepcast/`, например `['widgets', 'clock.tsx']`. */
+  /** Сегменты пути внутри `.burnex/`, например `['widgets', 'clock.tsx']`. */
   readonly segments: readonly string[];
   /** Идентификатор виджета, дашборда или плагина — второй сегмент без расширения. */
   readonly id: string;
 }
 
-const STEPCAST_PREFIX = '.stepcast/';
+/** Префиксы цели: кабинет под новым именем и под прежним (один выпуск переходного периода, `kernel/dirs.ts`). */
+const CABINET_PREFIXES = [`${CABINET_DIR_NAME}/`, `${LEGACY_CABINET_DIR_NAME}/`];
 const WIDGETS_DIR = 'widgets';
 const DASHBOARDS_DIR = 'dashboards';
 const PLUGINS_DIR = 'plugins';
@@ -107,13 +109,14 @@ function stripExtension(name: string, extension: string): string | undefined {
  * ссылки — не здесь: цель проверяется как строка, диск смотрит `store.ts`.
  */
 export function parseProposalTarget(target: string): ParsedProposalTarget {
-  if (!target.startsWith(STEPCAST_PREFIX)) {
+  const prefix = CABINET_PREFIXES.find((candidate) => target.startsWith(candidate));
+  if (prefix === undefined) {
     throw new ProposalError(
-      `Цель ${target} вне кабинета проекта: допустимы только .stepcast/widgets/<id>.tsx, .stepcast/dashboards/<id>.yml и файл внутри .stepcast/plugins/<id>/`,
+      `Цель ${target} вне кабинета проекта: допустимы только .burnex/widgets/<id>.tsx, .burnex/dashboards/<id>.yml и файл внутри .burnex/plugins/<id>/`,
     );
   }
 
-  const segments = target.slice(STEPCAST_PREFIX.length).split('/');
+  const segments = target.slice(prefix.length).split('/');
   if (segments.some((segment) => !isSafeSegment(segment))) {
     throw new ProposalError(`Цель ${target} несёт недопустимый сегмент пути`);
   }
@@ -133,9 +136,9 @@ export function parseProposalTarget(target: string): ParsedProposalTarget {
   }
 
   throw new ProposalError(
-    `Цель ${target} не считается ни виджетом (.stepcast/widgets/<id>.tsx, непосредственно в каталоге), ` +
-      `ни дашбордом (.stepcast/dashboards/<id>.yml, непосредственно в каталоге), ни файлом плагина ` +
-      `(.stepcast/plugins/<id>/…, на любой глубине)`,
+    `Цель ${target} не считается ни виджетом (.burnex/widgets/<id>.tsx, непосредственно в каталоге), ` +
+      `ни дашбордом (.burnex/dashboards/<id>.yml, непосредственно в каталоге), ни файлом плагина ` +
+      `(.burnex/plugins/<id>/…, на любой глубине)`,
   );
 }
 
@@ -144,7 +147,7 @@ function timestampSegment(now: Date): string {
   return now.toISOString().replace(/\.\d{3}Z$/, 'Z').replaceAll(':', '-');
 }
 
-/** Цель, свёрнутая в сегмент имени файла: путь внутри `.stepcast/` без расширения последнего сегмента, через дефис. */
+/** Цель, свёрнутая в сегмент имени файла: путь внутри `.burnex/` без расширения последнего сегмента, через дефис. */
 function targetSegment(parsed: ParsedProposalTarget): string {
   const parts = [...parsed.segments];
   const last = parts[parts.length - 1] as string;

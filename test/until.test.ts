@@ -25,7 +25,7 @@ function isolatedScriptRoots(project: Project): { project: string; home: string;
 async function runWithScriptRoots(project: Project): Promise<RunResult> {
   const runsRoot = tempDir('runs-');
   const expanded = expandPipeline({
-    pipelinePath: project.path('stepcast.yml'),
+    pipelinePath: project.path('burnex.yml'),
     config: project.config,
     scriptRoots: isolatedScriptRoots(project),
   });
@@ -40,7 +40,7 @@ async function runWithScriptRoots(project: Project): Promise<RunResult> {
 async function run(project: Project): Promise<RunResult> {
   const runsRoot = tempDir('runs-');
   return runPipeline({
-    expanded: expandPipeline({ pipelinePath: project.path('stepcast.yml'), config: project.config }),
+    expanded: expandPipeline({ pipelinePath: project.path('burnex.yml'), config: project.config }),
     config: { ...project.config, runs: { ...project.config.runs, root: runsRoot } },
     projectRoot: project.root,
     cwd: project.root,
@@ -78,7 +78,7 @@ jobs:
 describe('job-iteration: цикл повторяет шаги до выполнения условия', () => {
   // Сценарий: «Условие выполнено с первого захода»
   it('не начинает вторую итерацию, когда проверка прошла сразу', async () => {
-    const project = makeProject({ 'счётчик.txt': '0\n', 'stepcast.yml': counting(1, 4) });
+    const project = makeProject({ 'счётчик.txt': '0\n', 'burnex.yml': counting(1, 4) });
     const result = await run(project);
 
     assert.equal(result.status, 'success');
@@ -88,7 +88,7 @@ describe('job-iteration: цикл повторяет шаги до выполн�
 
   // Сценарий: «Условие выполнено со второго захода»
   it('делает ровно столько итераций, сколько нужно', async () => {
-    const project = makeProject({ 'счётчик.txt': '0\n', 'stepcast.yml': counting(3, 5) });
+    const project = makeProject({ 'счётчик.txt': '0\n', 'burnex.yml': counting(3, 5) });
     const result = await run(project);
 
     assert.equal(result.status, 'success');
@@ -99,7 +99,7 @@ describe('job-iteration: цикл повторяет шаги до выполн�
   // Сценарий: «Работа без цикла»
   it('исполняет работу без цикла один раз и не заводит итераций', async () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 version: 1
 kind: pipeline
 name: без-цикла
@@ -121,7 +121,7 @@ jobs:
 describe('job-iteration: исчерпание итераций', () => {
   // Сценарий: «Предел исчерпан» / «Диагностика исчерпания»
   it('завершает работу отказом с причиной until_not_met', async () => {
-    const project = makeProject({ 'счётчик.txt': '0\n', 'stepcast.yml': counting(10, 2) });
+    const project = makeProject({ 'счётчик.txt': '0\n', 'burnex.yml': counting(10, 2) });
     const result = await run(project);
 
     assert.equal(result.status, 'failed');
@@ -143,7 +143,7 @@ describe('job-iteration: отказ шага прекращает цикл', () 
   // Сценарий: «Шаг исчерпал попытки» / «Check не вычисляется после отказа шага»
   it('не начинает новую итерацию после отказа шага', async () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 version: 1
 kind: pipeline
 name: падающий-шаг
@@ -172,7 +172,7 @@ jobs:
 describe('job-iteration: раскладка журнала', () => {
   // Сценарий: «Раскладка работы с циклом»
   it('группирует каталоги шагов по итерациям', async () => {
-    const project = makeProject({ 'счётчик.txt': '0\n', 'stepcast.yml': counting(2, 4) });
+    const project = makeProject({ 'счётчик.txt': '0\n', 'burnex.yml': counting(2, 4) });
     const result = await run(project);
 
     const steps = join(result.journal.paths.jobs, 'работа', 'steps');
@@ -183,7 +183,7 @@ describe('job-iteration: раскладка журнала', () => {
   // Сценарий: «Раскладка работы без цикла не меняется»
   it('оставляет раскладку работы без цикла прежней', async () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 version: 1
 kind: pipeline
 name: без-цикла
@@ -204,7 +204,7 @@ jobs:
 
   // Сценарий: «Адресация шага без указания итерации»
   it('адресует шаг по последней выполненной итерации, если она не указана', async () => {
-    const project = makeProject({ 'счётчик.txt': '0\n', 'stepcast.yml': counting(3, 5) });
+    const project = makeProject({ 'счётчик.txt': '0\n', 'burnex.yml': counting(3, 5) });
     const result = await run(project);
 
     const latest = findStepDir(result.journal.paths, 'работа', 'считает');
@@ -218,7 +218,7 @@ jobs:
 describe('job-iteration: события итераций', () => {
   // Сценарий: «События итерации»
   it('пишет начало, завершение и исход проверки каждой итерации', async () => {
-    const project = makeProject({ 'счётчик.txt': '0\n', 'stepcast.yml': counting(2, 4) });
+    const project = makeProject({ 'счётчик.txt': '0\n', 'burnex.yml': counting(2, 4) });
     const result = await run(project);
 
     const events = readEvents(result.journal.paths);
@@ -237,7 +237,7 @@ describe('job-iteration: статическая проверка', () => {
   // Сценарий: «Предел итераций не объявлен»
   it('отклоняет until без max_iterations', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 version: 1
 kind: pipeline
 name: без-предела
@@ -254,7 +254,7 @@ jobs:
     });
 
     assert.throws(
-      () => expandPipeline({ pipelinePath: project.path('stepcast.yml'), config: project.config }),
+      () => expandPipeline({ pipelinePath: project.path('burnex.yml'), config: project.config }),
       (error: unknown) => {
         assert.ok(error instanceof StepcastError);
         assert.match(error.message, /без max_iterations/);
@@ -266,7 +266,7 @@ jobs:
   // Сценарий: «Пустой список проверок»
   it('отклоняет until с пустым check', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 version: 1
 kind: pipeline
 name: пустой-check
@@ -283,7 +283,7 @@ jobs:
     });
 
     assert.throws(
-      () => expandPipeline({ pipelinePath: project.path('stepcast.yml'), config: project.config }),
+      () => expandPipeline({ pipelinePath: project.path('burnex.yml'), config: project.config }),
       (error: unknown) => {
         assert.ok(error instanceof StepcastError);
         assert.match(error.message, /пустым check/);
@@ -295,7 +295,7 @@ jobs:
   // Сценарий: «Цикл без бюджета работы»
   it('предупреждает о цикле без собственного бюджета и оценивает худший случай', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 version: 1
 kind: pipeline
 name: без-бюджета
@@ -314,7 +314,7 @@ jobs:
     });
 
     const expanded = expandPipeline({
-      pipelinePath: project.path('stepcast.yml'),
+      pipelinePath: project.path('burnex.yml'),
       config: project.config,
     });
     const diagnostics = lintPipeline(expanded, { config: project.config });
@@ -328,7 +328,7 @@ jobs:
   // Сценарий: «Предикат границ изменений допустим»
   it('больше не отклоняет предикат changed_only', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 version: 1
 kind: pipeline
 name: границы
@@ -344,7 +344,7 @@ jobs:
     });
 
     const expanded = expandPipeline({
-      pipelinePath: project.path('stepcast.yml'),
+      pipelinePath: project.path('burnex.yml'),
       config: project.config,
     });
     const errors = lintPipeline(expanded, { config: project.config }).filter(
@@ -362,7 +362,7 @@ describe('result-contract: предикат script в until.check', () => {
   it('script в until.check исполняется и решает исход итерации', async () => {
     const project = makeProject({
       'счётчик.txt': '0\n',
-      'stepcast.yml': `
+      'burnex.yml': `
 version: 1
 kind: pipeline
 name: цикл-script
@@ -379,7 +379,7 @@ jobs:
 `,
     });
     project.write(
-      '.stepcast/scripts/converged.sh',
+      '.burnex/scripts/converged.sh',
       '#!/bin/sh\ntest "$(cat счётчик.txt)" -ge 2\n',
     );
 

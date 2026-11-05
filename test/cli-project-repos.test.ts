@@ -41,7 +41,7 @@ async function projectRepos(
 
 function makeHome(): string {
   const home = tempDir('project-repos-home-');
-  mkdirSync(join(home, '.stepcast'), { recursive: true });
+  mkdirSync(join(home, '.burnex'), { recursive: true });
   return home;
 }
 
@@ -49,8 +49,8 @@ function makeRepo(configYaml?: string): string {
   const dir = tempDir('project-repos-');
   gitInit(dir);
   if (configYaml !== undefined) {
-    mkdirSync(join(dir, '.stepcast'), { recursive: true });
-    writeFileSync(join(dir, '.stepcast', 'config.yml'), configYaml);
+    mkdirSync(join(dir, '.burnex'), { recursive: true });
+    writeFileSync(join(dir, '.burnex', 'config.yml'), configYaml);
   }
   writeFileSync(join(dir, 'seed.txt'), 'затравка\n');
   gitCommit(dir, 'первый');
@@ -170,7 +170,7 @@ describe('CLI: burnex project repos', () => {
     assert.match(out.stderr, /один репозиторий/);
   });
 
-  it('недостающий ключ объявления отказывает, называя пункт и .stepcast/config.yml', async () => {
+  it('недостающий ключ объявления отказывает, называя пункт и .burnex/config.yml', async () => {
     const incomplete = ROOT_CONFIG + '  nested_repos: [backend]\n';
     const dir = makeRepo(incomplete);
     const document = { lanes: { a: filledLane('an-item', ['backend']) } };
@@ -179,7 +179,7 @@ describe('CLI: burnex project repos', () => {
     assert.equal(out.code, ExitCode.configError);
     assert.match(out.stderr, /an-item/);
     assert.match(out.stderr, /backend/);
-    assert.match(out.stderr, /\.stepcast\/config\.yml/);
+    assert.match(out.stderr, /\.burnex\/config\.yml/);
   });
 
   /**
@@ -202,16 +202,16 @@ describe('CLI: burnex project repos', () => {
 
   it('объявление только в документе пайплайна не подменяет отсутствие в конфигурации', async () => {
     const dir = makeRepo();
-    mkdirSync(join(dir, '.stepcast', 'pipelines'), { recursive: true });
+    mkdirSync(join(dir, '.burnex', 'pipelines'), { recursive: true });
     writeFileSync(
-      join(dir, '.stepcast', 'pipelines', 'self-improve.yml'),
+      join(dir, '.burnex', 'pipelines', 'self-improve.yml'),
       'kind: pipeline\nproject:\n  check: npm run check\njobs:\n  build:\n    steps: [{ id: c, run: echo ok }]\n',
     );
     const document = { lanes: { a: filledLane('an-item') } };
     const out = await projectRepos(dir, makeHome(), { stdin: JSON.stringify(document) });
 
     assert.equal(out.code, ExitCode.configError);
-    assert.match(out.stderr, /\.stepcast\/config\.yml/);
+    assert.match(out.stderr, /\.burnex\/config\.yml/);
   });
 
   it('пустой стандартный ввод отказывает кодом 2 и не печатает в stdout', async () => {
@@ -231,7 +231,7 @@ describe('CLI: burnex project repos', () => {
   it('файл очереди и конфигурация остаются неизменными после вызова', async () => {
     const dir = makeRepo(WITH_BACKEND);
     writeFileSync(join(dir, 'backlog.md'), '# Очередь\n');
-    const configPath = join(dir, '.stepcast', 'config.yml');
+    const configPath = join(dir, '.burnex', 'config.yml');
     const configBefore = readFileSync(configPath, 'utf8');
     const backlogBefore = readFileSync(join(dir, 'backlog.md'), 'utf8');
 

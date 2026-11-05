@@ -9,7 +9,7 @@ const MANAGED = {
   repo: 'https://example.com/stepcast.git',
   ref: 'v0.3.0',
   version: '0.3.0',
-  releases_dir: '/home/u/.stepcast/releases',
+  releases_dir: '/home/u/.burnex/releases',
   installed_at: '2026-10-30T00:00:00Z',
 };
 
@@ -66,14 +66,14 @@ describe('install-manifest: разбор паспорта', () => {
 });
 
 describe('install-manifest: путь паспорта', () => {
-  it('берёт BURNEX_HOME, иначе ~/.stepcast', () => {
+  it('берёт BURNEX_HOME, иначе ~/.burnex', () => {
     assert.equal(installManifestPath({ BURNEX_HOME: '/opt/sc' }, '/home/u'), '/opt/sc/install.json');
-    assert.equal(installManifestPath({}, '/home/u'), '/home/u/.stepcast/install.json');
-    assert.equal(installManifestPath({ BURNEX_HOME: '' }, '/home/u'), '/home/u/.stepcast/install.json');
+    assert.equal(installManifestPath({}, '/home/u'), '/home/u/.burnex/install.json');
+    assert.equal(installManifestPath({ BURNEX_HOME: '' }, '/home/u'), '/home/u/.burnex/install.json');
   });
 
   it('пустой BURNEX_HOME — умолчание и для домашнего каталога: каталог релизов не становится относительным', () => {
-    assert.equal(stepcastHome({ BURNEX_HOME: '' }, '/home/u'), '/home/u/.stepcast');
+    assert.equal(stepcastHome({ BURNEX_HOME: '' }, '/home/u'), '/home/u/.burnex');
     assert.equal(stepcastHome({ BURNEX_HOME: '/opt/sc' }, '/home/u'), '/opt/sc');
   });
 

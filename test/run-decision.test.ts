@@ -60,10 +60,10 @@ async function findRunPaths(runsRoot: string): Promise<RunPaths> {
 describe('run-decision: остановка прогона на решении человека', () => {
   it('continue продолжает прогон успехом, ожидание не тратит бюджет', async () => {
     const runsRoot = tempDir('runs-');
-    const project = makeProject({ 'stepcast.yml': singleGate() });
+    const project = makeProject({ 'burnex.yml': singleGate() });
     const registry = builtinRegistry();
     const promise = runPipeline({
-      expanded: expandPipeline({ pipelinePath: project.path('stepcast.yml'), config: project.config, registry }),
+      expanded: expandPipeline({ pipelinePath: project.path('burnex.yml'), config: project.config, registry }),
       config: { ...project.config, runs: { ...project.config.runs, root: runsRoot } },
       projectRoot: project.root,
       cwd: project.root,
@@ -104,10 +104,10 @@ describe('run-decision: остановка прогона на решении ч
 
   it('reject останавливает прогон отменой с названной причиной', async () => {
     const runsRoot = tempDir('runs-');
-    const project = makeProject({ 'stepcast.yml': singleGate() });
+    const project = makeProject({ 'burnex.yml': singleGate() });
     const registry = builtinRegistry();
     const promise = runPipeline({
-      expanded: expandPipeline({ pipelinePath: project.path('stepcast.yml'), config: project.config, registry }),
+      expanded: expandPipeline({ pipelinePath: project.path('burnex.yml'), config: project.config, registry }),
       config: { ...project.config, runs: { ...project.config.runs, root: runsRoot } },
       projectRoot: project.root,
       cwd: project.root,
@@ -134,7 +134,7 @@ describe('run-decision: остановка прогона на решении ч
   it('restart просит продолжить с выбранного шага и записывает restart_from', async () => {
     const runsRoot = tempDir('runs-');
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 version: 1
 kind: pipeline
 name: решение-перезапуск
@@ -156,7 +156,7 @@ jobs:
     });
     const registry = builtinRegistry();
     const promise = runPipeline({
-      expanded: expandPipeline({ pipelinePath: project.path('stepcast.yml'), config: project.config, registry }),
+      expanded: expandPipeline({ pipelinePath: project.path('burnex.yml'), config: project.config, registry }),
       config: { ...project.config, runs: { ...project.config.runs, root: runsRoot } },
       projectRoot: project.root,
       cwd: project.root,
@@ -180,11 +180,11 @@ jobs:
 
   it('отмена прогона прерывает ожидание сигналом, без записи решения', async () => {
     const runsRoot = tempDir('runs-');
-    const project = makeProject({ 'stepcast.yml': singleGate() });
+    const project = makeProject({ 'burnex.yml': singleGate() });
     const registry = builtinRegistry();
     const controller = new AbortController();
     const promise = runPipeline({
-      expanded: expandPipeline({ pipelinePath: project.path('stepcast.yml'), config: project.config, registry }),
+      expanded: expandPipeline({ pipelinePath: project.path('burnex.yml'), config: project.config, registry }),
       config: { ...project.config, runs: { ...project.config.runs, root: runsRoot } },
       projectRoot: project.root,
       cwd: project.root,
@@ -212,13 +212,13 @@ jobs:
   // что решение не потеряно.
   it('решение, записанное прогону с мёртвым процессом, применяется возобновлением', async () => {
     const runsRoot = tempDir('runs-');
-    const project = makeProject({ 'stepcast.yml': singleGate() });
+    const project = makeProject({ 'burnex.yml': singleGate() });
     const registry = builtinRegistry();
     const config = { ...project.config, runs: { ...project.config.runs, root: runsRoot } };
     const controller = new AbortController();
 
     const promise = runPipeline({
-      expanded: expandPipeline({ pipelinePath: project.path('stepcast.yml'), config: project.config, registry }),
+      expanded: expandPipeline({ pipelinePath: project.path('burnex.yml'), config: project.config, registry }),
       config,
       projectRoot: project.root,
       cwd: project.root,
@@ -276,7 +276,7 @@ jobs:
   it('успешное решение переиспользуется возобновлением, и человека не спрашивают заново', async () => {
     const runsRoot = tempDir('runs-');
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 version: 1
 kind: pipeline
 name: решение-переиспользование
@@ -299,7 +299,7 @@ jobs:
     const config = { ...project.config, runs: { ...project.config.runs, root: runsRoot } };
 
     const promise = runPipeline({
-      expanded: expandPipeline({ pipelinePath: project.path('stepcast.yml'), config: project.config, registry }),
+      expanded: expandPipeline({ pipelinePath: project.path('burnex.yml'), config: project.config, registry }),
       config,
       projectRoot: project.root,
       cwd: project.root,
@@ -338,7 +338,7 @@ jobs:
   it('два ожидания одновременно и снятие одного не трогает другое', async () => {
     const runsRoot = tempDir('runs-');
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 version: 1
 kind: pipeline
 name: решение-параллель
@@ -356,7 +356,7 @@ jobs:
     });
     const registry = builtinRegistry();
     const promise = runPipeline({
-      expanded: expandPipeline({ pipelinePath: project.path('stepcast.yml'), config: project.config, registry }),
+      expanded: expandPipeline({ pipelinePath: project.path('burnex.yml'), config: project.config, registry }),
       config: { ...project.config, runs: { ...project.config.runs, root: runsRoot } },
       projectRoot: project.root,
       cwd: project.root,

@@ -4,10 +4,11 @@ import { dirname, join } from 'node:path';
 import { StepcastError, ExitCode, type ExitCodeValue } from '../../../kernel/errors.js';
 import { commandRow } from '../../../kernel/cli/commandRow.js';
 import type { ParsedArgs } from '../../../kernel/cli/args.js';
+import { cabinetDir } from '../../../kernel/dirs.js';
 
 /**
  * Шаблон нарочно без агентского бэкенда: `burnex init && burnex run
- * stepcast.yml` должен работать сразу после установки, без Claude Code и без
+ * burnex.yml` должен работать сразу после установки, без Claude Code и без
  * сетевого доступа.
  */
 const PIPELINE_TEMPLATE = `version: 1
@@ -26,7 +27,7 @@ jobs:
   example:
     description: Работа, вынесенная в отдельный файл через uses
     needs: [build]
-    uses: .stepcast/jobs/example.yml
+    uses: .burnex/jobs/example.yml
 `;
 
 const EXAMPLE_JOB_TEMPLATE = `version: 1
@@ -45,7 +46,7 @@ steps:
  * саморазвития отказывается стартовать на грязном дереве. Заведённый раньше
  * проект называет ту же строку `docs/proposals.md`.
  */
-const PROPOSALS_GITIGNORE_LINE = '.stepcast/proposals/';
+const PROPOSALS_GITIGNORE_LINE = '.burnex/proposals/';
 
 /**
  * Внести строку каталога очереди в `.gitignore` проекта, не дублируя её при
@@ -66,7 +67,7 @@ function ensureProposalsIgnored(cwd: string, write: (line: string) => void): voi
 
 /** Каталог знания и файл правил встроенного источника — умолчания разворачивания. */
 const KNOWLEDGE_DIR = 'knowledge';
-const KNOWLEDGE_RULES = join('.stepcast', 'prompts', 'knowledge-rules.md');
+const KNOWLEDGE_RULES = join('.burnex', 'prompts', 'knowledge-rules.md');
 
 const KNOWLEDGE_CONFIG_TEMPLATE = `version: 1
 kind: config
@@ -140,7 +141,7 @@ export function runInitCommand(
     return initKnowledge(cwd, force, write);
   }
 
-  const pipelinePath = join(cwd, 'stepcast.yml');
+  const pipelinePath = join(cwd, 'burnex.yml');
 
   if (existsSync(pipelinePath) && !force) {
     throw new StepcastError(`${pipelinePath} уже существует`, {
@@ -149,7 +150,7 @@ export function runInitCommand(
     });
   }
 
-  const examplePath = join(cwd, '.stepcast', 'jobs', 'example.yml');
+  const examplePath = join(cabinetDir(cwd), 'jobs', 'example.yml');
   mkdirSync(dirname(examplePath), { recursive: true });
   writeFileSync(pipelinePath, PIPELINE_TEMPLATE);
   writeFileSync(examplePath, EXAMPLE_JOB_TEMPLATE);
@@ -170,7 +171,7 @@ export function runInitCommand(
  * `project.check`, границы правок и прочее, чего разворачивание не знает.
  */
 function initKnowledge(cwd: string, force: boolean, write: (line: string) => void): ExitCodeValue {
-  const configPath = join(cwd, '.stepcast', 'config.yml');
+  const configPath = join(cabinetDir(cwd), 'config.yml');
   const dirPath = join(cwd, KNOWLEDGE_DIR);
   const rulesPath = join(cwd, KNOWLEDGE_RULES);
 
@@ -229,9 +230,9 @@ export const row = commandRow(
   {
     name: 'init',
     spec: {
-      description: 'создать stepcast.yml и пример работы в текущем каталоге',
+      description: 'создать burnex.yml и пример работы в текущем каталоге',
       flags: {
-        force: { kind: 'boolean', description: 'перезаписать существующий stepcast.yml' },
+        force: { kind: 'boolean', description: 'перезаписать существующий burnex.yml' },
         knowledge: {
           kind: 'string',
           description: 'развернуть практику памяти вместо пайплайна: fs — встроенный источник',

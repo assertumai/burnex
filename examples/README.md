@@ -3,7 +3,7 @@
 **`minimal/`** — запускается текущим срезом целиком:
 
 ```bash
-burnex run examples/minimal/stepcast.yml --input topic=сессии
+burnex run examples/minimal/burnex.yml --input topic=сессии
 ```
 
 Показывает общую сессию агентских шагов, структурированный выход работы,
@@ -13,7 +13,7 @@ burnex run examples/minimal/stepcast.yml --input topic=сессии
 **`acceptance/`** — приёмка цикла `until` на живом бэкенде:
 
 ```bash
-burnex run examples/acceptance/stepcast.yml
+burnex run examples/acceptance/burnex.yml
 node examples/acceptance/verify.mjs <каталог-прогона-из-вывода>
 ```
 
@@ -23,7 +23,7 @@ node examples/acceptance/verify.mjs <каталог-прогона-из-выво
 сброс сессий и попыток, раскладку `iter-N` и её отсутствие у работы без цикла —
 двенадцать проверок, каждая с внятным исходом.
 
-После прогона в рабочем каталоге остаётся служебный `.stepcast-счётчик` — его
+После прогона в рабочем каталоге остаётся служебный `.burnex-счётчик` — его
 можно удалить.
 
 **`codex/`** — приёмка адаптера Codex, поставляемого плагином. Требует
@@ -32,12 +32,12 @@ node examples/acceptance/verify.mjs <каталог-прогона-из-выво
 Проверяет структурированный вывод, судью и продолжение нити в общей сессии.
 
 **`widgets/`** — образец виджета спайка `ui-runtime-widget-spike`. Скопируйте
-`clock.tsx` в `<проект>/.stepcast/widgets/`, откройте демон и экран «Виджеты»
+`clock.tsx` в `<проект>/.burnex/widgets/`, откройте демон и экран «Виджеты»
 — подробности и границы спайка в [`docs/widgets.md`](../docs/widgets.md).
 
 **`packages/hello/`** — образец пакета: пайплайн, шаг, виджет, дашборд, маршрут
 и каталожный плагин в одном каталоге с манифестом `package.yml`. Скопируйте его
-в `<проект>/.stepcast/packages/hello/` (или в `~/.stepcast/packages/hello/`) и
+в `<проект>/.burnex/packages/hello/` (или в `~/.burnex/packages/hello/`) и
 выполните `burnex package list`, затем `burnex run hello:greet` —
 подробности в [`docs/packages.md`](../docs/packages.md). Проверяется тестом
 `test/example-package.test.ts`.
@@ -55,7 +55,7 @@ node examples/acceptance/verify.mjs <каталог-прогона-из-выво
   Input) и вкладом в `SCREEN` дескриптором из `@burnex/slots`; `element/` —
   на другом фреймворке (Preact), встаёт в слот пользовательским элементом
   через адаптер `elementSlotComponent`, не импортируя ни React, ни cordis.
-  Скопируйте каталог в `~/.stepcast/plugins/<id>/` рядом с `plugin.json` —
+  Скопируйте каталог в `~/.burnex/plugins/<id>/` рядом с `plugin.json` —
   демон соберёт и отдаст браузерную половину сам.
 
 **`target-state/`** — целевое состояние формата. **Не запускается**: использует

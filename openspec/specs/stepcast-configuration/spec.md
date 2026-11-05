@@ -7,7 +7,7 @@
 ### Requirement: Разрешение конфигурации из двух файлов
 
 Система SHALL собирать действующую конфигурацию из встроенных умолчаний,
-глобального файла `~/.stepcast/config.yml`, проектного файла `.stepcast/config.yml` и
+глобального файла `~/.burnex/config.yml`, проектного файла `.burnex/config.yml` и
 флагов командной строки. Каждый следующий источник MUST перекрывать
 предыдущий. Отсутствие любого из файлов MUST NOT быть ошибкой.
 
@@ -23,7 +23,7 @@
 
 #### Scenario: Конфигов нет
 
-- **WHEN** ни `~/.stepcast/config.yml`, ни `.stepcast/config.yml` не существуют
+- **WHEN** ни `~/.burnex/config.yml`, ни `.burnex/config.yml` не существуют
 - **THEN** система работает на встроенных умолчаниях без ошибки
 
 ### Requirement: Запреты складываются и не отменяются снизу
@@ -66,7 +66,7 @@
 
 #### Scenario: Путь к бэкенду в проектном конфиге
 
-- **WHEN** `.stepcast/config.yml` содержит `backends.claude.command`
+- **WHEN** `.burnex/config.yml` содержит `backends.claude.command`
 - **THEN** система завершается с ошибкой конфигурации и называет запрещённый ключ
 
 ### Requirement: Происхождение значений наблюдаемо
@@ -102,11 +102,11 @@
 
 ### Requirement: Знание принадлежит репозиторию, а не машине
 
-Система SHALL допускать секцию `project.knowledge` только в `.stepcast/config.yml` и отклонять её в `~/.stepcast/config.yml` — тем же правилом, каким отклоняются `project.check`, `project.tools` и `project.spec`.
+Система SHALL допускать секцию `project.knowledge` только в `.burnex/config.yml` и отклонять её в `~/.burnex/config.yml` — тем же правилом, каким отклоняются `project.check`, `project.tools` и `project.spec`.
 
 #### Scenario: Объявление в глобальном конфиге
 
-- **WHEN** `~/.stepcast/config.yml` содержит секцию `project.knowledge`
+- **WHEN** `~/.burnex/config.yml` содержит секцию `project.knowledge`
 - **THEN** разбор конфигурации отклоняет её с диагностикой о недопустимой области объявления
 
 ### Requirement: Пути секции знания относительны корню репозитория

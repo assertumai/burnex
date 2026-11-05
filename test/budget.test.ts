@@ -45,7 +45,7 @@ async function run(
 ): Promise<RunResult> {
   const runsRoot = options.runsRoot ?? tempDir('runs-');
   return runPipeline({
-    expanded: expandPipeline({ pipelinePath: project.path('stepcast.yml'), config: project.config }),
+    expanded: expandPipeline({ pipelinePath: project.path('burnex.yml'), config: project.config }),
     config: {
       ...project.config,
       runs: { ...project.config.runs, root: runsRoot },
@@ -109,7 +109,7 @@ jobs:
 `;
 
   it('токены и время судьи входят в usage.json попытки', async () => {
-    const project = makeProject({ 'stepcast.yml': PIPELINE });
+    const project = makeProject({ 'burnex.yml': PIPELINE });
     const fake = createFakeBackend({
       lines: [initLine(), resultLine({ text: 'план готов', tokensIn: 40, tokensOut: 10 })],
     });
@@ -152,7 +152,7 @@ jobs:
 `;
 
   it('шаг, дошедший до конца, числится success, даже когда его последняя запись расхода перевела потолок', async () => {
-    const project = makeProject({ 'stepcast.yml': PIPELINE_TOKENS });
+    const project = makeProject({ 'burnex.yml': PIPELINE_TOKENS });
     const fake = createFakeBackend({
       lines: [initLine(), resultLine({ text: 'план готов', tokensIn: 40, tokensOut: 0 })],
     });
@@ -194,7 +194,7 @@ jobs:
 `;
 
   it('командный шаг остаётся success тем же образом, и прогон доигран', async () => {
-    const project = makeProject({ 'stepcast.yml': RUN_PIPELINE_TOKENS });
+    const project = makeProject({ 'burnex.yml': RUN_PIPELINE_TOKENS });
     const fake = createFakeBackend({ lines: [] });
     const critic = createFakeBackend({
       lines: [
@@ -231,7 +231,7 @@ jobs:
 `;
 
   it('судья не вызывается, если бюджет уже исчерпан к моменту проверки', async () => {
-    const project = makeProject({ 'stepcast.yml': PIPELINE });
+    const project = makeProject({ 'burnex.yml': PIPELINE });
     const fake = createFakeBackend({
       lines: [initLine(), resultLine({ text: 'план готов', tokensIn: 40, tokensOut: 0 })],
     });
@@ -272,7 +272,7 @@ jobs:
 `;
 
   it('второй шаг не запускается: первый исчерпал потолок, дойдя до своего конца', async () => {
-    const project = makeProject({ 'stepcast.yml': PIPELINE });
+    const project = makeProject({ 'burnex.yml': PIPELINE });
     // Первый шаг переходит потолок последней записью расхода — усилиями
     // судьи, вызванного уже после того, как собственный процесс шага
     // отработал и вышел: перевод потолка её ничего не прерывает, и исход
@@ -299,7 +299,7 @@ jobs:
   // Спека run-journal: «Отмена важнее исчерпанного потолка»
   it('отменённый прогон с записью о перейдённом потолке остаётся canceled', async () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 version: 1
 kind: pipeline
 name: budget-then-cancel
@@ -342,7 +342,7 @@ jobs:
 
     const runsRoot = tempDir('runs-');
     const promise = runPipeline({
-      expanded: expandPipeline({ pipelinePath: project.path('stepcast.yml'), config: project.config }),
+      expanded: expandPipeline({ pipelinePath: project.path('burnex.yml'), config: project.config }),
       config: { ...project.config, runs: { ...project.config.runs, root: runsRoot } },
       projectRoot: project.root,
       cwd: project.root,
@@ -418,7 +418,7 @@ jobs:
 `;
 
   it('освобождённая on: always исполняется и отчитывается успехом; неосвобождённая — budget_exceeded', async () => {
-    const project = makeProject({ 'stepcast.yml': PIPELINE });
+    const project = makeProject({ 'burnex.yml': PIPELINE });
     const fake = createFakeBackend({
       lines: [initLine(), resultLine({ text: 'план готов', tokensIn: 40, tokensOut: 0 })],
     });
@@ -492,7 +492,7 @@ jobs:
 
   // Спека pipeline-execution: «Расход освобождённой работы виден»
   it('расход освобождённой работы целиком виден в отчёте и в состоянии прогона', async () => {
-    const project = makeProject({ 'stepcast.yml': USAGE_PIPELINE });
+    const project = makeProject({ 'burnex.yml': USAGE_PIPELINE });
     const fake = createFakeBackend({
       lines: [initLine(), resultLine({ text: 'план готов', tokensIn: 40, tokensOut: 0 })],
     });
@@ -520,7 +520,7 @@ jobs:
   // Спека pipeline-execution: «Собственный потолок освобождённой работы действует»
   it('собственный потолок освобождённой работы обрывает её попытку', async () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 version: 1
 kind: pipeline
 name: budget-exempt-own-budget
@@ -583,7 +583,7 @@ jobs:
   // Спека pipeline-execution: «Окно лимита подписки сторожит и освобождённую работу»
   it('rate_limit_pct прогона усыпляет и освобождённую работу', async () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 version: 1
 kind: pipeline
 name: budget-exempt-rate-limit
@@ -656,7 +656,7 @@ jobs:
 describe('streaming budget: usage в tool_use', () => {
   it('прерывает агентский процесс до terminal result, когда usage пришёл вместе с tool_use', async () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 version: 1
 kind: pipeline
 name: streaming-tool-usage
@@ -950,7 +950,7 @@ jobs:
 `;
 
   it('превышение rate_limit_pct с известным resets_at усыпляет прогон и переисполняет шаг', async () => {
-    const project = makeProject({ 'stepcast.yml': WAIT_PIPELINE });
+    const project = makeProject({ 'burnex.yml': WAIT_PIPELINE });
     const fake = createFakeBackend({
       hangMs: 1_000,
       lines: (index) =>
@@ -980,7 +980,7 @@ jobs:
 
   it('переисполнение не расходует attempts.max, а расход оборванной попытки остаётся в usage', async () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 version: 1
 kind: pipeline
 name: wait-attempts
@@ -1029,7 +1029,7 @@ jobs:
   });
 
   it('отсутствие resets_at даёт budget_exceeded с причиной о неизвестном сбросе', async () => {
-    const project = makeProject({ 'stepcast.yml': WAIT_PIPELINE });
+    const project = makeProject({ 'burnex.yml': WAIT_PIPELINE });
     const fake = createFakeBackend({
       hangMs: 4_000,
       lines: [
@@ -1052,7 +1052,7 @@ jobs:
   });
 
   it('сброс дальше объявленного предела ожидания даёт budget_exceeded с причиной о пределе', async () => {
-    const project = makeProject({ 'stepcast.yml': WAIT_PIPELINE });
+    const project = makeProject({ 'burnex.yml': WAIT_PIPELINE });
     const fake = createFakeBackend({
       hangMs: 4_000,
       lines: [
@@ -1076,7 +1076,7 @@ jobs:
 
   it('превышение потолка токенов при on_exceed: wait останавливает прогон без ожидания', async () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 version: 1
 kind: pipeline
 name: wait-tokens
@@ -1107,7 +1107,7 @@ jobs:
   });
 
   it('ожидание не засчитывается в wallclock прогона', async () => {
-    const project = makeProject({ 'stepcast.yml': WAIT_PIPELINE });
+    const project = makeProject({ 'burnex.yml': WAIT_PIPELINE });
     const fake = createFakeBackend({
       hangMs: 1_000,
       lines: (index) =>
@@ -1162,7 +1162,7 @@ jobs:
   }
 
   it('отмена во время сна прекращает ожидание и даёт canceled без budget.resumed', async () => {
-    const project = makeProject({ 'stepcast.yml': WAIT_PIPELINE });
+    const project = makeProject({ 'burnex.yml': WAIT_PIPELINE });
     const controller = new AbortController();
     const fake = createFakeBackend({
       hangMs: 4_000,
@@ -1179,7 +1179,7 @@ jobs:
 
     const runsRoot = tempDir('runs-');
     const promise = runPipeline({
-      expanded: expandPipeline({ pipelinePath: project.path('stepcast.yml'), config: project.config }),
+      expanded: expandPipeline({ pipelinePath: project.path('burnex.yml'), config: project.config }),
       config: {
         ...project.config,
         runs: { ...project.config.runs, root: runsRoot },
@@ -1212,7 +1212,7 @@ jobs:
   });
 
   it('состояние со сна доступно снаружи до пробуждения', async () => {
-    const project = makeProject({ 'stepcast.yml': WAIT_PIPELINE });
+    const project = makeProject({ 'burnex.yml': WAIT_PIPELINE });
     const controller = new AbortController();
     const fake = createFakeBackend({
       hangMs: 4_000,
@@ -1233,7 +1233,7 @@ jobs:
 
     const runsRoot = tempDir('runs-');
     const promise = runPipeline({
-      expanded: expandPipeline({ pipelinePath: project.path('stepcast.yml'), config: project.config }),
+      expanded: expandPipeline({ pipelinePath: project.path('burnex.yml'), config: project.config }),
       config: {
         ...project.config,
         runs: { ...project.config.runs, root: runsRoot },
@@ -1295,7 +1295,7 @@ jobs:
 `;
 
   it('усыпляет прогон и переисполняет шаг, когда объявлен on_exceed: wait', async () => {
-    const project = makeProject({ 'stepcast.yml': WAIT_REFUSAL_PIPELINE });
+    const project = makeProject({ 'burnex.yml': WAIT_REFUSAL_PIPELINE });
     const resetAt = Date.now() + 3_000;
     const fake = createFakeBackend({
       hangMs: 1_000,
@@ -1320,7 +1320,7 @@ jobs:
     // Ключ расхода — `job/step#attempt`: без запечатывания перед
     // переисполнением вторая попытка легла бы под тем же ключом, и разностный
     // учёт вычел бы из потолков расход прерванной попытки.
-    const project = makeProject({ 'stepcast.yml': WAIT_REFUSAL_PIPELINE });
+    const project = makeProject({ 'burnex.yml': WAIT_REFUSAL_PIPELINE });
     const resetAt = Date.now() + 1_000;
     const fake = createFakeBackend({
       lines: (index) =>
@@ -1349,7 +1349,7 @@ jobs:
     // `on_exceed: stop` материализуется в каждом объявленном бюджете как
     // умолчание — режим ищется у ближайшей области, которая его написала.
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 version: 1
 kind: pipeline
 name: backend-refusal-inherited-wait
@@ -1382,7 +1382,7 @@ jobs:
   });
 
   it('без объявленного on_exceed: wait останавливает прогон с budget_exceeded', async () => {
-    const project = makeProject({ 'stepcast.yml': STOP_REFUSAL_PIPELINE });
+    const project = makeProject({ 'burnex.yml': STOP_REFUSAL_PIPELINE });
     const fake = createFakeBackend({ lines: [rateLimitRefusalLine({ resetText: 'подождите' })] });
 
     const result = await run(project, { fake });
@@ -1395,7 +1395,7 @@ jobs:
   });
 
   it('нераспознанный момент сброса останавливает прогон, даже когда объявлен wait', async () => {
-    const project = makeProject({ 'stepcast.yml': WAIT_REFUSAL_PIPELINE });
+    const project = makeProject({ 'burnex.yml': WAIT_REFUSAL_PIPELINE });
     const fake = createFakeBackend({ lines: [rateLimitRefusalLine({ resetText: 'скоро' })] });
 
     const result = await run(project, { fake });
@@ -1407,7 +1407,7 @@ jobs:
   });
 
   it('момент сброса дальше предела ожидания останавливает прогон', async () => {
-    const project = makeProject({ 'stepcast.yml': WAIT_REFUSAL_PIPELINE });
+    const project = makeProject({ 'burnex.yml': WAIT_REFUSAL_PIPELINE });
     const resetAt = Date.now() + 60_000;
     const fake = createFakeBackend({
       lines: [rateLimitRefusalLine({ resetText: `resets ${new Date(resetAt).toISOString()}` })],
@@ -1422,7 +1422,7 @@ jobs:
   });
 
   it('отчёт о расходе не содержит доли использования окна, которой бэкенд не сообщал', async () => {
-    const project = makeProject({ 'stepcast.yml': STOP_REFUSAL_PIPELINE });
+    const project = makeProject({ 'burnex.yml': STOP_REFUSAL_PIPELINE });
     const fake = createFakeBackend({ lines: [rateLimitRefusalLine({ resetText: 'подождите' })] });
 
     const result = await run(project, { fake });
@@ -1432,7 +1432,7 @@ jobs:
   });
 
   it('отмена во время сна по отказу бэкенда прекращает ожидание', async () => {
-    const project = makeProject({ 'stepcast.yml': WAIT_REFUSAL_PIPELINE });
+    const project = makeProject({ 'burnex.yml': WAIT_REFUSAL_PIPELINE });
     const controller = new AbortController();
     const resetAt = Date.now() + 60_000;
     const fake = createFakeBackend({
@@ -1442,7 +1442,7 @@ jobs:
 
     const runsRoot = tempDir('runs-');
     const promise = runPipeline({
-      expanded: expandPipeline({ pipelinePath: project.path('stepcast.yml'), config: project.config }),
+      expanded: expandPipeline({ pipelinePath: project.path('burnex.yml'), config: project.config }),
       config: {
         ...project.config,
         runs: { ...project.config.runs, root: runsRoot },
@@ -1466,7 +1466,7 @@ jobs:
 
   it('отказ аутентификации прекращает прогон даже при fail_fast: false', async () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 version: 1
 kind: pipeline
 name: auth-fail-fast-false
@@ -1541,7 +1541,7 @@ jobs:
           : [initLine(), resultLine({ text: 'готово', tokensIn: 300, tokensOut: 0 })],
     });
 
-    const result = await run(makeProject({ 'stepcast.yml': RETRY_PIPELINE }), { fake });
+    const result = await run(makeProject({ 'burnex.yml': RETRY_PIPELINE }), { fake });
     assert.equal(result.status, 'success');
 
     const usage = readUsage(result.journal.paths);
@@ -1566,7 +1566,7 @@ describe('cost-budget: применение денежного потолка', 
   // Спека pipeline-execution: «Денежный потолок шага, работы, пайплайна»
   it('превышение денежного потолка шага останавливает шаг с budget_exceeded', async () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 version: 1
 kind: pipeline
 name: cost-step
@@ -1599,7 +1599,7 @@ jobs:
 
   it('превышение денежного потолка работы останавливает шаг с budget_exceeded', async () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 version: 1
 kind: pipeline
 name: cost-job
@@ -1625,7 +1625,7 @@ jobs:
 
   it('превышение денежного потолка пайплайна останавливает шаг с budget_exceeded', async () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 version: 1
 kind: pipeline
 name: cost-pipeline
@@ -1652,7 +1652,7 @@ jobs:
   // Спека pipeline-execution: «Сосуществование денежного и токенного потолков»
   it('денежный потолок, исчерпанный раньше токенного, останавливает по cost', async () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 version: 1
 kind: pipeline
 name: cost-before-tokens
@@ -1682,7 +1682,7 @@ jobs:
 
   it('токенный потолок, исчерпанный раньше денежного, останавливает по tokens', async () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 version: 1
 kind: pipeline
 name: tokens-before-cost
@@ -1713,7 +1713,7 @@ jobs:
   // Спека pipeline-execution: «on_exceed: wait не применяется к деньгам»
   it('on_exceed: wait с денежным превышением останавливает прогон без ожидания', async () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 version: 1
 kind: pipeline
 name: cost-wait
@@ -1746,7 +1746,7 @@ jobs:
   // Спека pipeline-execution: «Цена судьи входит в потолок»
   it('цена вызова судьи входит в цену попытки и в потолок шага', async () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 version: 1
 kind: pipeline
 name: cost-judge
@@ -1788,7 +1788,7 @@ jobs:
   // Спека run-journal: «Попытка без сообщённой цены»
   it('попытка без цены не входит в сумму, а отчёт называет её несообщённой', async () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 version: 1
 kind: pipeline
 name: cost-unreported
@@ -1822,7 +1822,7 @@ jobs:
   // Спека pipeline-execution: «Полностью несообщённая цена»
   it('денежный потолок при полностью несообщённой цене: событие, предупреждение, прогон доведён до конца', async () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 version: 1
 kind: pipeline
 name: cost-silent
@@ -1854,7 +1854,7 @@ jobs:
   // Спека run-journal: «Частично несообщённая цена»
   it('часть попыток без цены: потолок применяется по учтённой части, число неучтённых названо', async () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 version: 1
 kind: pipeline
 name: cost-partial
@@ -2031,7 +2031,7 @@ jobs:
   // Спека pipeline-execution: «Превышение обнаружено при двух идущих работах»
   // и «Прогон останавливается с объявленной причиной».
   it('доводит начатую работу до конца, новых не запускает и называет причину', async () => {
-    const project = makeProject({ 'stepcast.yml': THREE_JOBS });
+    const project = makeProject({ 'burnex.yml': THREE_JOBS });
     // Имя адаптера у поддельного бэкенда общее, а место считается по нему:
     // без переименования оба вызова встали бы в одну очередь и перестали быть
     // одновременными.
@@ -2103,7 +2103,7 @@ jobs:
 
   // Спека run-journal: «Сводка доступна до конца прогона»
   it('usage.json несёт расход завершившейся работы и признак незаконченности, пока прогон идёт', async () => {
-    const project = makeProject({ 'stepcast.yml': TWO_JOBS });
+    const project = makeProject({ 'burnex.yml': TWO_JOBS });
     const fake = createFakeBackend({
       lines: [initLine(), resultLine({ text: 'готово', tokensIn: 40, tokensOut: 10 })],
     });
@@ -2138,7 +2138,7 @@ jobs:
 
   // Спека run-journal: «Итог сводки не расходится с состоянием»
   it('итог сводки расхода совпадает с накопленной величиной состояния', async () => {
-    const project = makeProject({ 'stepcast.yml': TWO_JOBS });
+    const project = makeProject({ 'burnex.yml': TWO_JOBS });
     const fake = createFakeBackend({
       lines: [initLine(), resultLine({ text: 'готово', tokensIn: 40, tokensOut: 10 })],
     });
@@ -2203,7 +2203,7 @@ ${options.judge ?? ''}`;
   const codexLines = [initLine(), resultLine({ text: 'готово', tokensIn: 100_000, tokensOut: 50_000 })];
 
   it('денежный потолок связывает по оценке на бэкенде без сообщённой цены', async () => {
-    const project = makeProject({ 'stepcast.yml': pipeline({ model: 'm1' }) });
+    const project = makeProject({ 'burnex.yml': pipeline({ model: 'm1' }) });
     const worker = createFakeBackend({ name: 'codex', capabilities: { reportsCost: false }, lines: codexLines });
 
     const result = await run(project, { worker }, { priceCatalog: priceCatalog() });
@@ -2225,7 +2225,7 @@ ${options.judge ?? ''}`;
   });
 
   it('сообщённая цена главнее каталога, даже когда модель в нём есть', async () => {
-    const project = makeProject({ 'stepcast.yml': pipeline({ model: 'm1', budget: 'budget:\n  cost: 100' }) });
+    const project = makeProject({ 'burnex.yml': pipeline({ model: 'm1', budget: 'budget:\n  cost: 100' }) });
     const worker = createFakeBackend({
       name: 'codex',
       capabilities: { reportsCost: false },
@@ -2243,7 +2243,7 @@ ${options.judge ?? ''}`;
   it('модель вне каталога и необъявленная модель неучтены, прогон не останавливается', async () => {
     for (const model of ['unknown', undefined]) {
       const project = makeProject({
-        'stepcast.yml': pipeline({ ...(model === undefined ? {} : { model }), budget: 'budget:\n  cost: 100' }),
+        'burnex.yml': pipeline({ ...(model === undefined ? {} : { model }), budget: 'budget:\n  cost: 100' }),
       });
       const worker = createFakeBackend({ name: 'codex', capabilities: { reportsCost: false }, lines: codexLines });
 
@@ -2266,7 +2266,7 @@ ${options.judge ?? ''}`;
   });
 
   it('адаптер без признака reportsCost получает предупреждение', async () => {
-    const project = makeProject({ 'stepcast.yml': pipeline({ budget: 'budget:\n  cost: 100' }) });
+    const project = makeProject({ 'burnex.yml': pipeline({ budget: 'budget:\n  cost: 100' }) });
     const worker = createFakeBackend({ lines: codexLines });
     const { reportsCost: _reportsCost, ...capabilities } = worker.adapter.capabilities;
     const bare: FakeBackend = { invocations: worker.invocations, adapter: { ...worker.adapter, capabilities } };
@@ -2277,14 +2277,14 @@ ${options.judge ?? ''}`;
   });
 
   it('бэкенд с reportsCost: true и прогон без budget.cost предупреждений не получают', async () => {
-    const reporting = makeProject({ 'stepcast.yml': pipeline({ budget: 'budget:\n  cost: 100' }) });
+    const reporting = makeProject({ 'burnex.yml': pipeline({ budget: 'budget:\n  cost: 100' }) });
     const claudeLike = createFakeBackend({
       lines: [initLine(), resultLine({ text: 'готово', tokensIn: 10, tokensOut: 1, costUsd: 0.1 })],
     });
     const first = await run(reporting, { worker: claudeLike });
     assert.equal(readEvents(first.journal.paths).some((event) => event.kind === 'budget.cost_unpriced'), false);
 
-    const noCost = makeProject({ 'stepcast.yml': pipeline({ budget: 'budget:\n  tokens: 1000000' }) });
+    const noCost = makeProject({ 'burnex.yml': pipeline({ budget: 'budget:\n  tokens: 1000000' }) });
     const codexLike = createFakeBackend({ name: 'codex', capabilities: { reportsCost: false }, lines: codexLines });
     const second = await run(noCost, { worker: codexLike }, { priceCatalog: priceCatalog() });
     assert.equal(readEvents(second.journal.paths).some((event) => event.kind === 'budget.cost_unpriced'), false);
@@ -2292,7 +2292,7 @@ ${options.judge ?? ''}`;
 
   it('ступень эскалации на модели вне каталога получает предупреждение', async () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 version: 1
 kind: pipeline
 name: escalated
@@ -2328,7 +2328,7 @@ jobs:
 
   it('судья на той же модели, что и шаг, назван отдельно от шага', async () => {
     const project = makeProject({
-      'stepcast.yml': pipeline({
+      'burnex.yml': pipeline({
         model: 'unknown',
         budget: 'budget:\n  cost: 100',
         judge: '          - judge: "план полный"\n            hard: true\n            agent: worker\n            model: unknown\n',
@@ -2351,7 +2351,7 @@ jobs:
 
   it('судья на другой модели оценивается по своей, а источник суммы — mixed', async () => {
     const project = makeProject({
-      'stepcast.yml': pipeline({
+      'burnex.yml': pipeline({
         budget: 'budget:\n  cost: 100',
         judge: '          - judge: "план полный"\n            hard: true\n            agent: critic\n            model: m1\n',
       }),
@@ -2376,7 +2376,7 @@ jobs:
   });
 
   it('сообщённая вопреки reportsCost: false цена учитывается как reported', async () => {
-    const project = makeProject({ 'stepcast.yml': pipeline({ budget: 'budget:\n  cost: 100' }) });
+    const project = makeProject({ 'burnex.yml': pipeline({ budget: 'budget:\n  cost: 100' }) });
     const worker = createFakeBackend({
       capabilities: { reportsCost: false },
       lines: [initLine(), resultLine({ text: 'готово', tokensIn: 10, tokensOut: 1, costUsd: 0.3 })],

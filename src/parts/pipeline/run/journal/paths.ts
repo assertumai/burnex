@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { existsSync, readFileSync, realpathSync, statSync } from 'node:fs';
 import { dirname, join, parse as parsePath, sep } from 'node:path';
+import { cabinetDir } from '../../../../kernel/dirs.js';
 
 /**
  * Раскладка журнала прогона.
@@ -28,7 +29,7 @@ function mainRootOfWorktree(gitFile: string): string | undefined {
 }
 
 /**
- * Корень проекта: явный маркер `.stepcast/config.yml` (заведённый `stepcast
+ * Корень проекта: явный маркер `.burnex/config.yml` (заведённый `stepcast
  * init --knowledge fs` или вручную) либо ближайший каталог с настоящим `.git`
  * — директорией основного репозитория, а не файлом линкованного worktree.
  * Маркер и `.git`-директория проверяются на каждом уровне вместе: у
@@ -46,7 +47,7 @@ export function findProjectRoot(from: string): string {
       if (mainRoot !== undefined && existsSync(mainRoot)) return realpathSync(mainRoot);
       return current;
     }
-    if (existsSync(join(current, '.stepcast', 'config.yml'))) return current;
+    if (existsSync(join(cabinetDir(current), 'config.yml'))) return current;
 
     const parent = dirname(current);
     if (parent === current || parent === parsePath(current).root) return realpathSync(from);

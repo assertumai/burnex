@@ -5,6 +5,7 @@ import { buildPublishedSchemas, pluginPredicateEntries, pluginStepKindEntries } 
 import { nativePredicateNames, nativeStepKindNames, type Registry } from '../../../kernel/registry.js';
 import { isDefaultNativePredicates, isDefaultNativeStepKinds } from '../document/schema.js';
 import { ExitCode, type ExitCodeValue } from '../../../kernel/errors.js';
+import { cabinetDir } from '../../../kernel/dirs.js';
 import type { PipelineCommandEnv } from '../contract.js';
 import { commandRow } from '../../../kernel/cli/commandRow.js';
 import { PIPELINE_SERVICES } from '../services.js';
@@ -24,7 +25,7 @@ export function runSchemaCommand(
   cwd: string,
   registry: Registry,
 ): ExitCodeValue {
-  const outDir = resolvePath(cwd, typeof args.flags.out === 'string' ? args.flags.out : join('.stepcast', 'schema'));
+  const outDir = resolvePath(cwd, typeof args.flags.out === 'string' ? args.flags.out : join(cabinetDir(cwd), 'schema'));
 
   // Тот же перечень, с каким сверяет записанный файл `burnex lint`.
   const predicates = pluginPredicateEntries(registry);
@@ -72,9 +73,9 @@ export const row = commandRow<PipelineCommandEnv>(
     name: 'schema',
     spec: {
       description:
-        'записать в .stepcast/schema/ JSON Schema документов проекта, знающую предикаты загруженных плагинов',
+        'записать в .burnex/schema/ JSON Schema документов проекта, знающую предикаты загруженных плагинов',
       flags: {
-        out: { kind: 'string', description: 'каталог вывода вместо .stepcast/schema/' },
+        out: { kind: 'string', description: 'каталог вывода вместо .burnex/schema/' },
       },
     },
     run: (args, io, env) => runSchemaCommand(args, io.out, env.cwd, env.registry),

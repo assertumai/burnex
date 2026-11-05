@@ -27,7 +27,7 @@ function rootOf(lines: readonly string[]): string {
   const root = lines[0] ?? '';
   assert.match(
     basename(root),
-    /^stepcast-test-/,
+    /^burnex-test-/,
     `фикстура обязана напечатать корень песочницы первой строкой, напечатано: ${JSON.stringify(lines)}`,
   );
   return root;
@@ -39,7 +39,7 @@ function rootOf(lines: readonly string[]): string {
  * — не то же самое, что убирать за собой.
  */
 function removeRoot(root: string | undefined): void {
-  if (root !== undefined && /^stepcast-test-/.test(basename(root))) {
+  if (root !== undefined && /^burnex-test-/.test(basename(root))) {
     rmSync(root, { recursive: true, force: true });
   }
 }
@@ -87,7 +87,7 @@ async function signalOutcome(
   });
 
   const root = await firstLine(child);
-  assert.match(basename(root), /^stepcast-test-/, `фикстура обязана напечатать корень песочницы, напечатано: ${root}`);
+  assert.match(basename(root), /^burnex-test-/, `фикстура обязана напечатать корень песочницы, напечатано: ${root}`);
 
   child.kill(signal);
   // `close`, а не `exit`: поток ошибок к этому моменту дочитан, и напечатанное
@@ -164,7 +164,7 @@ describe('test/tmp: песочница временных файлов тест�
     try {
       assert.equal(status, 0);
       assert.equal(existsSync(root!), true, 'сохранённый корень обязан остаться на диске');
-      assert.match(basename(root!), /^stepcast-test-keep-/);
+      assert.match(basename(root!), /^burnex-test-keep-/);
       assert.ok(stderr.includes(root!), 'путь сохранённого корня обязан быть в потоке ошибок');
     } finally {
       removeRoot(root);
@@ -179,7 +179,7 @@ describe('test/tmp: песочница временных файлов тест�
     try {
       assert.equal(signal, 'SIGINT');
       assert.equal(existsSync(root), true, 'сохранённый корень обязан пережить прерывание');
-      assert.match(basename(root), /^stepcast-test-keep-/);
+      assert.match(basename(root), /^burnex-test-keep-/);
       assert.ok(stderr.includes(root), 'путь сохранённого корня обязан быть в потоке ошибок');
     } finally {
       removeRoot(root);
@@ -205,7 +205,7 @@ describe('test/tmp: песочница временных файлов тест�
     const { lines } = runFixture('success');
     const root = rootOf(lines);
     const probe = lines[1];
-    assert.match(basename(root), /^stepcast-test-/);
+    assert.match(basename(root), /^burnex-test-/);
     assert.doesNotMatch(basename(probe!), /^stepcast-/);
   });
 });

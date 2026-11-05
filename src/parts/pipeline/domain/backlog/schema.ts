@@ -29,7 +29,7 @@ export const BacklogSlugSchema = z
  *
  * Невидимым на доске такой пункт не становится: доска показывает его отдельно
  * и предлагает завести под его статус колонку (`screen-scrum`,
- * `.stepcast/board.yml`).
+ * `.burnex/board.yml`).
  */
 export const BACKLOG_STATUSES = ['todo', 'in_progress', 'done', 'failed'] as const;
 

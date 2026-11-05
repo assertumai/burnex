@@ -196,8 +196,8 @@ function formFor(route: RouteRow | DisabledRouteRow, enabled: boolean): FormStat
 }
 
 const LAYER_FILE: Readonly<Record<Layer, string>> = {
-  home: '~/.stepcast/routes.yml',
-  project: '.stepcast/routes.yml',
+  home: '~/.burnex/routes.yml',
+  project: '.burnex/routes.yml',
 };
 
 type LoadState =

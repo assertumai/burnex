@@ -142,7 +142,7 @@ function held(overrides: Partial<Extract<BacklogLockView, { state: 'held' }>> = 
     acquiredAt: new Date(NOW - 125_000).toISOString(),
     abandoned: false,
     foreignHost: false,
-    path: '/work/proj/.git/stepcast-backlog.lock',
+    path: '/work/proj/.git/burnex-backlog.lock',
     ...overrides,
   };
 }
@@ -165,16 +165,16 @@ describe('ui-backlog-owner-and-lock: предупреждение о блоки�
   it('блокировка чужой машины называет путь файла и подсказывает удалить его руками', () => {
     const html = renderToStaticMarkup(<BacklogLockNotice lock={held({ foreignHost: true })} now={NOW} />);
     assert.match(html, /another machine/);
-    assert.match(html, /\/work\/proj\/\.git\/stepcast-backlog\.lock/);
+    assert.match(html, /\/work\/proj\/\.git\/burnex-backlog\.lock/);
     assert.match(html, /by hand/);
   });
 
   it('нечитаемый lock-файл называет путь', () => {
     const html = renderToStaticMarkup(
-      <BacklogLockNotice lock={{ state: 'unreadable', path: '/work/proj/.git/stepcast-backlog.lock' }} now={NOW} />,
+      <BacklogLockNotice lock={{ state: 'unreadable', path: '/work/proj/.git/burnex-backlog.lock' }} now={NOW} />,
     );
     assert.match(html, /unreadable/);
-    assert.match(html, /stepcast-backlog\.lock/);
+    assert.match(html, /burnex-backlog\.lock/);
   });
 
   it('у свободной блокировки и у занятой моложе секунды предупреждения нет', () => {
@@ -200,7 +200,7 @@ describe('ui-backlog-owner-and-lock: отказ записи по блокиро
   });
 
   const OWNER_TEXT =
-    'The backlog is locked by "backlog pick" (pid 4242 on mac-1 since 2026-11-01T11:57:55.000Z): /work/proj/.git/stepcast-backlog.lock';
+    'The backlog is locked by "backlog pick" (pid 4242 on mac-1 since 2026-11-01T11:57:55.000Z): /work/proj/.git/burnex-backlog.lock';
 
   function conflict(): void {
     globalThis.fetch = (async () =>

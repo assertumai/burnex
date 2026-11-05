@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Проверка приёмочного прогона `examples/acceptance/stepcast.yml`.
+// Проверка приёмочного прогона `examples/acceptance/burnex.yml`.
 //
 //   node examples/acceptance/verify.mjs <каталог-прогона>
 //

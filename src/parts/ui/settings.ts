@@ -12,6 +12,7 @@ import { EffortSchema, ModelNameSchema, ModelTierSchema, RawConfigSchema } from 
 import { StepcastError } from '../../kernel/errors.js';
 import { currentDaemonKernel } from './daemon/kernel.js';
 import type { KernelCache } from './pipelines.js';
+import { homeRoot } from '../../kernel/dirs.js';
 
 export interface SettingsValue {
   readonly value: string | undefined;
@@ -69,7 +70,7 @@ const SettingsPatchSchema = z.object({
 export type SettingsPatch = z.infer<typeof SettingsPatchSchema>;
 
 export function globalConfigPath(home: string = homedir()): string {
-  return join(home, '.stepcast', 'config.yml');
+  return join(homeRoot(home), 'config.yml');
 }
 
 /**

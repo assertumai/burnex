@@ -27,15 +27,15 @@ function bed(): Bed {
   const base = tempDir('plugin-tree-');
   const root = join(base, 'work');
   const home = join(base, 'home');
-  mkdirSync(join(root, '.stepcast'), { recursive: true });
-  mkdirSync(join(home, '.stepcast'), { recursive: true });
+  mkdirSync(join(root, '.burnex'), { recursive: true });
+  mkdirSync(join(home, '.burnex'), { recursive: true });
   return {
     root,
     home,
-    globalPath: join(home, '.stepcast', 'config.yml'),
-    projectPath: join(root, '.stepcast', 'config.yml'),
-    homePatchPath: join(home, '.stepcast', 'plugins.patch.yml'),
-    projectPatchPath: join(root, '.stepcast', 'plugins.patch.yml'),
+    globalPath: join(home, '.burnex', 'config.yml'),
+    projectPath: join(root, '.burnex', 'config.yml'),
+    homePatchPath: join(home, '.burnex', 'plugins.patch.yml'),
+    projectPatchPath: join(root, '.burnex', 'plugins.patch.yml'),
   };
 }
 
@@ -73,7 +73,7 @@ function writePluginDir(
   manifest: Record<string, unknown>,
   files: Readonly<Record<string, string>> = {},
 ): string {
-  const dir = join(baseDir, '.stepcast', 'plugins', id);
+  const dir = join(baseDir, '.burnex', 'plugins', id);
   mkdirSync(dir, { recursive: true });
   writeFileSync(join(dir, 'plugin.json'), JSON.stringify(manifest));
   for (const [name, content] of Object.entries(files)) writeFileSync(join(dir, name), content);
@@ -119,8 +119,8 @@ describe('plugin-tree: свёртка трёх слоёв', () => {
 
   it('конфигурация без единого plugins.patch.yml сворачивается в прежний состав и порядок', () => {
     const place = bed();
-    writeModule(join(place.home, '.stepcast', 'g.mjs'), 'export default { name: "g", predicates: [] };\n');
-    writeModule(join(place.root, '.stepcast', 'p.mjs'), 'export default { name: "p", predicates: [] };\n');
+    writeModule(join(place.home, '.burnex', 'g.mjs'), 'export default { name: "g", predicates: [] };\n');
+    writeModule(join(place.root, '.burnex', 'p.mjs'), 'export default { name: "p", predicates: [] };\n');
     const config = resolved(place, {
       global: 'plugins: ["./g.mjs"]\n',
       project: 'plugins: ["./p.mjs"]\n',
@@ -370,11 +370,11 @@ describe('plugin-tree: отключение строки', () => {
   it('enabled: false убирает вклады строки из реестра, не убирая её из дерева, и освобождает имя другой строке', async () => {
     const place = bed();
     writeModule(
-      join(place.root, '.stepcast', 'a.mjs'),
+      join(place.root, '.burnex', 'a.mjs'),
       'export default { name: "a", predicates: [{ name: "shared_name", schema: { type: "boolean" }, evaluate: () => ({ predicate: "shared_name", passed: true, hard: true }) }] };\n',
     );
     writeModule(
-      join(place.root, '.stepcast', 'b.mjs'),
+      join(place.root, '.burnex', 'b.mjs'),
       'export default { name: "b", predicates: [{ name: "shared_name", schema: { type: "boolean" }, evaluate: () => ({ predicate: "shared_name", passed: false, hard: true }) }] };\n',
     );
     const config = resolved(place, {
@@ -398,7 +398,7 @@ describe('plugin-tree: отключение строки', () => {
 describe('plugin-tree: замена встроенной строки', () => {
   it('проектный патч заменяет backend-claude модулем пользователя: реестр несёт вклад пользователя без конфликта имён', async () => {
     const place = bed();
-    writeModule(join(place.root, '.stepcast', 'claude.mjs'), REPLACEMENT_CLAUDE);
+    writeModule(join(place.root, '.burnex', 'claude.mjs'), REPLACEMENT_CLAUDE);
     const config = resolved(place, {
       projectPatch: 'version: 1\nkind: plugins-patch\nplugins:\n  - id: backend-claude\n    use: ./claude.mjs\n',
     });
@@ -415,7 +415,7 @@ describe('plugin-tree: замена встроенной строки', () => {
 
   it('незаменённая встроенная строка оставляет владельцем «встроенный», и текст отказа о конфликте сохраняется дословно', async () => {
     const place = bed();
-    writeModule(join(place.root, '.stepcast', 'impostor.mjs'), REPLACEMENT_CLAUDE.replace('user-claude', 'impostor'));
+    writeModule(join(place.root, '.burnex', 'impostor.mjs'), REPLACEMENT_CLAUDE.replace('user-claude', 'impostor'));
     const config = resolved(place, { project: 'plugins: ["./impostor.mjs"]\n' });
 
     assert.equal(config.pluginTree[1]?.id, 'backend-claude');
@@ -460,7 +460,7 @@ describe('plugin-tree: замена встроенной строки', () => {
   it('проектный патч заменяет predicates модулем пользователя: ни один встроенный предикат не появляется сам собой', async () => {
     const place = bed();
     writeModule(
-      join(place.root, '.stepcast', 'own-predicates.mjs'),
+      join(place.root, '.burnex', 'own-predicates.mjs'),
       'export default { name: "own-predicates", predicates: [{ name: "always_true", schema: { type: "boolean" }, evaluate: () => ({ predicate: "always_true", passed: true, hard: true }) }] };\n',
     );
     const config = resolved(place, {
@@ -476,7 +476,7 @@ describe('plugin-tree: замена встроенной строки', () => {
   it('строка патча с id встроенного предиката — обычная новая строка, а имя предиката занято вкладом строки predicates', async () => {
     const place = bed();
     writeModule(
-      join(place.root, '.stepcast', 'exit-code.mjs'),
+      join(place.root, '.burnex', 'exit-code.mjs'),
       'export default { name: "exit-code-row", predicates: [{ name: "exit_code", schema: { type: "number" }, evaluate: () => ({ predicate: "exit_code", passed: true, hard: true }) }] };\n',
     );
     const config = resolved(place, {
@@ -504,7 +504,7 @@ describe('plugin-tree: замена встроенной строки', () => {
   it('enabled: false на строке predicates убирает все встроенные предикаты и освобождает их имена', async () => {
     const place = bed();
     writeModule(
-      join(place.root, '.stepcast', 'свой-exit-code.mjs'),
+      join(place.root, '.burnex', 'свой-exit-code.mjs'),
       'export default { name: "own-exit-code", predicates: [{ name: "exit_code", schema: { type: "string" }, evaluate: () => ({ predicate: "exit_code", passed: true, hard: true }) }] };\n',
     );
     const config = resolved(place, {
@@ -655,7 +655,7 @@ describe('plugin-tree: пересечение перечней строк — и
 
   it('замена backend-claude патчем состава по-прежнему проходит, отказ о пересечении её не задевает', async () => {
     const place = bed();
-    writeModule(join(place.root, '.stepcast', 'claude.mjs'), REPLACEMENT_CLAUDE);
+    writeModule(join(place.root, '.burnex', 'claude.mjs'), REPLACEMENT_CLAUDE);
     const config = resolved(place, {
       projectPatch: 'version: 1\nkind: plugins-patch\nplugins:\n  - id: backend-claude\n    use: ./claude.mjs\n',
     });
@@ -669,7 +669,7 @@ describe('plugin-tree: пересечение перечней строк — и
 describe('plugin-tree: ключ plugins как сокращённая форма', () => {
   it('патч заменяет строку, объявленную ключом plugins по id, равному спецификатору', async () => {
     const place = bed();
-    writeModule(join(place.root, '.stepcast', 'http-real.mjs'), 'export default { name: "http-real", backends: {} };\n');
+    writeModule(join(place.root, '.burnex', 'http-real.mjs'), 'export default { name: "http-real", backends: {} };\n');
     const config = resolved(place, {
       global: 'plugins: ["stepcast-plugin-http"]\n',
       projectPatch:
@@ -701,8 +701,8 @@ describe('plugin-tree: ключ plugins как сокращённая форма
     // слоем, объявившим её первым, вместе со своим файлом, — иначе
     // относительный путь сменил бы базу разрешения и грузился бы другой файл,
     // чего прежний список ключа `plugins` не делал.
-    writeModule(join(place.home, '.stepcast', 'shared.mjs'), 'export default { name: "home-shared", predicates: [] };\n');
-    writeModule(join(place.root, '.stepcast', 'shared.mjs'), 'export default { name: "project-shared", predicates: [] };\n');
+    writeModule(join(place.home, '.burnex', 'shared.mjs'), 'export default { name: "home-shared", predicates: [] };\n');
+    writeModule(join(place.root, '.burnex', 'shared.mjs'), 'export default { name: "project-shared", predicates: [] };\n');
     const config = resolved(place, {
       global: 'plugins: ["./shared.mjs"]\n',
       project: 'plugins: ["./shared.mjs"]\n',
@@ -857,10 +857,10 @@ describe('plugin-tree: каталожные строки (user-plugins)', () => 
 
   it('строка патча, назвавшая в use каталог с манифестом, даёт тот же плагин, что и обход', async () => {
     const place = bed();
-    // Каталог вне `.stepcast/plugins/` обходом не находится — на него ссылается только патч.
+    // Каталог вне `.burnex/plugins/` обходом не находится — на него ссылается только патч.
     // Патч разрешает относительный `use` от своего собственного каталога
-    // (`.stepcast`), поэтому каталог плагина заводится рядом, внутри него.
-    const dir = join(place.root, '.stepcast', 'vendored', 'clock');
+    // (`.burnex`), поэтому каталог плагина заводится рядом, внутри него.
+    const dir = join(place.root, '.burnex', 'vendored', 'clock');
     mkdirSync(dir, { recursive: true });
     writeFileSync(join(dir, 'plugin.json'), JSON.stringify({ server: 'server.mjs' }));
     writeFileSync(join(dir, 'server.mjs'), 'export default { name: "clock", predicates: [] };\n');
@@ -1026,7 +1026,7 @@ describe('plugin-tree: потребитель и пользовательски�
   it('пользовательская строка-потребитель предикатов, вставленная перед pipeline, получает сервис и вносит вклад', async () => {
     const place = bed();
     writeModule(
-      join(place.root, '.stepcast', 'own-predicate.mjs'),
+      join(place.root, '.burnex', 'own-predicate.mjs'),
       "export default function ownPredicate(ctx) { ctx.predicates.register('always_ok', { name: 'always_ok', schema: {}, evaluate: () => ({ predicate: 'always_ok', passed: true, hard: true }) }); }\nownPredicate.inject = ['predicates'];\n",
     );
     const config = resolved(place, {
@@ -1059,7 +1059,7 @@ describe('plugin-tree: потребитель и пользовательски�
   it('пользовательский плагин, ждущий steps, применённый впереди pipeline, получает сервис и вносит вклад', async () => {
     const place = bed();
     writeModule(
-      join(place.root, '.stepcast', 'waiter.mjs'),
+      join(place.root, '.burnex', 'waiter.mjs'),
       "export default function waiter(ctx) { ctx.steps.register('custom', { name: 'custom', title: 'Свой', fields: {}, execute: () => ({}) }); }\nwaiter.inject = ['steps'];\n",
     );
     const config = resolved(place, {
@@ -1084,7 +1084,7 @@ describe('plugin-tree: замена строки pipeline строкой пол�
   it('действуют только сервисы пользовательской строки; ни один сервис заменённой не появляется сам собой', async () => {
     const place = bed();
     writeModule(
-      join(place.root, '.stepcast', 'my-pipeline.mjs'),
+      join(place.root, '.burnex', 'my-pipeline.mjs'),
       "export default function myPipeline(ctx) { ctx.provide('own-pipeline'); ctx.set('own-pipeline', { своё: true }); }\n",
     );
     const config = resolved(place, {
@@ -1130,7 +1130,7 @@ describe('plugin-tree: замена строки pipeline строкой пол�
 
 /** Пакет пользователя с манифестом; плагины кладутся в его `plugins/` помощником ниже. */
 function writePackage(baseDir: string, name: string, broken = false): string {
-  const dir = join(baseDir, '.stepcast', 'packages', name);
+  const dir = join(baseDir, '.burnex', 'packages', name);
   mkdirSync(dir, { recursive: true });
   writeFileSync(
     join(dir, 'package.yml'),

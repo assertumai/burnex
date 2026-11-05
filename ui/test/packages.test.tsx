@@ -15,12 +15,12 @@ import { BUILTIN_SCREENS } from '../src/screens/index';
 
 function overview(extra: Partial<PackagesOverview> = {}): PackagesOverview {
   return {
-    layers: { project: '/work/.stepcast/packages', home: '/home/me/.stepcast/packages' },
+    layers: { project: '/work/.burnex/packages', home: '/home/me/.burnex/packages' },
     packages: [
       {
         name: 'hello',
         layer: 'project',
-        dir: '/work/.stepcast/packages/hello',
+        dir: '/work/.burnex/packages/hello',
         status: 'ok',
         version: '0.2.0',
         description: 'Пример пакета',
@@ -31,7 +31,7 @@ function overview(extra: Partial<PackagesOverview> = {}): PackagesOverview {
       {
         name: 'other',
         layer: 'project',
-        dir: '/work/.stepcast/packages/other',
+        dir: '/work/.burnex/packages/other',
         status: 'ok',
         version: '0.1.0',
         description: 'Второй',
@@ -41,7 +41,7 @@ function overview(extra: Partial<PackagesOverview> = {}): PackagesOverview {
       {
         name: 'hello',
         layer: 'home',
-        dir: '/home/me/.stepcast/packages/hello',
+        dir: '/home/me/.burnex/packages/hello',
         status: 'shadowed',
         shadowedBy: 'project',
         version: '0.1.0',
@@ -52,7 +52,7 @@ function overview(extra: Partial<PackagesOverview> = {}): PackagesOverview {
       {
         name: 'broken',
         layer: 'home',
-        dir: '/home/me/.stepcast/packages/broken',
+        dir: '/home/me/.burnex/packages/broken',
         status: 'broken',
         reason: 'package.yml: YAML не разобран',
         provides: ['scripts'],
@@ -72,7 +72,7 @@ function overview(extra: Partial<PackagesOverview> = {}): PackagesOverview {
         packages: ['hello'],
         kind: 'dashboards',
         id: 'ops',
-        file: '/work/.stepcast/packages/hello/dashboards/ops.yml',
+        file: '/work/.burnex/packages/hello/dashboards/ops.yml',
         message: 'Dashboard ops: cells: ожидался список',
       },
     ],
@@ -93,9 +93,9 @@ describe('Packages: разметка по ответу API', () => {
   it('секции Project и Home идут в порядке поиска, пакеты — в своём слое', () => {
     assert.ok(html.indexOf('aria-label="Project"') < html.indexOf('aria-label="Home"'));
     const project = section(html, 'Project');
-    assert.ok(project.includes('/work/.stepcast/packages/hello'));
-    assert.ok(!project.includes('/home/me/.stepcast/packages/broken'));
-    assert.ok(section(html, 'Home').includes('/home/me/.stepcast/packages/broken'));
+    assert.ok(project.includes('/work/.burnex/packages/hello'));
+    assert.ok(!project.includes('/home/me/.burnex/packages/broken'));
+    assert.ok(section(html, 'Home').includes('/home/me/.burnex/packages/broken'));
   });
 
   it('карточка: имя, версия, описание, каталог и статусы с причиной и затенением', () => {
@@ -131,7 +131,7 @@ describe('Packages: разметка по ответу API', () => {
   it('отказ дашборда — в карточке своего пакета, с файлом и причиной, и только там', () => {
     const project = section(html, 'Project');
     assert.equal(project.split('Dashboard ops: cells').length - 1, 1);
-    assert.ok(project.includes('/work/.stepcast/packages/hello/dashboards/ops.yml'));
+    assert.ok(project.includes('/work/.burnex/packages/hello/dashboards/ops.yml'));
     assert.ok(!section(html, 'Home').includes('Dashboard ops'));
   });
 });
@@ -142,8 +142,8 @@ describe('Packages: пустой слой и ошибка плагинов', () 
       <PackagesList overview={overview({ packages: [], problems: [] })} />,
     );
     assert.equal(html.split('No packages').length - 1, 2);
-    assert.ok(html.includes('/work/.stepcast/packages'));
-    assert.ok(html.includes('/home/me/.stepcast/packages'));
+    assert.ok(html.includes('/work/.burnex/packages'));
+    assert.ok(html.includes('/home/me/.burnex/packages'));
   });
 
   it('pluginsError — отдельным предупреждением, остальное показывается', () => {

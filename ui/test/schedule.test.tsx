@@ -33,7 +33,7 @@ function overview(service: ScheduleOverview['service']): ScheduleOverview {
         projectPath: '/work/a',
         pipelines: [
           {
-            pipeline: '.stepcast/pipelines/nightly.yml',
+            pipeline: '.burnex/pipelines/nightly.yml',
             entries: [
               {
                 index: 0,
@@ -61,9 +61,9 @@ function overview(service: ScheduleOverview['service']): ScheduleOverview {
         ],
         pipelineErrors: [
           {
-            pipeline: '.stepcast/pipelines/broken.yml',
+            pipeline: '.burnex/pipelines/broken.yml',
             error: 'jobs: ожидался объект',
-            errorFile: '.stepcast/jobs/shared.yml',
+            errorFile: '.burnex/jobs/shared.yml',
             errorAt: 'jobs.build',
             errorHint: 'Опишите работу словарём с ключом steps',
           },
@@ -81,7 +81,7 @@ describe('Schedule: разметка по ответу API', () => {
     for (const column of ['Pipeline', 'Expression', 'Timezone', 'Next', 'Last scheduled run', 'Catch-up']) {
       assert.ok(html.includes(`<th>${column}</th>`), column);
     }
-    assert.ok(html.includes('.stepcast/pipelines/nightly.yml'));
+    assert.ok(html.includes('.burnex/pipelines/nightly.yml'));
     assert.ok(html.includes('0 4 * * *'));
     assert.ok(html.includes('Europe/Berlin'));
     assert.ok(html.includes('abc123'), 'последний запуск назван идентификатором прогона');
@@ -96,7 +96,7 @@ describe('Schedule: разметка по ответу API', () => {
   it('ошибка записи — словами линта; пайплайн и проект с ошибкой — строками ошибки', () => {
     assert.ok(html.includes('расписание невыполнимо'));
     assert.ok(html.includes('jobs: ожидался объект'));
-    assert.ok(html.includes('.stepcast/jobs/shared.yml'));
+    assert.ok(html.includes('.burnex/jobs/shared.yml'));
     assert.ok(html.includes('Опишите работу словарём с ключом steps'));
     assert.ok(html.includes('Не удалось загрузить плагин'));
   });

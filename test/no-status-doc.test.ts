@@ -22,7 +22,7 @@ const ROOT = fileURLToPath(new URL('../../', import.meta.url));
 /** Упоминание документа, его основы, сборщика или любого из снятых скриптов. */
 const MENTION = /status\.md|status\.base|status:build|status:check|status\.mjs/;
 
-const SCANNED_PREFIXES = ['src/', 'test/', 'ui/', 'docs/', '.stepcast/', 'schema/', 'scripts/'];
+const SCANNED_PREFIXES = ['src/', 'test/', 'ui/', 'docs/', '.burnex/', 'schema/', 'scripts/'];
 const SCANNED_FILES = ['README.md', 'package.json', '.gitattributes'];
 
 /**

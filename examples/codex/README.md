@@ -7,7 +7,7 @@
 ## Почему из временного проекта
 
 Адаптер поставляется плагином (`burnex/backends/codex`), а не встроен. В
-`.stepcast/config.yml` этого репозитория он **не объявляется**: движок петли
+`.burnex/config.yml` этого репозитория он **не объявляется**: движок петли
 саморазвития зафиксирован снимком, модуль лежит в `dist/` рабочего дерева и до
 сборки не существует, а отказ загрузки плагина прекращает любую команду — в том
 числе `burnex data`, которую агент зовёт внутри шага. Поэтому приёмка идёт из
@@ -20,7 +20,7 @@ npm run build
 ```
 
 ```bash
-T=$(mktemp -d) && mkdir -p "$T/.stepcast" && printf 'plugins: ["%s/dist/src/backends/codex/index.js"]\ndefaults:\n  agent: codex\n' "$PWD" > "$T/.stepcast/config.yml" && git -C "$T" init -q && echo "$T"
+T=$(mktemp -d) && mkdir -p "$T/.burnex" && printf 'plugins: ["%s/dist/src/backends/codex/index.js"]\ndefaults:\n  agent: codex\n' "$PWD" > "$T/.burnex/config.yml" && git -C "$T" init -q && echo "$T"
 ```
 
 ```bash
@@ -31,7 +31,7 @@ cd "$T" && burnex config | grep codex
 перечне загруженных.
 
 ```bash
-cd "$T" && burnex lint /путь/к/stepcast/examples/codex/stepcast.yml && burnex run /путь/к/stepcast/examples/codex/stepcast.yml
+cd "$T" && burnex lint /путь/к/stepcast/examples/codex/burnex.yml && burnex run /путь/к/stepcast/examples/codex/burnex.yml
 ```
 
 ## Что сверить по журналу прогона

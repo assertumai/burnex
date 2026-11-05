@@ -46,7 +46,7 @@ export function makeProject(files: Readonly<Record<string, string>> = {}): Proje
   const root = join(base, 'work');
   const home = join(base, 'home');
   mkdirSync(root, { recursive: true });
-  mkdirSync(join(home, '.stepcast'), { recursive: true });
+  mkdirSync(join(home, '.burnex'), { recursive: true });
 
   const project: Project = {
     root,
@@ -54,8 +54,8 @@ export function makeProject(files: Readonly<Record<string, string>> = {}): Proje
     config: resolveConfig({
       cwd: root,
       home,
-      globalPath: join(home, '.stepcast', 'config.yml'),
-      projectPath: join(root, '.stepcast', 'config.yml'),
+      globalPath: join(home, '.burnex', 'config.yml'),
+      projectPath: join(root, '.burnex', 'config.yml'),
     }).config,
     write(relativePath, content) {
       const full = join(root, relativePath);
@@ -148,8 +148,8 @@ export function makeJournalBed(): JournalBed {
   const home = join(base, 'home');
   mkdirSync(runsRoot, { recursive: true });
   mkdirSync(projectRoot, { recursive: true });
-  mkdirSync(join(home, '.stepcast'), { recursive: true });
-  writeFileSync(join(home, '.stepcast', 'config.yml'), `runs:\n  root: ${runsRoot}\n`);
+  mkdirSync(join(home, '.burnex'), { recursive: true });
+  writeFileSync(join(home, '.burnex', 'config.yml'), `runs:\n  root: ${runsRoot}\n`);
   return { runsRoot, projectRoot, home };
 }
 
@@ -199,7 +199,7 @@ export function seedRun(
   journal.writeManifest({
     run_id: runId,
     pipeline: 'demo',
-    pipeline_file: join(projectRoot, 'stepcast.yml'),
+    pipeline_file: join(projectRoot, 'burnex.yml'),
     lock_hash: 'abc',
     project_root: projectRoot,
     workspace: { mode: 'cwd' },

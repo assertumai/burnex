@@ -44,8 +44,8 @@ function writePackage(packagesDir: string, name: string, files: Record<string, s
   return dir;
 }
 
-const projectPackages = (project: Project): string => join(project.root, '.stepcast', 'packages');
-const homePackages = (project: Project): string => join(project.home, '.stepcast', 'packages');
+const projectPackages = (project: Project): string => join(project.root, '.burnex', 'packages');
+const homePackages = (project: Project): string => join(project.home, '.burnex', 'packages');
 
 interface ListedPackage {
   readonly name: string;
@@ -141,10 +141,10 @@ describe('package list: перечень', () => {
   });
 
   it('работает, когда состав плагинов сломан', async () => {
-    const project = makeProject({ '.stepcast/config.yml': 'plugins: ["./plugins/missing.mjs"]\n' });
+    const project = makeProject({ '.burnex/config.yml': 'plugins: ["./plugins/missing.mjs"]\n' });
     writePackage(projectPackages(project), 'hello', {}, manifest('hello', 'needs:\n  backends: [ghost]\n'));
     // Пакет home читается рядом с тем же глобальным конфигом, что и у
-    // неудавшегося разрешения (`<home>/.stepcast/config.yml`).
+    // неудавшегося разрешения (`<home>/.burnex/config.yml`).
     writePackage(homePackages(project), 'tools');
 
     // Остальные команды при таком составе отказывают…

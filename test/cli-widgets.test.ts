@@ -22,7 +22,7 @@ function project(): string {
 describe('cli widgets: состав виджетов проекта', () => {
   it('печатает оба виджета, называя у устаревшего неразрешимое имя и версию таблицы', () => {
     const dir = project();
-    const widgetsDir = join(dir, '.stepcast', 'widgets');
+    const widgetsDir = join(dir, '.burnex', 'widgets');
     mkdirSync(widgetsDir, { recursive: true });
     writeFileSync(join(widgetsDir, 'clock.tsx'), "import { useState } from 'react';\nexport default function C() { return null; }\n");
     writeFileSync(
@@ -43,7 +43,7 @@ describe('cli widgets: состав виджетов проекта', () => {
 
   it('--json печатает тот же состав машинным видом', () => {
     const dir = project();
-    const widgetsDir = join(dir, '.stepcast', 'widgets');
+    const widgetsDir = join(dir, '.burnex', 'widgets');
     mkdirSync(widgetsDir, { recursive: true });
     writeFileSync(join(widgetsDir, 'clock.tsx'), "import { NotAName } from '@burnex/ui';\nexport default function C() { return null; }\n");
 
@@ -73,7 +73,7 @@ describe('cli widgets: состав виджетов проекта', () => {
    */
   it('специфик вне таблицы назван неразрешимым и в тексте, и в машинном виде', () => {
     const dir = project();
-    const widgetsDir = join(dir, '.stepcast', 'widgets');
+    const widgetsDir = join(dir, '.burnex', 'widgets');
     mkdirSync(widgetsDir, { recursive: true });
     writeFileSync(
       join(widgetsDir, 'gauge.tsx'),
@@ -98,7 +98,7 @@ describe('cli widgets: состав виджетов проекта', () => {
     const dir = project();
     const home = tempDir('cli-widgets-home-');
     const writePackageWidget = (name: string, id: string): void => {
-      const packageDir = join(dir, '.stepcast', 'packages', name);
+      const packageDir = join(dir, '.burnex', 'packages', name);
       mkdirSync(join(packageDir, 'widgets'), { recursive: true });
       writeFileSync(
         join(packageDir, 'package.yml'),

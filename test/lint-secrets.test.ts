@@ -8,7 +8,7 @@ import { lintPipeline, type Diagnostic } from '../src/parts/pipeline/domain/lint
 import { makeProject, withHome, type Project } from './helpers.js';
 
 function lint(project: Project): Diagnostic[] {
-  const expanded = expandPipeline({ pipelinePath: project.path('stepcast.yml'), config: project.config });
+  const expanded = expandPipeline({ pipelinePath: project.path('burnex.yml'), config: project.config });
   return lintPipeline(expanded, { config: project.config });
 }
 
@@ -41,7 +41,7 @@ const messages = (diagnostics: readonly Diagnostic[], severity: 'error' | 'warni
 
 describe('lint: секреты', () => {
   it('чистое объявление и использование не дают ни ошибок, ни предупреждений о секретах', () => {
-    const project = makeProject({ 'stepcast.yml': pipeline({ secrets: TOKEN, steps: USING }) });
+    const project = makeProject({ 'burnex.yml': pipeline({ secrets: TOKEN, steps: USING }) });
     assert.deepEqual(
       lint(project).filter((item) => /секрет/i.test(item.message)),
       [],
@@ -50,7 +50,7 @@ describe('lint: секреты', () => {
 
   it('необъявленный секрет на шаге: имя и адрес шага — отказом разбора, который линт показывает как ошибку', async () => {
     const project = makeProject({
-      'stepcast.yml': pipeline({ secrets: TOKEN, steps: '      - { id: deploy, run: [echo, ok], secrets: [missing] }\n' }),
+      'burnex.yml': pipeline({ secrets: TOKEN, steps: '      - { id: deploy, run: [echo, ok], secrets: [missing] }\n' }),
     });
     const { code, out } = await cli(project, ['lint']);
     assert.equal(code, ExitCode.configError);
@@ -61,7 +61,7 @@ describe('lint: секреты', () => {
 
   it('secrets на агентском шаге: «агенту секрет не передаётся»', async () => {
     const project = makeProject({
-      'stepcast.yml': pipeline({ secrets: TOKEN, steps: '      - { id: a, prompt: сделай, secrets: [gh-token] }\n' }),
+      'burnex.yml': pipeline({ secrets: TOKEN, steps: '      - { id: a, prompt: сделай, secrets: [gh-token] }\n' }),
     });
     const { code, out } = await cli(project, ['lint']);
     assert.equal(code, ExitCode.configError);
@@ -70,7 +70,7 @@ describe('lint: секреты', () => {
 
   it('secrets на судье judge: тот же текст', async () => {
     const project = makeProject({
-      'stepcast.yml': pipeline({
+      'burnex.yml': pipeline({
         secrets: TOKEN,
         steps: '      - id: a\n        run: [echo, ok]\n        expect: [{ judge: хорошо, secrets: [gh-token] }]\n',
       }),
@@ -82,7 +82,7 @@ describe('lint: секреты', () => {
 
   it('неизвестный провайдер: ошибка с именем провайдера и перечнем доступных', () => {
     const project = makeProject({
-      'stepcast.yml': pipeline({ secrets: '  gh-token:\n    provider: vault\n    path: x\n', steps: USING }),
+      'burnex.yml': pipeline({ secrets: '  gh-token:\n    provider: vault\n    path: x\n', steps: USING }),
     });
     const errors = lint(project).filter((item) => item.severity === 'error');
     assert.equal(errors.length, 1);
@@ -93,7 +93,7 @@ describe('lint: секреты', () => {
 
   it('параметры против схемы провайдера: файл обязателен, лишний ключ отклоняется', () => {
     const project = makeProject({
-      'stepcast.yml': pipeline({
+      'burnex.yml': pipeline({
         secrets: '  gh-token:\n    provider: env-file\n  other:\n    provider: env-file\n    file: .env\n    extra: 1\n',
         steps: USING + '      - { id: b, run: [echo, ok], secrets: [other] }\n',
       }),
@@ -106,7 +106,7 @@ describe('lint: секреты', () => {
 
   it('два секрета с одним env', () => {
     const project = makeProject({
-      'stepcast.yml': pipeline({
+      'burnex.yml': pipeline({
         secrets: `${TOKEN}  other:\n    provider: env-file\n    file: .env\n    env: GH_TOKEN\n`,
         steps: USING + '      - { id: b, run: [echo, ok], secrets: [other] }\n',
       }),
@@ -118,7 +118,7 @@ describe('lint: секреты', () => {
 
   it('явный env пайплайна, работы и шага с именем env секрета', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 name: p
 budget: { tokens: 100k }
@@ -147,7 +147,7 @@ jobs:
 
   it('${env.<env секрета>} в промпте агентского шага и в аргументе команды', () => {
     const project = makeProject({
-      'stepcast.yml': pipeline({
+      'burnex.yml': pipeline({
         secrets: TOKEN,
         steps:
           '      - { id: a, run: [echo, "${env.GH_TOKEN}"], secrets: [gh-token] }\n' +
@@ -166,7 +166,7 @@ jobs:
 
   it('неиспользуемый секрет — предупреждение, не ошибка', () => {
     const project = makeProject({
-      'stepcast.yml': pipeline({ secrets: TOKEN, steps: '      - { id: a, run: [echo, ok] }\n' }),
+      'burnex.yml': pipeline({ secrets: TOKEN, steps: '      - { id: a, run: [echo, ok] }\n' }),
     });
     const diagnostics = lint(project);
     assert.deepEqual(messages(diagnostics, 'error'), []);
@@ -174,7 +174,7 @@ jobs:
   });
 
   it('burnex lint завершается успехом на чистом документе с секретом', async () => {
-    const project = makeProject({ 'stepcast.yml': pipeline({ secrets: TOKEN, steps: USING }) });
+    const project = makeProject({ 'burnex.yml': pipeline({ secrets: TOKEN, steps: USING }) });
     const { code, out } = await cli(project, ['lint']);
     assert.equal(code, ExitCode.ok, out);
   });
@@ -199,20 +199,20 @@ describe('lint: keychain и учётные данные бэкендов', () =>
   }
 
   function lintWith(project: Project, config: Project['config']): Diagnostic[] {
-    const expanded = expandPipeline({ pipelinePath: project.path('stepcast.yml'), config });
+    const expanded = expandPipeline({ pipelinePath: project.path('burnex.yml'), config });
     return lintPipeline(expanded, { config });
   }
 
   const AGENT = '      - { id: think, agent: claude, prompt: подумай }\n';
 
   it('секрет keychain с валидными параметрами: линт не сообщает об ошибке, в том числе не на macOS', () => {
-    const project = makeProject({ 'stepcast.yml': pipeline({ secrets: KEYCHAIN_SECRET, steps: USING }) });
+    const project = makeProject({ 'burnex.yml': pipeline({ secrets: KEYCHAIN_SECRET, steps: USING }) });
     assert.deepEqual(messages(lint(project), 'error'), []);
   });
 
   it('секрет keychain без account: ошибка с указанием параметра', () => {
     const project = makeProject({
-      'stepcast.yml': pipeline({
+      'burnex.yml': pipeline({
         secrets: '  gh-token:\n    provider: keychain\n    service: github.com\n',
         steps: USING,
       }),
@@ -224,7 +224,7 @@ describe('lint: keychain и учётные данные бэкендов', () =>
   });
 
   it('credentials с незарегистрированным провайдером: путь записи и имя провайдера', () => {
-    const project = makeProject({ 'stepcast.yml': pipeline({ steps: AGENT }) });
+    const project = makeProject({ 'burnex.yml': pipeline({ steps: AGENT }) });
     const config = withCredentials(project, 'claude', {
       ANTHROPIC_API_KEY: { provider: 'vault', params: { path: 'x' } },
     });
@@ -234,12 +234,12 @@ describe('lint: keychain и учётные данные бэкендов', () =>
     assert.equal(errors[0]!.at, 'backends.claude.credentials.ANTHROPIC_API_KEY.provider');
     // Запись лежит в глобальном конфиге, а не в документе пайплайна.
     assert.equal(errors[0]!.file, config.globalConfigFile);
-    assert.notEqual(errors[0]!.file, project.path('stepcast.yml'));
+    assert.notEqual(errors[0]!.file, project.path('burnex.yml'));
     assert.match(errors[0]!.hint ?? '', /keychain/);
   });
 
   it('credentials keychain без account: диагностика называет параметр и путь записи', () => {
-    const project = makeProject({ 'stepcast.yml': pipeline({ steps: AGENT }) });
+    const project = makeProject({ 'burnex.yml': pipeline({ steps: AGENT }) });
     const config = withCredentials(project, 'claude', {
       ANTHROPIC_API_KEY: { provider: 'keychain', params: { service: 'api.anthropic.com' } },
     });
@@ -250,7 +250,7 @@ describe('lint: keychain и учётные данные бэкендов', () =>
   });
 
   it('credentials бэкенда, которым пайплайн не идёт, не проверяются', () => {
-    const project = makeProject({ 'stepcast.yml': pipeline({ steps: AGENT }) });
+    const project = makeProject({ 'burnex.yml': pipeline({ steps: AGENT }) });
     const config = withCredentials(project, 'codex', {
       OPENAI_API_KEY: { provider: 'vault', params: {} },
     });
@@ -258,7 +258,7 @@ describe('lint: keychain и учётные данные бэкендов', () =>
   });
 
   it('credentials с валидным keychain: диагностик нет', () => {
-    const project = makeProject({ 'stepcast.yml': pipeline({ steps: AGENT }) });
+    const project = makeProject({ 'burnex.yml': pipeline({ steps: AGENT }) });
     const config = withCredentials(project, 'claude', {
       ANTHROPIC_API_KEY: { provider: 'keychain', params: { service: 'api.anthropic.com', account: 'alice' } },
     });

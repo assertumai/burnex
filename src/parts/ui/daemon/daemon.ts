@@ -5,6 +5,7 @@ import { join } from 'node:path';
 
 import { StepcastError } from '../../../kernel/errors.js';
 import { isProcessAlive } from '../../../kernel/process.js';
+import { homeRoot } from '../../../kernel/dirs.js';
 
 /**
  * Жизненный цикл демона витрины.
@@ -33,7 +34,7 @@ export interface DaemonPaths {
 }
 
 export function daemonPaths(home: string = homedir()): DaemonPaths {
-  const dir = join(home, '.stepcast');
+  const dir = homeRoot(home);
   return { pidFile: join(dir, 'ui.pid'), logFile: join(dir, 'ui.log') };
 }
 

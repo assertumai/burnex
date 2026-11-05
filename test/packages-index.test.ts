@@ -39,14 +39,14 @@ interface Roots {
 function roots(): Roots {
   const base = tempDir('packages-index-');
   const projectRoot = join(base, 'project');
-  const homeDir = join(base, 'home', '.stepcast');
+  const homeDir = join(base, 'home', '.burnex');
   mkdirSync(projectRoot, { recursive: true });
   mkdirSync(homeDir, { recursive: true });
   return {
     projectRoot,
     homeDir,
     globalPath: join(homeDir, 'config.yml'),
-    projectPackages: join(projectRoot, '.stepcast', 'packages'),
+    projectPackages: join(projectRoot, '.burnex', 'packages'),
     homePackages: join(homeDir, 'packages'),
   };
 }
@@ -130,7 +130,7 @@ describe('packages-index: указатель пакетов', () => {
 
   it('проект внутри домашнего каталога: слои совпадают, пакет не затеняет сам себя', () => {
     const base = tempDir('packages-index-same-');
-    const homeDir = join(base, '.stepcast');
+    const homeDir = join(base, '.burnex');
     writePackage(join(homeDir, 'packages'), 'hello');
     const index = buildPackageIndex({ projectRoot: base, globalPath: join(homeDir, 'config.yml') });
     assert.deepEqual(index.packages.map((p) => [p.name, p.layer, p.shadowedBy]), [['hello', 'project', undefined]]);
@@ -153,7 +153,7 @@ describe('packages-index: слои ресурсов', () => {
     const index = buildPackageIndex({ projectRoot: r.projectRoot, globalPath: r.globalPath });
     const layers = resourceLayers(index, 'steps', { projectRoot: r.projectRoot, homeStepcastDir: r.homeDir });
     assert.deepEqual(layers.map((l) => l.source), ['project', 'project-packages', 'home', 'home-packages', 'builtin']);
-    assert.deepEqual(layers[0], { source: 'project', path: join(r.projectRoot, '.stepcast', 'steps') });
+    assert.deepEqual(layers[0], { source: 'project', path: join(r.projectRoot, '.burnex', 'steps') });
     assert.deepEqual(layers[2], { source: 'home', path: join(r.homeDir, 'steps') });
   });
 

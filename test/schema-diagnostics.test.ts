@@ -12,7 +12,7 @@ import { makeJournalBed, makeProject, seedRun, type Project } from './helpers.js
 /** Ошибка разбора пайплайна проекта — единственное, ради чего заведён проект. */
 function refusal(project: Project): StepcastError {
   try {
-    expandPipeline({ pipelinePath: project.path('stepcast.yml'), config: project.config });
+    expandPipeline({ pipelinePath: project.path('burnex.yml'), config: project.config });
   } catch (error) {
     assert.ok(error instanceof StepcastError);
     return error;
@@ -26,7 +26,7 @@ describe('schema-diagnostics: skip_exit_code', () => {
   it('отклоняет ключ на шаге agent, называя шаг и ключ', () => {
     const error = refusal(
       makeProject({
-        'stepcast.yml': `kind: pipeline
+        'burnex.yml': `kind: pipeline
 name: t
 jobs:
   build:
@@ -44,7 +44,7 @@ jobs:
   it('отклоняет ключ на шаге decision, называя шаг и ключ', () => {
     const error = refusal(
       makeProject({
-        'stepcast.yml': `kind: pipeline
+        'burnex.yml': `kind: pipeline
 name: t
 jobs:
   build:
@@ -63,7 +63,7 @@ jobs:
 
   it('принимает ключ на run, script, uses, работе, месте подключения и корне', () => {
     const project = makeProject({
-      'stepcast.yml': `kind: pipeline
+      'burnex.yml': `kind: pipeline
 name: t
 skip_exit_code: 78
 jobs:
@@ -81,16 +81,16 @@ jobs:
 steps:
   - { id: a, run: [echo, ok] }
 `,
-      '.stepcast/scripts/probe.sh': '#!/bin/sh\nexit 0\n',
-      '.stepcast/steps/noop/step.yml': `version: 1
+      '.burnex/scripts/probe.sh': '#!/bin/sh\nexit 0\n',
+      '.burnex/steps/noop/step.yml': `version: 1
 kind: step
 name: noop
 description: Ничего не делает.
 file: ./main.cjs
 `,
-      '.stepcast/steps/noop/main.cjs': 'process.exit(0);\n',
+      '.burnex/steps/noop/main.cjs': 'process.exit(0);\n',
     });
-    assert.doesNotThrow(() => expandPipeline({ pipelinePath: project.path('stepcast.yml'), config: project.config }));
+    assert.doesNotThrow(() => expandPipeline({ pipelinePath: project.path('burnex.yml'), config: project.config }));
   });
 });
 
@@ -99,7 +99,7 @@ describe('schema-diagnostics: отказ схемы называет причи�
   it('называет неизвестный ключ работы, а не обобщённое Invalid input', () => {
     const error = refusal(
       makeProject({
-        'stepcast.yml': `kind: pipeline
+        'burnex.yml': `kind: pipeline
 name: t
 jobs:
   propose:
@@ -117,7 +117,7 @@ jobs:
   it('указывает причину внутри варианта шага, а не отказ объединения целиком', () => {
     const error = refusal(
       makeProject({
-        'stepcast.yml': `kind: pipeline
+        'burnex.yml': `kind: pipeline
 name: t
 jobs:
   build:
@@ -136,7 +136,7 @@ jobs:
   it('спускается до глубоко вложенного лишнего ключа', () => {
     const error = refusal(
       makeProject({
-        'stepcast.yml': `kind: pipeline
+        'burnex.yml': `kind: pipeline
 name: t
 jobs:
   build:
@@ -159,7 +159,7 @@ jobs:
   it('не теряет осмысленное сообщение там, где объединения нет', () => {
     const error = refusal(
       makeProject({
-        'stepcast.yml': `kind: pipeline
+        'burnex.yml': `kind: pipeline
 name: t
 jobs:
   build:
@@ -173,14 +173,14 @@ jobs:
 
   it('называет неизвестный ключ конфигурации тем же разбором', () => {
     const bed = makeJournalBed();
-    mkdirSync(join(bed.projectRoot, '.stepcast'), { recursive: true });
-    writeFileSync(join(bed.projectRoot, '.stepcast', 'config.yml'), 'defaults:\n  modle: opus\n');
+    mkdirSync(join(bed.projectRoot, '.burnex'), { recursive: true });
+    writeFileSync(join(bed.projectRoot, '.burnex', 'config.yml'), 'defaults:\n  modle: opus\n');
     assert.throws(
       () =>
         resolveConfig({
           cwd: bed.projectRoot,
           home: bed.home,
-          projectPath: join(bed.projectRoot, '.stepcast', 'config.yml'),
+          projectPath: join(bed.projectRoot, '.burnex', 'config.yml'),
         }),
       (error: unknown) => {
         assert.ok(error instanceof StepcastError);
@@ -197,7 +197,7 @@ describe('ui-dashboard: карточка нечитаемого пайплайн
     const { runsRoot, projectRoot, home } = makeJournalBed();
     seedRun(runsRoot, projectRoot, { runId: 'a' });
     writeFileSync(
-      join(projectRoot, 'stepcast.yml'),
+      join(projectRoot, 'burnex.yml'),
       `kind: pipeline
 name: t
 jobs:
@@ -212,7 +212,7 @@ jobs:
     assert.ok(view !== undefined);
     assert.match(view.error ?? '', /bogus_key/);
     assert.equal(view.errorAt, 'jobs.propose');
-    assert.equal(view.errorFile, 'stepcast.yml');
+    assert.equal(view.errorFile, 'burnex.yml');
     assert.match(view.errorHint ?? '', /pipeline-format/);
   });
 
@@ -220,7 +220,7 @@ jobs:
     const { runsRoot, projectRoot, home } = makeJournalBed();
     seedRun(runsRoot, projectRoot, { runId: 'a' });
     writeFileSync(
-      join(projectRoot, 'stepcast.yml'),
+      join(projectRoot, 'burnex.yml'),
       `kind: pipeline
 name: t
 jobs:
@@ -241,7 +241,7 @@ steps:
 
     const view = (await buildPipelines(runsRoot, config, { home })).pipelines[0];
     assert.ok(view !== undefined);
-    assert.equal(view.file, 'stepcast.yml');
+    assert.equal(view.file, 'burnex.yml');
     assert.equal(view.errorFile, 'jobs/x.yml');
     assert.equal(view.errorAt, 'steps.0');
     assert.match(view.error ?? '', /promt/);

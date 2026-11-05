@@ -21,7 +21,7 @@ import { tempDir } from './tmp.js';
 
 function bed(): ReturnType<typeof daemonPaths> {
   const home = tempDir('daemon-');
-  mkdirSync(join(home, '.stepcast'), { recursive: true });
+  mkdirSync(join(home, '.burnex'), { recursive: true });
   return daemonPaths(home);
 }
 
@@ -152,7 +152,7 @@ describe('ui-daemon: жизненный цикл', () => {
 
 /** Каталог плагина пользователя в домашнем слое (`user-plugins`). */
 function writeHomePlugin(home: string, id: string, manifest: Record<string, unknown>, files: Readonly<Record<string, string>>): void {
-  const dir = join(home, '.stepcast', 'plugins', id);
+  const dir = join(home, '.burnex', 'plugins', id);
   mkdirSync(dir, { recursive: true });
   writeFileSync(join(dir, 'plugin.json'), JSON.stringify(manifest));
   for (const [name, content] of Object.entries(files)) writeFileSync(join(dir, name), content);
@@ -161,12 +161,12 @@ function writeHomePlugin(home: string, id: string, manifest: Record<string, unkn
 describe('ui-daemon: действующее ядро и каталожные плагины', () => {
   it('итоги строк доходят до ядра демона: каталожный плагин действует, сломанный сосед назван отказавшим', async () => {
     const home = tempDir('daemon-kernel-');
-    mkdirSync(join(home, '.stepcast'), { recursive: true });
+    mkdirSync(join(home, '.burnex'), { recursive: true });
     writeHomePlugin(home, 'clock', { server: 'server.mjs' }, {
       'server.mjs': 'export default { name: "clock" };\n',
     });
     // Каталог без манифеста — мягкий отказ строки: демон обязан подняться.
-    mkdirSync(join(home, '.stepcast', 'plugins', 'broken'), { recursive: true });
+    mkdirSync(join(home, '.burnex', 'plugins', 'broken'), { recursive: true });
 
     const daemon = await currentDaemonKernel(undefined, home);
 
@@ -180,7 +180,7 @@ describe('ui-daemon: действующее ядро и каталожные п�
 
   it('запасное встроенное ядро не берёт плагинов пользователя: домашний слой у него свой, подставной', async () => {
     const home = tempDir('daemon-kernel-');
-    mkdirSync(join(home, '.stepcast'), { recursive: true });
+    mkdirSync(join(home, '.burnex'), { recursive: true });
     writeHomePlugin(home, 'clock', { server: 'server.mjs' }, {
       'server.mjs': 'export default { name: "clock" };\n',
     });
@@ -188,7 +188,7 @@ describe('ui-daemon: действующее ядро и каталожные п�
     // и действующим становится запасное ядро (design.md `config-patch-layers`,
     // Решение 7): в нём не должно быть ни домашнего слоя, ни его каталогов.
     writeFileSync(
-      join(home, '.stepcast', 'plugins.patch.yml'),
+      join(home, '.burnex', 'plugins.patch.yml'),
       'version: 1\nkind: plugins-patch\nplugins:\n  - id: mine\n    use: ./нет-такого.mjs\n',
     );
 

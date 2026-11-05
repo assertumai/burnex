@@ -381,7 +381,7 @@ jobs:
 // токены с ценой — потеря поля в снимке иначе прошла бы мимо теста.
 describe('run-progress: расход в снимке растёт от шага к шагу', () => {
   it('токены и цена во втором исходе шага больше, чем в первом', async () => {
-    const project = makeProject({ 'stepcast.yml': TWO_AGENT_STEPS });
+    const project = makeProject({ 'burnex.yml': TWO_AGENT_STEPS });
     const fake = createFakeBackend({
       lines: [initLine(), resultLine({ text: 'готово', tokensIn: 100, tokensOut: 20, costUsd: 0.25 })],
     });
@@ -389,7 +389,7 @@ describe('run-progress: расход в снимке растёт от шага 
     const snapshots: UsageSnapshot[] = [];
 
     await runPipeline({
-      expanded: expandPipeline({ pipelinePath: project.path('stepcast.yml'), config: project.config }),
+      expanded: expandPipeline({ pipelinePath: project.path('burnex.yml'), config: project.config }),
       config: { ...project.config, runs: { ...project.config.runs, root: runsRoot } },
       projectRoot: project.root,
       cwd: project.root,
@@ -438,12 +438,12 @@ jobs:
 // началом и первой записью проходят десятки минут.
 describe('run-progress: состояние на диске знает об идущей работе', () => {
   it('показывает работу running со started_at, пока её шаг ещё идёт', async () => {
-    const project = makeProject({ 'stepcast.yml': SLOW_STEP });
+    const project = makeProject({ 'burnex.yml': SLOW_STEP });
     const runsRoot = tempDir('runs-');
     let onStepStart: RunStatus | undefined;
 
     const result = await runPipeline({
-      expanded: expandPipeline({ pipelinePath: project.path('stepcast.yml'), config: project.config }),
+      expanded: expandPipeline({ pipelinePath: project.path('burnex.yml'), config: project.config }),
       config: { ...project.config, runs: { ...project.config.runs, root: runsRoot } },
       projectRoot: project.root,
       cwd: project.root,
@@ -517,7 +517,7 @@ jobs:
  */
 describe('run-progress: событие engine.pinned', () => {
   it('лента называет снимок среди первых строк, после начала прогона и до первой работы', async () => {
-    const project = makeProject({ 'stepcast.yml': ONE_STEP_PIPELINE });
+    const project = makeProject({ 'burnex.yml': ONE_STEP_PIPELINE });
     const engineRoot = project.path('vendor/engine');
     mkdirSync(join(engineRoot, 'dist', 'src'), { recursive: true });
     writeFileSync(join(engineRoot, 'package.json'), JSON.stringify({ name: 'fake-engine', files: ['dist'] }));
@@ -529,7 +529,7 @@ describe('run-progress: событие engine.pinned', () => {
     const rendered: string[] = [];
 
     await runPipeline({
-      expanded: expandPipeline({ pipelinePath: project.path('stepcast.yml'), config: project.config }),
+      expanded: expandPipeline({ pipelinePath: project.path('burnex.yml'), config: project.config }),
       config: { ...project.config, runs: { ...project.config.runs, root: runsRoot } },
       projectRoot: project.root,
       cwd: project.root,
@@ -552,7 +552,7 @@ describe('run-progress: событие engine.pinned', () => {
   });
 
   it('движок вне правимого дерева: лента о нём не сообщает', async () => {
-    const project = makeProject({ 'stepcast.yml': ONE_STEP_PIPELINE });
+    const project = makeProject({ 'burnex.yml': ONE_STEP_PIPELINE });
     const outsideRoot = tempDir('outside-engine-');
     mkdirSync(join(outsideRoot, 'dist'), { recursive: true });
     writeFileSync(join(outsideRoot, 'package.json'), JSON.stringify({ name: 'fake-engine', files: ['dist'] }));
@@ -563,7 +563,7 @@ describe('run-progress: событие engine.pinned', () => {
     const rendered: string[] = [];
 
     await runPipeline({
-      expanded: expandPipeline({ pipelinePath: project.path('stepcast.yml'), config: project.config }),
+      expanded: expandPipeline({ pipelinePath: project.path('burnex.yml'), config: project.config }),
       config: { ...project.config, runs: { ...project.config.runs, root: runsRoot } },
       projectRoot: project.root,
       cwd: project.root,
@@ -580,11 +580,11 @@ describe('run-progress: событие engine.pinned', () => {
 
 describe('run-progress: команда run печатает ход', () => {
   it('ход виден до возврата команды: строки прогона, работы и шага собраны раньше строки итога', async () => {
-    const project = makeProject({ 'stepcast.yml': ONE_STEP_PIPELINE });
+    const project = makeProject({ 'burnex.yml': ONE_STEP_PIPELINE });
     const { lines, write } = capture();
 
     const exitCode = await withHome(project.home, () =>
-      runRunCommand(args(['stepcast.yml']), write, project.root),
+      runRunCommand(args(['burnex.yml']), write, project.root),
     );
 
     assert.equal(exitCode, ExitCode.ok);
@@ -597,10 +597,10 @@ describe('run-progress: команда run печатает ход', () => {
   });
 
   it('идентификатор и путь к журналу напечатаны первыми строками и годятся для адресации', async () => {
-    const project = makeProject({ 'stepcast.yml': ONE_STEP_PIPELINE });
+    const project = makeProject({ 'burnex.yml': ONE_STEP_PIPELINE });
     const { lines, write } = capture();
 
-    await withHome(project.home, () => runRunCommand(args(['stepcast.yml']), write, project.root));
+    await withHome(project.home, () => runRunCommand(args(['burnex.yml']), write, project.root));
 
     const runIdLine = lines[0] ?? '';
     const journalLine = lines[1] ?? '';
@@ -620,11 +620,11 @@ describe('run-progress: команда run печатает ход', () => {
   });
 
   it('перемешанный поток двух параллельных работ читается по адресам', async () => {
-    const project = makeProject({ 'stepcast.yml': TWO_PARALLEL_PIPELINE });
+    const project = makeProject({ 'burnex.yml': TWO_PARALLEL_PIPELINE });
     const { lines, write } = capture();
 
     const exitCode = await withHome(project.home, () =>
-      runRunCommand(args(['stepcast.yml']), write, project.root),
+      runRunCommand(args(['burnex.yml']), write, project.root),
     );
 
     assert.equal(exitCode, ExitCode.ok);
@@ -637,15 +637,15 @@ describe('run-progress: команда run печатает ход', () => {
   });
 
   it('--quiet подавляет ход, но сохраняет итог, статус, путь к журналу и код возврата', async () => {
-    const project = makeProject({ 'stepcast.yml': ONE_STEP_PIPELINE });
+    const project = makeProject({ 'burnex.yml': ONE_STEP_PIPELINE });
     const loud = capture();
     const quiet = capture();
 
     const loudExit = await withHome(project.home, () =>
-      runRunCommand(args(['stepcast.yml']), loud.write, project.root),
+      runRunCommand(args(['burnex.yml']), loud.write, project.root),
     );
     const quietExit = await withHome(project.home, () =>
-      runRunCommand(args(['stepcast.yml'], { quiet: true }), quiet.write, project.root),
+      runRunCommand(args(['burnex.yml'], { quiet: true }), quiet.write, project.root),
     );
 
     assert.equal(quietExit, loudExit);
@@ -663,7 +663,7 @@ describe('run-progress: команда run печатает ход', () => {
 describe('run-progress: итог изолированного прогона', () => {
   it('однорепозиторный прогон предлагает burnex apply', async () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 version: 1
 kind: pipeline
 name: изолированный-итог
@@ -678,7 +678,7 @@ jobs:
     const { lines, write } = capture();
 
     const exitCode = await withHome(project.home, () =>
-      runRunCommand(args(['stepcast.yml']), write, project.root),
+      runRunCommand(args(['burnex.yml']), write, project.root),
     );
 
     assert.equal(exitCode, ExitCode.ok);
@@ -691,7 +691,7 @@ jobs:
   // однорепозиторный.
   it('составной прогон предлагает burnex apply наравне с однорепозиторным', async () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 version: 1
 kind: pipeline
 name: составной-итог
@@ -700,7 +700,7 @@ jobs:
   build:
     steps: [{ id: compile, run: [echo, ok], expect: [{ exit_code: 0 }] }]
 `,
-      '.stepcast/config.yml': 'project:\n  nested_repos: [public-site]\n',
+      '.burnex/config.yml': 'project:\n  nested_repos: [public-site]\n',
       'public-site/.gitkeep': '',
     });
     gitInit(project.root);
@@ -710,7 +710,7 @@ jobs:
     const { lines, write } = capture();
 
     const exitCode = await withHome(project.home, () =>
-      runRunCommand(args(['stepcast.yml']), write, project.root),
+      runRunCommand(args(['burnex.yml']), write, project.root),
     );
 
     assert.equal(exitCode, ExitCode.ok);
@@ -763,10 +763,10 @@ jobs:
   });
 
   it('команда run печатает цикл из двух проходов с пределом 3 и строки участников как прежде', async () => {
-    const project = makeProject({ 'counter.txt': '0\n', 'stepcast.yml': COUNTER_LOOP });
+    const project = makeProject({ 'counter.txt': '0\n', 'burnex.yml': COUNTER_LOOP });
     const { lines, write } = capture();
 
-    const exitCode = await withHome(project.home, () => runRunCommand(args(['stepcast.yml']), write, project.root));
+    const exitCode = await withHome(project.home, () => runRunCommand(args(['burnex.yml']), write, project.root));
 
     assert.equal(exitCode, ExitCode.ok);
     const loopLines = lines.filter((line) => line.includes('fix-loop:'));

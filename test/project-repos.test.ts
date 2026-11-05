@@ -21,11 +21,11 @@ function config(projectYaml: string) {
   const root = tempDir('project-repos-');
   const home = join(root, 'home');
   const cwd = join(root, 'project');
-  mkdirSync(join(home, '.stepcast'), { recursive: true });
-  mkdirSync(join(cwd, '.stepcast'), { recursive: true });
-  writeFileSync(join(cwd, '.stepcast', 'config.yml'), projectYaml);
+  mkdirSync(join(home, '.burnex'), { recursive: true });
+  mkdirSync(join(cwd, '.burnex'), { recursive: true });
+  writeFileSync(join(cwd, '.burnex', 'config.yml'), projectYaml);
 
-  return resolveConfig({ cwd, home, globalPath: join(home, '.stepcast', 'config.yml') }).config;
+  return resolveConfig({ cwd, home, globalPath: join(home, '.burnex', 'config.yml') }).config;
 }
 
 const ROOT_ONLY =
@@ -116,7 +116,7 @@ describe('project/repos: resolveItemRepo', () => {
         assert.match(error.message, /an-item/);
         assert.match(error.message, /корень/);
         assert.match(error.message, /check/);
-        assert.match(error.hint ?? '', /\.stepcast\/config\.yml/);
+        assert.match(error.hint ?? '', /\.burnex\/config\.yml/);
         return true;
       },
     );
@@ -131,7 +131,7 @@ describe('project/repos: resolveItemRepo', () => {
         assert.match(error.message, /an-item/);
         assert.match(error.message, /backend/);
         assert.match(error.message, /check/);
-        assert.match(error.hint ?? '', /\.stepcast\/config\.yml/);
+        assert.match(error.hint ?? '', /\.burnex\/config\.yml/);
         return true;
       },
     );

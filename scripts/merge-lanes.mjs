@@ -2,7 +2,7 @@
 /**
  * Сведение дорожек больше не ведёт этот скрипт — петля зовёт `stepcast
  * merge-lanes` (`src/parts/pipeline/domain/lanes/merge.ts`) напрямую через `$BURNEX_BIN`
- * (`.stepcast/jobs/merge.yml`). Файл остаётся заглушкой, а не исчезает:
+ * (`.burnex/jobs/merge.yml`). Файл остаётся заглушкой, а не исчезает:
  * физическое удаление вне прав работы `implement-express`
  * (openspec/changes/agent-cannot-clean-up/proposal.md) — тело, несущее
  * прежнюю логику, читалось бы вторым, расходящимся источником правды.

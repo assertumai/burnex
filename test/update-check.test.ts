@@ -10,7 +10,7 @@ import { CHECK_TIMEOUT_MS, checkUpdate, type UpdateStep } from '../src/parts/ins
 const SHA = 'a'.repeat(40);
 
 const managed = parseInstallManifest(
-  JSON.stringify({ method: 'managed', repo: '/srv/sc.git', ref: 'v0.3.0', version: '0.3.0', releases_dir: '/h/.stepcast/releases' }),
+  JSON.stringify({ method: 'managed', repo: '/srv/sc.git', ref: 'v0.3.0', version: '0.3.0', releases_dir: '/h/.burnex/releases' }),
 );
 const checkout = parseInstallManifest('{"method":"checkout","dir":"/work/sc"}');
 const npm = parseInstallManifest('{"method":"npm","package":"stepcast"}');
@@ -203,9 +203,9 @@ function commandHost(manifest: string, answers: Answers): { host: UpdateHost; ex
   const executed: string[] = [];
   const { capture } = probe(answers);
   const host: UpdateHost = {
-    engineRoot: '/h/.stepcast/releases/0.3.0',
-    manifestPath: '/h/.stepcast/install.json',
-    probes: { isGitTree: () => false, readPackageName: () => undefined, releasesDir: '/h/.stepcast/releases' },
+    engineRoot: '/h/.burnex/releases/0.3.0',
+    manifestPath: '/h/.burnex/install.json',
+    probes: { isGitTree: () => false, readPackageName: () => undefined, releasesDir: '/h/.burnex/releases' },
     readManifest: () => manifest,
     exec: (step) => {
       executed.push([step.cmd, ...step.args].join(' '));

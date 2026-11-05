@@ -46,7 +46,7 @@ function baseManifest(runId: string): RunManifest {
   return {
     run_id: runId,
     pipeline: 'demo',
-    pipeline_file: '/tmp/stepcast.yml',
+    pipeline_file: '/tmp/burnex.yml',
     lock_hash: 'abc',
     project_root: '/tmp/project',
     workspace: { mode: 'cwd' },

@@ -91,7 +91,7 @@ export function runKnowledgeCommand(
 
   if (source === undefined) {
     throw new StepcastError('Практика памяти не объявлена', {
-      hint: 'Объявите project.knowledge в .stepcast/config.yml или разверните её: burnex init --knowledge fs',
+      hint: 'Объявите project.knowledge в .burnex/config.yml или разверните её: burnex init --knowledge fs',
     });
   }
 

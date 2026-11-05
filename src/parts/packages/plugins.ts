@@ -76,7 +76,7 @@ export function packagePluginOperations(
     if (first !== undefined && second !== undefined) {
       const failure: PackagePluginConflictFailure = {
         message: `Плагин ${plugin.id} приносят два пакета одного слоя — ${first.package} и ${second.package}`,
-        hint: 'Переименуйте каталог плагина в одном из пакетов, уберите один из пакетов либо положите свой плагин в свободный каталог .stepcast/plugins',
+        hint: 'Переименуйте каталог плагина в одном из пакетов, уберите один из пакетов либо положите свой плагин в свободный каталог .burnex/plugins',
         conflict: [first.package, second.package],
       };
       operations.push(

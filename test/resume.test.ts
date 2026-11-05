@@ -83,7 +83,7 @@ async function firstRun(
   adapterFor?: (name: string) => BackendAdapter,
 ): Promise<RunResult> {
   return runPipeline({
-    expanded: expandPipeline({ pipelinePath: b.project.path('stepcast.yml'), config: b.project.config }),
+    expanded: expandPipeline({ pipelinePath: b.project.path('burnex.yml'), config: b.project.config }),
     config: configOf(b),
     projectRoot: b.project.root,
     cwd: b.project.root,
@@ -94,7 +94,7 @@ async function firstRun(
 /** Построить план так же, как это делает команда `burnex resume`. */
 function planFor(b: Bed, source: RunResult, from?: string): ResumePlan {
   const expanded = expandPipeline({
-    pipelinePath: b.project.path('stepcast.yml'),
+    pipelinePath: b.project.path('burnex.yml'),
     config: b.project.config,
   });
   const nested = b.project.config.project.nestedRepos;
@@ -132,7 +132,7 @@ async function resume(
 ): Promise<RunResult> {
   const plan = planFor(b, source, from);
   return runPipeline({
-    expanded: expandPipeline({ pipelinePath: b.project.path('stepcast.yml'), config: b.project.config }),
+    expanded: expandPipeline({ pipelinePath: b.project.path('burnex.yml'), config: b.project.config }),
     config: configOf(b),
     projectRoot: b.project.root,
     cwd: b.project.root,
@@ -180,7 +180,7 @@ jobs:
 describe('run-resume: переиспользование по ключам', () => {
   // Сценарий: «Успешный шаг переиспользован» / «Упавший шаг переисполняется»
   it('переиспользует успевшие шаги и переисполняет упавший', async () => {
-    const b = bed({ 'сырьё.txt': 'вход', 'stepcast.yml': TWO_JOBS });
+    const b = bed({ 'сырьё.txt': 'вход', 'burnex.yml': TWO_JOBS });
 
     const first = await firstRun(b);
     assert.equal(first.status, 'failed', 'третий шаг падает: маркера нет');
@@ -204,7 +204,7 @@ describe('run-resume: переиспользование по ключам', () 
 
   // Сценарий: «Признак и источник»
   it('помечает переиспользованный шаг источником', async () => {
-    const b = bed({ 'сырьё.txt': 'вход', 'маркер.txt': 'есть', 'stepcast.yml': TWO_JOBS });
+    const b = bed({ 'сырьё.txt': 'вход', 'маркер.txt': 'есть', 'burnex.yml': TWO_JOBS });
     const first = await firstRun(b);
     assert.equal(first.status, 'success');
 
@@ -216,7 +216,7 @@ describe('run-resume: переиспользование по ключам', () 
 
   // Сценарий: «Ссылка на исходный прогон» / «Исходный прогон неприкосновенен»
   it('создаёт новый прогон со ссылкой и не трогает исходный', async () => {
-    const b = bed({ 'сырьё.txt': 'вход', 'маркер.txt': 'есть', 'stepcast.yml': TWO_JOBS });
+    const b = bed({ 'сырьё.txt': 'вход', 'маркер.txt': 'есть', 'burnex.yml': TWO_JOBS });
     const first = await firstRun(b);
     const before = readFileSync(first.journal.paths.status, 'utf8');
 
@@ -233,7 +233,7 @@ describe('run-resume: переиспользование по ключам', () 
 
   // Сценарий: «Событие переиспользования»
   it('пишет событие переиспользования', async () => {
-    const b = bed({ 'сырьё.txt': 'вход', 'маркер.txt': 'есть', 'stepcast.yml': TWO_JOBS });
+    const b = bed({ 'сырьё.txt': 'вход', 'маркер.txt': 'есть', 'burnex.yml': TWO_JOBS });
     const first = await firstRun(b);
     const second = await resume(b, first, 'вторая');
 
@@ -244,7 +244,7 @@ describe('run-resume: переиспользование по ключам', () 
 
   // Сценарий: «Изменение рабочего дерева обесценивает шаг»
   it('переисполняет шаг с объявленными входами, когда тронуты именно они', async () => {
-    const b = bed({ 'сырьё.txt': 'вход', 'маркер.txt': 'есть', 'stepcast.yml': TWO_JOBS });
+    const b = bed({ 'сырьё.txt': 'вход', 'маркер.txt': 'есть', 'burnex.yml': TWO_JOBS });
     const first = await firstRun(b);
 
     b.project.write('сырьё.txt', 'другой вход');
@@ -263,7 +263,7 @@ describe('run-resume: переиспользование по ключам', () 
   it('обесценивает шаг без объявленных входов любой правкой дерева', async () => {
     const b = bed({
       'посторонний.txt': 'ни при чём',
-      'stepcast.yml': `
+      'burnex.yml': `
 version: 1
 kind: pipeline
 name: широкий-отпечаток
@@ -289,7 +289,7 @@ jobs:
   });
 
   it('переиспользует всё, когда с прошлого прогона ничего не тронуто', async () => {
-    const b = bed({ 'сырьё.txt': 'вход', 'маркер.txt': 'есть', 'stepcast.yml': TWO_JOBS });
+    const b = bed({ 'сырьё.txt': 'вход', 'маркер.txt': 'есть', 'burnex.yml': TWO_JOBS });
     const first = await firstRun(b);
     assert.equal(first.status, 'success');
 
@@ -302,7 +302,7 @@ describe('run-resume: гранулярность по режиму сессии'
   // Сценарий: «Общая сессия повторяется целиком»
   it('огрубляет план до работы целиком при session: shared', async () => {
     const b = bed({
-      'stepcast.yml': `
+      'burnex.yml': `
 version: 1
 kind: pipeline
 name: общая-сессия
@@ -338,7 +338,7 @@ jobs:
 
   // Сценарий: «Пошаговая сессия повторяется с шага»
   it('переиспользует отдельные шаги при session: per_step', async () => {
-    const b = bed({ 'сырьё.txt': 'вход', 'stepcast.yml': TWO_JOBS });
+    const b = bed({ 'сырьё.txt': 'вход', 'burnex.yml': TWO_JOBS });
     const first = await firstRun(b);
     b.project.write('маркер.txt', 'есть');
 
@@ -376,7 +376,7 @@ ${steps}
         expect: [{ exit_code: 0 }]`);
 
   it('невалидный второй шаг переисполняет работу целиком, и причина называет попытки', async () => {
-    const b = bed({ 'сырьё.txt': 'вход', 'stepcast.yml': FAILING });
+    const b = bed({ 'сырьё.txt': 'вход', 'burnex.yml': FAILING });
     const first = await firstRun(b);
     assert.equal(first.status, 'failed');
     b.project.write('маркер.txt', 'есть');
@@ -390,7 +390,7 @@ ${steps}
   });
 
   it('отказывает в --from <работа>/<шаг> и называет работу ближайшей допустимой точкой', async () => {
-    const b = bed({ 'сырьё.txt': 'вход', 'stepcast.yml': FAILING });
+    const b = bed({ 'сырьё.txt': 'вход', 'burnex.yml': FAILING });
     const first = await firstRun(b);
 
     const request = (from: string) => ({
@@ -416,7 +416,7 @@ ${steps}
     const b = bed(
       {
         'сырьё.txt': 'вход',
-        'stepcast.yml': ATTEMPTED(`
+        'burnex.yml': ATTEMPTED(`
       - id: пишет
         run: [sh, -c, 'test ! -e результат.txt && echo r > результат.txt']
         expect: [{ exit_code: 0 }]
@@ -451,7 +451,7 @@ ${steps}
 describe('run-resume: явная точка возобновления', () => {
   // Сценарий: «Возобновление с работы»
   it('переисполняет указанную работу и всё ниже по графу', async () => {
-    const b = bed({ 'сырьё.txt': 'вход', 'маркер.txt': 'есть', 'stepcast.yml': TWO_JOBS });
+    const b = bed({ 'сырьё.txt': 'вход', 'маркер.txt': 'есть', 'burnex.yml': TWO_JOBS });
     const first = await firstRun(b);
 
     const plan = planFor(b, first, 'первая');
@@ -465,7 +465,7 @@ describe('run-resume: явная точка возобновления', () => {
 
   // Сценарий: «Возобновление с шага»
   it('переиспользует шаги до указанного при пошаговой сессии', async () => {
-    const b = bed({ 'сырьё.txt': 'вход', 'маркер.txt': 'есть', 'stepcast.yml': TWO_JOBS });
+    const b = bed({ 'сырьё.txt': 'вход', 'маркер.txt': 'есть', 'burnex.yml': TWO_JOBS });
     const first = await firstRun(b);
 
     const plan = planFor(b, first, 'первая/b');
@@ -483,7 +483,7 @@ describe('run-resume: восстановление дерева', () => {
     const b = bed(
       {
         'маркер.txt': 'есть',
-        'stepcast.yml': `
+        'burnex.yml': `
 version: 1
 kind: pipeline
 name: восстановление
@@ -534,7 +534,7 @@ jobs:
     const b = bed(
       {
         'маркер.txt': 'есть',
-        'stepcast.yml': `
+        'burnex.yml': `
 version: 1
 kind: pipeline
 name: сохранность
@@ -580,7 +580,7 @@ jobs:
 
   // Сценарий: «Ни одно состояние не восстановимо»
   it('исполняет пайплайн с начала, когда переиспользовать нечего', async () => {
-    const b = bed({ 'сырьё.txt': 'вход', 'маркер.txt': 'есть', 'stepcast.yml': TWO_JOBS });
+    const b = bed({ 'сырьё.txt': 'вход', 'маркер.txt': 'есть', 'burnex.yml': TWO_JOBS });
     const first = await firstRun(b);
 
     // Стираем якоря: прогон выглядит как снятый до их введения.
@@ -615,7 +615,7 @@ describe('run-resume: выдержка о прошлом отказе', () => {
   // Сценарий: «Выдержка подложена» / «Протокол попыток не переносится»
   it('подкладывает previous_failure первому переисполняемому шагу с контекстом', async () => {
     const b = bed({
-      'stepcast.yml': `
+      'burnex.yml': `
 version: 1
 kind: pipeline
 name: выдержка
@@ -644,7 +644,7 @@ jobs:
   });
 
   it('не строит выдержку для успешного прогона', async () => {
-    const b = bed({ 'маркер.txt': 'есть', 'stepcast.yml': TWO_JOBS });
+    const b = bed({ 'маркер.txt': 'есть', 'burnex.yml': TWO_JOBS });
     const first = await firstRun(b);
 
     const { buildPreviousFailure } = await import('../src/parts/pipeline/run/previousFailure.js');
@@ -685,7 +685,7 @@ jobs:
   // Сценарий: «Выдержка достаётся работе, названной планом» — адресат назван
   // по имени работы, а не по порядку переисполнения.
   it('адресует выдержку работе с переисполняемым агентским шагом, а не первой переисполняемой', async () => {
-    const b = bed({ 'stepcast.yml': RUN_THEN_AGENT('') });
+    const b = bed({ 'burnex.yml': RUN_THEN_AGENT('') });
 
     const first = await firstRun(b, talker());
     assert.equal(first.status, 'failed', 'без маркера подготовка падает');
@@ -717,7 +717,7 @@ jobs:
   // адресата.
   it('сообщает о недоставленной выдержке, когда адресата снимает условие', async () => {
     const b = bed({
-      'stepcast.yml': RUN_THEN_AGENT(`
+      'burnex.yml': RUN_THEN_AGENT(`
     if: "jobs.prepare.status == 'failed'"`),
     });
 
@@ -787,7 +787,7 @@ describe('run-resume: запись о прерывании', () => {
 describe('run-resume: объяснение и пробный запуск', () => {
   // Сценарий: «Отчёт о валидности»
   it('объясняет по каждому шагу, будет ли он переиспользован', async () => {
-    const b = bed({ 'сырьё.txt': 'вход', 'stepcast.yml': TWO_JOBS });
+    const b = bed({ 'сырьё.txt': 'вход', 'burnex.yml': TWO_JOBS });
     const first = await firstRun(b);
     b.project.write('маркер.txt', 'есть');
 
@@ -799,7 +799,7 @@ describe('run-resume: объяснение и пробный запуск', () =
 
   // Сценарий: «Пробный вызов ничего не исполняет»
   it('строит план, не создавая прогона и не трогая дерево', async () => {
-    const b = bed({ 'сырьё.txt': 'вход', 'stepcast.yml': TWO_JOBS });
+    const b = bed({ 'сырьё.txt': 'вход', 'burnex.yml': TWO_JOBS });
     const first = await firstRun(b);
 
     const before = readdirSync(first.journal.paths.projectDir).length;
@@ -814,7 +814,7 @@ describe('run-resume: объяснение и пробный запуск', () =
 
 describe('run-resume: переиспользование не тратит бюджет', () => {
   it('не учитывает расход переиспользованных шагов заново', async () => {
-    const b = bed({ 'сырьё.txt': 'вход', 'маркер.txt': 'есть', 'stepcast.yml': TWO_JOBS });
+    const b = bed({ 'сырьё.txt': 'вход', 'маркер.txt': 'есть', 'burnex.yml': TWO_JOBS });
     const first = await firstRun(b);
     const second = await resume(b, first, 'вторая');
 
@@ -832,7 +832,7 @@ describe('run-resume: --set переопределяет вход', () => {
   it('обесценивает шаги, зависящие от переопределённого входа', async () => {
     const b = bed({
       'сырьё.txt': 'вход',
-      'stepcast.yml': `
+      'burnex.yml': `
 version: 1
 kind: pipeline
 name: входы
@@ -879,7 +879,7 @@ function planWithInputs(
   Object.assign(inputs, overrides);
 
   const expanded = expandPipeline({
-    pipelinePath: b.project.path('stepcast.yml'),
+    pipelinePath: b.project.path('burnex.yml'),
     config: b.project.config,
     inputs,
   });
@@ -912,7 +912,7 @@ describe('run-resume: атрибуция изменений дерева', () =>
   // Сценарий: «Собственный вывод прогона не обесценивает его работы»
   it('переиспользует предыдущие работы, когда дерево изменено только собственным выводом прогона', async () => {
     const b = bed({
-      'stepcast.yml': `
+      'burnex.yml': `
 version: 1
 kind: pipeline
 name: атрибуция
@@ -974,7 +974,7 @@ jobs:
 `;
 
     {
-      const b = bed({ 'stepcast.yml': pipeline });
+      const b = bed({ 'burnex.yml': pipeline });
       const first = await firstRun(b);
       assert.equal(first.status, 'success');
       b.project.write('поздний.txt', 'правка после прогона');
@@ -984,7 +984,7 @@ jobs:
     }
 
     {
-      const b = bed({ 'stepcast.yml': pipeline });
+      const b = bed({ 'burnex.yml': pipeline });
       const first = await firstRun(b);
       assert.equal(first.status, 'success');
       b.project.write('ранний.txt', 'правка после прогона');
@@ -1007,7 +1007,7 @@ describe('run-resume: файлы определения вне множеств�
   it('переисполняет только шаги работы, чей файл определения изменился', async () => {
     const b = bed(
       {
-        'stepcast.yml': `
+        'burnex.yml': `
 kind: pipeline
 name: определения
 jobs:
@@ -1094,7 +1094,7 @@ jobs:
 
   // Сценарий: «Верх графа переиспользуется поверх изменённого дерева»
   it('переиспользует работу выше точки, игнорируя и перечисляя чужую правку в её области', async () => {
-    const b = bed({ 'a.txt': 'вход', 'stepcast.yml': CHAIN });
+    const b = bed({ 'a.txt': 'вход', 'burnex.yml': CHAIN });
     const first = await firstRun(b);
     assert.equal(first.status, 'success');
 
@@ -1113,7 +1113,7 @@ jobs:
   it('не переиспользует шаг выше точки, если изменилось его определение', async () => {
     const b = bed(
       {
-        'stepcast.yml': `
+        'burnex.yml': `
 version: 1
 kind: pipeline
 name: цепочка-с-определением
@@ -1164,7 +1164,7 @@ steps:
 
 describe('run-resume: отчёт по работам', () => {
   it('называет частичное переисполнение и точку, с которой оно начинается', async () => {
-    const b = bed({ 'сырьё.txt': 'вход', 'маркер.txt': 'есть', 'stepcast.yml': TWO_JOBS });
+    const b = bed({ 'сырьё.txt': 'вход', 'маркер.txt': 'есть', 'burnex.yml': TWO_JOBS });
     const first = await firstRun(b);
     assert.equal(first.status, 'success');
 
@@ -1213,7 +1213,7 @@ jobs:
   // Сценарий: «Артефакт переиспользованной работы существует» / «Нижележащая
   // работа видит выход»
   it('публикует артефакт полностью переиспользованной работы в новом прогоне', async () => {
-    const b = bed({ 'stepcast.yml': OUTPUT_PIPELINE });
+    const b = bed({ 'burnex.yml': OUTPUT_PIPELINE });
     const first = await firstRun(b, fakeAdapter());
     assert.equal(first.status, 'success');
 
@@ -1229,7 +1229,7 @@ jobs:
 
   // Сценарий: «Частичное переиспользование работы с output.from»
   it('публикует выход переиспользованного шага при частичном переиспользовании работы', async () => {
-    const b = bed({ 'stepcast.yml': OUTPUT_PIPELINE });
+    const b = bed({ 'burnex.yml': OUTPUT_PIPELINE });
     const first = await firstRun(b, fakeAdapter());
     assert.equal(first.status, 'success');
 
@@ -1246,7 +1246,7 @@ jobs:
 
   // Сценарий: «Выход восстановить нельзя»
   it('переисполняет работу, чей выход в источнике недоступен', async () => {
-    const b = bed({ 'stepcast.yml': OUTPUT_PIPELINE });
+    const b = bed({ 'burnex.yml': OUTPUT_PIPELINE });
     const first = await firstRun(b, fakeAdapter());
     assert.equal(first.status, 'success');
 
@@ -1283,7 +1283,7 @@ jobs:
 
   // Сценарий: «Перечень сужает при отпечатке по дереву»
   it('изменение файла вне наблюдённых входов не инвалидирует шаг без объявленных inputs', async () => {
-    const b = bed({ 'a.ts': 'вход', 'b.ts': 'посторонний', 'stepcast.yml': OBSERVED_PIPELINE });
+    const b = bed({ 'a.ts': 'вход', 'b.ts': 'посторонний', 'burnex.yml': OBSERVED_PIPELINE });
     const first = await firstRun(b, readsA());
     assert.equal(first.status, 'success');
 
@@ -1306,7 +1306,7 @@ jobs:
     const b = bed({
       'a.ts': 'вход',
       'declared.txt': 'вход',
-      'stepcast.yml': `
+      'burnex.yml': `
 version: 1
 kind: pipeline
 name: наблюдённые-против-объявленных
@@ -1355,7 +1355,7 @@ jobs:
 
   // Сценарий: «Чужая правка выше точки»
   it('не восстанавливает из якоря чужую правку, которую сама же обещала проигнорировать', async () => {
-    const b = bed({ 'сырьё.txt': 'вход', 'stepcast.yml': PRODUCING }, { git: true });
+    const b = bed({ 'сырьё.txt': 'вход', 'burnex.yml': PRODUCING }, { git: true });
     const first = await firstRun(b);
     assert.equal(first.status, 'success');
 
@@ -1382,7 +1382,7 @@ jobs:
   it('гасит следующие шаги выше точки, когда предшественник переисполнен по существу', async () => {
     const b = bed(
       {
-        'stepcast.yml': `
+        'burnex.yml': `
 version: 1
 kind: pipeline
 name: каскад-выше-точки
@@ -1462,7 +1462,7 @@ jobs:
 
   // Сценарий: «Неизвестная точка отвергается»
   it('отвергает работу, которой в пайплайне нет, вместо переиспользования всего', async () => {
-    const b = bed({ 'stepcast.yml': PAIR }, { git: true });
+    const b = bed({ 'burnex.yml': PAIR }, { git: true });
     const first = await firstRun(b);
 
     // Точка, которая никогда не наступает, оставляла бы весь пайплайн «выше
@@ -1481,7 +1481,7 @@ jobs:
   });
 
   it('отвергает шаг, которого у названной работы нет', async () => {
-    const b = bed({ 'stepcast.yml': PAIR }, { git: true });
+    const b = bed({ 'burnex.yml': PAIR }, { git: true });
     const first = await firstRun(b);
 
     assert.throws(
@@ -1527,7 +1527,7 @@ describe('run-resume: отложенные подстановки простра
   // Сценарий: «Отложенная подстановка величины прогона не меняет ключ» /
   // «Работа с подстановкой директории прогона переиспользуется»
   it('переиспользует работу с ${run.dir} в контексте шага при возобновлении без правок', async () => {
-    const b = bed({ 'stepcast.yml': RUN_DIR_PIPELINE });
+    const b = bed({ 'burnex.yml': RUN_DIR_PIPELINE });
     const first = await firstRun(b, runDirAdapter());
     assert.equal(first.status, 'success');
 
@@ -1547,7 +1547,7 @@ describe('run-resume: отложенные подстановки простра
   // Сценарий: «Одинаковые условия дают одинаковый ключ» — прямее, чем через
   // решение планировщика: сравниваются сами записанные ключи.
   it('даёт совпадающие ключи шагов в двух независимых прогонах одной работы', async () => {
-    const b = bed({ 'stepcast.yml': RUN_DIR_PIPELINE });
+    const b = bed({ 'burnex.yml': RUN_DIR_PIPELINE });
     const first = await firstRun(b, runDirAdapter());
     assert.equal(first.status, 'success');
 
@@ -1566,7 +1566,7 @@ describe('run-resume: отложенные подстановки простра
   // переисполняется и читает `${run.dir}/item.json` — файл, которого в
   // каталоге нового прогона никто не создавал.
   it('переносит файл, оставленный переиспользованным шагом в каталоге прогона', async () => {
-    const b = bed({ 'stepcast.yml': RUN_DIR_PIPELINE });
+    const b = bed({ 'burnex.yml': RUN_DIR_PIPELINE });
     const first = await firstRun(b, runDirAdapter());
     assert.equal(first.status, 'success');
 
@@ -1599,7 +1599,7 @@ describe('run-resume: отложенные подстановки простра
   // возобновления ниже работы с `${run.dir}`, определение и дерево не менялись.
   it('переиспользует работу с ${run.dir} при возобновлении с точки ниже неё', async () => {
     const b = bed({
-      'stepcast.yml': `
+      'burnex.yml': `
 version: 1
 kind: pipeline
 name: run-dir-и-нижележащая
@@ -1649,7 +1649,7 @@ describe('run-resume: вход ключа собирают одинаково о
   // её шагу уже знает выход `propose`, обход в порядке объявления не знал бы.
   it('переиспользует работу, объявленную раньше своей зависимости', async () => {
     const b = bed({
-      'stepcast.yml': `
+      'burnex.yml': `
 version: 1
 kind: pipeline
 name: объявлена-раньше-зависимости
@@ -1723,7 +1723,7 @@ jobs:
 
   // Сценарий: «Изменение выхода работы выше по графу меняет ключ»
   it('смена выхода работы выше по графу меняет ключ шага, который его использует', async () => {
-    const b = bed({ 'stepcast.yml': UPSTREAM_PIPELINE });
+    const b = bed({ 'burnex.yml': UPSTREAM_PIPELINE });
     const first = await firstRun(b, proposeAdapter());
     assert.equal(first.status, 'success');
 
@@ -1745,7 +1745,7 @@ jobs:
   it('правка файла работы с ${run.dir} меняет её ключи и не задевает шаги другой работы', async () => {
     const b = bed(
       {
-        'stepcast.yml': `
+        'burnex.yml': `
 kind: pipeline
 name: правка-работы-с-run-dir
 jobs:
@@ -1810,7 +1810,7 @@ steps:
   it('правка значения в env работы меняет ключ шага, который его подставляет', async () => {
     const b = bed(
       {
-        'stepcast.yml': `
+        'burnex.yml': `
 kind: pipeline
 name: правка-env
 jobs:
@@ -1875,7 +1875,7 @@ jobs:
 
   /** Тот же план, что строит planFor, но с подменённой конфигурацией — раскрытие видит другой раннер. */
   function planWithConfig(b: Bed, source: RunResult, config: Config): ResumePlan {
-    const expanded = expandPipeline({ pipelinePath: b.project.path('stepcast.yml'), config });
+    const expanded = expandPipeline({ pipelinePath: b.project.path('burnex.yml'), config });
     const nested = config.project.nestedRepos;
     const anchorKind = detectAnchorKind(b.project.root, nested);
     const stateDir = tempDir('plan-');
@@ -1903,21 +1903,21 @@ jobs:
 
   // Сценарий: «Переписанный скрипт даёт другой ключ»
   it('правка содержимого файла при неизменном пути обесценивает шаг', async () => {
-    const b = bed({ 'stepcast.yml': SCRIPT_PIPELINE });
-    b.project.write('.stepcast/scripts/task.sh', '#!/bin/sh\nexit 0\n');
+    const b = bed({ 'burnex.yml': SCRIPT_PIPELINE });
+    b.project.write('.burnex/scripts/task.sh', '#!/bin/sh\nexit 0\n');
 
     const first = await firstRun(b);
     assert.equal(first.status, 'success');
     assert.equal(planFor(b, first).steps[0]?.decision.kind, 'reuse');
 
-    b.project.write('.stepcast/scripts/task.sh', '#!/bin/sh\n# другой код\nexit 0\n');
+    b.project.write('.burnex/scripts/task.sh', '#!/bin/sh\n# другой код\nexit 0\n');
     assert.equal(planFor(b, first).steps[0]?.decision.kind, 'rerun');
   });
 
   // Сценарий: «Смена раннера даёт другой ключ»
   it('смена command раннера в конфигурации обесценивает шаг', async () => {
-    const b = bed({ 'stepcast.yml': SCRIPT_PIPELINE });
-    b.project.write('.stepcast/scripts/task.sh', '#!/bin/sh\nexit 0\n');
+    const b = bed({ 'burnex.yml': SCRIPT_PIPELINE });
+    b.project.write('.burnex/scripts/task.sh', '#!/bin/sh\nexit 0\n');
 
     const first = await firstRun(b);
     assert.equal(first.status, 'success');
@@ -1936,15 +1936,15 @@ jobs:
   // Сценарий: «Узкие inputs дыры не оставляют»
   it('inputs, не покрывающие каталог скриптов, дыры в ключе не оставляют', async () => {
     // Работа объявляет inputs: [неподходящее.txt] — отпечаток входов считается
-    // только по нему, и .stepcast/scripts/ в него не входит вовсе.
-    const b = bed({ 'stepcast.yml': SCRIPT_PIPELINE, 'неподходящее.txt': 'исходно' });
-    b.project.write('.stepcast/scripts/task.sh', '#!/bin/sh\nexit 0\n');
+    // только по нему, и .burnex/scripts/ в него не входит вовсе.
+    const b = bed({ 'burnex.yml': SCRIPT_PIPELINE, 'неподходящее.txt': 'исходно' });
+    b.project.write('.burnex/scripts/task.sh', '#!/bin/sh\nexit 0\n');
 
     const first = await firstRun(b);
     assert.equal(first.status, 'success');
     assert.equal(planFor(b, first).steps[0]?.decision.kind, 'reuse');
 
-    b.project.write('.stepcast/scripts/task.sh', '#!/bin/sh\n# правка вне объявленных inputs\nexit 0\n');
+    b.project.write('.burnex/scripts/task.sh', '#!/bin/sh\n# правка вне объявленных inputs\nexit 0\n');
     assert.equal(planFor(b, first).steps[0]?.decision.kind, 'rerun');
   });
 });
@@ -1953,7 +1953,7 @@ jobs:
  * Тот же образец, что и у `script` выше: правка манифеста (design.md
  * изменения reusable-steps, решение 11) должна обесценивать переиспользование
  * шага так же надёжно, как правка самого файла скрипта. Манифест лежит в
- * `.stepcast/steps/greet/` внутри корня проекта — том же корне, от которого
+ * `.burnex/steps/greet/` внутри корня проекта — том же корне, от которого
  * `expandPipeline` без явных `stepRoots` находит проектный слой сама.
  */
 describe('run-resume: правка манифеста и with обесценивает переиспользование шага uses', () => {
@@ -1988,13 +1988,13 @@ jobs:
 `;
 
   function withGreetStep(project: Project, manifest = GREET_MANIFEST): void {
-    project.write('.stepcast/steps/greet/step.yml', manifest);
-    project.write('.stepcast/steps/greet/main.cjs', GREET_MAIN);
+    project.write('.burnex/steps/greet/step.yml', manifest);
+    project.write('.burnex/steps/greet/main.cjs', GREET_MAIN);
   }
 
   // Сценарий: «Правка манифеста даёт другой ключ»
   it('правка умолчания параметра в манифесте обесценивает шаг', async () => {
-    const b = bed({ 'stepcast.yml': USES_PIPELINE, 'неподходящее.txt': 'исходно' });
+    const b = bed({ 'burnex.yml': USES_PIPELINE, 'неподходящее.txt': 'исходно' });
     withGreetStep(b.project);
 
     const first = await firstRun(b);
@@ -2007,7 +2007,7 @@ jobs:
 
   // Сценарий: «Другой параметр даёт другой ключ»
   it('правка with на месте вызова обесценивает шаг', async () => {
-    const b = bed({ 'stepcast.yml': USES_PIPELINE, 'неподходящее.txt': 'исходно' });
+    const b = bed({ 'burnex.yml': USES_PIPELINE, 'неподходящее.txt': 'исходно' });
     withGreetStep(b.project);
 
     const first = await firstRun(b);
@@ -2015,7 +2015,7 @@ jobs:
     assert.equal(planFor(b, first).steps[0]?.decision.kind, 'reuse');
 
     b.project.write(
-      'stepcast.yml',
+      'burnex.yml',
       USES_PIPELINE.replace('uses: greet', 'uses: greet\n        with: { name: Ann }'),
     );
     assert.equal(planFor(b, first).steps[0]?.decision.kind, 'rerun');
@@ -2049,11 +2049,11 @@ jobs:
   // Сценарий: «Переиспользованный шаг script»
   it('переносит output.json переиспользованного шага script и работа публикует его как свой выход', async () => {
     const b = bed({
-      'stepcast.yml': SCRIPT_OUTPUT_PIPELINE,
+      'burnex.yml': SCRIPT_OUTPUT_PIPELINE,
       'неподходящее.txt': 'исходно',
       'schema.json': JSON.stringify({ type: 'object' }),
     });
-    b.project.write('.stepcast/scripts/plan.sh', '#!/bin/sh\necho \'{"slug":"add-oauth"}\' > "$BURNEX_OUTPUT"\n');
+    b.project.write('.burnex/scripts/plan.sh', '#!/bin/sh\necho \'{"slug":"add-oauth"}\' > "$BURNEX_OUTPUT"\n');
 
     const first = await firstRun(b);
     assert.equal(first.status, 'success');
@@ -2120,10 +2120,10 @@ jobs:
   // Сценарий: «Выход доступен как у шага script», перенесённый через resume —
   // тем же путём, каким переносится выход переиспользованного шага script.
   it('переносит output.json переиспользованного шага uses и работа публикует его как свой выход', async () => {
-    const b = bed({ 'stepcast.yml': USES_OUTPUT_PIPELINE, 'неподходящее.txt': 'исходно' });
-    b.project.write('.stepcast/steps/greet/step.yml', GREET_MANIFEST);
-    b.project.write('.stepcast/steps/greet/main.cjs', GREET_MAIN);
-    b.project.write('.stepcast/steps/greet/output.schema.json', GREET_OUTPUT_SCHEMA);
+    const b = bed({ 'burnex.yml': USES_OUTPUT_PIPELINE, 'неподходящее.txt': 'исходно' });
+    b.project.write('.burnex/steps/greet/step.yml', GREET_MANIFEST);
+    b.project.write('.burnex/steps/greet/main.cjs', GREET_MAIN);
+    b.project.write('.burnex/steps/greet/output.schema.json', GREET_OUTPUT_SCHEMA);
 
     const first = await firstRun(b);
     assert.equal(first.status, 'success');
@@ -2189,7 +2189,7 @@ jobs:
   }
 
   it('другой пункт с другим репозиторием обесценивает шаги дорожки, а не работу slots', async () => {
-    const b = bed({ 'stepcast.yml': SLOTS_PIPELINE }, { git: true });
+    const b = bed({ 'burnex.yml': SLOTS_PIPELINE }, { git: true });
     const first = await firstRun(b, slotsAdapter('.'));
     assert.equal(first.status, 'success');
     assert.ok(planFor(b, first).steps.every((item) => item.decision.kind === 'reuse'));
@@ -2232,7 +2232,7 @@ jobs:
   // каталога части (тот же путь, что печатает `burnex resume --dry-run`).
   it('правка во вложенном репозитории, входящая в область шага, обесценивает шаг', async () => {
     const b = bed(
-      { 'public-site/src/api.ts': 'исходное', 'stepcast.yml': NESTED_INPUT_PIPELINE },
+      { 'public-site/src/api.ts': 'исходное', 'burnex.yml': NESTED_INPUT_PIPELINE },
       { nestedRepos: ['public-site'] },
     );
     const first = await firstRun(b);
@@ -2268,7 +2268,7 @@ jobs:
       {
         'маркер.txt': 'есть',
         'public-site/src/api.ts': 'исходное',
-        'stepcast.yml': OUTSIDE_NESTED_PIPELINE,
+        'burnex.yml': OUTSIDE_NESTED_PIPELINE,
       },
       { nestedRepos: ['public-site'] },
     );
@@ -2298,7 +2298,7 @@ jobs:
   // Задача 10 / Сценарий: состав исходного прогона не совпадает с сегодняшним.
   it('возобновление прогона другого состава исполняет пайплайн с начала с причиной про состав', async () => {
     const b = bed(
-      { 'маркер.txt': 'есть', 'public-site/src/api.ts': 'исходное', 'stepcast.yml': MARKED_PIPELINE },
+      { 'маркер.txt': 'есть', 'public-site/src/api.ts': 'исходное', 'burnex.yml': MARKED_PIPELINE },
       { nestedRepos: ['public-site'] },
     );
     const first = await firstRun(b);
@@ -2345,7 +2345,7 @@ jobs:
   // несравнимостью, а не исключением git наружу из planResume.
   it('смена состава на прогоне, изменившем дерево, даёт план, а не исключение git', async () => {
     const b = bed(
-      { 'маркер.txt': 'есть', 'public-site/src/api.ts': 'исходное', 'stepcast.yml': WRITING_PIPELINE },
+      { 'маркер.txt': 'есть', 'public-site/src/api.ts': 'исходное', 'burnex.yml': WRITING_PIPELINE },
       { nestedRepos: ['public-site'] },
     );
     const first = await firstRun(b);
@@ -2394,7 +2394,7 @@ jobs:
   // шагом заходит внутрь части — тем же `restorePaths`, что и у корня.
   it('восстановление дерева перед первым переисполняемым шагом приводит файл внутри части к прежнему состоянию', async () => {
     const b = bed(
-      { 'маркер.txt': 'есть', 'public-site/src/api.ts': 'исходное', 'stepcast.yml': RESTORE_PIPELINE },
+      { 'маркер.txt': 'есть', 'public-site/src/api.ts': 'исходное', 'burnex.yml': RESTORE_PIPELINE },
       { nestedRepos: ['public-site'] },
     );
 
@@ -2499,7 +2499,7 @@ async function runFirstCanceledAtSecondStep(
 
   const controller = new AbortController();
   const firstPromise = runPipeline({
-    expanded: expandPipeline({ pipelinePath: b.project.path('stepcast.yml'), config }),
+    expanded: expandPipeline({ pipelinePath: b.project.path('burnex.yml'), config }),
     config,
     projectRoot: b.project.root,
     cwd: b.project.root,
@@ -2520,7 +2520,7 @@ async function runFirstCanceledAtSecondStep(
 describe('run-resume: продолжение сессии оборванного шага', () => {
   // Сценарий: «Оборванная сессия продолжается»
   it('продолжает сессию второго шага, а первый переиспользует', async () => {
-    const b = bed({ 'stepcast.yml': SESSION_CONTINUATION_PIPELINE }, { git: true });
+    const b = bed({ 'burnex.yml': SESSION_CONTINUATION_PIPELINE }, { git: true });
     const config = configWithFakeSessions(b, true);
 
     const { first } = await runFirstCanceledAtSecondStep(b, config);
@@ -2538,7 +2538,7 @@ describe('run-resume: продолжение сессии оборванного
 
     const secondBackend = createFakeBackend({ lines: [initLine(), resultLine({ text: 'готово' })] });
     const second = await runPipeline({
-      expanded: expandPipeline({ pipelinePath: b.project.path('stepcast.yml'), config }),
+      expanded: expandPipeline({ pipelinePath: b.project.path('burnex.yml'), config }),
       config,
       projectRoot: b.project.root,
       cwd: b.project.root,
@@ -2568,7 +2568,7 @@ describe('run-resume: продолжение сессии оборванного
 
   // Сценарий: «Бэкенд без поддержки сессий»
   it('без поддержки сессий у бэкенда работа переисполняется целиком', async () => {
-    const b = bed({ 'stepcast.yml': SESSION_CONTINUATION_PIPELINE }, { git: true });
+    const b = bed({ 'burnex.yml': SESSION_CONTINUATION_PIPELINE }, { git: true });
     const config = configWithFakeSessions(b, false);
 
     const { first } = await runFirstCanceledAtSecondStep(b, config, { capabilities: { sessions: false } });
@@ -2582,7 +2582,7 @@ describe('run-resume: продолжение сессии оборванного
       lines: [initLine(), resultLine({ text: 'ок' }), initLine(), resultLine({ text: 'готово' })],
     });
     const second = await runPipeline({
-      expanded: expandPipeline({ pipelinePath: b.project.path('stepcast.yml'), config }),
+      expanded: expandPipeline({ pipelinePath: b.project.path('burnex.yml'), config }),
       config,
       projectRoot: b.project.root,
       cwd: b.project.root,
@@ -2600,7 +2600,7 @@ describe('run-resume: продолжение сессии оборванного
   // сессии у шага нет, и продолжать нечего — записанная за него пустая строка
   // выглядела бы идентификатором и стоила бы следующему прогону попытки.
   it('отменённый шаг без названной бэкендом нити продолжения не назначает', async () => {
-    const b = bed({ 'stepcast.yml': SESSION_CONTINUATION_PIPELINE }, { git: true });
+    const b = bed({ 'burnex.yml': SESSION_CONTINUATION_PIPELINE }, { git: true });
     const config = configWithFakeSessions(b, true);
 
     const { first } = await runFirstCanceledAtSecondStep(b, config, {
@@ -2626,7 +2626,7 @@ describe('run-resume: продолжение сессии оборванного
       lines: [initLine(), resultLine({ text: 'готово' })],
     });
     const second = await runPipeline({
-      expanded: expandPipeline({ pipelinePath: b.project.path('stepcast.yml'), config }),
+      expanded: expandPipeline({ pipelinePath: b.project.path('burnex.yml'), config }),
       config,
       projectRoot: b.project.root,
       cwd: b.project.root,
@@ -2646,13 +2646,13 @@ describe('run-resume: продолжение сессии оборванного
 
   // Сценарий: «Изменённое определение шага отменяет продолжение»
   it('изменённый после прогона промпт шага отменяет продолжение', async () => {
-    const b = bed({ 'stepcast.yml': SESSION_CONTINUATION_PIPELINE }, { git: true });
+    const b = bed({ 'burnex.yml': SESSION_CONTINUATION_PIPELINE }, { git: true });
     const config = configWithFakeSessions(b, true);
 
     const { first } = await runFirstCanceledAtSecondStep(b, config);
     assert.equal(first.status, 'canceled');
 
-    b.project.write('stepcast.yml', SESSION_CONTINUATION_PIPELINE.replace('"Второй"', '"Второй, но иначе"'));
+    b.project.write('burnex.yml', SESSION_CONTINUATION_PIPELINE.replace('"Второй"', '"Второй, но иначе"'));
 
     const { plan } = planResume({ cwd: b.project.root, config, source: readSourceRun(first.journal.paths) });
     assert.deepEqual(decisions(plan), { 'работа/первый': 'rerun', 'работа/второй': 'rerun' });
@@ -2666,7 +2666,7 @@ describe('run-resume: продолжение сессии оборванного
       'session: shared',
       'session: per_step',
     );
-    const b = bed({ 'stepcast.yml': PER_STEP_PIPELINE }, { git: true });
+    const b = bed({ 'burnex.yml': PER_STEP_PIPELINE }, { git: true });
     const config = configWithFakeSessions(b, true);
 
     const { first } = await runFirstCanceledAtSecondStep(b, config);
@@ -2684,7 +2684,7 @@ describe('run-resume: продолжение сессии оборванного
 
     const secondBackend = createFakeBackend({ lines: [initLine(), resultLine({ text: 'готово' })] });
     const second = await runPipeline({
-      expanded: expandPipeline({ pipelinePath: b.project.path('stepcast.yml'), config }),
+      expanded: expandPipeline({ pipelinePath: b.project.path('burnex.yml'), config }),
       config,
       projectRoot: b.project.root,
       cwd: b.project.root,
@@ -2700,7 +2700,7 @@ describe('run-resume: продолжение сессии оборванного
   // Отмена завершает шаг, а не заводит ему следующую попытку: на этом держится
   // условие продолжения — последняя запись попытки обязана быть `canceled`.
   it('отмена не заводит шагу следующую попытку', async () => {
-    const b = bed({ 'stepcast.yml': CONTINUATION_WITH_ATTEMPTS_PIPELINE }, { git: true });
+    const b = bed({ 'burnex.yml': CONTINUATION_WITH_ATTEMPTS_PIPELINE }, { git: true });
     const config = configWithFakeSessions(b, true);
 
     const { first } = await runFirstCanceledAtSecondStep(b, config);
@@ -2713,7 +2713,7 @@ describe('run-resume: продолжение сессии оборванного
 
   // Сценарий: «Перенесённая попытка отличима»
   it('перенесённая попытка называет прогон, в котором она исполнялась', async () => {
-    const b = bed({ 'stepcast.yml': SESSION_CONTINUATION_PIPELINE }, { git: true });
+    const b = bed({ 'burnex.yml': SESSION_CONTINUATION_PIPELINE }, { git: true });
     const config = configWithFakeSessions(b, true);
 
     const { first } = await runFirstCanceledAtSecondStep(b, config);
@@ -2724,7 +2724,7 @@ describe('run-resume: продолжение сессии оборванного
 
     const secondBackend = createFakeBackend({ lines: [initLine(), resultLine({ text: 'готово' })] });
     const second = await runPipeline({
-      expanded: expandPipeline({ pipelinePath: b.project.path('stepcast.yml'), config }),
+      expanded: expandPipeline({ pipelinePath: b.project.path('burnex.yml'), config }),
       config,
       projectRoot: b.project.root,
       cwd: b.project.root,
@@ -2744,13 +2744,13 @@ describe('run-resume: продолжение сессии оборванного
   // Сценарий: «Отмена между попытками» — последняя попытка завершилась сама
   // (успехом или отказом), а отмена сама по себе к сессии не привязана.
   it('отмена между попытками не назначает продолжение', async () => {
-    const b = bed({ 'stepcast.yml': SESSION_CONTINUATION_PIPELINE }, { git: true });
+    const b = bed({ 'burnex.yml': SESSION_CONTINUATION_PIPELINE }, { git: true });
     const config = configWithFakeSessions(b, true);
 
     const backend = createFakeBackend({ lines: [initLine(), resultLine({ text: 'ок' })] });
     const controller = new AbortController();
     const firstPromise = runPipeline({
-      expanded: expandPipeline({ pipelinePath: b.project.path('stepcast.yml'), config }),
+      expanded: expandPipeline({ pipelinePath: b.project.path('burnex.yml'), config }),
       config,
       projectRoot: b.project.root,
       cwd: b.project.root,
@@ -2799,7 +2799,7 @@ jobs:
   // `--from` отменяет продолжение, только когда точка названа на продолжаемом
   // шаге или выше: ниже по графу она о нём ничего не говорит.
   it('точка --from ниже продолжаемого шага продолжения не отменяет, а на его работе — отменяет', async () => {
-    const b = bed({ 'stepcast.yml': CONTINUATION_WITH_FOLLOWER_PIPELINE }, { git: true });
+    const b = bed({ 'burnex.yml': CONTINUATION_WITH_FOLLOWER_PIPELINE }, { git: true });
     const config = configWithFakeSessions(b, true);
 
     const { first } = await runFirstCanceledAtSecondStep(b, config);
@@ -2855,7 +2855,7 @@ jobs:
 
   // Сценарий: «Сессии у бэкенда больше нет» / «Отмена не съедает попытку»
   it('недоступная сессия стоит одной попытки, а объявленные попытки шага отмена не расходует', async () => {
-    const b = bed({ 'stepcast.yml': CONTINUATION_WITH_ATTEMPTS_PIPELINE }, { git: true });
+    const b = bed({ 'burnex.yml': CONTINUATION_WITH_ATTEMPTS_PIPELINE }, { git: true });
     const config = configWithFakeSessions(b, true);
 
     const { first } = await runFirstCanceledAtSecondStep(b, config);
@@ -2875,7 +2875,7 @@ jobs:
     });
 
     const second = await runPipeline({
-      expanded: expandPipeline({ pipelinePath: b.project.path('stepcast.yml'), config }),
+      expanded: expandPipeline({ pipelinePath: b.project.path('burnex.yml'), config }),
       config,
       projectRoot: b.project.root,
       cwd: b.project.root,
@@ -2901,7 +2901,7 @@ jobs:
 
   // Сценарий: «Расход складывается»
   it('сводка расхода нового прогона складывает оборванную и продолженную попытки шага', async () => {
-    const b = bed({ 'stepcast.yml': SESSION_CONTINUATION_PIPELINE }, { git: true });
+    const b = bed({ 'burnex.yml': SESSION_CONTINUATION_PIPELINE }, { git: true });
     const config = configWithFakeSessions(b, true);
 
     const { first } = await runFirstCanceledAtSecondStep(b, config, {
@@ -2919,7 +2919,7 @@ jobs:
       lines: [initLine(), resultLine({ text: 'готово', tokensIn: 20, tokensOut: 10 })],
     });
     const second = await runPipeline({
-      expanded: expandPipeline({ pipelinePath: b.project.path('stepcast.yml'), config }),
+      expanded: expandPipeline({ pipelinePath: b.project.path('burnex.yml'), config }),
       config,
       projectRoot: b.project.root,
       cwd: b.project.root,
@@ -2965,7 +2965,7 @@ jobs:
     // упёрлась бы в него сама и получила бы budget_exceeded, а не canceled) —
     // поэтому запись оборванной попытки правится на диске, как если бы она
     // успела израсходовать больше потолка до того, как её оборвали.
-    const b = bed({ 'stepcast.yml': TIGHT_BUDGET_CONTINUATION_PIPELINE }, { git: true });
+    const b = bed({ 'burnex.yml': TIGHT_BUDGET_CONTINUATION_PIPELINE }, { git: true });
     const config = configWithFakeSessions(b, true);
 
     const { first } = await runFirstCanceledAtSecondStep(b, config);
@@ -2993,7 +2993,7 @@ jobs:
 
     const secondBackend = createFakeBackend({ lines: [initLine(), resultLine({ text: 'готово' })] });
     const second = await runPipeline({
-      expanded: expandPipeline({ pipelinePath: b.project.path('stepcast.yml'), config }),
+      expanded: expandPipeline({ pipelinePath: b.project.path('burnex.yml'), config }),
       config,
       projectRoot: b.project.root,
       cwd: b.project.root,
@@ -3029,7 +3029,7 @@ jobs:
 
   // Сценарий: «Каталог перенят» / «Продолжаемая работа не откатывается»
   it('продолжение в режиме worktree идёт в каталоге исходного прогона, а не в заведённом заново', async () => {
-    const b = bed({ 'stepcast.yml': WORKTREE_CONTINUATION_PIPELINE }, { git: true });
+    const b = bed({ 'burnex.yml': WORKTREE_CONTINUATION_PIPELINE }, { git: true });
     const config = configWithFakeSessions(b, true);
 
     const { first } = await runFirstCanceledAtSecondStep(b, config);
@@ -3045,7 +3045,7 @@ jobs:
 
     const secondBackend = createFakeBackend({ lines: [initLine(), resultLine({ text: 'готово' })] });
     const second = await runPipeline({
-      expanded: expandPipeline({ pipelinePath: b.project.path('stepcast.yml'), config }),
+      expanded: expandPipeline({ pipelinePath: b.project.path('burnex.yml'), config }),
       config,
       projectRoot: b.project.root,
       cwd: b.project.root,
@@ -3071,7 +3071,7 @@ jobs:
   // `worktree`. Рабочая копия сама рабочим деревом git не является, и якорь
   // над ней снимается только с репозиторием прогона.
   it('продолжение в режиме copy идёт в перенятой рабочей копии исходного прогона', async () => {
-    const b = bed({ 'stepcast.yml': COPY_CONTINUATION_PIPELINE }, { git: true });
+    const b = bed({ 'burnex.yml': COPY_CONTINUATION_PIPELINE }, { git: true });
     const config = configWithFakeSessions(b, true);
 
     const { first } = await runFirstCanceledAtSecondStep(b, config);
@@ -3085,7 +3085,7 @@ jobs:
 
     const secondBackend = createFakeBackend({ lines: [initLine(), resultLine({ text: 'готово' })] });
     const second = await runPipeline({
-      expanded: expandPipeline({ pipelinePath: b.project.path('stepcast.yml'), config }),
+      expanded: expandPipeline({ pipelinePath: b.project.path('burnex.yml'), config }),
       config,
       projectRoot: b.project.root,
       cwd: b.project.root,
@@ -3102,7 +3102,7 @@ jobs:
 
   // Сценарий: «Каталог снесён уборкой»
   it('снесённый каталог отменяет продолжение и переисполняет работу с восстановлением дерева', async () => {
-    const b = bed({ 'stepcast.yml': WORKTREE_CONTINUATION_PIPELINE }, { git: true });
+    const b = bed({ 'burnex.yml': WORKTREE_CONTINUATION_PIPELINE }, { git: true });
     const config = configWithFakeSessions(b, true);
 
     const { first } = await runFirstCanceledAtSecondStep(b, config);
@@ -3131,7 +3131,7 @@ jobs:
   // остались — ровно то полурасхождение дерева с диалогом, которого
   // продолжение и избегает.
   it('файл, дописанный оборванной попыткой поверх результата префикса, откатом не стирается', async () => {
-    const b = bed({ 'stepcast.yml': SESSION_CONTINUATION_PIPELINE }, { git: true });
+    const b = bed({ 'burnex.yml': SESSION_CONTINUATION_PIPELINE }, { git: true });
     const config = configWithFakeSessions(b, true);
 
     // Первый шаг пишет заметку, второй — переписывает её и обрывается.
@@ -3152,7 +3152,7 @@ jobs:
 
     const secondBackend = createFakeBackend({ lines: [initLine(), resultLine({ text: 'готово' })] });
     const second = await runPipeline({
-      expanded: expandPipeline({ pipelinePath: b.project.path('stepcast.yml'), config }),
+      expanded: expandPipeline({ pipelinePath: b.project.path('burnex.yml'), config }),
       config,
       projectRoot: b.project.root,
       cwd: b.project.root,
@@ -3170,7 +3170,7 @@ jobs:
 
   // Сценарий: «Каталог тронут после прогона»
   it('каталог, тронутый после прогона, отменяет продолжение', async () => {
-    const b = bed({ 'stepcast.yml': WORKTREE_CONTINUATION_PIPELINE }, { git: true });
+    const b = bed({ 'burnex.yml': WORKTREE_CONTINUATION_PIPELINE }, { git: true });
     const config = configWithFakeSessions(b, true);
 
     const { first } = await runFirstCanceledAtSecondStep(b, config);
@@ -3206,11 +3206,11 @@ describe('run-resume: раскладка сессий входит в ключ �
   // объявления группы обязано переисполнить шаг, а не молча его переиспользовать —
   // прежний ключ считался по определению работы без раскладки диалогов.
   it('шаг, исполненный без объявленной группы, не переиспользуется, когда работа группу объявляет', async () => {
-    const b = bed({ 'stepcast.yml': groupPipeline() });
+    const b = bed({ 'burnex.yml': groupPipeline() });
     const first = await firstRun(b);
     assert.equal(first.status, 'success');
 
-    b.project.write('stepcast.yml', groupPipeline('g'));
+    b.project.write('burnex.yml', groupPipeline('g'));
     const plan = planFor(b, first);
 
     assert.equal(plan.steps[0]?.decision.kind, 'rerun');
@@ -3267,7 +3267,7 @@ jobs:
   // пользователя незакоммиченной правкой, а её собственная копия оставалась
   // пустой — предикаты `until` гоняли проверку по дереву без единой правки.
   it('переиспользованный результат работы режима worktree не попадает в каталог запуска', async () => {
-    const b = bed({ 'сырьё.txt': 'вход', 'stepcast.yml': ISOLATED_PIPELINE }, { git: true });
+    const b = bed({ 'сырьё.txt': 'вход', 'burnex.yml': ISOLATED_PIPELINE }, { git: true });
 
     const first = await firstRun(b);
     assert.equal(first.status, 'failed', 'второй работе не хватает файла пользователя');
@@ -3373,7 +3373,7 @@ jobs:
   const FLAGS = '{"type":"object","required":["base"],"properties":{"base":{"type":"boolean"}}}';
 
   it('переиспользует работы ниже пропущенной, если её условие считается так же', async () => {
-    const b = bed({ 'flags.json': FLAGS, 'stepcast.yml': SKIPPED });
+    const b = bed({ 'flags.json': FLAGS, 'burnex.yml': SKIPPED });
     const first = await firstRun(b);
     assert.equal(first.status, 'failed', 'finish падает: маркера нет');
     const base = readStatus(first.journal.paths).jobs.find((job) => job.id === 'base');
@@ -3400,11 +3400,11 @@ jobs:
   });
 
   it('не считает работу пропущенной по-прежнему, если её условие изменилось', async () => {
-    const b = bed({ 'flags.json': FLAGS, 'stepcast.yml': SKIPPED });
+    const b = bed({ 'flags.json': FLAGS, 'burnex.yml': SKIPPED });
     const first = await firstRun(b);
     assert.equal(first.status, 'failed');
 
-    b.project.write('stepcast.yml', SKIPPED.replace('jobs.stand.output.base == true', 'jobs.stand.output.base == false'));
+    b.project.write('burnex.yml', SKIPPED.replace('jobs.stand.output.base == true', 'jobs.stand.output.base == false'));
     const plan = planFor(b, first);
     assert.equal(decisions(plan)['base/build'], 'rerun');
     assert.equal(decisions(plan)['lane/work'], 'rerun', 'работа, которую условие теперь пускает, меняет всё ниже');
@@ -3434,7 +3434,7 @@ jobs:
 `;
 
   it('не переносит пропуск и переисполняет его шаг', async () => {
-    const b = bed({ 'stepcast.yml': DECLARED });
+    const b = bed({ 'burnex.yml': DECLARED });
     const first = await firstRun(b);
     assert.equal(first.status, 'failed', 'хвост падает: маркера нет');
     const probe = readStatus(first.journal.paths).jobs.find((job) => job.id === 'проба');
@@ -3497,7 +3497,7 @@ jobs:
 `;
 
   it('восстанавливает пути всех итераций, а не только последней', async () => {
-    const b = bed({ 'сырьё.txt': 'вход', 'stepcast.yml': LOOP_PIPELINE }, { git: true });
+    const b = bed({ 'сырьё.txt': 'вход', 'burnex.yml': LOOP_PIPELINE }, { git: true });
 
     const first = await firstRun(b);
     assert.equal(first.status, 'failed', 'последней работе не хватает маркера');
@@ -3534,7 +3534,7 @@ jobs:
       "run: [sh, -c, 'test \"$BURNEX_JOB_ATTEMPT\" = 2 || exit 1; n=$(",
     );
     assert.notEqual(pipeline, LOOP_PIPELINE);
-    const b = bed({ 'сырьё.txt': 'вход', 'stepcast.yml': pipeline }, { git: true });
+    const b = bed({ 'сырьё.txt': 'вход', 'burnex.yml': pipeline }, { git: true });
 
     const first = await firstRun(b);
     assert.equal(first.status, 'failed', 'последней работе не хватает маркера');
@@ -3597,7 +3597,7 @@ jobs:
   const NEVER = 'test -f ok.txt';
 
   it('цикл, исчерпавший проходы, переигрывается с первого: единицей повтора служит цикл', async () => {
-    const b = bed({ 'counter.txt': '0\n', 'stepcast.yml': loopPipeline({ check: NEVER }) }, { git: true });
+    const b = bed({ 'counter.txt': '0\n', 'burnex.yml': loopPipeline({ check: NEVER }) }, { git: true });
     const first = await firstRun(b);
     assert.equal(first.status, 'failed');
     assert.equal(readStatus(first.journal.paths).loops?.[0]?.verdict, 'exhausted');
@@ -3618,10 +3618,10 @@ jobs:
   });
 
   it('дерево перед циклом берётся из первого шага точки входа в pass-1', async () => {
-    const b = bed({ 'counter.txt': '0\n', 'stepcast.yml': loopPipeline({ check: NEVER }) }, { git: true });
+    const b = bed({ 'counter.txt': '0\n', 'burnex.yml': loopPipeline({ check: NEVER }) }, { git: true });
     const first = await firstRun(b);
     const source = readSourceRun(first.journal.paths);
-    const expanded = expandPipeline({ pipelinePath: b.project.path('stepcast.yml'), config: b.project.config });
+    const expanded = expandPipeline({ pipelinePath: b.project.path('burnex.yml'), config: b.project.config });
 
     const bases = loopTreeBefore(source, expanded.pipeline);
     const firstStep = JSON.parse(
@@ -3633,7 +3633,7 @@ jobs:
   });
 
   it('сошедшийся цикл переиспользуется, когда --from стоит ниже него', async () => {
-    const b = bed({ 'counter.txt': '0\n', 'stepcast.yml': loopPipeline({ check: CONVERGES }) }, { git: true });
+    const b = bed({ 'counter.txt': '0\n', 'burnex.yml': loopPipeline({ check: CONVERGES }) }, { git: true });
     const first = await firstRun(b);
     assert.equal(first.status, 'failed', 'ниже цикла нет маркера');
     assert.equal(readStatus(first.journal.paths).loops?.[0]?.verdict, 'done');
@@ -3658,7 +3658,7 @@ jobs:
   });
 
   it('прогон, прерванный во втором проходе, переигрывает цикл с первого, хотя шаги второго прохода годны', async () => {
-    const b = bed({ 'counter.txt': '0\n', 'stepcast.yml': loopPipeline({ check: CONVERGES }) }, { git: true });
+    const b = bed({ 'counter.txt': '0\n', 'burnex.yml': loopPipeline({ check: CONVERGES }) }, { git: true });
     const first = await firstRun(b);
 
     // Обрыв процесса посреди второго прохода: записи вердикта нет, цикл и
@@ -3695,7 +3695,7 @@ jobs:
   it('основание until у участника цикла из одного прохода — первая итерация в pass-1', async () => {
     const b = bed(
       {
-        'stepcast.yml': `
+        'burnex.yml': `
 kind: pipeline
 loops:
   l:
@@ -3721,7 +3721,7 @@ jobs:
     assert.equal(readStatus(first.journal.paths).loops?.[0]?.iterations, 1);
 
     const source = readSourceRun(first.journal.paths);
-    const expanded = expandPipeline({ pipelinePath: b.project.path('stepcast.yml'), config: b.project.config });
+    const expanded = expandPipeline({ pipelinePath: b.project.path('burnex.yml'), config: b.project.config });
     const firstIteration = JSON.parse(
       readFileSync(join(first.journal.paths.jobs, 'work', 'steps', 'pass-1', 'iter-1', '01-write', 'step.json'), 'utf8'),
     ) as { tree_before: string };
@@ -3731,13 +3731,13 @@ jobs:
   });
 
   it('изменённое определение участника переисполняет весь цикл, причина называет цикл', async () => {
-    const b = bed({ 'counter.txt': '0\n', 'stepcast.yml': loopPipeline({ check: CONVERGES }) }, { git: true });
+    const b = bed({ 'counter.txt': '0\n', 'burnex.yml': loopPipeline({ check: CONVERGES }) }, { git: true });
     const first = await firstRun(b);
     assert.equal(readStatus(first.journal.paths).loops?.[0]?.verdict, 'done');
 
     // `fix` в последнем проходе пропущен, но ранние проходы он исполнял: его правка меняет дерево цикла.
     b.project.write(
-      'stepcast.yml',
+      'burnex.yml',
       loopPipeline({ check: CONVERGES, bump: 'echo $(( $(cat counter.txt) + 1 )) > counter.txt; true' }),
     );
     const plan = planFor(b, first, 'after');
@@ -3748,7 +3748,7 @@ jobs:
   });
 
   it('--from принимает точку входа и отклоняет другого участника и шаг участника', async () => {
-    const b = bed({ 'counter.txt': '0\n', 'stepcast.yml': loopPipeline({ check: CONVERGES }) }, { git: true });
+    const b = bed({ 'counter.txt': '0\n', 'burnex.yml': loopPipeline({ check: CONVERGES }) }, { git: true });
     const first = await firstRun(b);
     const request = (from: string) => ({
       cwd: b.project.root,

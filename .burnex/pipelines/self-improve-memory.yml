@@ -1,22 +1,23 @@
+# Петля саморазвития с памятью: та же цепочка, что в self-improve.yml, плюс
+# три отличия — оглавление памяти в контексте пайплайна, отбор по области в
+# работах, правящих код, и работа remember между verify и merge.
+#
+# Существует рядом с self-improve.yml, а не вместо него, намеренно. Память
+# стоит контекста в каждом агентском шаге, и окупается ли она — вопрос замера,
+# а не мнения; ответить на него можно, только прогнав обе версии по одной и
+# той же очереди. Сравнивать: стоимость и время на сто строк изменения, число
+# ходов работы implement, долю заходов, дошедших до merge зелёными.
+#
+# Всё, что ниже и не помечено как отличие, — копия self-improve.yml. Правка
+# одного из двух документов, не перенесённая во второй, делает замер
+# бессмысленным.
+#
 # Петля саморазвития: stepcast улучшает сам stepcast.
 #
 # Заход берёт до двух свободных пунктов из backlog.md — по одному на дорожку
 # — и ведёт их одновременно: propose → plan → implement → review →
 # fix-review → verify на каждой. Дорожка без свободного пункта пропускает всю
 # свою цепочку.
-#
-# У дорожки две ветки, и выбирает между ними разметка пункта. Слово express
-# знает этот пайплайн, а не движок: очередь несёт метку веса и проверяет
-# только её форму, а какая цепочка ей соответствует, решается здесь. Пункт с
-# track: express идёт облегчённой: propose-express → implement-express →
-# verify, без plan, review и fix-review. Размечает человек, ведущий очередь,
-# и только он: цена полной цепочки не зависит от объёма правки — описание и
-# план берут $7-11 на opus прежде первой строки кода, ревью с починкой ещё
-# $8-15, — а механической правке ни того, ни другого не нужно. Разметка и
-# есть весь критерий: снятое ревью ничем другим не заменено, и пункт,
-# названный простым по ошибке, доедет до коммита без второго мнения. Гейты
-# при этом общие: объявленная проверка, строгий разбор документов изменения,
-# границы правок и повторная проверка при сведении — у обеих веток.
 #
 # Общей сессии у работ дорожки нет, и это результат замера, а не умолчание по
 # недосмотру. Движок умеет сводить работы в один диалог ключом обвязки
@@ -37,26 +38,23 @@
 # работы, а не её диалог целиком. После того как обе дорожки дошли до verify (или были
 # пропущены), work merge накладывает зелёные дорожки на дерево проекта по
 # очереди, проверяя каждую свежей объявленной командой (project.check из
-# .stepcast/config.yml — секции project в этом документе больше нет)
+# .burnex/config.yml — секции project в этом документе больше нет)
 # перед коммитом. work finalize
 # проставляет failed пунктам дорожек, которые до done не дошли.
 #
-#   stepcast lint .stepcast/pipelines/self-improve.yml
-#   stepcast run  .stepcast/pipelines/self-improve.yml
+#   stepcast lint .burnex/pipelines/self-improve.yml
+#   stepcast run  .burnex/pipelines/self-improve.yml
 #
 # Требует чистого рабочего дерева: отказ прошлого захода останавливает петлю до
 # разбора человеком, а не наслаивает следующее улучшение на сломанный код.
 # Чистоту проверяет work slots, до того как какая-либо дорожка тронет копию.
-# Требование действует без входа onto; с ним (так зовёт
-# scripts/self-improve-loop.sh) slots чистоту не проверяет, а сведение ждёт
-# чистой копии само.
 
 version: 1
 kind: pipeline
-name: self-improve
+name: self-improve-memory
 
 # Секция project (команда проверки, инструменты, практика спецификации,
-# границы правок) объявлена в .stepcast/config.yml, а не здесь: команды
+# границы правок) объявлена в .burnex/config.yml, а не здесь: команды
 # движка (stepcast assert-clean, stepcast project repos) читают конфигурацию
 # напрямую и подстановки этого документа не видят вовсе, а объявление
 # репозитория, читаемое ими, обязано быть видно и им. Работы и промпты петли
@@ -80,6 +78,13 @@ fail_fast: false
 # подавляет. Дублировать подгружаемое бэкендом значило бы платить за него
 # дважды.
 context:
+  # Отличие первое: оглавление памяти. Заголовки без тел — при пределе
+  # index_max_tokens это меньше двух процентов context.max_tokens, и платится
+  # оно за то, чтобы агент мог попросить смежное, о существовании которого
+  # иначе не узнал бы: отбор по области отдаёт только пересекающееся с
+  # правимыми путями, а ограничение платформы, задевающее соседний модуль, в
+  # это пересечение не попадает.
+  - knowledge: index
   # Команду проверки этот текст не называет, хотя ${project.check} здесь
   # раскрылся бы: контекст пайплайна наследует каждая работа обеих дорожек, а
   # проверка у дорожки своя — та, что объявил репозиторий её пункта
@@ -92,13 +97,11 @@ context:
       правит. Сгенерированное в dist/ не трогать: оно пересобирается сборкой.
       Проверяй код только той командой, которую называет твоя работа: пункт
       очереди мог назвать вложенный репозиторий, и проверка корня его кода не
-      проверяет вовсе. Движок этого прогона зафиксирован снимком в каталоге
-      прогона: пересборка dist/ в дереве его не подменяет, и npm run build или
-      npm test внутри объявленной проверки безопасны для идущего прогона.
-      Если эта команда — корневая npm run check, её части можно гонять по
-      отдельности ради скорости: npm run typecheck, npm run lint,
-      npm run test:only — но итоговое утверждение о зелёной проверке делай по
-      полной команде.
+      проверяет вовсе. Если эта команда — корневая npm run check, её части
+      можно гонять по отдельности: npm run typecheck, npm run lint,
+      npm run test:only. Ни npm run build, ни npm test не вызывай напрямую,
+      что бы ни правил: они пересобирают dist/ и могут нарушить бегущий
+      процесс stepcast.
 
 defaults:
   agent: claude
@@ -112,23 +115,12 @@ defaults:
 # ровно на $40-44, потому что fix-review обеих дорожек (opus) идёт
 # одновременно и удваивает темп расхода именно там, где потолок ближе всего.
 # $50 — предел, разрешённый встроенным limits.cost (TIGHTEN_ONLY: проектный
-# конфиг может его только понизить, поднять — только ~/.stepcast/config.yml
+# конфиг может его только понизить, поднять — только ~/.burnex/config.yml
 # человеком на своей машине). Даже он не гарантия против дорогого захода —
 # наблюдённый пик уже $44.30, — но не требует трогать конфигурацию за
 # пределами этого репозитория.
-#
-# $80, а не прежние $50: прогон 2026-09-16T14-57-28Z-67caf0 на последнем
-# структурном пункте очереди (source-tree-microkernel-layout — переезд всего
-# дерева исходников) остановился на $50.20 в шаге fix-review-a/apply-fixes,
-# успев свести propose, plan, implement и review. Потолок отделил прогон от
-# завершения на двадцати центах — это не защита от дорогого захода, а
-# отсечка посреди сведённой работы. Строка про «предел, разрешённый
-# встроенным limits.cost» выше описывает прошлое состояние: умолчание
-# limits.cost с тех пор поднято до $100, поэтому $80 объявляются здесь без
-# правки конфигурации за пределами репозитория и оставляют $20 запаса до
-# встроенного потолка, продолжая ловить случайный лишний ноль.
 budget:
-  cost: $80
+  cost: $50
   wallclock: 4h
   rate_limit_pct: 80
   # on_exceed: wait реализован и усыпляет прогон до сброса окна подписки, но
@@ -137,31 +129,11 @@ budget:
   # встретить осознанно.
   on_exceed: stop
 
-# Вход прогона: слаг пункта, который взять в работу. Пусто — обычный отбор
-# очереди (верхний todo, иначе верхний backlog): ночной заход запускается без
-# ключей и ведёт себя ровно как прежде. Заполняет его витрина, когда человек
-# переводит пункт в колонку in progress на доске и выбирает этот пайплайн:
-#
-#   stepcast run .stepcast/pipelines/self-improve.yml --input item=<слаг>
-#
-# onto — ветка, на вершину которой заход сводит результат. Заполняет его
-# scripts/self-improve-loop.sh; пустое значение — прежнее поведение:
-#
-#   stepcast run .stepcast/pipelines/self-improve.yml --input onto=<ветка>
-inputs:
-  item: { type: string, default: '' }
-  onto: { type: string, default: '' }
-
 jobs:
 
   slots:
     uses: ../jobs/slots.yml
     workspace: { mode: cwd }
-    # Работе inputs пайплайна не видны намеренно (движок запрещает ${inputs.*}
-    # внутри работы): значение доезжает параметром с места подключения.
-    with:
-      item: ${inputs.item}
-      onto: ${inputs.onto}
     # Подпись узла в витрине. Самоссылка законна ровно здесь: display не
     # проходит через раскрытие определения работы (там данных ещё нет) — его
     # раскрывает витрина в момент отрисовки, когда pick-lanes уже записала
@@ -179,8 +151,8 @@ jobs:
   # репозиторий, даёт те же значения, что ${project.*} давал до этого
   # изменения. Параметров у работы столько, сколько она потребляет: verify —
   # каталог, команду и команду проверки практики; implement и fix-review — их
-  # же плюс пути документов; propose и propose-express — путь(и) документов
-  # и имя инструмента для записи права; plan и review — путь(и) документов.
+  # же плюс пути документов; propose — путь(и) документов и имя инструмента
+  # для записи права; plan и review — путь(и) документов.
 
   propose-a:
     uses: ../jobs/propose.yml
@@ -193,14 +165,8 @@ jobs:
     workspace: { inherit: none }
     # Неопределённое значение (слот не заполнен, а то и вовсе work slots не
     # дошла до успеха) сравнением с true даёт false — работа пропускается,
-    # а не запускается на пустоте. Второе условие разводит ветки: пункт с
-    # меткой express ведёт облегчённую цепочку ниже, а эта — полная —
-    # пропускается целиком. Полная и есть умолчание: пункт без метки, с
-    # чужой меткой и с опечаткой в ней идёт сюда, и это направление выбрано
-    # сознательно — лишние деньги дешевле пропущенного ревью. Работы, пропущенные условием, годности
-    # дорожки не отменяют (см. lane-merge): дорожка остаётся одна, ветки в
-    # ней две, и пройдена всегда ровно одна.
-    if: "jobs.slots.output.lanes.a.filled == true and jobs.slots.output.lanes.a.track != 'express'"
+    # а не запускается на пустоте.
+    if: "jobs.slots.output.lanes.a.filled == true"
 
   plan-a:
     uses: ../jobs/plan.yml
@@ -212,6 +178,18 @@ jobs:
 
   implement-a:
     uses: ../jobs/implement.yml
+    # Отличие второе: тела единиц знания, чья область пересекается с
+    # границами правок выбранного репозитория. Объявлено на месте
+    # подключения, а не в файле работы: файл работы общий с
+    # self-improve.yml, и объявление в нём сделало бы версии неразличимыми.
+    context:
+      - knowledge:
+          scope:
+            # Границы правок раскрываются по элементу списка на
+            # значение — тем же правилом, каким они попадают в
+            # changed_only работы. В скалярном поле список не
+            # раскрывается, и запись обязана быть списочной.
+            - ${project.edit_paths}
     with:
       change: "${jobs.propose-a.output.slug}"
       repo_dir: "${jobs.slots.output.lanes.a.repo.dir}"
@@ -232,6 +210,14 @@ jobs:
 
   fix-review-a:
     uses: ../jobs/fix-review.yml
+    context:
+      - knowledge:
+          scope:
+            # Границы правок раскрываются по элементу списка на
+            # значение — тем же правилом, каким они попадают в
+            # changed_only работы. В скалярном поле список не
+            # раскрывается, и запись обязана быть списочной.
+            - ${project.edit_paths}
     with:
       change: "${jobs.propose-a.output.slug}"
       repo_dir: "${jobs.slots.output.lanes.a.repo.dir}"
@@ -252,49 +238,16 @@ jobs:
     lane: a
     needs: [fix-review-a]
 
-  # --- Облегчённая ветка дорожки a: пункт с track: express ---
-  #
-  # Три работы вместо шести: описание изменения по облегчённой схеме,
-  # реализация по его чек-листу и та же объявленная проверка. Сняты plan
-  # (чек-лист изменения и есть план), review и fix-review. Снятие ревью —
-  # осознанный размен: он держится на разметке очереди, и пункт, размеченный
-  # облегчённым по ошибке, доедет до коммита без второго мнения. Поэтому обе
-  # работы ветки обязаны сказать вслух, если пункт оказался не механическим
-  # (см. промпты), а гейты — объявленная проверка, строгий разбор документов,
-  # границы правок и повторная проверка при сведении — остаются нетронутыми.
-
-  propose-express-a:
-    uses: ../jobs/propose-express.yml
+  # Отличие третье: запись узнанного и гейт целостности памяти. Стоит после
+  # verify, а не до: писать в память по коду, который ещё не прошёл проверку,
+  # значит запоминать то, что через десять минут откатится.
+  remember-a:
+    uses: ../jobs/remember.yml
     with:
-      spec_dir: "${jobs.slots.output.lanes.a.repo.spec.dir}"
-      spec_rules: "${jobs.slots.output.lanes.a.repo.spec.rules}"
-      spec_tool: "${jobs.slots.output.lanes.a.repo.spec.tool}"
+      change: "${jobs.propose-a.output.slug}"
+      knowledge_rules: "${project.knowledge.rules}"
     lane: a
-    needs: [slots]
-    workspace: { inherit: none }
-    if: "jobs.slots.output.lanes.a.track == 'express'"
-
-  implement-express-a:
-    uses: ../jobs/implement-express.yml
-    with:
-      change: "${jobs.propose-express-a.output.slug}"
-      repo_dir: "${jobs.slots.output.lanes.a.repo.dir}"
-      check: "${jobs.slots.output.lanes.a.repo.check}"
-      spec_dir: "${jobs.slots.output.lanes.a.repo.spec.dir}"
-      spec_rules: "${jobs.slots.output.lanes.a.repo.spec.rules}"
-      spec_check: "${jobs.slots.output.lanes.a.repo.spec.check}"
-    lane: a
-    needs: [propose-express-a]
-
-  verify-express-a:
-    uses: ../jobs/verify.yml
-    with:
-      change: "${jobs.propose-express-a.output.slug}"
-      repo_dir: "${jobs.slots.output.lanes.a.repo.dir}"
-      check: "${jobs.slots.output.lanes.a.repo.check}"
-      spec_check: "${jobs.slots.output.lanes.a.repo.spec.check}"
-    lane: a
-    needs: [implement-express-a]
+    needs: [verify-a]
 
   # --- Дорожка b: та же цепочка, те же файлы работ, те же параметры ---
 
@@ -307,7 +260,7 @@ jobs:
     lane: b
     needs: [slots]
     workspace: { inherit: none }
-    if: "jobs.slots.output.lanes.b.filled == true and jobs.slots.output.lanes.b.track != 'express'"
+    if: "jobs.slots.output.lanes.b.filled == true"
 
   plan-b:
     uses: ../jobs/plan.yml
@@ -319,6 +272,18 @@ jobs:
 
   implement-b:
     uses: ../jobs/implement.yml
+    # Отличие второе: тела единиц знания, чья область пересекается с
+    # границами правок выбранного репозитория. Объявлено на месте
+    # подключения, а не в файле работы: файл работы общий с
+    # self-improve.yml, и объявление в нём сделало бы версии неразличимыми.
+    context:
+      - knowledge:
+          scope:
+            # Границы правок раскрываются по элементу списка на
+            # значение — тем же правилом, каким они попадают в
+            # changed_only работы. В скалярном поле список не
+            # раскрывается, и запись обязана быть списочной.
+            - ${project.edit_paths}
     with:
       change: "${jobs.propose-b.output.slug}"
       repo_dir: "${jobs.slots.output.lanes.b.repo.dir}"
@@ -339,6 +304,14 @@ jobs:
 
   fix-review-b:
     uses: ../jobs/fix-review.yml
+    context:
+      - knowledge:
+          scope:
+            # Границы правок раскрываются по элементу списка на
+            # значение — тем же правилом, каким они попадают в
+            # changed_only работы. В скалярном поле список не
+            # раскрывается, и запись обязана быть списочной.
+            - ${project.edit_paths}
     with:
       change: "${jobs.propose-b.output.slug}"
       repo_dir: "${jobs.slots.output.lanes.b.repo.dir}"
@@ -359,54 +332,29 @@ jobs:
     lane: b
     needs: [fix-review-b]
 
-  # --- Облегчённая ветка дорожки b: та же цепочка, те же файлы работ ---
-  propose-express-b:
-    uses: ../jobs/propose-express.yml
+  # Отличие третье: запись узнанного и гейт целостности памяти. Стоит после
+  # verify, а не до: писать в память по коду, который ещё не прошёл проверку,
+  # значит запоминать то, что через десять минут откатится.
+  remember-b:
+    uses: ../jobs/remember.yml
     with:
-      spec_dir: "${jobs.slots.output.lanes.b.repo.spec.dir}"
-      spec_rules: "${jobs.slots.output.lanes.b.repo.spec.rules}"
-      spec_tool: "${jobs.slots.output.lanes.b.repo.spec.tool}"
+      change: "${jobs.propose-b.output.slug}"
+      knowledge_rules: "${project.knowledge.rules}"
     lane: b
-    needs: [slots]
-    workspace: { inherit: none }
-    if: "jobs.slots.output.lanes.b.track == 'express'"
-
-  implement-express-b:
-    uses: ../jobs/implement-express.yml
-    with:
-      change: "${jobs.propose-express-b.output.slug}"
-      repo_dir: "${jobs.slots.output.lanes.b.repo.dir}"
-      check: "${jobs.slots.output.lanes.b.repo.check}"
-      spec_dir: "${jobs.slots.output.lanes.b.repo.spec.dir}"
-      spec_rules: "${jobs.slots.output.lanes.b.repo.spec.rules}"
-      spec_check: "${jobs.slots.output.lanes.b.repo.spec.check}"
-    lane: b
-    needs: [propose-express-b]
-
-  verify-express-b:
-    uses: ../jobs/verify.yml
-    with:
-      change: "${jobs.propose-express-b.output.slug}"
-      repo_dir: "${jobs.slots.output.lanes.b.repo.dir}"
-      check: "${jobs.slots.output.lanes.b.repo.check}"
-      spec_check: "${jobs.slots.output.lanes.b.repo.spec.check}"
-    lane: b
-    needs: [implement-express-b]
+    needs: [verify-b]
 
   # --- Сведение и завершение ---
 
-  # on: always — дорожка с пустым слотом даёт verify статусом skipped, а не
-  # success, и без always merge не запустилась бы вовсе; то же, когда пусты
-  # все слоты и пропущены все зависимости. budget_exempt: true —
-  # явное освобождение от потолка прогона: без него исчерпанный потолок
-  # останавливал бы её шаги наравне с любой другой работой, и зелёная дорожка
-  # осталась бы несведённой (budget-stop-status-lies).
+  # on: always — дорожка с пустым слотом даёт verify, а за ним и remember,
+  # статусом skipped, а не success, и без always merge не запустилась бы вовсе;
+  # то же, когда пусты все слоты и пропущены все зависимости.
+  # budget_exempt: true — явное освобождение от потолка прогона: без него
+  # исчерпанный потолок останавливал бы её шаги наравне с любой другой
+  # работой, и зелёная дорожка осталась бы несведённой (budget-stop-status-lies).
   merge:
     uses: ../jobs/merge.yml
     workspace: { mode: cwd }
-    with:
-      onto: ${inputs.onto}
-    needs: [verify-a, verify-b, verify-express-a, verify-express-b]
+    needs: [remember-a, remember-b]
     on: always
     budget_exempt: true
 

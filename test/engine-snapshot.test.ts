@@ -358,7 +358,7 @@ async function run(
 ): Promise<RunResult> {
   const runsRoot = tempDir('runs-');
   return runPipeline({
-    expanded: expandPipeline({ pipelinePath: project.path('stepcast.yml'), config: project.config }),
+    expanded: expandPipeline({ pipelinePath: project.path('burnex.yml'), config: project.config }),
     config: { ...project.config, runs: { ...project.config.runs, root: runsRoot } },
     projectRoot: project.root,
     cwd: project.root,
@@ -383,7 +383,7 @@ jobs:
 
 describe('run-engine-snapshot: фиксация движка при прогоне', () => {
   it('движок внутри дерева проекта: снимок снят, манифест называет его', async () => {
-    const project = makeProject({ 'stepcast.yml': CHECK_BIN_PIPELINE });
+    const project = makeProject({ 'burnex.yml': CHECK_BIN_PIPELINE });
     const engineRoot = project.path('vendor/engine');
     mkdirSync(join(engineRoot, 'dist', 'src'), { recursive: true });
     writeFileSync(join(engineRoot, 'package.json'), JSON.stringify({ name: 'fake-engine', files: ['dist'] }));
@@ -404,7 +404,7 @@ describe('run-engine-snapshot: фиксация движка при прогон
 
   it('движок вне дерева проекта: каталог engine/ не создаётся, манифест называет установку', async () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 version: 1
 kind: pipeline
 name: checked
@@ -430,7 +430,7 @@ jobs:
   });
 
   it('отказ снятия снимка останавливает прогон до первого события работы', async () => {
-    const project = makeProject({ 'stepcast.yml': CHECK_BIN_PIPELINE });
+    const project = makeProject({ 'burnex.yml': CHECK_BIN_PIPELINE });
     const engineRoot = project.path('vendor/broken-engine'); // без package.json
     mkdirSync(engineRoot, { recursive: true });
 
@@ -449,7 +449,7 @@ jobs:
 
 describe('step-execution: BURNEX_BIN — точка входа движка этого прогона', () => {
   it('шаг видит BURNEX_BIN, ведущий в каталог прогона', async () => {
-    const project = makeProject({ 'stepcast.yml': CHECK_BIN_PIPELINE });
+    const project = makeProject({ 'burnex.yml': CHECK_BIN_PIPELINE });
     const engineRoot = project.path('vendor/engine');
     mkdirSync(join(engineRoot, 'dist', 'src'), { recursive: true });
     writeFileSync(join(engineRoot, 'package.json'), JSON.stringify({ name: 'fake-engine', files: ['dist'] }));
@@ -465,7 +465,7 @@ describe('step-execution: BURNEX_BIN — точка входа движка эт
   it('движок вне правимого дерева: переменная несёт прежнее значение', async () => {
     const engine = makeEnginePackage({ files: ['dist'] });
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 version: 1
 kind: pipeline
 name: checked
@@ -496,7 +496,7 @@ describe('run-engine-snapshot: пересборка дерева не меняе
     chmodSync(entry, 0o755);
 
     project.write(
-      'stepcast.yml',
+      'burnex.yml',
       `
 version: 1
 kind: pipeline
@@ -533,7 +533,7 @@ describe('run-engine-snapshot: снимок принадлежит одному 
   it('возобновление снимает собственный снимок, а не тащит чужой из прогона-источника', async () => {
     const project = makeProject({
       'сырьё.txt': 'вход',
-      'stepcast.yml': `
+      'burnex.yml': `
 version: 1
 kind: pipeline
 name: возобновление
@@ -566,7 +566,7 @@ jobs:
     const engineLocator = (): EngineLocation => ({ root: engineRoot, entry });
     const start = (extra: Partial<Parameters<typeof runPipeline>[0]> = {}): Promise<RunResult> =>
       runPipeline({
-        expanded: expandPipeline({ pipelinePath: project.path('stepcast.yml'), config: project.config }),
+        expanded: expandPipeline({ pipelinePath: project.path('burnex.yml'), config: project.config }),
         config,
         projectRoot: project.root,
         cwd: project.root,

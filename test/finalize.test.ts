@@ -1,6 +1,6 @@
 /**
  * `scripts/finalize.mjs` больше не участвует в петле: работа `finalize`
- * зовёт `burnex backlog settle` (см. `.stepcast/jobs/finalize.yml`), и её
+ * зовёт `burnex backlog settle` (см. `.burnex/jobs/finalize.yml`), и её
  * покрытие — `describe('CLI: burnex backlog settle', …)` в
  * `test/cli-backlog.test.ts`.
  *

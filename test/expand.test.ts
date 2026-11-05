@@ -55,12 +55,12 @@ const BACKEND_WITH_DEFAULT_MODEL: BackendConfig = {
   env: {},
 };
 
-/** Тот же проект, но с указанным `project.check`, будто он объявлен в `.stepcast/config.yml`. */
+/** Тот же проект, но с указанным `project.check`, будто он объявлен в `.burnex/config.yml`. */
 function withProjectCheck(project: Project, check: string | undefined): Config {
   return { ...project.config, project: { ...project.config.project, check } };
 }
 
-/** Тот же проект, но с указанной группой `project.spec`, будто она объявлена в `.stepcast/config.yml`. */
+/** Тот же проект, но с указанной группой `project.spec`, будто она объявлена в `.burnex/config.yml`. */
 function withProjectSpec(project: Project, spec: Partial<Config['project']['spec']>): Config {
   return {
     ...project.config,
@@ -68,17 +68,17 @@ function withProjectSpec(project: Project, spec: Partial<Config['project']['spec
   };
 }
 
-/** Тот же проект, но с указанными `project.tools`, будто они объявлены в `.stepcast/config.yml`. */
+/** Тот же проект, но с указанными `project.tools`, будто они объявлены в `.burnex/config.yml`. */
 function withProjectTools(project: Project, tools: readonly string[] | undefined): Config {
   return { ...project.config, project: { ...project.config.project, tools } };
 }
 
-/** Тот же проект, но с указанными `project.edit_paths`, будто они объявлены в `.stepcast/config.yml`. */
+/** Тот же проект, но с указанными `project.edit_paths`, будто они объявлены в `.burnex/config.yml`. */
 function withProjectEditPaths(project: Project, editPaths: readonly string[] | undefined): Config {
   return { ...project.config, project: { ...project.config.project, editPaths } };
 }
 
-/** Тот же проект, но с указанной группой `project.knowledge`, будто она объявлена в `.stepcast/config.yml`. */
+/** Тот же проект, но с указанной группой `project.knowledge`, будто она объявлена в `.burnex/config.yml`. */
 function withProjectKnowledge(
   project: Project,
   knowledge: Partial<Config['project']['knowledge']>,
@@ -92,7 +92,7 @@ function withProjectKnowledge(
   };
 }
 
-function expand(project: Project, file = 'stepcast.yml', inputs?: Record<string, string>) {
+function expand(project: Project, file = 'burnex.yml', inputs?: Record<string, string>) {
   return expandPipeline({
     pipelinePath: project.path(file),
     config: project.config,
@@ -100,7 +100,7 @@ function expand(project: Project, file = 'stepcast.yml', inputs?: Record<string,
   });
 }
 
-function expandWith(project: Project, config: Config, file = 'stepcast.yml') {
+function expandWith(project: Project, config: Config, file = 'burnex.yml') {
   return expandPipeline({ pipelinePath: project.path(file), config });
 }
 
@@ -116,7 +116,7 @@ function isolatedScriptRoots(project: Project): ScriptRoots {
 function expandScript(
   project: Project,
   scriptRoots: ScriptRoots,
-  file = 'stepcast.yml',
+  file = 'burnex.yml',
 ) {
   return expandPipeline({ pipelinePath: project.path(file), config: project.config, scriptRoots });
 }
@@ -126,7 +126,7 @@ function usesStepRoots(project: Project): ScriptRoots {
   return { project: project.root, home: tempDir('step-home-'), builtin: tempDir('step-builtin-') };
 }
 
-function expandUses(project: Project, stepRoots: ScriptRoots, file = 'stepcast.yml') {
+function expandUses(project: Project, stepRoots: ScriptRoots, file = 'burnex.yml') {
   return expandPipeline({
     pipelinePath: project.path(file),
     config: project.config,
@@ -155,20 +155,20 @@ function thrown(fn: () => unknown): StepcastError {
 describe('pipeline-definition: разбор и раскрытие', () => {
   // Сценарий: «Работа описана на месте»
   it('исполняет работу, описанную на месте', () => {
-    const project = makeProject({ 'stepcast.yml': MINIMAL_PIPELINE });
+    const project = makeProject({ 'burnex.yml': MINIMAL_PIPELINE });
     const { pipeline } = expand(project);
 
     assert.equal(pipeline.jobs.length, 1);
     const job = pipeline.jobs[0]!;
     assert.equal(job.id, 'build');
-    assert.equal(job.source, project.path('stepcast.yml'));
+    assert.equal(job.source, project.path('burnex.yml'));
     assert.equal(job.steps[0]!.kind, 'run');
   });
 
   // Сценарий: «Работа подключена файлом»
   it('раскрывает работу, подключённую файлом', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 name: p
 jobs:
@@ -191,7 +191,7 @@ steps:
 
   it('отклоняет файл, у которого kind не job', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 jobs:
   build:
@@ -205,7 +205,7 @@ jobs:
   // Сценарий: «Обязательный параметр не передан»
   it('требует обязательный параметр работы', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 jobs:
   build:
@@ -234,7 +234,7 @@ steps:
   // Сценарий: «Лишний ключ в with»
   it('отклоняет лишний ключ в with', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 jobs:
   build:
@@ -249,7 +249,7 @@ jobs:
   // Сценарий: «Умолчание параметра»
   it('подставляет умолчание параметра', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 jobs:
   build:
@@ -271,7 +271,7 @@ steps:
 
   it('приводит типы параметров', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 inputs:
   count: { type: int }
@@ -284,7 +284,7 @@ jobs:
 `,
     });
 
-    const step = expand(project, 'stepcast.yml', { count: '3', flag: 'false' }).pipeline.jobs[0]!
+    const step = expand(project, 'burnex.yml', { count: '3', flag: 'false' }).pipeline.jobs[0]!
       .steps[0]!;
     assert.deepEqual(asRun(step).command, ['echo', '3-false']);
   });
@@ -292,7 +292,7 @@ jobs:
   // Сценарий: «needs в файле работы»
   it('отклоняет обвязку внутри файла работы', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 jobs:
   build:
@@ -321,7 +321,7 @@ steps:
   // Сценарий: «Подстановка входа пайплайна»
   it('подставляет вход пайплайна', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 inputs:
   change: { type: string, required: true }
@@ -333,14 +333,14 @@ jobs:
 `,
     });
 
-    const step = expand(project, 'stepcast.yml', { change: 'foo' }).pipeline.jobs[0]!.steps[0]!;
+    const step = expand(project, 'burnex.yml', { change: 'foo' }).pipeline.jobs[0]!.steps[0]!;
     assert.deepEqual(asRun(step).command, ['echo', 'foo']);
   });
 
   // Сценарий: «Неизвестное имя»
   it('отклоняет обращение к необъявленному входу', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 jobs:
   build:
@@ -354,7 +354,7 @@ jobs:
 
   it('работе недоступны inputs пайплайна', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 inputs:
   change: { type: string, default: x }
@@ -382,7 +382,7 @@ steps:
 
   it('оставляет подстановки времени прогона нераскрытыми и запоминает их', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 jobs:
   plan:
@@ -413,7 +413,7 @@ jobs:
   // Сценарий: «Экранирование в промпте»
   it('экранирует $${ в промпте', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 jobs:
   ask:
@@ -431,29 +431,29 @@ jobs:
   // Сценарий: «Промпт рядом с файлом работы»
   it('разрешает промпт от файла работы, а не от пайплайна', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 jobs:
   ask:
-    uses: ./.stepcast/jobs/ask.yml
+    uses: ./.burnex/jobs/ask.yml
 `,
-      '.stepcast/jobs/ask.yml': `
+      '.burnex/jobs/ask.yml': `
 kind: job
 steps:
   - id: a
     prompt: "file:../prompts/ask.md"
 `,
-      '.stepcast/prompts/ask.md': 'спроси\n',
+      '.burnex/prompts/ask.md': 'спроси\n',
     });
 
     const step = asAgent(expand(project).pipeline.jobs[0]!.steps[0]!);
     assert.equal(step.prompt.trim(), 'спроси');
-    assert.equal(step.promptSource, project.path('.stepcast/prompts/ask.md'));
+    assert.equal(step.promptSource, project.path('.burnex/prompts/ask.md'));
   });
 
   it('шаблонизирует файл промпта параметрами работы', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 jobs:
   ask:
@@ -479,7 +479,7 @@ steps:
   // статической проверке» — сценарий «Подстановка внешнего промпта попадает в карту»
   it('подстановка внешнего промпта попадает в карту под путём шага', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 inputs:
   change: { type: string, default: x }
@@ -504,7 +504,7 @@ jobs:
   // Сценарий: «Внутренний промпт учитывается как прежде»
   it('подстановка внутреннего промпта записана под тем же путём и без origin', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 inputs:
   change: { type: string, default: x }
@@ -525,7 +525,7 @@ jobs:
 
   it('подстановка в самом пути file: не теряется', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 inputs:
   which: { type: string, default: ask }
@@ -551,7 +551,7 @@ jobs:
   // проход снял бы экранирование ещё раз и продублировал бы записи в карте.
   it('внутренний промпт не раскрывается дважды', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 inputs:
   change: { type: string, default: x }
@@ -578,7 +578,7 @@ jobs:
 
   it('on_fail.prompt из файла тоже попадает в карту', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 inputs:
   change: { type: string, default: x }
@@ -603,7 +603,7 @@ jobs:
 
   it('применяет умолчания конфигурации и пайплайна к шагам', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 defaults:
   model: opus
@@ -633,7 +633,7 @@ jobs:
   describe('слой модели шага', () => {
     it('слой step: модель объявлена самим шагом', () => {
       const project = makeProject({
-        'stepcast.yml': `
+        'burnex.yml': `
 kind: pipeline
 defaults:
   model: opus
@@ -653,7 +653,7 @@ jobs:
 
     it('слой pipeline: модель пришла из умолчаний документа', () => {
       const project = makeProject({
-        'stepcast.yml': `
+        'burnex.yml': `
 kind: pipeline
 defaults:
   model: opus
@@ -672,7 +672,7 @@ jobs:
 
     it('слой config: модель пришла из конфигурации, документ умолчания не объявляет', () => {
       const project = makeProject({
-        'stepcast.yml': `
+        'burnex.yml': `
 kind: pipeline
 jobs:
   ask:
@@ -693,7 +693,7 @@ jobs:
 
     it('слой backend: модель — умолчание бэкенда шага', () => {
       const project = makeProject({
-        'stepcast.yml': `
+        'burnex.yml': `
 kind: pipeline
 jobs:
   ask:
@@ -714,7 +714,7 @@ jobs:
 
     it('слой none: модель не задана ни на одном из четырёх звеньев', () => {
       const project = makeProject({
-        'stepcast.yml': `
+        'burnex.yml': `
 kind: pipeline
 jobs:
   ask:
@@ -735,7 +735,7 @@ jobs:
 
     it('одинаковое значение модели с разных звеньев остаётся различимо', () => {
       const project = makeProject({
-        'stepcast.yml': `
+        'burnex.yml': `
 kind: pipeline
 jobs:
   ask:
@@ -767,7 +767,7 @@ jobs:
       // видит звена вовсе (design.md, Решение 1) — значит, объекты обязаны
       // выйти побитово равными, а ключ и лок — совпасть.
       const pipelineLayerProject = makeProject({
-        'stepcast.yml': `
+        'burnex.yml': `
 kind: pipeline
 defaults:
   model: opus
@@ -779,7 +779,7 @@ jobs:
 `,
       });
       const configLayerProject = makeProject({
-        'stepcast.yml': `
+        'burnex.yml': `
 kind: pipeline
 jobs:
   ask:
@@ -847,7 +847,7 @@ jobs:
 
   it('раздаёт псевдонимы сессий по режиму работы', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 jobs:
   shared_job:
@@ -881,7 +881,7 @@ jobs:
 
   it('накладывает переопределения с места подключения поверх файла работы', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 jobs:
   build:
@@ -908,7 +908,7 @@ steps:
   // Спека pipeline-definition: «Денежный потолок на трёх уровнях»
   it('раскрывает budget.cost независимо на трёх уровнях', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 budget: { cost: 20 }
 jobs:
@@ -931,7 +931,7 @@ jobs:
 
   it('cost рядом с tokens не отменяет его', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 budget: { tokens: 500k, cost: 5 }
 jobs:
@@ -949,7 +949,7 @@ jobs:
 
   it('отклоняет отрицательный budget.cost с указанием места', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 budget: { cost: -5 }
 jobs:
@@ -972,7 +972,7 @@ jobs:
 
   it('отклоняет валютный суффикс в budget.cost', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 budget: { cost: "12 EUR" }
 jobs:
@@ -988,7 +988,7 @@ jobs:
 
   it('отклоняет output без from у работы без агентских шагов', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 jobs:
   build:
@@ -1003,7 +1003,7 @@ jobs:
 
   it('отклоняет превышение limits.attempts', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 jobs:
   build:
@@ -1025,7 +1025,7 @@ jobs:
 
   it('сохраняет порядок объявления работ', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 jobs:
   zebra:
@@ -1045,7 +1045,7 @@ jobs:
   // Сценарий: «Дорожка объявлена на месте подключения»
   it('разбирает lane на месте подключения работы', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 jobs:
   build:
@@ -1062,7 +1062,7 @@ jobs:
 
   it('отклоняет lane внутри файла работы, как и прочую обвязку', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 jobs:
   build:
@@ -1083,7 +1083,7 @@ steps:
   // Сценарий: «Освобождение от потолка прогона объявлено на месте подключения»
   it('разбирает budget_exempt на месте подключения работы', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 jobs:
   finalize:
@@ -1101,7 +1101,7 @@ jobs:
 
   it('отклоняет budget_exempt внутри файла работы, как и прочую обвязку', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 jobs:
   build:
@@ -1121,7 +1121,7 @@ steps:
 
   it('не меняет порядок исполнения графа при объявленной lane', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 jobs:
   zebra:
@@ -1147,7 +1147,7 @@ jobs:
 describe('pipeline-definition: пространство подстановки ${job.lane}', () => {
   it('раскрывается в поле тела, в аргументе шага и в тексте файла промпта работы, подключённой через uses', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 jobs:
   build:
@@ -1178,7 +1178,7 @@ steps:
 
   it('раскрывается в теле работы, объявленной прямо в пайплайне', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 jobs:
   build:
@@ -1199,7 +1199,7 @@ jobs:
   // здесь, там же, где стоит и сам ключ lane.
   it('доступна в переопределении с места подключения (context_upstream поверх uses)', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 jobs:
   build:
@@ -1219,7 +1219,7 @@ steps: [{ id: c, run: [echo, ok] }]
 
   it('отказ разбора на ${job.lane} у работы без объявленной метки, называющий работу', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 jobs:
   build:
@@ -1238,7 +1238,7 @@ steps: [{ id: c, run: [echo, "\${job.lane}"] }]
 
   it('отказ разбора на ${job.lane} у работы без метки, объявленной прямо в пайплайне', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 jobs:
   build:
@@ -1252,7 +1252,7 @@ jobs:
 
   it('lane внутри документа kind: job по-прежнему отклоняется rejectWiringKeys, даже когда работа читает job.lane', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 jobs:
   build:
@@ -1275,7 +1275,7 @@ describe('pipeline-definition: permissions.enforce', () => {
   // Сценарий: «Значение принято»
   it('принимает enforce: strict на шаге и переносит в раскрытый пайплайн', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 jobs:
   build:
@@ -1295,7 +1295,7 @@ jobs:
   // Сценарий: «Неизвестное значение отклоняется»
   it('отклоняет enforce вне перечня', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 jobs:
   build:
@@ -1312,7 +1312,7 @@ jobs:
   // Сценарий: «Шаг сужает режим работы»
   it('шаг со strict перекрывает работу с inherit', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 jobs:
   build:
@@ -1335,7 +1335,7 @@ jobs:
   // Работа со strict, шаг без своего блока permissions — работа побеждает целиком.
   it('работа со strict применяется к шагу без своего блока permissions', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 jobs:
   build:
@@ -1356,7 +1356,7 @@ jobs:
   // Отсутствие обоих объявлений даёт прежнее раскрытие без поля.
   it('без объявлений на работе и шаге раскрытие не несёт permissions', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 jobs:
   build:
@@ -1376,7 +1376,7 @@ describe('pipeline-definition: подстановка в числовые пол
   // Сценарий: «Предел итераций задан параметром»
   it('раскрывает max_iterations из with в число', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 jobs:
   build:
@@ -1403,7 +1403,7 @@ steps:
   // Сценарий: «Число попыток задано параметром»
   it('раскрывает attempts.max из подстановки в число', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 jobs:
   build:
@@ -1428,7 +1428,7 @@ steps:
   // Сценарий: «Ширина параллелизма задана входом пайплайна»
   it('раскрывает concurrency из входа пайплайна в число', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 inputs:
   workers: { type: int, required: true }
@@ -1439,14 +1439,14 @@ jobs:
 `,
     });
 
-    const { pipeline } = expand(project, 'stepcast.yml', { workers: '2' });
+    const { pipeline } = expand(project, 'burnex.yml', { workers: '2' });
     assert.equal(pipeline.concurrency, 2);
   });
 
   // Сценарий: «Числовой литерал разбирается как прежде»
   it('литеральная запись числовых полей разбирается как прежде', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 concurrency: 1
 jobs:
@@ -1466,7 +1466,7 @@ jobs:
   // Сценарий: «Нечисловое значение отклонено» и «Ошибка называет источник значения»
   it('отклоняет нечисловое значение с путём поля, значением и источником', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 inputs:
   n: { type: string, required: true }
@@ -1480,7 +1480,7 @@ jobs:
     });
 
     assert.throws(
-      () => expand(project, 'stepcast.yml', { n: 'много' }),
+      () => expand(project, 'burnex.yml', { n: 'много' }),
       (error: unknown) => {
         assert.ok(error instanceof StepcastError);
         assert.match(error.at ?? '', /until\.max_iterations/);
@@ -1494,7 +1494,7 @@ jobs:
   // Сценарий: «Отложенная подстановка в числовом поле отклонена»
   it('отклоняет ${jobs.*} в числовом поле объясняющей ошибкой', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 jobs:
   plan:
@@ -1521,7 +1521,7 @@ jobs:
 
   it('отклоняет ${run.*} и ${env.*} в числовом поле объясняющей ошибкой', () => {
     const runProject = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 jobs:
   build:
@@ -1538,7 +1538,7 @@ jobs:
     );
 
     const envProject = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 jobs:
   build:
@@ -1558,7 +1558,7 @@ jobs:
   // Сценарий: «Отложенная подстановка доезжает до числового поля через параметр»
   it('называет отложенное пространство, когда оно доехало через params', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 jobs:
   plan:
@@ -1596,7 +1596,7 @@ steps:
   // поле должно жаловаться на неразбираемое число, а не на пространство.
   it('отклоняет экранированный литерал в числовом поле как неразбираемое число', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 concurrency: "$\${params.x}"
 jobs:
@@ -1619,7 +1619,7 @@ jobs:
   // Сценарий: «Ограничение поля проверяется после раскрытия»
   it('attempts.max из подстановки, превышающий limits.attempts, даёт ошибку о потолке', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 jobs:
   build:
@@ -1651,7 +1651,7 @@ steps:
 describe('pipeline-definition: попытки работы', () => {
   const body = (attempts: string): Project =>
     makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 jobs:
   build:
@@ -1715,7 +1715,7 @@ steps:
 describe('pipeline.lock.yml', () => {
   it('не содержит ссылок uses и нераскрытых подстановок пайплайна', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 inputs:
   change: { type: string, required: true }
@@ -1734,7 +1734,7 @@ steps:
 `,
     });
 
-    const lock = serializeLock(expand(project, 'stepcast.yml', { change: 'foo' }).pipeline);
+    const lock = serializeLock(expand(project, 'burnex.yml', { change: 'foo' }).pipeline);
     assert.doesNotMatch(lock, /uses:/);
     assert.doesNotMatch(lock, /\$\{(inputs|params)\./);
     assert.match(lock, /foo/);
@@ -1746,7 +1746,7 @@ steps:
 
   it('несёт permissions.enforce работы и шага', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 jobs:
   build:
@@ -1768,7 +1768,7 @@ jobs:
 
   it('сохраняет подстановки времени прогона как есть', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 jobs:
   plan:
@@ -1782,7 +1782,7 @@ jobs:
   });
 
   it('раскрывает умолчания, чтобы лок был самодостаточен', () => {
-    const project = makeProject({ 'stepcast.yml': MINIMAL_PIPELINE });
+    const project = makeProject({ 'burnex.yml': MINIMAL_PIPELINE });
     const parsed = parseYaml(serializeLock(expand(project).pipeline)) as {
       concurrency: number;
       fail_fast: boolean;
@@ -1800,7 +1800,7 @@ jobs:
 
   it('раскрывает политику публикации и живые файлы только на уровне пайплайна', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 inputs:
   queue: { type: string, default: backlog.md }
@@ -1844,7 +1844,7 @@ jobs:
 
   it('не принимает живые файлы в workspace отдельной работы', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 workspace: { mode: worktree }
 jobs:
@@ -1861,7 +1861,7 @@ jobs:
   for (const mode of ['cwd', 'copy']) {
     it(`не принимает source: commit с режимом ${mode}`, () => {
       const project = makeProject({
-        'stepcast.yml': `
+        'burnex.yml': `
 kind: pipeline
 workspace: { mode: ${mode}, source: commit, preserve_local_changes: true }
 jobs:
@@ -1875,7 +1875,7 @@ jobs:
 
   it('не позволяет job выйти из commit-backed worktree в cwd', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 workspace: { mode: worktree, source: commit, preserve_local_changes: true }
 jobs:
@@ -1890,7 +1890,7 @@ jobs:
   for (const path of ['/tmp/backlog.md', '../backlog.md', 'queue/../../backlog.md']) {
     it(`не принимает живой путь вне корня: ${path}`, () => {
       const project = makeProject({
-        'stepcast.yml': `
+        'burnex.yml': `
 kind: pipeline
 workspace:
   mode: worktree
@@ -1907,7 +1907,7 @@ jobs:
 
   it('не принимает один живой путь дважды', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 workspace:
   mode: worktree
@@ -1926,7 +1926,7 @@ jobs:
   // Сценарий: «Работа объявляет источник наследования»
   it('раскрывает workspace.inherit и сохраняет его в локе', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 workspace: { mode: worktree }
 jobs:
@@ -1956,7 +1956,7 @@ jobs:
   // режиму, а при режиме, отличном от copy, и вовсе запрещён.
   it('не наследует пайплайновый path работе, сменившей режим', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 workspace: { mode: copy, path: ./сборка }
 jobs:
@@ -1977,7 +1977,7 @@ jobs:
   });
 
   it('раскрывает работу без inherit как прежде', () => {
-    const project = makeProject({ 'stepcast.yml': MINIMAL_PIPELINE });
+    const project = makeProject({ 'burnex.yml': MINIMAL_PIPELINE });
     const { pipeline } = expand(project);
     assert.equal(pipeline.jobs[0]!.workspace.inherit, undefined);
     assert.doesNotMatch(serializeLock(pipeline), /inherit/);
@@ -1985,7 +1985,7 @@ jobs:
 
   it('сохраняет объявленную lane в pipeline.lock.yml', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 jobs:
   build:
@@ -2000,7 +2000,7 @@ jobs:
 
   // Сценарий: «Пайплайн без триггеров не изменился»
   it('раскрывает пайплайн без triggers ровно как прежде', () => {
-    const project = makeProject({ 'stepcast.yml': MINIMAL_PIPELINE });
+    const project = makeProject({ 'burnex.yml': MINIMAL_PIPELINE });
     const { pipeline } = expand(project);
     assert.equal(pipeline.triggers, undefined);
 
@@ -2011,7 +2011,7 @@ jobs:
   // Сценарий: «Расписание объявлено одной записью»
   it('видит объявленное расписание в раскрытой модели и в локе', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 name: scheduled
 triggers:
@@ -2038,7 +2038,7 @@ jobs:
   // Сценарий: «Два расписания на один пайплайн»
   it('раскрывает несколько записей расписания', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 triggers:
   schedule:
@@ -2058,7 +2058,7 @@ jobs:
   // Сценарий: «Триггер в файле работы»
   it('отклоняет triggers внутри файла работы, как и прочую обвязку', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 jobs:
   build:
@@ -2080,7 +2080,7 @@ steps:
   // Сценарий: «Незнакомый вид триггера»
   it('отклоняет незнакомый вид триггера, называя его ключ', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 triggers:
   github: {}
@@ -2102,7 +2102,7 @@ describe('pipeline-definition: объявление MCP-серверов', () =>
   // Сценарий: «Объявление на шаге»
   it('шаг с объявленным сервером-процессом несёт его в раскрытой модели', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 jobs:
   build:
@@ -2124,7 +2124,7 @@ jobs:
 
   it('сервер конечной точкой несёт url и headers', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 jobs:
   build:
@@ -2147,7 +2147,7 @@ jobs:
   // Сценарий: «Наследование от работы и от пайплайна»
   it('сервер, объявленный пайплайном, доходит до шага без своего объявления', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 mcp:
   a: { command: [node, a.js] }
@@ -2165,7 +2165,7 @@ jobs:
 
   it('объявление работы перекрывает объявление пайплайна целиком', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 mcp:
   a: { command: [node, a.js] }
@@ -2186,7 +2186,7 @@ jobs:
   // Сценарий: «Ближайшее объявление побеждает целиком»
   it('объявление шага перекрывает и пайплайн, и работу', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 mcp:
   a: { command: [node, a.js] }
@@ -2209,7 +2209,7 @@ jobs:
   // Сценарий: «Снятие унаследованных серверов»
   it('mcp: {} на шаге снимает унаследованное от работы', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 jobs:
   build:
@@ -2229,7 +2229,7 @@ jobs:
   // Сценарий: «Шаг без объявления»
   it('ни один уровень не объявляет — раскрытие не несёт mcp', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 jobs:
   build:
@@ -2246,7 +2246,7 @@ jobs:
   // Сценарий: «Сервер без транспорта»
   it('отказывает на сервере без command и без url, называя место объявления', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 jobs:
   build:
@@ -2264,7 +2264,7 @@ jobs:
   // Сценарий: «Сервер с двумя транспортами»
   it('отказывает на сервере с command и url разом, называя место объявления', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 jobs:
   build:
@@ -2284,7 +2284,7 @@ jobs:
   // Сценарий: «Недопустимое имя сервера»
   it('отказывает на имени сервера с пробелом', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 jobs:
   build:
@@ -2301,7 +2301,7 @@ jobs:
 
   it('отказывает на имени сервера с точкой', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 jobs:
   build:
@@ -2319,7 +2319,7 @@ jobs:
   // Сценарий: «Команда строкой»
   it('отказывает, когда command объявлена строкой, а не списком argv', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 jobs:
   build:
@@ -2339,7 +2339,7 @@ jobs:
 describe('pipeline.lock.yml: объявление MCP-серверов', () => {
   it('записи шага и работы несут своё объявление', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 jobs:
   build:
@@ -2362,7 +2362,7 @@ jobs:
 
   it('шаг без объявления не несёт ключа mcp в записи', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 jobs:
   build:
@@ -2400,7 +2400,7 @@ jobs:
   const EXPECTED_LOCK_WITHOUT_MCP = `version: 1
 kind: pipeline.lock
 name: pipeline
-file: <root>/stepcast.yml
+file: <root>/burnex.yml
 inputs: {}
 workspace: &a1
   mode: cwd
@@ -2417,7 +2417,7 @@ concurrency: 1
 fail_fast: true
 jobs:
   - id: build
-    source: <root>/stepcast.yml
+    source: <root>/burnex.yml
     needs: []
     on: success
     session: shared
@@ -2451,8 +2451,8 @@ jobs:
   }
 
   it('объявление серверов меняет jobLockHash и ключ шага', () => {
-    const without = keyOf(makeProject({ 'stepcast.yml': PIPELINE_WITHOUT_MCP }));
-    const withMcp = keyOf(makeProject({ 'stepcast.yml': PIPELINE_WITH_MCP }));
+    const without = keyOf(makeProject({ 'burnex.yml': PIPELINE_WITHOUT_MCP }));
+    const withMcp = keyOf(makeProject({ 'burnex.yml': PIPELINE_WITH_MCP }));
     assert.notEqual(without.lockHash, withMcp.lockHash);
     assert.notEqual(without.stepKey, withMcp.stepKey);
   });
@@ -2463,7 +2463,7 @@ jobs:
   // хеш целиком, и запись вида `mcp: null` у шага или работы — единственный
   // способ развести ключи документа без объявлений — здесь видна глазом.
   it('замок пайплайна без объявлений сохраняет прежний состав, без единого ключа mcp', () => {
-    const project = makeProject({ 'stepcast.yml': PIPELINE_WITHOUT_MCP });
+    const project = makeProject({ 'burnex.yml': PIPELINE_WITHOUT_MCP });
     const { pipeline } = expand(project);
     const lock = serializeLock(pipeline)
       .replaceAll(project.root, '<root>')
@@ -2476,7 +2476,7 @@ jobs:
     // Тот же путь документа при обоих раскрытиях: иначе `pipeline.file`,
     // входящий в замок, сам по себе развёл бы хеши — это проверка
     // устойчивости к mcp, а не к расположению временного проекта.
-    const project = makeProject({ 'stepcast.yml': PIPELINE_WITHOUT_MCP });
+    const project = makeProject({ 'burnex.yml': PIPELINE_WITHOUT_MCP });
     const first = keyOf(project);
     const second = keyOf(project);
     assert.equal(first.lockHash, second.lockHash);
@@ -2487,7 +2487,7 @@ jobs:
 describe('pipeline-definition: секция project документа', () => {
   it('разбирает верхний ключ project', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 project:
   check: make check
@@ -2502,7 +2502,7 @@ jobs:
 
   it('отклоняет пустую project.check в пайплайне, называя ключ', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 project:
   check: ""
@@ -2523,7 +2523,7 @@ jobs:
 
   it('отклоняет неизвестное поле внутри секции project', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 project:
   name: x
@@ -2538,7 +2538,7 @@ jobs:
   // ui-proposals / stepcast-configuration, сценарий «Ключ в пайплайне»
   it('отклоняет project.proposals в документе пайплайна своим текстом, а не безымянным «неизвестный ключ»', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 project:
   proposals: direct
@@ -2563,12 +2563,12 @@ jobs:
 describe('pipeline-definition: группа project.spec документа', () => {
   it('разбирает группу spec внутри верхнего ключа project', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 project:
   spec:
     dir: openspec/changes
-    rules: .stepcast/prompts/spec-rules.md
+    rules: .burnex/prompts/spec-rules.md
     tool: openspec
     check: openspec validate "$SPEC_CHANGE" --strict
 jobs:
@@ -2586,14 +2586,14 @@ jobs:
     });
     const steps = expand(project).pipeline.jobs[0]!.steps;
     assert.equal(asRun(steps[0]!).command, 'openspec/changes');
-    assert.equal(asRun(steps[1]!).command, '.stepcast/prompts/spec-rules.md');
+    assert.equal(asRun(steps[1]!).command, '.burnex/prompts/spec-rules.md');
     assert.equal(asRun(steps[2]!).command, 'openspec');
     assert.equal(asRun(steps[3]!).command, 'openspec validate "$SPEC_CHANGE" --strict');
   });
 
   it('отклоняет пустой dir внутри группы spec', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 project:
   spec:
@@ -2608,7 +2608,7 @@ jobs:
 
   it('отклоняет абсолютный путь внутри группы spec', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 project:
   spec:
@@ -2623,7 +2623,7 @@ jobs:
 
   it('отклоняет неизвестный ключ внутри группы spec', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 project:
   spec:
@@ -2649,14 +2649,14 @@ jobs:
 `;
 
   it('пайплайн перекрывает конфигурацию по ключу', () => {
-    const project = makeProject({ 'stepcast.yml': PIPELINE_WITH_SPEC_DIR });
+    const project = makeProject({ 'burnex.yml': PIPELINE_WITH_SPEC_DIR });
     const config = withProjectSpec(project, { dir: 'openspec/changes' });
     const step = asRun(expandWith(project, config).pipeline.jobs[0]!.steps[0]!);
     assert.equal(step.command, 'docs/changes');
   });
 
   it('объявление только в пайплайне раскрывается им', () => {
-    const project = makeProject({ 'stepcast.yml': PIPELINE_WITH_SPEC_DIR });
+    const project = makeProject({ 'burnex.yml': PIPELINE_WITH_SPEC_DIR });
     const config = withProjectSpec(project, {});
     const step = asRun(expandWith(project, config).pipeline.jobs[0]!.steps[0]!);
     assert.equal(step.command, 'docs/changes');
@@ -2664,7 +2664,7 @@ jobs:
 
   it('объявление только в конфигурации раскрывается им, когда пайплайн ключ не называет', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 jobs:
   build:
@@ -2678,7 +2678,7 @@ jobs:
 
   it('частичное объявление в обоих слоях сливается по ключу, а не по группе целиком', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 project:
   spec:
@@ -2701,7 +2701,7 @@ jobs:
   // Задача 3.3 / Сценарий: «Ключ practice.spec.check раскрывается из конфигурации»
   it('project.spec.check раскрывается из конфигурации, когда пайплайн ключ не называет', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 jobs:
   build:
@@ -2716,7 +2716,7 @@ jobs:
   // Задача 3.3 / Сценарий: «Пайплайн перекрывает конфигурацию по project.spec.check»
   it('пайплайн перекрывает конфигурацию по project.spec.check', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 project:
   spec:
@@ -2739,7 +2739,7 @@ jobs:
   // листьям) обнулило бы здесь три значения из четырёх.
   it('project.spec.check из пайплайна не затирает dir, rules и tool из конфигурации', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 project:
   spec:
@@ -2759,13 +2759,13 @@ jobs:
     });
     const config = withProjectSpec(project, {
       dir: 'openspec/changes',
-      rules: '.stepcast/prompts/spec-rules.md',
+      rules: '.burnex/prompts/spec-rules.md',
       tool: 'openspec',
     });
 
     const steps = expandWith(project, config).pipeline.jobs[0]!.steps;
     assert.equal(asRun(steps[0]!).command, 'openspec/changes');
-    assert.equal(asRun(steps[1]!).command, '.stepcast/prompts/spec-rules.md');
+    assert.equal(asRun(steps[1]!).command, '.burnex/prompts/spec-rules.md');
     assert.equal(asRun(steps[2]!).command, 'openspec');
     assert.equal(asRun(steps[3]!).command, 'make spec-check');
   });
@@ -2774,7 +2774,7 @@ jobs:
   // команду строкой, а не подстановку, дожившую до исполнения.
   it('project.spec.check попадает в снимок пайплайна строкой, а не подстановкой', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 project:
   spec:
@@ -2794,7 +2794,7 @@ jobs:
 describe('pipeline-definition: состав пространства project.spec.*', () => {
   it('ссылка на необъявленный project.spec.dir — отказ, называющий ключ и оба места', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 jobs:
   build:
@@ -2807,8 +2807,8 @@ jobs:
       (error: unknown) => {
         assert.ok(error instanceof StepcastError);
         assert.match(error.hint ?? '', /project\.spec\.dir/);
-        assert.match(error.hint ?? '', new RegExp(project.path('stepcast.yml').replace(/[/\\]/g, '\\$&')));
-        assert.match(error.hint ?? '', /\.stepcast\/config\.yml/);
+        assert.match(error.hint ?? '', new RegExp(project.path('burnex.yml').replace(/[/\\]/g, '\\$&')));
+        assert.match(error.hint ?? '', /\.burnex\/config\.yml/);
         return true;
       },
     );
@@ -2816,7 +2816,7 @@ jobs:
 
   it('обращение к имени вне состава пространства называет доступные имена, включая составные', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 jobs:
   build:
@@ -2840,7 +2840,7 @@ jobs:
   // Задача 3.3 / Сценарий: «${project.spec.validate} — не имя, а грамматика подкоманды»
   it('ссылка на ${project.spec.validate} отклоняется, называя спискок имён, среди которых spec.check', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 jobs:
   build:
@@ -2862,7 +2862,7 @@ jobs:
   // Задача 3.3 / Сценарий: «Ссылка на необъявленный project.spec.check — оба места»
   it('ссылка на необъявленный project.spec.check — отказ, называющий ключ и оба места', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 jobs:
   build:
@@ -2875,8 +2875,8 @@ jobs:
       (error: unknown) => {
         assert.ok(error instanceof StepcastError);
         assert.match(error.hint ?? '', /project\.spec\.check/);
-        assert.match(error.hint ?? '', new RegExp(project.path('stepcast.yml').replace(/[/\\]/g, '\\$&')));
-        assert.match(error.hint ?? '', /\.stepcast\/config\.yml/);
+        assert.match(error.hint ?? '', new RegExp(project.path('burnex.yml').replace(/[/\\]/g, '\\$&')));
+        assert.match(error.hint ?? '', /\.burnex\/config\.yml/);
         return true;
       },
     );
@@ -2884,7 +2884,7 @@ jobs:
 
   it('необъявленный составной ключ и имя вне состава — разные сообщения', () => {
     const undeclared = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 jobs:
   build:
@@ -2892,7 +2892,7 @@ jobs:
 `,
     });
     const outside = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 jobs:
   build:
@@ -2915,7 +2915,7 @@ jobs:
   // отделаться сообщением о непредставимом строкой значении.
   it('обращение к группе без листа называет доступные имена', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 project:
   spec:
@@ -2949,14 +2949,14 @@ jobs:
 `;
 
   it('пайплайн перекрывает конфигурацию по project.knowledge.spec_index_max_tokens', () => {
-    const project = makeProject({ 'stepcast.yml': PIPELINE_WITH_SPEC_LIMIT });
+    const project = makeProject({ 'burnex.yml': PIPELINE_WITH_SPEC_LIMIT });
     const config = withProjectKnowledge(project, { specIndexMaxTokens: 2000 });
     const pipeline = expandWith(project, config).pipeline;
     assert.equal(pipeline.knowledge.specIndexMaxTokens, 6000);
   });
 
   it('объявление одного ключа в пайплайне не задевает два других предела из конфигурации', () => {
-    const project = makeProject({ 'stepcast.yml': PIPELINE_WITH_SPEC_LIMIT });
+    const project = makeProject({ 'burnex.yml': PIPELINE_WITH_SPEC_LIMIT });
     const config = withProjectKnowledge(project, {
       indexMaxTokens: 4000,
       specIndexMaxTokens: 2000,
@@ -2970,7 +2970,7 @@ jobs:
 
   it('объявление только в конфигурации раскрывается им, когда пайплайн ключ не называет', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 jobs:
   build:
@@ -2988,7 +2988,7 @@ jobs:
 describe('pipeline-definition: project.nested_repos не имеет пайплайнового слоя', () => {
   it('документ пайплайна с project.nested_repos отклоняется, называя ключ', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 project:
   nested_repos: [public-site]
@@ -3003,7 +3003,7 @@ jobs:
       (error: unknown) => {
         assert.ok(error instanceof StepcastError);
         assert.match(error.message, /nested_repos/);
-        assert.equal(error.file, project.path('stepcast.yml'));
+        assert.equal(error.file, project.path('burnex.yml'));
         return true;
       },
     );
@@ -3011,7 +3011,7 @@ jobs:
 
   it('обращение к ${project.nested_repos} отказывает действующим составом пространства', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 jobs:
   build:
@@ -3035,19 +3035,19 @@ jobs:
 describe('pipeline-definition: ${project.spec.*} в подключённой работе', () => {
   function usesProject(): Project {
     return makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 name: p
 project:
   spec:
     dir: openspec/changes
-    rules: .stepcast/prompts/spec-rules.md
+    rules: .burnex/prompts/spec-rules.md
     tool: openspec
 jobs:
   work:
-    uses: ./.stepcast/jobs/work.yml
+    uses: ./.burnex/jobs/work.yml
 `,
-      '.stepcast/jobs/work.yml': `
+      '.burnex/jobs/work.yml': `
 kind: job
 context:
   - path: "\${project.spec.dir}/**/*.md"
@@ -3059,7 +3059,7 @@ steps:
     expect:
       - changed_only: ["\${project.spec.dir}/**"]
 `,
-      '.stepcast/prompts/agent.md': 'Правила: ${project.spec.rules}\n',
+      '.burnex/prompts/agent.md': 'Правила: ${project.spec.rules}\n',
     });
   }
 
@@ -3068,7 +3068,7 @@ steps:
     const { pipeline } = expandWith(
       project,
       withProjectSpec(project, {}),
-      'stepcast.yml',
+      'burnex.yml',
     );
     const job = pipeline.jobs[0]!;
 
@@ -3079,14 +3079,14 @@ steps:
     });
 
     const step = asAgent(job.steps[0]!);
-    assert.equal(step.prompt.trim(), 'Правила: .stepcast/prompts/spec-rules.md');
+    assert.equal(step.prompt.trim(), 'Правила: .burnex/prompts/spec-rules.md');
     assert.deepEqual(step.permissions?.allow, ['Bash(openspec *)']);
     assert.deepEqual(step.expect[0], { kind: 'changed_only', globs: ['openspec/changes/**'] });
   });
 
   it('раскрытый пайплайн несёт значения, а не подстановки', () => {
     const project = usesProject();
-    const { pipeline } = expandWith(project, withProjectSpec(project, {}), 'stepcast.yml');
+    const { pipeline } = expandWith(project, withProjectSpec(project, {}), 'burnex.yml');
 
     const lock = serializeLock(pipeline);
     assert.doesNotMatch(lock, /\$\{project\.spec\.\w+\}/);
@@ -3098,7 +3098,7 @@ steps:
 describe('pipeline-definition: действующее значение project.check', () => {
   it('пайплайн перекрывает конфигурацию', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 project:
   check: make check
@@ -3114,7 +3114,7 @@ jobs:
 
   it('раскрывается значением из пайплайна, когда конфигурация секции не содержит', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 project:
   check: make check
@@ -3130,7 +3130,7 @@ jobs:
 
   it('раскрывается значением из конфигурации, когда пайплайн секцию не объявляет', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 jobs:
   build:
@@ -3143,7 +3143,7 @@ jobs:
   });
 
   it('документ без ссылки на подстановку разбирается без ошибки, даже если ключ не объявлен ни там ни там', () => {
-    const project = makeProject({ 'stepcast.yml': MINIMAL_PIPELINE });
+    const project = makeProject({ 'burnex.yml': MINIMAL_PIPELINE });
     const config = withProjectCheck(project, undefined);
     assert.doesNotThrow(() => expandWith(project, config));
   });
@@ -3152,7 +3152,7 @@ jobs:
 describe('pipeline-definition: подстановка ${project.check}', () => {
   function projectPipeline(): Project {
     return makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 name: p
 context: [{ text: "проверяется \${project.check}" }]
@@ -3208,8 +3208,8 @@ jobs:
       (error: unknown) => {
         assert.ok(error instanceof StepcastError);
         assert.match(error.hint ?? '', /project\.check/);
-        assert.match(error.hint ?? '', new RegExp(project.path('stepcast.yml').replace(/[/\\]/g, '\\$&')));
-        assert.match(error.hint ?? '', /\.stepcast\/config\.yml/);
+        assert.match(error.hint ?? '', new RegExp(project.path('burnex.yml').replace(/[/\\]/g, '\\$&')));
+        assert.match(error.hint ?? '', /\.burnex\/config\.yml/);
         return true;
       },
     );
@@ -3217,7 +3217,7 @@ jobs:
 
   it('обращение к имени вне состава пространства называет доступные имена', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 jobs:
   build:
@@ -3243,7 +3243,7 @@ jobs:
   it('необъявленный ключ и имя вне состава — разные сообщения', () => {
     const undeclared = projectPipeline();
     const outside = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 jobs:
   build:
@@ -3269,14 +3269,14 @@ jobs:
 describe('pipeline-definition: ${project.check} в подключённой работе', () => {
   function usesProject(): Project {
     return makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 name: p
 jobs:
   loop:
-    uses: ./.stepcast/jobs/loop.yml
+    uses: ./.burnex/jobs/loop.yml
 `,
-      '.stepcast/jobs/loop.yml': `
+      '.burnex/jobs/loop.yml': `
 kind: job
 until:
   max_iterations: 3
@@ -3289,7 +3289,7 @@ steps:
   - id: ask
     prompt: "file:../prompts/ask.md"
 `,
-      '.stepcast/prompts/ask.md': 'Проверка: ${project.check}\n',
+      '.burnex/prompts/ask.md': 'Проверка: ${project.check}\n',
     });
   }
 
@@ -3298,7 +3298,7 @@ steps:
     const { pipeline } = expandWith(project, withProjectCheck(project, 'npm run check'));
     const job = pipeline.jobs[0]!;
 
-    assert.equal(job.source, project.path('.stepcast/jobs/loop.yml'));
+    assert.equal(job.source, project.path('.burnex/jobs/loop.yml'));
     assert.equal((job.until?.check[0] as { command: string }).command, 'npm run check');
     assert.equal(asRun(job.steps[0]!).command, 'npm run check');
     assert.deepEqual(asRun(job.steps[1]!).command, ['npm run check']);
@@ -3314,9 +3314,9 @@ steps:
         assert.ok(error instanceof StepcastError);
         // Диагностика называет файл работы — там объявлено поле, — а подсказка
         // оба места, где команду можно объявить.
-        assert.equal(error.file, project.path('.stepcast/jobs/loop.yml'));
+        assert.equal(error.file, project.path('.burnex/jobs/loop.yml'));
         assert.match(error.hint ?? '', /Объявите project\.check/);
-        assert.match(error.hint ?? '', /\.stepcast\/config\.yml/);
+        assert.match(error.hint ?? '', /\.burnex\/config\.yml/);
         return true;
       },
     );
@@ -3324,7 +3324,7 @@ steps:
 
   it('файл работы адресует project даже без параметров: подсказка про inputs его не касается', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 jobs:
   build:
@@ -3350,7 +3350,7 @@ steps: [{ id: c, run: "\${project.name}" }]
 describe('pipeline-definition: действующее значение project.tools', () => {
   it('пайплайн перекрывает конфигурацию целиком', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 project:
   tools: [make]
@@ -3366,7 +3366,7 @@ jobs:
 
   it('раскрывается значением из конфигурации, когда пайплайн секцию не объявляет', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 jobs:
   build:
@@ -3379,7 +3379,7 @@ jobs:
   });
 
   it('документ без ссылки на подстановку разбирается без ошибки, даже если ключ не объявлен ни там ни там', () => {
-    const project = makeProject({ 'stepcast.yml': MINIMAL_PIPELINE });
+    const project = makeProject({ 'burnex.yml': MINIMAL_PIPELINE });
     const config = withProjectTools(project, undefined);
     assert.doesNotThrow(() => expandWith(project, config));
   });
@@ -3388,7 +3388,7 @@ jobs:
 describe('pipeline-definition: подстановка ${project.tools}', () => {
   it('ссылка на необъявленный project.tools — отказ разбора, называющий оба места объявления', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 jobs:
   build:
@@ -3402,8 +3402,8 @@ jobs:
       (error: unknown) => {
         assert.ok(error instanceof StepcastError);
         assert.match(error.hint ?? '', /project\.tools/);
-        assert.match(error.hint ?? '', new RegExp(project.path('stepcast.yml').replace(/[/\\]/g, '\\$&')));
-        assert.match(error.hint ?? '', /\.stepcast\/config\.yml/);
+        assert.match(error.hint ?? '', new RegExp(project.path('burnex.yml').replace(/[/\\]/g, '\\$&')));
+        assert.match(error.hint ?? '', /\.burnex\/config\.yml/);
         return true;
       },
     );
@@ -3411,7 +3411,7 @@ jobs:
 
   it('обращение к имени вне состава пространства называет доступные имена, включая tools', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 jobs:
   build:
@@ -3433,7 +3433,7 @@ jobs:
 
   it('шаг с правом Bash(${project.tools} *) уходит в permissions.allow тремя записями в объявленном порядке', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 project:
   tools: [npm, npx, node]
@@ -3463,7 +3463,7 @@ jobs:
   // в бэкенд.
   it('раскрытое значение попадает в снимок пайплайна строками, а не подстановкой', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 project:
   tools: [npm, npx, node]
@@ -3496,7 +3496,7 @@ jobs:
 describe('pipeline-definition: действующее значение project.edit_paths', () => {
   it('пайплайн перекрывает конфигурацию целиком', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 project:
   edit_paths: [cmd/**]
@@ -3512,7 +3512,7 @@ jobs:
 
   it('раскрывается значением из конфигурации, когда пайплайн секцию не объявляет', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 jobs:
   build:
@@ -3525,7 +3525,7 @@ jobs:
   });
 
   it('документ без ссылки на подстановку разбирается без ошибки, даже если ключ не объявлен ни там ни там', () => {
-    const project = makeProject({ 'stepcast.yml': MINIMAL_PIPELINE });
+    const project = makeProject({ 'burnex.yml': MINIMAL_PIPELINE });
     const config = withProjectEditPaths(project, undefined);
     assert.doesNotThrow(() => expandWith(project, config));
   });
@@ -3534,7 +3534,7 @@ jobs:
 describe('pipeline-definition: подстановка ${project.edit_paths}', () => {
   it('ссылка на необъявленный project.edit_paths — отказ разбора, называющий оба места объявления', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 jobs:
   build:
@@ -3548,8 +3548,8 @@ jobs:
       (error: unknown) => {
         assert.ok(error instanceof StepcastError);
         assert.match(error.hint ?? '', /project\.edit_paths/);
-        assert.match(error.hint ?? '', new RegExp(project.path('stepcast.yml').replace(/[/\\]/g, '\\$&')));
-        assert.match(error.hint ?? '', /\.stepcast\/config\.yml/);
+        assert.match(error.hint ?? '', new RegExp(project.path('burnex.yml').replace(/[/\\]/g, '\\$&')));
+        assert.match(error.hint ?? '', /\.burnex\/config\.yml/);
         return true;
       },
     );
@@ -3557,7 +3557,7 @@ jobs:
 
   it('обращение к имени вне состава пространства называет доступные имена, включая edit_paths', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 jobs:
   build:
@@ -3579,7 +3579,7 @@ jobs:
 
   it('элемент changed_only со ссылкой даёт по шаблону на объявленный путь, в объявленном порядке, соседи на местах', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 project:
   edit_paths: [src/**, test/**, package.json]
@@ -3589,20 +3589,20 @@ jobs:
       - id: ask
         prompt: сделай
         expect:
-          - changed_only: ["\${project.spec.dir}/**", "\${project.edit_paths}", ".stepcast/**"]
+          - changed_only: ["\${project.spec.dir}/**", "\${project.edit_paths}", ".burnex/**"]
 `,
     });
     const { pipeline } = expandWith(project, withProjectSpec(project, { dir: 'openspec/changes' }));
     const step = asAgent(pipeline.jobs[0]!.steps[0]!);
     assert.deepEqual(step.expect[0], {
       kind: 'changed_only',
-      globs: ['openspec/changes/**', 'src/**', 'test/**', 'package.json', '.stepcast/**'],
+      globs: ['openspec/changes/**', 'src/**', 'test/**', 'package.json', '.burnex/**'],
     });
   });
 
   it('check: ${project.edit_paths} — отказ о значении, непредставимом строкой, с подсказкой про элемент списка', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 project:
   edit_paths: [src/**, test/**]
@@ -3625,7 +3625,7 @@ jobs:
 
   it('раскрытое значение попадает в снимок пайплайна путями, а не подстановкой', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 project:
   edit_paths: [src/**, test/**, package.json]
@@ -3817,7 +3817,7 @@ describe('pipeline-definition: раскрытие списочного знач�
 describe('pipeline-definition: required у записи контекста', () => {
   it('доезжает до раскрытой записи, а необъявленное требование её не меняет', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 jobs:
   build:
@@ -3842,7 +3842,7 @@ jobs:
 
   it('опечатка в имени ключа записи отклоняется разбором', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 jobs:
   build:
@@ -3860,7 +3860,7 @@ jobs:
 describe('pipeline-definition: отказ раскрытия на ссылке burnex:<имя>', () => {
   it('неизвестное имя схемы роняет раскрытие, называя ссылку, место объявления и перечень имён', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 jobs:
   build:
@@ -3880,7 +3880,7 @@ jobs:
 
   it('имя с .. роняет раскрытие, не заходя в файловую систему', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 jobs:
   build:
@@ -3900,7 +3900,7 @@ jobs:
 
   it('обычный путь схемы разрешается как прежде, а не как ссылка на пакет', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 jobs:
   build:
@@ -3923,7 +3923,7 @@ describe('pipeline-definition: шаг script', () => {
   // Сценарий: «Шаг объявлен файлом»
   it('разбирается в шаг вида script с путём, args и разрешением', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 jobs:
   build:
@@ -3934,7 +3934,7 @@ jobs:
         expect: [{ exit_code: 0 }]
 `,
     });
-    project.write('.stepcast/scripts/cleanup.py', '#!/usr/bin/env python3\nprint("hi")\n');
+    project.write('.burnex/scripts/cleanup.py', '#!/usr/bin/env python3\nprint("hi")\n');
 
     const { pipeline } = expandScript(project, isolatedScriptRoots(project));
     const step = asScript(pipeline.jobs[0]!.steps[0]!);
@@ -3944,16 +3944,16 @@ jobs:
     assert.deepEqual(step.args, ['--dry-run']);
     assert.equal(step.unresolved, undefined);
     assert.equal(step.resolved?.layer, 'project');
-    assert.equal(step.resolved?.absolutePath, project.path('.stepcast/scripts/cleanup.py'));
+    assert.equal(step.resolved?.absolutePath, project.path('.burnex/scripts/cleanup.py'));
     assert.equal(step.resolved?.runner, 'python3');
-    assert.deepEqual(step.resolved?.argv, ['python3', project.path('.stepcast/scripts/cleanup.py'), '--dry-run']);
+    assert.deepEqual(step.resolved?.argv, ['python3', project.path('.burnex/scripts/cleanup.py'), '--dry-run']);
     assert.match(step.resolved?.fingerprint ?? '', /^[0-9a-f]{16}$/);
   });
 
   // Сценарий: «Два вида шага сразу»
   it('отклоняет шаг, объявивший script вместе с run', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 jobs:
   build:
@@ -3968,7 +3968,7 @@ jobs:
 
   it('отклоняет шаг, объявивший script вместе с prompt', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 jobs:
   build:
@@ -3984,7 +3984,7 @@ jobs:
   // Сценарий: «Аргументы только списком»
   it('отклоняет args строкой', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 jobs:
   build:
@@ -4000,7 +4000,7 @@ jobs:
   // Сценарий: «Схема выхода принимается»
   it('принимает output_schema у шага script и разрешает путь от файла объявления', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 jobs:
   build:
@@ -4019,7 +4019,7 @@ jobs:
   // Сценарий: «Вход объявляется отображением»
   it('вход script раскрывается объявленным отображением', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 jobs:
   build:
@@ -4037,7 +4037,7 @@ jobs:
   // Сценарий: «Вход не отображением»
   it('отклоняет input списком либо строкой', () => {
     const list = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 jobs:
   build:
@@ -4050,7 +4050,7 @@ jobs:
     assert.throws(() => expandScript(list, isolatedScriptRoots(list)), StepcastError);
 
     const str = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 jobs:
   build:
@@ -4066,7 +4066,7 @@ jobs:
   // Сценарий: «Вход у чужого вида шага»
   it('отклоняет input у шага run и у агентского шага', () => {
     const runProject = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 jobs:
   build:
@@ -4079,7 +4079,7 @@ jobs:
     assert.throws(() => expandScript(runProject, isolatedScriptRoots(runProject)), StepcastError);
 
     const agentProject = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 jobs:
   build:
@@ -4094,7 +4094,7 @@ jobs:
 
   it('отклоняет отложенную подстановку в значении script', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 jobs:
   build:
@@ -4113,7 +4113,7 @@ jobs:
     // Сценарий: «Проектный слой»
     it('находит файл в проектном слое', () => {
       const project = makeProject({
-        'stepcast.yml': `
+        'burnex.yml': `
 kind: pipeline
 jobs:
   build:
@@ -4122,18 +4122,18 @@ jobs:
         script: cleanup.py
 `,
       });
-      project.write('.stepcast/scripts/cleanup.py', 'print(1)\n');
+      project.write('.burnex/scripts/cleanup.py', 'print(1)\n');
       const roots = isolatedScriptRoots(project);
 
       const step = asScript(expandScript(project, roots).pipeline.jobs[0]!.steps[0]!);
       assert.equal(step.resolved?.layer, 'project');
-      assert.equal(step.resolved?.absolutePath, project.path('.stepcast/scripts/cleanup.py'));
+      assert.equal(step.resolved?.absolutePath, project.path('.burnex/scripts/cleanup.py'));
     });
 
     // Сценарий: «Домашний слой»
     it('падает на домашний слой, когда в проекте файла нет', () => {
       const project = makeProject({
-        'stepcast.yml': `
+        'burnex.yml': `
 kind: pipeline
 jobs:
   build:
@@ -4143,7 +4143,7 @@ jobs:
 `,
       });
       const roots = isolatedScriptRoots(project);
-      const homeScript = join(roots.home, '.stepcast', 'scripts');
+      const homeScript = join(roots.home, '.burnex', 'scripts');
       writeOutsideProject(homeScript, 'cleanup.py', 'print(1)\n');
 
       const step = asScript(expandScript(project, roots).pipeline.jobs[0]!.steps[0]!);
@@ -4154,7 +4154,7 @@ jobs:
     // Сценарий: «Встроенный слой»
     it('падает на встроенный слой, когда файла нет ни в проекте, ни дома', () => {
       const project = makeProject({
-        'stepcast.yml': `
+        'burnex.yml': `
 kind: pipeline
 jobs:
   build:
@@ -4174,7 +4174,7 @@ jobs:
     // Сценарий: «Явный путь слоёв не касается»
     it('явный путь ./ разрешается от файла объявления и слоёв не касается', () => {
       const project = makeProject({
-        'stepcast.yml': `
+        'burnex.yml': `
 kind: pipeline
 jobs:
   nightly:
@@ -4187,7 +4187,7 @@ steps:
     script: ../scripts/cleanup.py
 `,
       });
-      // Файл лежит вне слоя .stepcast/scripts/ — если бы разрешение искало
+      // Файл лежит вне слоя .burnex/scripts/ — если бы разрешение искало
       // слоями, оно бы этот файл не нашло вовсе.
       project.write('scripts/cleanup.py', 'print(1)\n');
       const roots = isolatedScriptRoots(project);
@@ -4199,7 +4199,7 @@ steps:
 
     it('ненайденный файл оставляет шаг неразрешённым, называя просмотренные каталоги', () => {
       const project = makeProject({
-        'stepcast.yml': `
+        'burnex.yml': `
 kind: pipeline
 jobs:
   build:
@@ -4215,8 +4215,8 @@ jobs:
       assert.equal(step.unresolved?.reason, 'file_not_found');
       if (step.unresolved?.reason === 'file_not_found') {
         assert.equal(step.unresolved.searched.length, 3);
-        assert.ok(step.unresolved.searched.includes(join(roots.project, '.stepcast', 'scripts')));
-        assert.ok(step.unresolved.searched.includes(join(roots.home, '.stepcast', 'scripts')));
+        assert.ok(step.unresolved.searched.includes(join(roots.project, '.burnex', 'scripts')));
+        assert.ok(step.unresolved.searched.includes(join(roots.home, '.burnex', 'scripts')));
         assert.ok(step.unresolved.searched.includes(roots.builtin));
       }
     });
@@ -4225,7 +4225,7 @@ jobs:
     // системной ошибкой вместо названного отказа.
     it('каталог на месте скрипта — тот же неразрешённый шаг, а не падение', () => {
       const project = makeProject({
-        'stepcast.yml': `
+        'burnex.yml': `
 kind: pipeline
 jobs:
   build:
@@ -4234,7 +4234,7 @@ jobs:
         script: tools
 `,
       });
-      project.write('.stepcast/scripts/tools/cleanup.py', 'print(1)\n');
+      project.write('.burnex/scripts/tools/cleanup.py', 'print(1)\n');
       const roots = isolatedScriptRoots(project);
 
       const step = asScript(expandScript(project, roots).pipeline.jobs[0]!.steps[0]!);
@@ -4244,7 +4244,7 @@ jobs:
 
     it('каталог, названный явным путём, тоже не находка', () => {
       const project = makeProject({
-        'stepcast.yml': `
+        'burnex.yml': `
 kind: pipeline
 jobs:
   build:
@@ -4267,7 +4267,7 @@ jobs:
     it('отклоняет пустое значение script', () => {
       for (const value of ['""', '"   "']) {
         const project = makeProject({
-          'stepcast.yml': `
+          'burnex.yml': `
 kind: pipeline
 jobs:
   build:
@@ -4285,7 +4285,7 @@ jobs:
     // Сценарий: «Явное имя раннера побеждает»
     it('явный runner побеждает расширение', () => {
       const project = makeProject({
-        'stepcast.yml': `
+        'burnex.yml': `
 kind: pipeline
 jobs:
   build:
@@ -4295,7 +4295,7 @@ jobs:
         runner: sh
 `,
       });
-      project.write('.stepcast/scripts/build.py', 'print(1)\n');
+      project.write('.burnex/scripts/build.py', 'print(1)\n');
       const step = asScript(expandScript(project, isolatedScriptRoots(project)).pipeline.jobs[0]!.steps[0]!);
       assert.equal(step.resolved?.runner, 'sh');
       assert.equal(step.resolved?.argv[0], 'sh');
@@ -4304,7 +4304,7 @@ jobs:
     // Сценарий: «Выбор по расширению»
     it('расширение побеждает shebang', () => {
       const project = makeProject({
-        'stepcast.yml': `
+        'burnex.yml': `
 kind: pipeline
 jobs:
   build:
@@ -4313,7 +4313,7 @@ jobs:
         script: report.ts
 `,
       });
-      project.write('.stepcast/scripts/report.ts', '#!/usr/bin/env python3\nconsole.log(1)\n');
+      project.write('.burnex/scripts/report.ts', '#!/usr/bin/env python3\nconsole.log(1)\n');
       const step = asScript(expandScript(project, isolatedScriptRoots(project)).pipeline.jobs[0]!.steps[0]!);
       assert.equal(step.resolved?.runner, 'node-ts');
       assert.deepEqual(step.resolved?.argv.slice(0, 2), ['node', '--experimental-strip-types']);
@@ -4322,7 +4322,7 @@ jobs:
     // Сценарий: «Выбор по shebang»
     it('файл без расширения выбирается по shebang', () => {
       const project = makeProject({
-        'stepcast.yml': `
+        'burnex.yml': `
 kind: pipeline
 jobs:
   build:
@@ -4331,7 +4331,7 @@ jobs:
         script: tool
 `,
       });
-      project.write('.stepcast/scripts/tool', '#!/usr/bin/env python3\nprint(1)\n');
+      project.write('.burnex/scripts/tool', '#!/usr/bin/env python3\nprint(1)\n');
       const step = asScript(expandScript(project, isolatedScriptRoots(project)).pipeline.jobs[0]!.steps[0]!);
       assert.equal(step.resolved?.runner, 'python3');
     });
@@ -4339,7 +4339,7 @@ jobs:
     // Сценарий: «Shebang не исполняется»
     it('форма env -S даёт имя python3, а флаги в argv не попадают', () => {
       const project = makeProject({
-        'stepcast.yml': `
+        'burnex.yml': `
 kind: pipeline
 jobs:
   build:
@@ -4348,15 +4348,15 @@ jobs:
         script: tool
 `,
       });
-      project.write('.stepcast/scripts/tool', '#!/usr/bin/env -S python3 -X utf8\nprint(1)\n');
+      project.write('.burnex/scripts/tool', '#!/usr/bin/env -S python3 -X utf8\nprint(1)\n');
       const step = asScript(expandScript(project, isolatedScriptRoots(project)).pipeline.jobs[0]!.steps[0]!);
       assert.equal(step.resolved?.runner, 'python3');
-      assert.deepEqual(step.resolved?.argv, ['python3', project.path('.stepcast/scripts/tool')]);
+      assert.deepEqual(step.resolved?.argv, ['python3', project.path('.burnex/scripts/tool')]);
     });
 
     it('неразрешимый выбор оставляет шаг неразрешённым с перечнем известных расширений', () => {
       const project = makeProject({
-        'stepcast.yml': `
+        'burnex.yml': `
 kind: pipeline
 jobs:
   build:
@@ -4365,7 +4365,7 @@ jobs:
         script: mystery.rb
 `,
       });
-      project.write('.stepcast/scripts/mystery.rb', 'puts 1\n');
+      project.write('.burnex/scripts/mystery.rb', 'puts 1\n');
       const step = asScript(expandScript(project, isolatedScriptRoots(project)).pipeline.jobs[0]!.steps[0]!);
       assert.equal(step.resolved, undefined);
       assert.equal(step.unresolved?.reason, 'runner_undetermined');
@@ -4376,7 +4376,7 @@ jobs:
 
     it('неизвестное имя раннера оставляет шаг неразрешённым с перечнем известных', () => {
       const project = makeProject({
-        'stepcast.yml': `
+        'burnex.yml': `
 kind: pipeline
 jobs:
   build:
@@ -4386,7 +4386,7 @@ jobs:
         runner: bun
 `,
       });
-      project.write('.stepcast/scripts/build.py', 'print(1)\n');
+      project.write('.burnex/scripts/build.py', 'print(1)\n');
       const step = asScript(expandScript(project, isolatedScriptRoots(project)).pipeline.jobs[0]!.steps[0]!);
       assert.equal(step.resolved, undefined);
       assert.equal(step.unresolved?.reason, 'unknown_runner');
@@ -4401,7 +4401,7 @@ jobs:
 describe('pipeline.lock.yml: шаг script', () => {
   it('несёт путь, слой, абсолютный путь, раннер, argv и отпечаток, но не содержимое', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 jobs:
   build:
@@ -4411,7 +4411,7 @@ jobs:
         args: ['--dry-run']
 `,
     });
-    project.write('.stepcast/scripts/cleanup.py', 'секретное содержимое, которого не должно быть в локе\n');
+    project.write('.burnex/scripts/cleanup.py', 'секретное содержимое, которого не должно быть в локе\n');
 
     const { pipeline } = expandScript(project, isolatedScriptRoots(project));
     const lock = serializeLock(pipeline);
@@ -4426,7 +4426,7 @@ jobs:
   // `step.resolved`, а `computeStepKey` хеширует `step` целиком (stepKey.ts).
   it('правка содержимого файла меняет ключ шага через хеширование step целиком', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 jobs:
   build:
@@ -4436,11 +4436,11 @@ jobs:
 `,
     });
     const roots = isolatedScriptRoots(project);
-    project.write('.stepcast/scripts/cleanup.py', 'print(1)\n');
+    project.write('.burnex/scripts/cleanup.py', 'print(1)\n');
     const before = expandScript(project, roots);
     const beforeStep = asScript(before.pipeline.jobs[0]!.steps[0]!);
 
-    project.write('.stepcast/scripts/cleanup.py', 'print(2)\n');
+    project.write('.burnex/scripts/cleanup.py', 'print(2)\n');
     const after = expandScript(project, roots);
     const afterStep = asScript(after.pipeline.jobs[0]!.steps[0]!);
 
@@ -4462,7 +4462,7 @@ jobs:
   // Сценарий: «Вход записан в замке»
   it('несёт input с нераскрытой отложенной подстановкой', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 jobs:
   plan:
@@ -4477,7 +4477,7 @@ jobs:
         input: { slug: "\${jobs.plan.output.slug}" }
 `,
     });
-    project.write('.stepcast/scripts/cleanup.py', 'print(1)\n');
+    project.write('.burnex/scripts/cleanup.py', 'print(1)\n');
     const { pipeline } = expandScript(project, isolatedScriptRoots(project));
     const lock = serializeLock(pipeline);
     assert.match(lock, /\$\{jobs\.plan\.output\.slug\}/);
@@ -4486,7 +4486,7 @@ jobs:
   // Сценарий: «Правка входа меняет ключ»
   it('правка input при неизменном скрипте меняет ключ шага', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 jobs:
   build:
@@ -4497,12 +4497,12 @@ jobs:
 `,
     });
     const roots = isolatedScriptRoots(project);
-    project.write('.stepcast/scripts/cleanup.py', 'print(1)\n');
+    project.write('.burnex/scripts/cleanup.py', 'print(1)\n');
     const before = expandScript(project, roots);
     const beforeStep = asScript(before.pipeline.jobs[0]!.steps[0]!);
 
     project.write(
-      'stepcast.yml',
+      'burnex.yml',
       `
 kind: pipeline
 jobs:
@@ -4536,7 +4536,7 @@ describe('pipeline-definition: типизированная подстановк
   it('${params.retries} даёт число, а не строку', () => {
     const project = makeProject({});
     project.write(
-      'stepcast.yml',
+      'burnex.yml',
       `
 kind: pipeline
 jobs:
@@ -4565,7 +4565,7 @@ steps:
   // Сценарий: «Подстановка внутри текста даёт строку»
   it('подстановка внутри текста input раскрывается строкой', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 jobs:
   build:
@@ -4590,7 +4590,7 @@ steps:
   // Прежнее правило вне input не меняется: объект в args по-прежнему отказ.
   it('подстановка объектом в args по-прежнему отказывает', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 jobs:
   build:
@@ -4613,7 +4613,7 @@ steps:
 describe('pipeline-definition: обёртка раннера в argv шага script', () => {
   it('node встраивает обёртку burnex:step между командой и путём скрипта', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 jobs:
   build:
@@ -4622,18 +4622,18 @@ jobs:
         script: build.mjs
 `,
     });
-    project.write('.stepcast/scripts/build.mjs', 'export default () => ({});\n');
+    project.write('.burnex/scripts/build.mjs', 'export default () => ({});\n');
     const { pipeline } = expandScript(project, isolatedScriptRoots(project));
     const step = asScript(pipeline.jobs[0]!.steps[0]!);
     const argv = step.resolved?.argv ?? [];
     assert.equal(argv[0], 'node');
     assert.match(argv[1] ?? '', /step[/\\]wrapper\.js$/);
-    assert.equal(argv[2], project.path('.stepcast/scripts/build.mjs'));
+    assert.equal(argv[2], project.path('.burnex/scripts/build.mjs'));
   });
 
   it('wrapper: none у переопределённого раннера снимает обёртку из argv', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 jobs:
   build:
@@ -4643,7 +4643,7 @@ jobs:
         args: ['--flag']
 `,
     });
-    project.write('.stepcast/scripts/build.mjs', 'export default () => ({});\n');
+    project.write('.burnex/scripts/build.mjs', 'export default () => ({});\n');
     const config = {
       ...project.config,
       runners: {
@@ -4652,14 +4652,14 @@ jobs:
       },
     };
     const { pipeline } = expandPipeline({
-      pipelinePath: project.path('stepcast.yml'),
+      pipelinePath: project.path('burnex.yml'),
       config,
       scriptRoots: isolatedScriptRoots(project),
     });
     const step = asScript(pipeline.jobs[0]!.steps[0]!);
     assert.deepEqual(step.resolved?.argv, [
       'bun',
-      project.path('.stepcast/scripts/build.mjs'),
+      project.path('.burnex/scripts/build.mjs'),
       '--flag',
     ]);
   });
@@ -4675,7 +4675,7 @@ describe('pipeline-definition: предикат script', () => {
   // Сценарий: «Предикат в expect шага»
   it('разбирает предикат script в expect шага и разрешает путь тем же слоем, что и шаг script', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 jobs:
   build:
@@ -4685,7 +4685,7 @@ jobs:
         expect: [{ script: checks/no-todo.py }]
 `,
     });
-    project.write('.stepcast/scripts/checks/no-todo.py', '#!/usr/bin/env python3\nprint("ok")\n');
+    project.write('.burnex/scripts/checks/no-todo.py', '#!/usr/bin/env python3\nprint("ok")\n');
 
     const { pipeline } = expandScript(project, isolatedScriptRoots(project));
     const step = asRun(pipeline.jobs[0]!.steps[0]!);
@@ -4697,18 +4697,18 @@ jobs:
     assert.equal(predicate.resolved?.runner, 'python3');
     assert.equal(
       predicate.resolved?.absolutePath,
-      project.path('.stepcast/scripts/checks/no-todo.py'),
+      project.path('.burnex/scripts/checks/no-todo.py'),
     );
     assert.deepEqual(predicate.resolved?.argv, [
       'python3',
-      project.path('.stepcast/scripts/checks/no-todo.py'),
+      project.path('.burnex/scripts/checks/no-todo.py'),
     ]);
   });
 
   // Сценарий: «Предикат в условии сходимости»
   it('разбирает предикат script в until.check тем же правилом, что и в expect', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 jobs:
   build:
@@ -4720,7 +4720,7 @@ jobs:
         run: [echo, hi]
 `,
     });
-    project.write('.stepcast/scripts/checks/converged.sh', '#!/bin/sh\nexit 0\n');
+    project.write('.burnex/scripts/checks/converged.sh', '#!/bin/sh\nexit 0\n');
 
     const { pipeline } = expandScript(project, isolatedScriptRoots(project));
     const predicate = scriptPredicate(pipeline.jobs[0]!.until!.check);
@@ -4733,7 +4733,7 @@ jobs:
   // Сценарий: «Пустое значение»
   it('отклоняет пустое значение предиката script', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 jobs:
   build:
@@ -4748,7 +4748,7 @@ jobs:
 
   it('предикат script голым именем ищется тем же слоем, что и шаг script с тем же именем', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 jobs:
   build:
@@ -4759,7 +4759,7 @@ jobs:
 `,
     });
     const roots = isolatedScriptRoots(project);
-    const homeScript = join(roots.home, '.stepcast', 'scripts', 'checks');
+    const homeScript = join(roots.home, '.burnex', 'scripts', 'checks');
     writeOutsideProject(homeScript, 'no-todo.py', 'print(1)\n');
 
     const { pipeline } = expandScript(project, roots);
@@ -4770,13 +4770,13 @@ jobs:
   // Сценарий: «Предикат script явным путём»
   it('предикат script явным путём разрешается от файла объявления работы, слои не просматриваются', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 jobs:
   nightly:
-    uses: ./.stepcast/jobs/nightly.yml
+    uses: ./.burnex/jobs/nightly.yml
 `,
-      '.stepcast/jobs/nightly.yml': `
+      '.burnex/jobs/nightly.yml': `
 kind: job
 until:
   max_iterations: 2
@@ -4786,7 +4786,7 @@ steps:
     run: [echo, hi]
 `,
     });
-    // Файл лежит вне слоя .stepcast/scripts/: находка доказывает, что путь с
+    // Файл лежит вне слоя .burnex/scripts/: находка доказывает, что путь с
     // префиксом ../ разрешается от файла работы, а не слоями.
     project.write('checks/converged.sh', 'exit 0\n');
 
@@ -4798,7 +4798,7 @@ steps:
 
   it('предикат script с ненайденным файлом даёт unresolved с перечнем просмотренных слоёв', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 jobs:
   build:
@@ -4816,14 +4816,14 @@ jobs:
     assert.equal(predicate.resolved, undefined);
     assert.equal(predicate.unresolved?.reason, 'file_not_found');
     if (predicate.unresolved?.reason === 'file_not_found') {
-      assert.ok(predicate.unresolved.searched.includes(join(roots.project, '.stepcast', 'scripts')));
-      assert.ok(predicate.unresolved.searched.includes(join(roots.home, '.stepcast', 'scripts')));
+      assert.ok(predicate.unresolved.searched.includes(join(roots.project, '.burnex', 'scripts')));
+      assert.ok(predicate.unresolved.searched.includes(join(roots.home, '.burnex', 'scripts')));
     }
   });
 
   it('предикат script с неразрешимым раннером даёт unresolved runner_undetermined', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 jobs:
   build:
@@ -4833,7 +4833,7 @@ jobs:
         expect: [{ script: checks/mystery.rb }]
 `,
     });
-    project.write('.stepcast/scripts/checks/mystery.rb', 'puts 1\n');
+    project.write('.burnex/scripts/checks/mystery.rb', 'puts 1\n');
 
     const { pipeline } = expandScript(project, isolatedScriptRoots(project));
     const predicate = scriptPredicate(asRun(pipeline.jobs[0]!.steps[0]!).expect);
@@ -4842,7 +4842,7 @@ jobs:
 
   it('отклоняет отложенную подстановку в значении предиката script', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 jobs:
   a:
@@ -4863,7 +4863,7 @@ describe('result-contract: умолчание output.from у шага script', (
   // Сценарий: «Умолчание по шагу script»
   it('работа без from публикует выход последнего script', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 jobs:
   build:
@@ -4873,14 +4873,14 @@ jobs:
         script: cleanup.py
 `,
     });
-    project.write('.stepcast/scripts/cleanup.py', 'print(1)\n');
+    project.write('.burnex/scripts/cleanup.py', 'print(1)\n');
     assert.doesNotThrow(() => expandScript(project, isolatedScriptRoots(project)));
   });
 
   // Сценарий: «Работа без способных дать выход шагов и без from»
   it('работа из одних run без output_schema и без from отклоняется', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 jobs:
   build:
@@ -4895,7 +4895,7 @@ jobs:
 
   it('run с объявленным output_schema делает работу способной дать выход по умолчанию', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 jobs:
   build:
@@ -4923,7 +4923,7 @@ jobs:
 describe('pipeline-definition: приоритет узнавания uses над script', () => {
   it('шаг с uses и ключом script узнаётся видом uses, а не script', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 jobs:
   build:
@@ -4946,7 +4946,7 @@ jobs:
 describe('pipeline-definition: вид шага вне действующего состава', () => {
   it('патч состава отключает step-run — пайплайн с шагом run: отказывает, называя вид и состав', async () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 jobs:
   build:
@@ -4957,7 +4957,7 @@ jobs:
     });
 
     const registry = await registryWithoutRow('step-run');
-    const error = thrown(() => expandPipeline({ pipelinePath: project.path('stepcast.yml'), config: project.config, registry }));
+    const error = thrown(() => expandPipeline({ pipelinePath: project.path('burnex.yml'), config: project.config, registry }));
 
     assert.match(error.message, /Вид шага run отключён составом/);
     assert.match(error.hint ?? '', /строка дерева/);
@@ -4971,7 +4971,7 @@ jobs:
 
   it('тот же пайплайн при дефолтном составе разбирается как прежде', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 jobs:
   build:
@@ -4990,7 +4990,7 @@ jobs:
   // самого вида, а не таблица «ключ → владельцы» резерва формата.
   it('патч состава отключает step-script — шаг script: отказывает тем же текстом, а не как опечатка', async () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 jobs:
   build:
@@ -5002,7 +5002,7 @@ jobs:
     project.write('main.cjs', 'process.exit(0);\n');
 
     const registry = await registryWithoutRow('step-script');
-    const error = thrown(() => expandPipeline({ pipelinePath: project.path('stepcast.yml'), config: project.config, registry }));
+    const error = thrown(() => expandPipeline({ pipelinePath: project.path('burnex.yml'), config: project.config, registry }));
 
     assert.match(error.message, /Вид шага script отключён составом/);
     assert.doesNotMatch(error.message, /неизвестен/);
@@ -5013,7 +5013,7 @@ jobs:
   // отказ называет вид `uses` только тогда, когда шаг назвал его ключ.
   it('шаг script: при отключённом step-uses разбирается как прежде', async () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 jobs:
   build:
@@ -5026,13 +5026,13 @@ jobs:
 
     const registry = await registryWithoutRow('step-uses');
     assert.doesNotThrow(() =>
-      expandPipeline({ pipelinePath: project.path('stepcast.yml'), config: project.config, registry }),
+      expandPipeline({ pipelinePath: project.path('burnex.yml'), config: project.config, registry }),
     );
   });
 
   it('патч состава отключает step-agent — шаг prompt: называет вид agent', async () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 jobs:
   build:
@@ -5043,7 +5043,7 @@ jobs:
     });
 
     const registry = await registryWithoutRow('step-agent');
-    const error = thrown(() => expandPipeline({ pipelinePath: project.path('stepcast.yml'), config: project.config, registry }));
+    const error = thrown(() => expandPipeline({ pipelinePath: project.path('burnex.yml'), config: project.config, registry }));
 
     assert.match(error.message, /Вид шага agent отключён составом/);
   });
@@ -5054,7 +5054,7 @@ jobs:
   // остаётся опечаткой»).
   it('незнакомый ключ при отключённой строке остаётся прежним отказом о неизвестном виде', async () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 jobs:
   build:
@@ -5065,7 +5065,7 @@ jobs:
     });
 
     const registry = await registryWithoutRow('step-run');
-    const error = thrown(() => expandPipeline({ pipelinePath: project.path('stepcast.yml'), config: project.config, registry }));
+    const error = thrown(() => expandPipeline({ pipelinePath: project.path('burnex.yml'), config: project.config, registry }));
 
     assert.match(error.message, /Вид шага frobnicate неизвестен: такого вклада в реестре нет/);
   });
@@ -5078,7 +5078,7 @@ jobs:
 describe('pipeline-definition: предикат вне действующего состава', () => {
   it('патч состава отключает predicates — предикат шага exit_code: отказывает, называя предикат и состав', async () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 jobs:
   build:
@@ -5090,7 +5090,7 @@ jobs:
     });
 
     const registry = await registryWithoutRow('predicates');
-    const error = thrown(() => expandPipeline({ pipelinePath: project.path('stepcast.yml'), config: project.config, registry }));
+    const error = thrown(() => expandPipeline({ pipelinePath: project.path('burnex.yml'), config: project.config, registry }));
 
     assert.match(error.message, /Предикат exit_code отключён составом/);
     assert.match(error.at ?? '', /jobs\.build\.steps\.0\.expect\.0/);
@@ -5103,7 +5103,7 @@ jobs:
 
   it('тот же пайплайн при дефолтном составе разбирается как прежде', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 jobs:
   build:
@@ -5119,7 +5119,7 @@ jobs:
 
   it('патч состава отключает predicates — предикат until.check: отказывает тем же текстом', async () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 jobs:
   build:
@@ -5134,7 +5134,7 @@ jobs:
     });
 
     const registry = await registryWithoutRow('predicates');
-    const error = thrown(() => expandPipeline({ pipelinePath: project.path('stepcast.yml'), config: project.config, registry }));
+    const error = thrown(() => expandPipeline({ pipelinePath: project.path('burnex.yml'), config: project.config, registry }));
 
     assert.match(error.message, /Предикат exit_code отключён составом/);
     assert.match(error.at ?? '', /jobs\.build\.until\.check\.0/);
@@ -5142,7 +5142,7 @@ jobs:
 
   it('предикат в подключённом файле работы отказывает тем же текстом', async () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 jobs:
   build:
@@ -5158,7 +5158,7 @@ steps:
     });
 
     const registry = await registryWithoutRow('predicates');
-    const error = thrown(() => expandPipeline({ pipelinePath: project.path('stepcast.yml'), config: project.config, registry }));
+    const error = thrown(() => expandPipeline({ pipelinePath: project.path('burnex.yml'), config: project.config, registry }));
 
     assert.match(error.message, /Предикат exit_code отключён составом/);
     assert.equal(error.file, project.path('jobs/build.yml'));
@@ -5169,7 +5169,7 @@ steps:
   // не мешают.
   it('многоключевая запись judge отказывает тем же текстом', async () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 jobs:
   build:
@@ -5181,7 +5181,7 @@ jobs:
     });
 
     const registry = await registryWithoutRow('predicates');
-    const error = thrown(() => expandPipeline({ pipelinePath: project.path('stepcast.yml'), config: project.config, registry }));
+    const error = thrown(() => expandPipeline({ pipelinePath: project.path('burnex.yml'), config: project.config, registry }));
 
     assert.match(error.message, /Предикат judge отключён составом/);
   });
@@ -5203,7 +5203,7 @@ jobs:
     const registry = registryFromKernel(kernel);
 
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 jobs:
   build:
@@ -5214,7 +5214,7 @@ jobs:
 `,
     });
 
-    const expanded = expandPipeline({ pipelinePath: project.path('stepcast.yml'), config: project.config, registry });
+    const expanded = expandPipeline({ pipelinePath: project.path('burnex.yml'), config: project.config, registry });
     const predicate = expanded.pipeline.jobs[0]!.steps[0]!.expect[0] as Predicate;
     assert.equal(predicate.kind, 'plugin');
 
@@ -5259,14 +5259,14 @@ fs.writeFileSync(process.env.BURNEX_OUTPUT, JSON.stringify(input));
 `;
 
   function writeEchoStep(project: Project): void {
-    project.write('.stepcast/steps/echo-input/step.yml', ECHO_MANIFEST);
-    project.write('.stepcast/steps/echo-input/main.cjs', ECHO_MAIN);
+    project.write('.burnex/steps/echo-input/step.yml', ECHO_MANIFEST);
+    project.write('.burnex/steps/echo-input/main.cjs', ECHO_MAIN);
   }
 
   // Сценарий: «Объект из выхода работы выше по графу» + «Число остаётся числом»
   it('${params.*} типизированно раскрывается числом при разборе', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 inputs:
   retries: { type: int, default: 3 }
@@ -5288,7 +5288,7 @@ jobs:
 
   it('строка с текстом вокруг подстановки даёт строку', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 inputs:
   slug: { type: string, default: bug-42 }
@@ -5310,7 +5310,7 @@ jobs:
 
   it('отложенный ${jobs.*} остаётся текстом до late.ts', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 jobs:
   plan:
@@ -5351,13 +5351,13 @@ fs.writeFileSync(process.env.BURNEX_OUTPUT, JSON.stringify(input));
 `;
 
   function writeEchoStep(project: Project, manifest = ECHO_MANIFEST): void {
-    project.write('.stepcast/steps/echo-input/step.yml', manifest);
-    project.write('.stepcast/steps/echo-input/main.cjs', ECHO_MAIN);
+    project.write('.burnex/steps/echo-input/step.yml', manifest);
+    project.write('.burnex/steps/echo-input/main.cjs', ECHO_MAIN);
   }
 
   it('несёт имя, слой, путь и отпечаток манифеста рядом с разрешённым, но не содержимое манифеста', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 jobs:
   build:
@@ -5385,7 +5385,7 @@ jobs:
 
   it('правка манифеста меняет ключ шага', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 jobs:
   build:
@@ -5418,7 +5418,7 @@ jobs:
 
   it('смена слоя разрешения меняет ключ шага', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 jobs:
   build:
@@ -5457,7 +5457,7 @@ jobs:
 
   it('правка with на месте вызова меняет ключ шага', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 jobs:
   build:
@@ -5473,7 +5473,7 @@ jobs:
     const beforeStep = asScript(before.pipeline.jobs[0]!.steps[0]!);
 
     project.write(
-      'stepcast.yml',
+      'burnex.yml',
       `
 kind: pipeline
 jobs:
@@ -5535,9 +5535,9 @@ backends:
     const pipeline = `name: p\n${options.root ?? ''}\njobs:\n  implement:\n${indent(options.job, 4)}\n    steps:\n      - id: code\n        prompt: hi\n${indent(options.step, 8)}\n`;
     const project = makeProject({
       'pipeline.yml': pipeline,
-      '.stepcast/config.yml': `${options.backends ?? BACKENDS}${options.config ?? ''}`,
+      '.burnex/config.yml': `${options.backends ?? BACKENDS}${options.config ?? ''}`,
     });
-    if (options.global !== undefined) writeFileSync(join(project.home, '.stepcast', 'config.yml'), options.global);
+    if (options.global !== undefined) writeFileSync(join(project.home, '.burnex', 'config.yml'), options.global);
     const { config } = resolveConfig({ cwd: project.root, home: project.home });
     const expanded = expandPipeline({ pipelinePath: project.path('pipeline.yml'), config });
     const step = asAgent(expanded.pipeline.jobs[0]!.steps[0]!);
@@ -5560,7 +5560,7 @@ backends:
       assert.equal(step.agent, 'codex');
       assert.deepEqual(expanded.agentOrigins.get('implement/code'), {
         layer: 'pipeline_agents',
-        file: project.path('.stepcast/config.yml'),
+        file: project.path('.burnex/config.yml'),
       });
     });
 
@@ -5625,7 +5625,7 @@ jobs:
   implement-c:
     steps: [{ id: code, prompt: hi }]
 `,
-        '.stepcast/config.yml': `${BACKENDS}step_agents:\n  p:\n    implement:\n      code: { agent: codex }\n`,
+        '.burnex/config.yml': `${BACKENDS}step_agents:\n  p:\n    implement:\n      code: { agent: codex }\n`,
       });
       const { config } = resolveConfig({ cwd: project.root, home: project.home });
       const { pipeline } = expandPipeline({ pipelinePath: project.path('pipeline.yml'), config });
@@ -5638,7 +5638,7 @@ jobs:
     it('точное имя работы ближе общего имени дорожек', () => {
       const project = makeProject({
         'pipeline.yml': 'name: p\njobs:\n  implement-a:\n    lane: a\n    steps: [{ id: code, prompt: hi }]\n',
-        '.stepcast/config.yml': `${BACKENDS}step_agents:\n  p:\n    implement:\n      code: { agent: codex }\n    implement-a:\n      code: { agent: claude, effort: low }\n`,
+        '.burnex/config.yml': `${BACKENDS}step_agents:\n  p:\n    implement:\n      code: { agent: codex }\n    implement-a:\n      code: { agent: claude, effort: low }\n`,
       });
       const { config } = resolveConfig({ cwd: project.root, home: project.home });
       const { pipeline } = expandPipeline({ pipelinePath: project.path('pipeline.yml'), config });
@@ -5694,7 +5694,7 @@ jobs:
         backend: 'claude',
         tier: 'review',
         tierLayer: 'step_agents',
-        file: project.path('.stepcast/config.yml'),
+        file: project.path('.burnex/config.yml'),
       });
     });
 
@@ -5779,8 +5779,8 @@ jobs:
         config: `${policy('fallback')}pipeline_agents:\n  p: { agent: codex, effort: high }\n`,
         global: 'step_agents:\n  p:\n    implement:\n      code: { model: gpt-x }\n',
       });
-      const global = join(project.home, '.stepcast', 'config.yml');
-      const projectFile = project.path('.stepcast/config.yml');
+      const global = join(project.home, '.burnex', 'config.yml');
+      const projectFile = project.path('.burnex/config.yml');
       assert.deepEqual(expanded.agentOrigins.get('implement/code'), { layer: 'pipeline_agents', file: projectFile });
       assert.deepEqual(expanded.modelOrigins.get('implement/code'), { layer: 'step_agents', file: global });
       assert.deepEqual(expanded.effortOrigins.get('implement/code'), { layer: 'pipeline_agents', file: projectFile });
@@ -5817,7 +5817,7 @@ jobs:
         (error: unknown) => {
           assert.ok(error instanceof StepcastError);
           assert.equal(error.at, 'pipeline_agents.p.agent');
-          assert.match(error.file ?? '', /\.stepcast[/\\]config\.yml$/);
+          assert.match(error.file ?? '', /\.burnex[/\\]config\.yml$/);
           return true;
         },
       );
@@ -5838,7 +5838,7 @@ jobs:
       const project = makeProject({
         'pipeline.yml':
           'name: p\njobs:\n  implement:\n    steps:\n      - id: code\n        prompt: hi\n      - id: build\n        run: [echo, ok]\n',
-        '.stepcast/config.yml': `${BACKENDS}step_agents:\n  p:\n    old:\n      gone: { agent: codex }\n    implement:\n      missing: { agent: codex }\n      build: { agent: codex }\n`,
+        '.burnex/config.yml': `${BACKENDS}step_agents:\n  p:\n    old:\n      gone: { agent: codex }\n    implement:\n      missing: { agent: codex }\n      build: { agent: codex }\n`,
       });
       const { config } = resolveConfig({ cwd: project.root, home: project.home });
       const { unusedAgentEntries } = expandPipeline({ pipelinePath: project.path('pipeline.yml'), config });
@@ -5874,7 +5874,7 @@ jobs:
     it('запись пайплайна без агентских шагов названа', () => {
       const project = makeProject({
         'pipeline.yml': 'name: p\njobs:\n  build:\n    steps: [{ id: c, run: [echo, ok] }]\n',
-        '.stepcast/config.yml': `${BACKENDS}pipeline_agents:\n  p: { agent: codex }\n`,
+        '.burnex/config.yml': `${BACKENDS}pipeline_agents:\n  p: { agent: codex }\n`,
       });
       const { config } = resolveConfig({ cwd: project.root, home: project.home });
       const { unusedAgentEntries } = expandPipeline({ pipelinePath: project.path('pipeline.yml'), config });
@@ -5891,7 +5891,7 @@ describe('pipeline-definition: skip_exit_code', () => {
 
   it('без объявления поля нет нигде', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 jobs:
   build:
@@ -5905,7 +5905,7 @@ jobs:
 
   it('ключ шага действует на самом шаге', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 jobs:
   build:
@@ -5919,7 +5919,7 @@ jobs:
 
   it('пайплайн, тело работы и место подключения — каждый уровень по отдельности', () => {
     const pipelineLevel = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 skip_exit_code: 70
 jobs:
@@ -5931,7 +5931,7 @@ jobs:
     assert.deepEqual(codes(pipelineLevel), [70]);
 
     const bodyLevel = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 jobs:
   build:
@@ -5943,7 +5943,7 @@ jobs:
     assert.deepEqual(codes(bodyLevel), [71]);
 
     const siteLevel = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 jobs:
   build:
@@ -5961,7 +5961,7 @@ steps:
 
   it('ближайший уровень перекрывает дальние: шаг, место подключения, тело работы', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 skip_exit_code: 70
 jobs:
@@ -5993,7 +5993,7 @@ steps:
 
   it('script берёт унаследованный код, uses — код с места вызова', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 skip_exit_code: 70
 jobs:
@@ -6002,7 +6002,7 @@ jobs:
       - { id: a, script: probe.sh }
       - { id: b, script: probe.sh, skip_exit_code: 74 }
 `,
-      '.stepcast/scripts/probe.sh': '#!/bin/sh\nexit 0\n',
+      '.burnex/scripts/probe.sh': '#!/bin/sh\nexit 0\n',
     });
     const job = expandScript(project, isolatedScriptRoots(project)).pipeline.jobs[0]!;
     assert.deepEqual(
@@ -6013,7 +6013,7 @@ jobs:
 
   it('uses-шаг берёт код с места вызова, а не из манифеста', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 skip_exit_code: 70
 jobs:
@@ -6022,14 +6022,14 @@ jobs:
       - { id: a, uses: noop }
       - { id: b, uses: noop, skip_exit_code: 75 }
 `,
-      '.stepcast/steps/noop/step.yml': `
+      '.burnex/steps/noop/step.yml': `
 version: 1
 kind: step
 name: noop
 description: Ничего не делает.
 file: ./main.cjs
 `,
-      '.stepcast/steps/noop/main.cjs': 'process.exit(0);\n',
+      '.burnex/steps/noop/main.cjs': 'process.exit(0);\n',
     });
     const job = expandUses(project, usesStepRoots(project)).pipeline.jobs[0]!;
     assert.deepEqual(
@@ -6040,7 +6040,7 @@ file: ./main.cjs
 
   it('${params.*} раскрывается в число', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 jobs:
   build:
@@ -6062,7 +6062,7 @@ steps:
 
   it('работа с agent и run: у agent поля нет, у run есть', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 skip_exit_code: 78
 jobs:
@@ -6080,7 +6080,7 @@ jobs:
   it('смена кода меняет ключ шага', () => {
     const body = (code: number): Project =>
       makeProject({
-        'stepcast.yml': `
+        'burnex.yml': `
 kind: pipeline
 jobs:
   build:
@@ -6097,7 +6097,7 @@ jobs:
   for (const bad of ['0', '256', '1.5', '-1']) {
     it(`отказывает на ${bad} и называет место ключа`, () => {
       const project = makeProject({
-        'stepcast.yml': `
+        'burnex.yml': `
 kind: pipeline
 jobs:
   build:
@@ -6112,7 +6112,7 @@ jobs:
 
   it('отказ на значении уровня работы называет ключ работы', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 jobs:
   build:
@@ -6126,7 +6126,7 @@ jobs:
 
   it('отказ на значении корня называет ключ корня', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 skip_exit_code: 0
 jobs:
@@ -6140,7 +6140,7 @@ jobs:
 
   it('отложенное пространство в значении отклоняется', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 jobs:
   build:
@@ -6172,7 +6172,7 @@ ${JOBS}`;
 
   it('раскрывает цикл: участники, предел, бюджет', () => {
     const project = makeProject({
-      'stepcast.yml': pipelineWith(`    jobs: [check, fix]
+      'burnex.yml': pipelineWith(`    jobs: [check, fix]
     while: "jobs.check.status != 'success'"
     max_iterations: 3
     cost: 5
@@ -6192,16 +6192,16 @@ ${JOBS}`;
   });
 
   it('без объявления loops список пустой, а замок не меняется', () => {
-    const project = makeProject({ 'stepcast.yml': `kind: pipeline${JOBS}` });
+    const project = makeProject({ 'burnex.yml': `kind: pipeline${JOBS}` });
     const { pipeline } = expand(project);
     assert.deepEqual(pipeline.loops, []);
     assert.doesNotMatch(serializeLock(pipeline), /loops:/);
   });
 
   it('пишет loops в замок только при наличии и не трогает хеш работ вне цикла', () => {
-    const plain = expand(makeProject({ 'stepcast.yml': `kind: pipeline${JOBS}` })).pipeline;
+    const plain = expand(makeProject({ 'burnex.yml': `kind: pipeline${JOBS}` })).pipeline;
     const looped = expand(
-      makeProject({ 'stepcast.yml': pipelineWith('    jobs: [check, fix]\n    max_iterations: 2') }),
+      makeProject({ 'burnex.yml': pipelineWith('    jobs: [check, fix]\n    max_iterations: 2') }),
     ).pipeline;
     assert.match(serializeLock(looped), /loops:\n {2}- id: fix-loop/);
     assert.notEqual(
@@ -6216,7 +6216,7 @@ ${JOBS}`;
 `;
     const withLoop = expand(
       makeProject({
-        'stepcast.yml': `kind: pipeline\nloops:\n  l:\n    jobs: [check, fix]\n    max_iterations: 2\n${JOBS}${after}`,
+        'burnex.yml': `kind: pipeline\nloops:\n  l:\n    jobs: [check, fix]\n    max_iterations: 2\n${JOBS}${after}`,
       }),
     ).pipeline;
     const outside = withLoop.jobs.find((job) => job.id === 'after')!;
@@ -6232,7 +6232,7 @@ ${JOBS}`;
   });
 
   it('отказывает без max_iterations с путём поля', () => {
-    const project = makeProject({ 'stepcast.yml': pipelineWith('    jobs: [check, fix]') });
+    const project = makeProject({ 'burnex.yml': pipelineWith('    jobs: [check, fix]') });
     const error = thrown(() => expand(project));
     assert.equal(error.at, 'loops.fix-loop.max_iterations');
     assert.match(error.message, /max_iterations/);
@@ -6240,21 +6240,21 @@ ${JOBS}`;
 
   it('отказывает, когда подстановка выше потолка limits.iterations', () => {
     const project = makeProject({
-      'stepcast.yml': pipelineWith(
+      'burnex.yml': pipelineWith(
         '    jobs: [check, fix]\n    max_iterations: "${inputs.n}"',
         'inputs:\n  n: { type: string, required: true }',
       ),
     });
-    const error = thrown(() => expand(project, 'stepcast.yml', { n: '500' }));
+    const error = thrown(() => expand(project, 'burnex.yml', { n: '500' }));
     assert.equal(error.at, 'loops.fix-loop.max_iterations');
     assert.match(error.message, /limits\.iterations/);
-    assert.equal(expand(project, 'stepcast.yml', { n: '4' }).pipeline.loops[0]!.maxIterations, 4);
+    assert.equal(expand(project, 'burnex.yml', { n: '4' }).pipeline.loops[0]!.maxIterations, 4);
   });
 
   it('отклоняет неизвестный ключ, в том числе on_exceed и tokens', () => {
     for (const key of ['on_exceed: stop', 'tokens: 1000', 'bogus: 1']) {
       const project = makeProject({
-        'stepcast.yml': pipelineWith(`    jobs: [check, fix]\n    max_iterations: 2\n    ${key}`),
+        'burnex.yml': pipelineWith(`    jobs: [check, fix]\n    max_iterations: 2\n    ${key}`),
       });
       assert.throws(() => expand(project), StepcastError, key);
     }
@@ -6270,7 +6270,7 @@ ${JOBS}`;
 describe('pipeline-definition: external', () => {
   const stepOf = (project: Project) => expand(project).pipeline.jobs[0]!.steps[0]! as { external?: boolean };
   const withStep = (line: string): Project =>
-    makeProject({ 'stepcast.yml': `\nkind: pipeline\njobs:\n  build:\n    steps:\n      - ${line}\n` });
+    makeProject({ 'burnex.yml': `\nkind: pipeline\njobs:\n  build:\n    steps:\n      - ${line}\n` });
   const keyOf = (step: ReturnType<typeof stepOf>): string =>
     computeStepKey({
       lockHash: 'лок',
@@ -6343,9 +6343,9 @@ jobs:
   }
 
   it('скрипт пакета проекта находится, пакет и слой названы', () => {
-    const project = makeProject({ 'stepcast.yml': scriptPipeline });
+    const project = makeProject({ 'burnex.yml': scriptPipeline });
     const roots = isolatedScriptRoots(project);
-    const dir = writePackageScript(join(roots.project, '.stepcast', 'packages'), 'hello');
+    const dir = writePackageScript(join(roots.project, '.burnex', 'packages'), 'hello');
 
     const step = asScript(expandScript(project, roots).pipeline.jobs[0]!.steps[0]!);
     assert.equal(step.unresolved, undefined);
@@ -6355,36 +6355,36 @@ jobs:
   });
 
   it('скрипт пакета home выше встроенного, ниже свободного home', () => {
-    const project = makeProject({ 'stepcast.yml': scriptPipeline });
+    const project = makeProject({ 'burnex.yml': scriptPipeline });
     const roots = isolatedScriptRoots(project);
     writeOutsideProject(roots.builtin, 'report.py', '#!/usr/bin/env python3\n');
-    writePackageScript(join(roots.home, '.stepcast', 'packages'), 'tools');
+    writePackageScript(join(roots.home, '.burnex', 'packages'), 'tools');
     assert.equal(asScript(expandScript(project, roots).pipeline.jobs[0]!.steps[0]!).resolved?.package, 'tools');
 
-    writeOutsideProject(join(roots.home, '.stepcast', 'scripts'), 'report.py', '#!/usr/bin/env python3\n');
+    writeOutsideProject(join(roots.home, '.burnex', 'scripts'), 'report.py', '#!/usr/bin/env python3\n');
     const free = asScript(expandScript(project, roots).pipeline.jobs[0]!.steps[0]!);
     assert.equal(free.resolved?.package, undefined);
     assert.equal(free.resolved?.layer, 'home');
   });
 
   it('свободный каталог проекта перекрывает пакет проекта', () => {
-    const project = makeProject({ 'stepcast.yml': scriptPipeline });
+    const project = makeProject({ 'burnex.yml': scriptPipeline });
     const roots = isolatedScriptRoots(project);
-    writePackageScript(join(roots.project, '.stepcast', 'packages'), 'hello');
-    project.write('.stepcast/scripts/report.py', '#!/usr/bin/env python3\n');
+    writePackageScript(join(roots.project, '.burnex', 'packages'), 'hello');
+    project.write('.burnex/scripts/report.py', '#!/usr/bin/env python3\n');
 
     const step = asScript(expandScript(project, roots).pipeline.jobs[0]!.steps[0]!);
     assert.equal(step.resolved?.package, undefined);
-    assert.equal(step.resolved?.absolutePath, project.path('.stepcast/scripts/report.py'));
+    assert.equal(step.resolved?.absolutePath, project.path('.burnex/scripts/report.py'));
   });
 
   it('конфликт двух пакетов не проваливается в нижний слой', () => {
-    const project = makeProject({ 'stepcast.yml': scriptPipeline });
+    const project = makeProject({ 'burnex.yml': scriptPipeline });
     const roots = isolatedScriptRoots(project);
-    const packages = join(roots.project, '.stepcast', 'packages');
+    const packages = join(roots.project, '.burnex', 'packages');
     writePackageScript(packages, 'a');
     writePackageScript(packages, 'b');
-    writeOutsideProject(join(roots.home, '.stepcast', 'scripts'), 'report.py', '#!/usr/bin/env python3\n');
+    writeOutsideProject(join(roots.home, '.burnex', 'scripts'), 'report.py', '#!/usr/bin/env python3\n');
 
     const step = asScript(expandScript(project, roots).pipeline.jobs[0]!.steps[0]!);
     assert.equal(step.resolved, undefined);
@@ -6393,9 +6393,9 @@ jobs:
   });
 
   it('промах при сломанном пакете называет его причину', () => {
-    const project = makeProject({ 'stepcast.yml': scriptPipeline });
+    const project = makeProject({ 'burnex.yml': scriptPipeline });
     const roots = isolatedScriptRoots(project);
-    writePackageScript(join(roots.project, '.stepcast', 'packages'), 'broken', 'not: [valid');
+    writePackageScript(join(roots.project, '.burnex', 'packages'), 'broken', 'not: [valid');
 
     const step = asScript(expandScript(project, roots).pipeline.jobs[0]!.steps[0]!);
     assert.equal(step.unresolved?.reason, 'file_not_found');

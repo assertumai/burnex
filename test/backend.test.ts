@@ -117,7 +117,7 @@ describe('agent-backend: reasoning effort', () => {
 
   it('не запускает backend без поддержки для шага с effective effort', async () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 name: p
 effort: high
@@ -136,7 +136,7 @@ jobs:
 
     await assert.rejects(
       runPipeline({
-        expanded: expandPipeline({ pipelinePath: project.path('stepcast.yml'), config: project.config }),
+        expanded: expandPipeline({ pipelinePath: project.path('burnex.yml'), config: project.config }),
         config: { ...project.config, runs: { ...project.config.runs, root: runsRoot } },
         projectRoot: project.root,
         cwd: project.root,
@@ -149,7 +149,7 @@ jobs:
 
   it('считает отсутствующую capability effort неподдерживаемой', async () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 name: p
 effort: high
@@ -166,7 +166,7 @@ jobs:
 
     await assert.rejects(
       runPipeline({
-        expanded: expandPipeline({ pipelinePath: project.path('stepcast.yml'), config: project.config }),
+        expanded: expandPipeline({ pipelinePath: project.path('burnex.yml'), config: project.config }),
         config: project.config,
         projectRoot: project.root,
         cwd: project.root,
@@ -178,7 +178,7 @@ jobs:
   });
 
   /**
-   * Прогон `build/ask` с настройками из `.stepcast/config.yml`: effort из
+   * Прогон `build/ask` с настройками из `.burnex/config.yml`: effort из
    * настроек и effort документа различаются только источником, поэтому тесту
    * нужен настоящий разбор конфигурации, а не `project.config`.
    */
@@ -188,8 +188,8 @@ jobs:
     readonly effort: boolean;
   }) {
     const project = makeProject({
-      'stepcast.yml': options.pipeline,
-      '.stepcast/config.yml': options.config,
+      'burnex.yml': options.pipeline,
+      '.burnex/config.yml': options.config,
     });
     const { config } = resolveConfig({ cwd: project.root, home: project.home });
     const backend = createFakeBackend({
@@ -197,7 +197,7 @@ jobs:
       lines: [resultLine({ text: 'готово' })],
     });
     const run = runPipeline({
-      expanded: expandPipeline({ pipelinePath: project.path('stepcast.yml'), config }),
+      expanded: expandPipeline({ pipelinePath: project.path('burnex.yml'), config }),
       config: { ...config, runs: { ...config.runs, root: tempDir('runs-') } },
       projectRoot: project.root,
       cwd: project.root,
@@ -313,7 +313,7 @@ describe('agent-backend: возможность жёсткого режима п
   // Сценарий: «Бэкенд без поддержки жёсткого режима»
   it('прогон не начинается, если адаптер не объявляет возможности жёсткого режима', async () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 name: p
 jobs:
@@ -335,7 +335,7 @@ jobs:
     await assert.rejects(
       runPipeline({
         expanded: expandPipeline({
-          pipelinePath: project.path('stepcast.yml'),
+          pipelinePath: project.path('burnex.yml'),
           config: project.config,
         }),
         config: { ...project.config, runs: { ...project.config.runs, root: runsRoot } },
@@ -350,7 +350,7 @@ jobs:
 
   it('прогон с Codex временно пропускает предстартовую проверку жёсткого режима', async () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 name: p
 jobs:
@@ -371,7 +371,7 @@ jobs:
     });
 
     const result = await runPipeline({
-      expanded: expandPipeline({ pipelinePath: project.path('stepcast.yml'), config: project.config }),
+      expanded: expandPipeline({ pipelinePath: project.path('burnex.yml'), config: project.config }),
       config: { ...project.config, runs: { ...project.config.runs, root: runsRoot } },
       projectRoot: project.root,
       cwd: project.root,
@@ -400,7 +400,7 @@ describe('agent-backend: возможность структурированно
 
   function runWithSchema(structuredOutput: boolean) {
     const project = makeProject({
-      'stepcast.yml': SCHEMA_PIPELINE,
+      'burnex.yml': SCHEMA_PIPELINE,
       'schema.json': '{ "type": "object" }\n',
     });
     const backend = createFakeBackend({
@@ -408,7 +408,7 @@ describe('agent-backend: возможность структурированно
       lines: [resultLine({ text: '{}' })],
     });
     const run = runPipeline({
-      expanded: expandPipeline({ pipelinePath: project.path('stepcast.yml'), config: project.config }),
+      expanded: expandPipeline({ pipelinePath: project.path('burnex.yml'), config: project.config }),
       config: { ...project.config, runs: { ...project.config.runs, root: tempDir('runs-') } },
       projectRoot: project.root,
       cwd: project.root,
@@ -454,7 +454,7 @@ describe('agent-backend: возможность работать с MCP', () => 
   // Сценарий: «Бэкенд без поддержки MCP»
   it('прогон не начинается, если для шага действует объявление, а адаптер возможности не объявляет', async () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 name: p
 jobs:
@@ -475,7 +475,7 @@ jobs:
     await assert.rejects(
       runPipeline({
         expanded: expandPipeline({
-          pipelinePath: project.path('stepcast.yml'),
+          pipelinePath: project.path('burnex.yml'),
           config: project.config,
         }),
         config: { ...project.config, runs: { ...project.config.runs, root: runsRoot } },
@@ -491,7 +491,7 @@ jobs:
   // Сценарий: «Бэкенд с поддержкой MCP»
   it('прогон идёт обычным порядком, когда адаптер возможность объявляет', async () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 name: p
 jobs:
@@ -510,7 +510,7 @@ jobs:
     });
 
     const result = await runPipeline({
-      expanded: expandPipeline({ pipelinePath: project.path('stepcast.yml'), config: project.config }),
+      expanded: expandPipeline({ pipelinePath: project.path('burnex.yml'), config: project.config }),
       config: { ...project.config, runs: { ...project.config.runs, root: runsRoot } },
       projectRoot: project.root,
       cwd: project.root,
@@ -525,7 +525,7 @@ jobs:
   // будет ни при каком бэкенде.
   it('пустое объявление на бэкенде без возможности прогон не останавливает', async () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 kind: pipeline
 name: p
 mcp:
@@ -545,7 +545,7 @@ jobs:
     });
 
     const result = await runPipeline({
-      expanded: expandPipeline({ pipelinePath: project.path('stepcast.yml'), config: project.config }),
+      expanded: expandPipeline({ pipelinePath: project.path('burnex.yml'), config: project.config }),
       config: { ...project.config, runs: { ...project.config.runs, root: runsRoot } },
       projectRoot: project.root,
       cwd: project.root,
@@ -580,7 +580,7 @@ jobs:
   }
 
   it('прогон идёт на бэкенде, предоставленном плагином', async () => {
-    const project = makeProject({ 'stepcast.yml': PIPELINE });
+    const project = makeProject({ 'burnex.yml': PIPELINE });
     const runsRoot = tempDir('runs-');
     const backend = createFakeBackend({ lines: [resultLine({ text: 'готово' })] });
     const kernel = createBuiltinKernel();
@@ -605,7 +605,7 @@ jobs:
     const config = withCodex(project.config);
 
     const result = await runPipeline({
-      expanded: expandPipeline({ pipelinePath: project.path('stepcast.yml'), config }),
+      expanded: expandPipeline({ pipelinePath: project.path('burnex.yml'), config }),
       config: { ...config, runs: { ...config.runs, root: runsRoot } },
       projectRoot: project.root,
       cwd: project.root,
@@ -620,13 +620,13 @@ jobs:
   });
 
   it('настроенный, но не предоставленный бэкенд отказывает до первой работы', async () => {
-    const project = makeProject({ 'stepcast.yml': PIPELINE });
+    const project = makeProject({ 'burnex.yml': PIPELINE });
     const runsRoot = tempDir('runs-');
     const config = withCodex(project.config);
 
     await assert.rejects(
       runPipeline({
-        expanded: expandPipeline({ pipelinePath: project.path('stepcast.yml'), config }),
+        expanded: expandPipeline({ pipelinePath: project.path('burnex.yml'), config }),
         config: { ...config, runs: { ...config.runs, root: runsRoot } },
         projectRoot: project.root,
         cwd: project.root,
@@ -1725,7 +1725,7 @@ describe('agent-backend: направление идентификатора с�
   // Сценарий: «Собственные идентификаторы не деградируют»
   it('session: shared на бэкенде со своими идентификаторами не даёт backend.degraded', async () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 version: 1
 kind: pipeline
 name: shared-thread-backend
@@ -1753,7 +1753,7 @@ jobs:
     });
 
     const result = await runPipeline({
-      expanded: expandPipeline({ pipelinePath: project.path('stepcast.yml'), config: project.config }),
+      expanded: expandPipeline({ pipelinePath: project.path('burnex.yml'), config: project.config }),
       config: { ...project.config, runs: { ...project.config.runs, root: runsRoot } },
       projectRoot: project.root,
       cwd: project.root,

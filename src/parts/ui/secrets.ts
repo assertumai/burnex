@@ -1,6 +1,6 @@
 import { existsSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { join, relative } from 'node:path';
+import { relative } from 'node:path';
 
 import { availableNames, BUILTIN_OWNER, contributionOwner, type Registry } from '../../kernel/registry.js';
 import type { Config } from '../pipeline/config/resolve.js';
@@ -23,6 +23,7 @@ import {
   type Failure,
   type KernelCache,
 } from './pipelines.js';
+import { homeRoot } from '../../kernel/dirs.js';
 
 /**
  * Секреты проектов для экрана «Secrets» (`ui-secrets-screen`, design.md).
@@ -165,7 +166,7 @@ async function projectView(
   }
 
   const entries = listPipelineEntries(project.path, {
-    globalConfigDir: join(options.home ?? homedir(), '.stepcast'),
+    globalConfigDir: homeRoot(options.home ?? homedir()),
   });
 
   const declared = new Map<string, Declared>();

@@ -121,7 +121,7 @@ describe('ui-dashboards-file: сборка двух слоёв', () => {
     // отказом, каким отвечает исчезнувший между тактами или недоступный на
     // чтение каталог. Наружу он уйти не должен: на старте это отказ подъёма
     // демона, в такте таймера — необработанное исключение.
-    mkdirSync(join(home, '.stepcast'), { recursive: true });
+    mkdirSync(join(home, '.burnex'), { recursive: true });
     writeFileSync(homeDashboardsDirPath(home), 'не каталог');
     writeProjectDashboard(projectRoot, 'release', SIMPLE_YAML);
 
@@ -348,7 +348,7 @@ describe('ui-dashboards-file: запись документа через Documen
 });
 
 function writePackageDashboard(root: string, name: string, id: string, content: string, broken = false): string {
-  const dir = join(root, '.stepcast', 'packages', name);
+  const dir = join(root, '.burnex', 'packages', name);
   mkdirSync(join(dir, 'dashboards'), { recursive: true });
   writeFileSync(
     join(dir, 'package.yml'),

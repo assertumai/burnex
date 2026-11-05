@@ -72,7 +72,7 @@ async function run(project: Project, registry: Registry): Promise<ReturnType<typ
   const runsRoot = tempDir('runs-');
   const config = project.config;
   return runPipeline({
-    expanded: expandPipeline({ pipelinePath: project.path('stepcast.yml'), config, registry }),
+    expanded: expandPipeline({ pipelinePath: project.path('burnex.yml'), config, registry }),
     config: { ...config, runs: { ...config.runs, root: runsRoot } },
     projectRoot: project.root,
     cwd: project.root,
@@ -82,7 +82,7 @@ async function run(project: Project, registry: Registry): Promise<ReturnType<typ
 
 describe('plugin-contributions: предикат плагина в документе', () => {
   it('разбирается, вычисляется и попадает в журнал под своим именем', async () => {
-    const project = makeProject({ 'stepcast.yml': pipelineWith('[{ exit_code: 0 }, { text_has: "готово" }]') });
+    const project = makeProject({ 'burnex.yml': pipelineWith('[{ exit_code: 0 }, { text_has: "готово" }]') });
 
     const result = await run(project, await pluginRegistry());
 
@@ -100,7 +100,7 @@ describe('plugin-contributions: предикат плагина в докуме�
   });
 
   it('непройденный предикат плагина отклоняет попытку', async () => {
-    const project = makeProject({ 'stepcast.yml': pipelineWith('[{ text_has: "провалено" }]') });
+    const project = makeProject({ 'burnex.yml': pipelineWith('[{ text_has: "провалено" }]') });
 
     const result = await run(project, await pluginRegistry());
 
@@ -117,13 +117,13 @@ describe('plugin-contributions: предикат плагина в докуме�
   });
 
   it('значение не по схеме вклада отклоняется разбором документа', async () => {
-    const project = makeProject({ 'stepcast.yml': pipelineWith('[{ text_has: 42 }]') });
+    const project = makeProject({ 'burnex.yml': pipelineWith('[{ text_has: 42 }]') });
     const registry = await pluginRegistry();
 
     assert.throws(
       () =>
         expandPipeline({
-          pipelinePath: project.path('stepcast.yml'),
+          pipelinePath: project.path('burnex.yml'),
           config: project.config,
           registry,
         }),
@@ -137,13 +137,13 @@ describe('plugin-contributions: предикат плагина в докуме�
   });
 
   it('неизвестный ключ предиката отклоняется с перечнем доступных', async () => {
-    const project = makeProject({ 'stepcast.yml': pipelineWith('[{ exit_cod: 0 }]') });
+    const project = makeProject({ 'burnex.yml': pipelineWith('[{ exit_cod: 0 }]') });
     const registry = await pluginRegistry();
 
     assert.throws(
       () =>
         expandPipeline({
-          pipelinePath: project.path('stepcast.yml'),
+          pipelinePath: project.path('burnex.yml'),
           config: project.config,
           registry,
         }),
@@ -158,13 +158,13 @@ describe('plugin-contributions: предикат плагина в докуме�
   });
 
   it('предикат плагина без плагина в документе не принимается', () => {
-    const project = makeProject({ 'stepcast.yml': pipelineWith('[{ text_has: "готово" }]') });
+    const project = makeProject({ 'burnex.yml': pipelineWith('[{ text_has: "готово" }]') });
 
-    assert.throws(() => expandPipeline({ pipelinePath: project.path('stepcast.yml'), config: project.config }));
+    assert.throws(() => expandPipeline({ pipelinePath: project.path('burnex.yml'), config: project.config }));
   });
 
   it('асинхронный вычислитель дожидается результата', async () => {
-    const project = makeProject({ 'stepcast.yml': pipelineWith('[{ text_has: "готово" }]') });
+    const project = makeProject({ 'burnex.yml': pipelineWith('[{ text_has: "готово" }]') });
     const registry = await pluginRegistry({
       evaluate: async (value, input) => {
         await new Promise((resolve) => setTimeout(resolve, 10));
@@ -213,9 +213,9 @@ describe('plugin-contributions: предикат плагина в докуме�
   it('значение предиката входит в ключ шага', async () => {
     const registry = await pluginRegistry();
     const key = (value: string): string => {
-      const project = makeProject({ 'stepcast.yml': pipelineWith(`[{ text_has: "${value}" }]`) });
+      const project = makeProject({ 'burnex.yml': pipelineWith(`[{ text_has: "${value}" }]`) });
       const { pipeline } = expandPipeline({
-        pipelinePath: project.path('stepcast.yml'),
+        pipelinePath: project.path('burnex.yml'),
         config: project.config,
         registry,
       });
@@ -235,7 +235,7 @@ describe('plugin-contributions: предикат плагина в докуме�
 
   it('предикат плагина в until.check вычисляется и линтится тем же хуком', async () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 version: 1
 kind: pipeline
 name: цикл
@@ -267,7 +267,7 @@ jobs:
     // Линт зовёт хук вклада и для предиката цикла: место объявления на
     // статическую проверку влиять не должно.
     const diagnostics = lintPipeline(
-      expandPipeline({ pipelinePath: project.path('stepcast.yml'), config: project.config, registry }),
+      expandPipeline({ pipelinePath: project.path('burnex.yml'), config: project.config, registry }),
       { config: project.config, registry },
     );
     const own = diagnostics.find((item) => item.message === 'проверка цикла осмотрена');
@@ -284,14 +284,14 @@ jobs:
   });
 
   it('статическая проверка вклада печатается линтом', async () => {
-    const project = makeProject({ 'stepcast.yml': pipelineWith('[{ text_has: "готово" }]') });
+    const project = makeProject({ 'burnex.yml': pipelineWith('[{ text_has: "готово" }]') });
     const registry = await pluginRegistry({
       lint: (value) =>
         String(value).length < 10 ? [{ severity: 'warning', message: 'слишком короткое ожидание' }] : [],
     });
 
     const diagnostics = lintPipeline(
-      expandPipeline({ pipelinePath: project.path('stepcast.yml'), config: project.config, registry }),
+      expandPipeline({ pipelinePath: project.path('burnex.yml'), config: project.config, registry }),
       { config: project.config, registry },
     );
 
@@ -304,7 +304,7 @@ jobs:
 
 describe('plugin-contributions: возобновление прогона с плагинным предикатом', () => {
   it('плагин загружен в реестр возобновления — пайплайн раскрывается', async () => {
-    const project = makeProject({ 'stepcast.yml': pipelineWith('[{ text_has: "готово" }]') });
+    const project = makeProject({ 'burnex.yml': pipelineWith('[{ text_has: "готово" }]') });
     const result = await run(project, await pluginRegistry());
     const source = readSourceRun(result.journal.paths);
 
@@ -321,7 +321,7 @@ describe('plugin-contributions: возобновление прогона с п�
   });
 
   it('плагин не загружен в реестр возобновления — отказ называет его по манифесту', async () => {
-    const project = makeProject({ 'stepcast.yml': pipelineWith('[{ text_has: "готово" }]') });
+    const project = makeProject({ 'burnex.yml': pipelineWith('[{ text_has: "готово" }]') });
     const result = await run(project, await pluginRegistry());
     const source = readSourceRun(result.journal.paths);
     assert.deepEqual(
@@ -350,13 +350,13 @@ describe('plugin-contributions: возобновление прогона с п�
   });
 
   it('опечатка в предикате при полном составе плагинов остаётся неизвестным ключом', async () => {
-    const project = makeProject({ 'stepcast.yml': pipelineWith('[{ text_has: "готово" }]') });
+    const project = makeProject({ 'burnex.yml': pipelineWith('[{ text_has: "готово" }]') });
     const result = await run(project, await pluginRegistry());
     const source = readSourceRun(result.journal.paths);
 
     // Пайплайн правится после прогона: опечатка в имени встроенного предиката,
     // не связанная ни с одним плагином, — а не пропажа плагина `example`.
-    project.write('stepcast.yml', pipelineWith('[{ exit_cod: 0 }]'));
+    project.write('burnex.yml', pipelineWith('[{ exit_cod: 0 }]'));
     const registry = await pluginRegistry();
 
     assert.throws(
@@ -377,7 +377,7 @@ describe('plugin-contributions: возобновление прогона с п�
   });
 
   it('манифест прежней версии без поля plugins сохраняет прежнюю диагностику', async () => {
-    const project = makeProject({ 'stepcast.yml': pipelineWith('[{ exit_cod: 0 }]') });
+    const project = makeProject({ 'burnex.yml': pipelineWith('[{ exit_cod: 0 }]') });
     const journal = seedRun(tempDir('runs-'), project.root);
     const source = readSourceRun(journal.paths);
     assert.equal(source.manifest.plugins, undefined);
@@ -429,7 +429,7 @@ describe('plugin-contributions: плагин занимает имя exit_code �
     );
     const registry = registryFromKernel(kernel);
 
-    const project = makeProject({ 'stepcast.yml': pipelineWith('[{ exit_code: "ok" }]') });
+    const project = makeProject({ 'burnex.yml': pipelineWith('[{ exit_code: "ok" }]') });
     const result = await run(project, registry);
 
     assert.equal(result.status, 'success');

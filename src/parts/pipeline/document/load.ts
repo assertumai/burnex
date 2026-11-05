@@ -87,7 +87,7 @@ export function rejectProposalsKeyInPipeline(document: unknown, file: string): v
     throw new StepcastError('Режим доставки правки кабинета объявляет только конфигурация репозитория', {
       file,
       at: 'project.proposals',
-      hint: 'Перенесите значение в .stepcast/config.yml — документ пайплайна его не принимает',
+      hint: 'Перенесите значение в .burnex/config.yml — документ пайплайна его не принимает',
     });
   }
 }

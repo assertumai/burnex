@@ -5,7 +5,7 @@ import { Alert, AlertDescription, AlertTitle, PageHeader } from '@burnex/ui';
 import './routes.css';
 
 /** Файл слоя, в который витрина пишет маршруты по умолчанию, — для подсказок на странице. */
-export const HOME_ROUTES_FILE = '~/.stepcast/routes.yml';
+export const HOME_ROUTES_FILE = '~/.burnex/routes.yml';
 
 export interface RoutesNoticeProps {
   readonly pathname: string;

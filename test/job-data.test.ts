@@ -80,9 +80,9 @@ jobs:
 
   // Сценарий: «Работа объявляет ключи»
   it('объявление доезжает до раскрытой модели, лока и resolved.json', async () => {
-    const project = makeProject({ 'stepcast.yml': PIPELINE_WITH_DATA_DECL });
+    const project = makeProject({ 'burnex.yml': PIPELINE_WITH_DATA_DECL });
     const { pipeline } = expandPipeline({
-      pipelinePath: project.path('stepcast.yml'),
+      pipelinePath: project.path('burnex.yml'),
       config: project.config,
     });
     const job = pipeline.jobs.find((item) => item.id === 'slots');
@@ -103,7 +103,7 @@ jobs:
   // Сценарий: «Недопустимое имя в объявлении»
   it('имя с точкой отклоняется разбором, называя работу', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 version: 1
 kind: pipeline
 name: недопустимое-имя
@@ -118,7 +118,7 @@ jobs:
     });
 
     assert.throws(
-      () => expandPipeline({ pipelinePath: project.path('stepcast.yml'), config: project.config }),
+      () => expandPipeline({ pipelinePath: project.path('burnex.yml'), config: project.config }),
       (error: unknown) =>
         error instanceof StepcastError &&
         /недопустимым именем/.test(error.message) &&
@@ -129,7 +129,7 @@ jobs:
   // Сценарий: «Объявления нет»
   it('работа без объявления имеет пустой состав', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 version: 1
 kind: pipeline
 name: без-объявления
@@ -142,7 +142,7 @@ jobs:
 `,
     });
     const { pipeline } = expandPipeline({
-      pipelinePath: project.path('stepcast.yml'),
+      pipelinePath: project.path('burnex.yml'),
       config: project.config,
     });
     assert.deepEqual(pipeline.jobs[0]?.data, []);
@@ -151,7 +151,7 @@ jobs:
   // Сценарий: «Объявленный ключ не опубликован»
   it('объявленный, но не опубликованный ключ ошибкой не считается', async () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 version: 1
 kind: pipeline
 name: не-опубликован
@@ -357,7 +357,7 @@ async function runProject(project: Project): Promise<RunResult> {
   const runsRoot = tempDir('runs-');
   return runPipeline({
     expanded: expandPipeline({
-      pipelinePath: project.path('stepcast.yml'),
+      pipelinePath: project.path('burnex.yml'),
       config: project.config,
     }),
     config: { ...project.config, runs: { ...project.config.runs, root: runsRoot } },
@@ -369,7 +369,7 @@ async function runProject(project: Project): Promise<RunResult> {
 describe('job-display-data: движок складывает данные в состояние', () => {
   // Сценарий: «Данные видны в состоянии до конца работы»
   it('кладёт данные в запись работы после шага, который их записал', async () => {
-    const project = makeProject({ 'stepcast.yml': PIPELINE_WITH_DISPLAY });
+    const project = makeProject({ 'burnex.yml': PIPELINE_WITH_DISPLAY });
     const result = await runProject(project);
 
     const slots = readStatus(result.journal.paths).jobs.find((job) => job.id === 'slots');
@@ -378,7 +378,7 @@ describe('job-display-data: движок складывает данные в с
 
   it('доносит данные до подстановки в работе ниже по графу', async () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 version: 1
 kind: pipeline
 name: потребитель
@@ -405,7 +405,7 @@ jobs:
 
   it('отсутствующий ключ чужой работы — отказ с объяснением, а не пустая строка', async () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 version: 1
 kind: pipeline
 name: строгий-потребитель
@@ -432,9 +432,9 @@ jobs:
   });
 
   it('объясняет отказ составом опубликованных данных', () => {
-    const project = makeProject({ 'stepcast.yml': PIPELINE_WITH_DISPLAY });
+    const project = makeProject({ 'burnex.yml': PIPELINE_WITH_DISPLAY });
     const job = expandPipeline({
-      pipelinePath: project.path('stepcast.yml'),
+      pipelinePath: project.path('burnex.yml'),
       config: project.config,
     }).pipeline.jobs[0];
     assert.ok(job !== undefined);
@@ -457,7 +457,7 @@ jobs:
   // Сценарий: «Запись в файл в обход команды»
   it('необъявленный ключ в data.json, записанный шагом в обход команды, роняет работу без повторных попыток', async () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 version: 1
 kind: pipeline
 name: обход-команды
@@ -482,7 +482,7 @@ jobs:
   // как это закрывал budget-stop-status-lies.
   it('упавший шаг сохраняет свою причину и cause, а нарушение объявления дописывается к ней', async () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 version: 1
 kind: pipeline
 name: упавший-шаг-с-данными
@@ -506,7 +506,7 @@ jobs:
   // Сценарий: «Объявленное соседство сохраняется»
   it('объявленный сосед необъявленного ключа сохраняется в записи работы', async () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 version: 1
 kind: pipeline
 name: соседство
@@ -529,7 +529,7 @@ jobs:
   // Сценарий: «Подстановка не получает необъявленного значения»
   it('необъявленное значение не доезжает до подстановки в работе ниже по графу', async () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 version: 1
 kind: pipeline
 name: не-доезжает
@@ -558,9 +558,9 @@ jobs:
 
 describe('job-display-data: раскрытие подписи', () => {
   it('resolveLate не трогает display: его раскрывает витрина', () => {
-    const project = makeProject({ 'stepcast.yml': PIPELINE_WITH_DISPLAY });
+    const project = makeProject({ 'burnex.yml': PIPELINE_WITH_DISPLAY });
     const { pipeline } = expandPipeline({
-      pipelinePath: project.path('stepcast.yml'),
+      pipelinePath: project.path('burnex.yml'),
       config: project.config,
     });
     const job = pipeline.jobs[0];
@@ -576,9 +576,9 @@ describe('job-display-data: раскрытие подписи', () => {
   });
 
   it('лок хранит подпись нераскрытой', () => {
-    const project = makeProject({ 'stepcast.yml': PIPELINE_WITH_DISPLAY });
+    const project = makeProject({ 'burnex.yml': PIPELINE_WITH_DISPLAY });
     const text = serializeLock(
-      expandPipeline({ pipelinePath: project.path('stepcast.yml'), config: project.config })
+      expandPipeline({ pipelinePath: project.path('burnex.yml'), config: project.config })
         .pipeline,
     );
     assert.match(text, /display:/);
@@ -613,9 +613,9 @@ describe('job-display-data: раскрытие подписи', () => {
 
 describe('job-display-data: подпись в снимке витрины', () => {
   function seeded(runId: string) {
-    const project = makeProject({ 'stepcast.yml': PIPELINE_WITH_DISPLAY });
+    const project = makeProject({ 'burnex.yml': PIPELINE_WITH_DISPLAY });
     const lock = serializeLock(
-      expandPipeline({ pipelinePath: project.path('stepcast.yml'), config: project.config })
+      expandPipeline({ pipelinePath: project.path('burnex.yml'), config: project.config })
         .pipeline,
     );
     const bed = makeJournalBed();
@@ -648,9 +648,9 @@ describe('job-display-data: подпись в снимке витрины', () =
   });
 
   it('снимок работы без данных подписи не несёт', () => {
-    const project = makeProject({ 'stepcast.yml': PIPELINE_WITH_DISPLAY });
+    const project = makeProject({ 'burnex.yml': PIPELINE_WITH_DISPLAY });
     const lock = serializeLock(
-      expandPipeline({ pipelinePath: project.path('stepcast.yml'), config: project.config })
+      expandPipeline({ pipelinePath: project.path('burnex.yml'), config: project.config })
         .pipeline,
     );
     const bed = makeJournalBed();
@@ -669,9 +669,9 @@ describe('job-display-data: подпись в снимке витрины', () =
 
 describe('job-display-data: линт подписи', () => {
   function diagnose(pipeline: string): readonly string[] {
-    const project = makeProject({ 'stepcast.yml': pipeline });
+    const project = makeProject({ 'burnex.yml': pipeline });
     const expanded = expandPipeline({
-      pipelinePath: project.path('stepcast.yml'),
+      pipelinePath: project.path('burnex.yml'),
       config: project.config,
     });
     return lintPipeline(expanded, { config: project.config, cwd: project.root })
@@ -739,7 +739,7 @@ jobs:
   // Сценарий: «Читатель называет необъявленный ключ»
   it('отклоняет ${jobs.<работа>.data.<ключ>} в поле, потребляемом шагом, когда работа его не объявляет', () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 version: 1
 kind: pipeline
 name: необъявленный-читатель
@@ -759,7 +759,7 @@ jobs:
 `,
     });
     const diagnostics = lintPipeline(
-      expandPipeline({ pipelinePath: project.path('stepcast.yml'), config: project.config }),
+      expandPipeline({ pipelinePath: project.path('burnex.yml'), config: project.config }),
       { config: project.config, cwd: project.root },
     ).filter((item) => item.severity === 'error');
 
@@ -872,7 +872,7 @@ steps:
     run: [echo, ок]
     expect: [{ exit_code: 0 }]
 `,
-      'stepcast.yml': `
+      'burnex.yml': `
 version: 1
 kind: pipeline
 name: обвязка-в-работе
@@ -883,7 +883,7 @@ jobs:
     });
 
     assert.throws(
-      () => expandPipeline({ pipelinePath: project.path('stepcast.yml'), config: project.config }),
+      () => expandPipeline({ pipelinePath: project.path('burnex.yml'), config: project.config }),
       (error: unknown) => error instanceof StepcastError && /display/.test(error.message),
     );
   });
@@ -893,7 +893,7 @@ describe('job-display-data: возобновление переносит дан
   // Сценарий: «Переиспользованный шаг ничего не пишет, а данные остаются»
   it('переносит data.json переиспользованной работы в новый прогон', async () => {
     const project = makeProject({
-      'stepcast.yml': `
+      'burnex.yml': `
 version: 1
 kind: pipeline
 name: перенос
@@ -922,7 +922,7 @@ jobs:
 
     const config = { ...project.config, runs: { ...project.config.runs, root: runsRoot } };
     const expandedOf = () =>
-      expandPipeline({ pipelinePath: project.path('stepcast.yml'), config: project.config });
+      expandPipeline({ pipelinePath: project.path('burnex.yml'), config: project.config });
 
     const first = await runPipeline({
       expanded: expandedOf(),
@@ -982,7 +982,7 @@ jobs:
         run: [echo, дальше]
         expect: [{ exit_code: 0 }]
 `;
-    const project = makeProject({ 'stepcast.yml': `${ЗАГОЛОВОК}\n    data: [slug]${ХВОСТ}` });
+    const project = makeProject({ 'burnex.yml': `${ЗАГОЛОВОК}\n    data: [slug]${ХВОСТ}` });
     const runsRoot = tempDir('runs-');
     execFileSync('git', ['-C', project.root, 'init', '--quiet', '--initial-branch=main']);
     execFileSync('git', ['-C', project.root, 'config', 'user.email', 'test@example.com']);
@@ -992,7 +992,7 @@ jobs:
 
     const config = { ...project.config, runs: { ...project.config.runs, root: runsRoot } };
     const expandedOf = () =>
-      expandPipeline({ pipelinePath: project.path('stepcast.yml'), config: project.config });
+      expandPipeline({ pipelinePath: project.path('burnex.yml'), config: project.config });
 
     const first = await runPipeline({
       expanded: expandedOf(),
@@ -1018,7 +1018,7 @@ jobs:
     });
 
     // Объявление снято: работа больше не вправе публиковать `slug`.
-    writeFileSync(project.path('stepcast.yml'), `${ЗАГОЛОВОК}${ХВОСТ}`);
+    writeFileSync(project.path('burnex.yml'), `${ЗАГОЛОВОК}${ХВОСТ}`);
 
     const second = await runPipeline({
       expanded: expandedOf(),

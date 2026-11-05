@@ -58,13 +58,13 @@ const FAILING_BACKENDS = 'backends:\n  claude: { command: "false" }\n  codex: { 
 
 function bed(files: Record<string, string> = {}, global = '') {
   const project = makeProject({
-    'stepcast.yml': PIPELINE,
-    '.stepcast/config.yml': BACKENDS,
+    'burnex.yml': PIPELINE,
+    '.burnex/config.yml': BACKENDS,
     ...files,
   });
   const runsRoot = tempDir('runs-');
   // `runs.root` и `backends.*.command` допустимы только в глобальной конфигурации.
-  writeFileSync(join(project.home, '.stepcast', 'config.yml'), `runs:\n  root: ${runsRoot}\n${global}`);
+  writeFileSync(join(project.home, '.burnex', 'config.yml'), `runs:\n  root: ${runsRoot}\n${global}`);
   const lines: string[] = [];
   return { project, runsRoot, lines, write: (line: string) => lines.push(line) };
 }
@@ -76,7 +76,7 @@ function agentsOf(project: Project, agent: string | undefined): Record<string, s
     agent === undefined
       ? withHome(project.home, () => project.config)
       : withHome(project.home, () => resolveConfigWithAgent({ cwd: project.root, agent }));
-  const expanded = expandPipeline({ pipelinePath: project.path('stepcast.yml'), config });
+  const expanded = expandPipeline({ pipelinePath: project.path('burnex.yml'), config });
   const result: Record<string, string> = {};
   for (const step of expanded.pipeline.jobs[0]!.steps) if (step.kind === 'agent') result[step.id] = step.agent;
   return result;
@@ -87,7 +87,7 @@ function args(command: string, positional: string[], flags: ParsedArgs['flags'])
 }
 
 function run(b: Bed, flags: ParsedArgs['flags']): Promise<number> {
-  return withHome(b.project.home, () => runRunCommand(args('run', ['stepcast.yml'], flags), b.write, b.project.root));
+  return withHome(b.project.home, () => runRunCommand(args('run', ['burnex.yml'], flags), b.write, b.project.root));
 }
 
 function manifestOf(b: Bed, runId: string) {
@@ -126,7 +126,7 @@ describe('run --agent: кому достаётся выбранный агент
 
   it('запись pipeline_agents сильнее флага', () => {
     const b = bed({
-      '.stepcast/config.yml': `${BACKENDS}pipeline_agents:\n  agent-override: { agent: claude }\n`,
+      '.burnex/config.yml': `${BACKENDS}pipeline_agents:\n  agent-override: { agent: claude }\n`,
     });
     assert.deepEqual(agentsOf(b.project, 'codex'), { free: 'claude', pinned: 'claude' });
   });
@@ -153,9 +153,9 @@ jobs:
 `;
 
   function rootedAgents(policy: string, agent: string): Record<string, string> {
-    const b = bed({ 'stepcast.yml': ROOTED, '.stepcast/config.yml': `${BACKENDS}agent_policy: ${policy}\n` });
+    const b = bed({ 'burnex.yml': ROOTED, '.burnex/config.yml': `${BACKENDS}agent_policy: ${policy}\n` });
     const config = withHome(b.project.home, () => resolveConfigWithAgent({ cwd: b.project.root, agent }));
-    const expanded = expandPipeline({ pipelinePath: b.project.path('stepcast.yml'), config });
+    const expanded = expandPipeline({ pipelinePath: b.project.path('burnex.yml'), config });
     const result: Record<string, string> = {};
     for (const job of expanded.pipeline.jobs) for (const step of job.steps) if (step.kind === 'agent') result[step.id] = step.agent;
     return result;
@@ -183,7 +183,7 @@ describe('run --agent: отказ и журнал', () => {
   });
 
   it('run.json несёт agent_override при флаге и не несёт без него', async () => {
-    const b = bed({ 'stepcast.yml': PIPELINE.replace(/ {6}- \{ id: free.*\n.*pinned.*\n/, '') });
+    const b = bed({ 'burnex.yml': PIPELINE.replace(/ {6}- \{ id: free.*\n.*pinned.*\n/, '') });
     // listRuns отдаёт новые первыми, а id двух запусков в одну секунду порядка не гарантируют:
     // прогон опознаётся по разности списков, а не по позиции.
     assert.equal(await run(b, { agent: 'codex' }), ExitCode.ok);
@@ -196,7 +196,7 @@ describe('run --agent: отказ и журнал', () => {
   });
 
   it('манифест прежней версии без agent_override читается', async () => {
-    const b = bed({ 'stepcast.yml': PIPELINE.replace(/ {6}- \{ id: free.*\n.*pinned.*\n/, '') });
+    const b = bed({ 'burnex.yml': PIPELINE.replace(/ {6}- \{ id: free.*\n.*pinned.*\n/, '') });
     assert.equal(await run(b, {}), ExitCode.ok);
     const id = listRuns(b.runsRoot, b.project.root)[0] as string;
     const parsed = RunManifestSchema.safeParse(manifestOf(b, id));
@@ -211,7 +211,7 @@ describe('resume наследует agent_override', () => {
   // (`resolved.json`) называет агента, которым шаг пошёл в исполнение. Сам
   // бэкенд — заведомо падающая команда: важно, кого выбрали, а не ответ.
   function gatedBed(project = BACKENDS): Bed {
-    return bed({ 'stepcast.yml': GATED, '.stepcast/config.yml': project }, FAILING_BACKENDS);
+    return bed({ 'burnex.yml': GATED, '.burnex/config.yml': project }, FAILING_BACKENDS);
   }
 
   /** Агенты шагов работы `work` — из `resolved.json`, с которым она пошла в исполнение. */
@@ -267,7 +267,7 @@ describe('resume наследует agent_override', () => {
   });
 
   it('возобновлённый прогон пишет тот же ключ; без ключа в источнике — без ключа', async () => {
-    const b = bed({ 'stepcast.yml': PIPELINE.replace(/ {6}- \{ id: free.*\n.*pinned.*\n/, '') });
+    const b = bed({ 'burnex.yml': PIPELINE.replace(/ {6}- \{ id: free.*\n.*pinned.*\n/, '') });
 
     assert.equal(await run(b, { agent: 'codex' }), ExitCode.ok);
     const source = listRuns(b.runsRoot, b.project.root)[0] as string;

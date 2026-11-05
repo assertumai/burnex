@@ -17,7 +17,7 @@ import { tempDir } from './tmp.js';
 
 function project(): string {
   const dir = tempDir('proposals-store-');
-  mkdirSync(join(dir, '.stepcast'), { recursive: true });
+  mkdirSync(join(dir, '.burnex'), { recursive: true });
   return dir;
 }
 
@@ -30,16 +30,16 @@ describe('proposals/store: чтение каталога очереди', () => 
 
   it('запись читается после постановки', () => {
     const dir = project();
-    proposeEntry(dir, { target: '.stepcast/widgets/clock.tsx', content: 'export default 1;\n' });
+    proposeEntry(dir, { target: '.burnex/widgets/clock.tsx', content: 'export default 1;\n' });
     const result = readProposalsDir(dir);
     assert.equal(result.records.length, 1);
-    assert.equal(result.records[0]?.target, '.stepcast/widgets/clock.tsx');
+    assert.equal(result.records[0]?.target, '.burnex/widgets/clock.tsx');
     assert.equal(result.records[0]?.state, 'pending');
   });
 
   it('негодная запись не стирается и не гасит чтение остальных', () => {
     const dir = project();
-    proposeEntry(dir, { target: '.stepcast/widgets/clock.tsx', content: 'a' });
+    proposeEntry(dir, { target: '.burnex/widgets/clock.tsx', content: 'a' });
     mkdirSync(proposalsDirPath(dir), { recursive: true });
     writeFileSync(join(proposalsDirPath(dir), 'broken.json'), '{not json');
     const result = readProposalsDir(dir);
@@ -53,7 +53,7 @@ describe('proposals/store: чтение каталога очереди', () => 
 describe('proposals/store: постановка', () => {
   it('постановка новой цели — pending, действие create, отпечатка нет', () => {
     const dir = project();
-    const record = proposeEntry(dir, { target: '.stepcast/dashboards/release.yml', content: 'title: x\n' });
+    const record = proposeEntry(dir, { target: '.burnex/dashboards/release.yml', content: 'title: x\n' });
     assert.equal(record.action, 'create');
     assert.equal(record.baseFingerprint, null);
     assert.equal(record.state, 'pending');
@@ -61,16 +61,16 @@ describe('proposals/store: постановка', () => {
 
   it('постановка правки существующего файла — действие update, несёт отпечаток', () => {
     const dir = project();
-    mkdirSync(join(dir, '.stepcast', 'widgets'), { recursive: true });
-    writeFileSync(join(dir, '.stepcast', 'widgets', 'clock.tsx'), 'export default 0;\n');
-    const record = proposeEntry(dir, { target: '.stepcast/widgets/clock.tsx', content: 'export default 1;\n' });
+    mkdirSync(join(dir, '.burnex', 'widgets'), { recursive: true });
+    writeFileSync(join(dir, '.burnex', 'widgets', 'clock.tsx'), 'export default 0;\n');
+    const record = proposeEntry(dir, { target: '.burnex/widgets/clock.tsx', content: 'export default 1;\n' });
     assert.equal(record.action, 'update');
     assert.notEqual(record.baseFingerprint, null);
   });
 
   it('недопустимая цель отказывает и не создаёт файл очереди', () => {
     const dir = project();
-    assert.throws(() => proposeEntry(dir, { target: '.stepcast/config.yml', content: 'x' }), StepcastError);
+    assert.throws(() => proposeEntry(dir, { target: '.burnex/config.yml', content: 'x' }), StepcastError);
     assert.equal(existsSync(proposalsDirPath(dir)), false);
   });
 
@@ -78,7 +78,7 @@ describe('proposals/store: постановка', () => {
    * Цель, которую `parseProposalTarget` отклоняет ещё по форме, до реального
    * пути не доходит вовсе — и ветвь сравнения реальных путей ей не проверить.
    * Достижимый выход по ссылке — каталог плагина, сделанный ссылкой наружу:
-   * форма цели законна (файл внутри `.stepcast/plugins/<id>/` на любой
+   * форма цели законна (файл внутри `.burnex/plugins/<id>/` на любой
    * глубине), а реальный путь ведёт за кабинет (`ui-proposals`, «Выход по
    * символической ссылке»).
    */
@@ -86,11 +86,11 @@ describe('proposals/store: постановка', () => {
     const dir = project();
     const outside = tempDir('proposals-outside-');
     writeFileSync(join(outside, 'plugin.json'), 'secret');
-    mkdirSync(join(dir, '.stepcast', 'plugins'), { recursive: true });
-    symlinkSync(outside, join(dir, '.stepcast', 'plugins', 'escape'));
+    mkdirSync(join(dir, '.burnex', 'plugins'), { recursive: true });
+    symlinkSync(outside, join(dir, '.burnex', 'plugins', 'escape'));
 
     assert.throws(
-      () => proposeEntry(dir, { target: '.stepcast/plugins/escape/plugin.json', content: 'x' }),
+      () => proposeEntry(dir, { target: '.burnex/plugins/escape/plugin.json', content: 'x' }),
       (error: unknown) => {
         assert.ok(error instanceof StepcastError);
         assert.match(error.message, /за пределы кабинета/);
@@ -106,10 +106,10 @@ describe('proposals/store: постановка', () => {
     const dir = project();
     const outside = tempDir('proposals-outside-widgets-');
     writeFileSync(join(outside, 'clock.tsx'), 'secret');
-    symlinkSync(outside, join(dir, '.stepcast', 'widgets'));
+    symlinkSync(outside, join(dir, '.burnex', 'widgets'));
 
     assert.throws(
-      () => proposeEntry(dir, { target: '.stepcast/widgets/clock.tsx', content: 'x' }),
+      () => proposeEntry(dir, { target: '.burnex/widgets/clock.tsx', content: 'x' }),
       (error: unknown) => {
         assert.ok(error instanceof StepcastError);
         assert.match(error.message, /за пределы кабинета/);
@@ -128,9 +128,9 @@ describe('proposals/store: постановка', () => {
   it('два предложения одной цели в одну секунду дают две записи, а не одну', () => {
     const dir = project();
     const now = new Date('2026-09-12T17:15:26.100Z');
-    const first = proposeEntry(dir, { target: '.stepcast/widgets/clock.tsx', content: 'v1', now });
+    const first = proposeEntry(dir, { target: '.burnex/widgets/clock.tsx', content: 'v1', now });
     const second = proposeEntry(dir, {
-      target: '.stepcast/widgets/clock.tsx',
+      target: '.burnex/widgets/clock.tsx',
       content: 'v2',
       now: new Date('2026-09-12T17:15:26.900Z'),
     });
@@ -146,10 +146,10 @@ describe('proposals/store: постановка', () => {
 
   it('повтор отклонённой записи (та же цель и то же содержимое) отказывает с её именем', () => {
     const dir = project();
-    const record = proposeEntry(dir, { target: '.stepcast/widgets/clock.tsx', content: 'v1' });
+    const record = proposeEntry(dir, { target: '.burnex/widgets/clock.tsx', content: 'v1' });
     rejectProposal(dir, record.id);
     assert.throws(
-      () => proposeEntry(dir, { target: '.stepcast/widgets/clock.tsx', content: 'v1' }),
+      () => proposeEntry(dir, { target: '.burnex/widgets/clock.tsx', content: 'v1' }),
       (error: unknown) => {
         assert.ok(error instanceof StepcastError);
         assert.match(error.message, new RegExp(record.id));
@@ -160,9 +160,9 @@ describe('proposals/store: постановка', () => {
 
   it('повтор с другим содержимым после отказа встаёт в очередь', () => {
     const dir = project();
-    const record = proposeEntry(dir, { target: '.stepcast/widgets/clock.tsx', content: 'v1' });
+    const record = proposeEntry(dir, { target: '.burnex/widgets/clock.tsx', content: 'v1' });
     rejectProposal(dir, record.id);
-    const second = proposeEntry(dir, { target: '.stepcast/widgets/clock.tsx', content: 'v2' });
+    const second = proposeEntry(dir, { target: '.burnex/widgets/clock.tsx', content: 'v2' });
     assert.equal(second.state, 'pending');
   });
 });
@@ -170,52 +170,52 @@ describe('proposals/store: постановка', () => {
 describe('proposals/store: решение', () => {
   it('принятие пишет цель и переводит запись в accepted', () => {
     const dir = project();
-    const record = proposeEntry(dir, { target: '.stepcast/widgets/clock.tsx', content: 'export default 1;\n' });
+    const record = proposeEntry(dir, { target: '.burnex/widgets/clock.tsx', content: 'export default 1;\n' });
     const decided = acceptProposal(dir, record.id);
     assert.equal(decided.state, 'accepted');
     assert.equal(typeof decided.decidedAt, 'string');
-    assert.equal(readFileSync(join(dir, '.stepcast', 'widgets', 'clock.tsx'), 'utf8'), 'export default 1;\n');
+    assert.equal(readFileSync(join(dir, '.burnex', 'widgets', 'clock.tsx'), 'utf8'), 'export default 1;\n');
   });
 
   it('принятие создаёт недостающий каталог кабинета', () => {
     const dir = project();
-    const record = proposeEntry(dir, { target: '.stepcast/dashboards/release.yml', content: 'title: r\n' });
-    assert.equal(existsSync(join(dir, '.stepcast', 'dashboards')), false);
+    const record = proposeEntry(dir, { target: '.burnex/dashboards/release.yml', content: 'title: r\n' });
+    assert.equal(existsSync(join(dir, '.burnex', 'dashboards')), false);
     acceptProposal(dir, record.id);
-    assert.equal(readFileSync(join(dir, '.stepcast', 'dashboards', 'release.yml'), 'utf8'), 'title: r\n');
+    assert.equal(readFileSync(join(dir, '.burnex', 'dashboards', 'release.yml'), 'utf8'), 'title: r\n');
   });
 
   it('отклонение не трогает цель', () => {
     const dir = project();
-    mkdirSync(join(dir, '.stepcast', 'widgets'), { recursive: true });
-    writeFileSync(join(dir, '.stepcast', 'widgets', 'clock.tsx'), 'original\n');
-    const record = proposeEntry(dir, { target: '.stepcast/widgets/clock.tsx', content: 'proposed\n' });
+    mkdirSync(join(dir, '.burnex', 'widgets'), { recursive: true });
+    writeFileSync(join(dir, '.burnex', 'widgets', 'clock.tsx'), 'original\n');
+    const record = proposeEntry(dir, { target: '.burnex/widgets/clock.tsx', content: 'proposed\n' });
     const decided = rejectProposal(dir, record.id);
     assert.equal(decided.state, 'rejected');
-    assert.equal(readFileSync(join(dir, '.stepcast', 'widgets', 'clock.tsx'), 'utf8'), 'original\n');
+    assert.equal(readFileSync(join(dir, '.burnex', 'widgets', 'clock.tsx'), 'utf8'), 'original\n');
   });
 
   it('расхождение отпечатка отменяет принятие: запись остаётся pending, файл не тронут', () => {
     const dir = project();
-    mkdirSync(join(dir, '.stepcast', 'widgets'), { recursive: true });
-    writeFileSync(join(dir, '.stepcast', 'widgets', 'clock.tsx'), 'original\n');
-    const record = proposeEntry(dir, { target: '.stepcast/widgets/clock.tsx', content: 'proposed\n' });
+    mkdirSync(join(dir, '.burnex', 'widgets'), { recursive: true });
+    writeFileSync(join(dir, '.burnex', 'widgets', 'clock.tsx'), 'original\n');
+    const record = proposeEntry(dir, { target: '.burnex/widgets/clock.tsx', content: 'proposed\n' });
     // Файл правят руками после постановки.
-    writeFileSync(join(dir, '.stepcast', 'widgets', 'clock.tsx'), 'изменено руками\n');
+    writeFileSync(join(dir, '.burnex', 'widgets', 'clock.tsx'), 'изменено руками\n');
     assert.throws(() => acceptProposal(dir, record.id), StepcastError);
     const stillPending = findProposal(dir, record.id);
     assert.equal(stillPending?.state, 'pending');
-    assert.equal(readFileSync(join(dir, '.stepcast', 'widgets', 'clock.tsx'), 'utf8'), 'изменено руками\n');
+    assert.equal(readFileSync(join(dir, '.burnex', 'widgets', 'clock.tsx'), 'utf8'), 'изменено руками\n');
   });
 
   it('предложение создания файла, который уже появился, отказывает тем же правилом', () => {
     const dir = project();
-    const record = proposeEntry(dir, { target: '.stepcast/dashboards/release.yml', content: 'title: r\n' });
-    mkdirSync(join(dir, '.stepcast', 'dashboards'), { recursive: true });
-    writeFileSync(join(dir, '.stepcast', 'dashboards', 'release.yml'), 'title: созданный руками\n');
+    const record = proposeEntry(dir, { target: '.burnex/dashboards/release.yml', content: 'title: r\n' });
+    mkdirSync(join(dir, '.burnex', 'dashboards'), { recursive: true });
+    writeFileSync(join(dir, '.burnex', 'dashboards', 'release.yml'), 'title: созданный руками\n');
     assert.throws(() => acceptProposal(dir, record.id), StepcastError);
     assert.equal(
-      readFileSync(join(dir, '.stepcast', 'dashboards', 'release.yml'), 'utf8'),
+      readFileSync(join(dir, '.burnex', 'dashboards', 'release.yml'), 'utf8'),
       'title: созданный руками\n',
     );
   });
@@ -224,7 +224,7 @@ describe('proposals/store: решение', () => {
 describe('proposals/store: режим direct', () => {
   it('пишет цель немедленно и не создаёт запись очереди', () => {
     const dir = project();
-    const path = writeProposalTargetDirect(dir, '.stepcast/widgets/clock.tsx', 'export default 1;\n');
+    const path = writeProposalTargetDirect(dir, '.burnex/widgets/clock.tsx', 'export default 1;\n');
     assert.equal(readFileSync(path, 'utf8'), 'export default 1;\n');
     assert.equal(existsSync(proposalsDirPath(dir)), false);
   });

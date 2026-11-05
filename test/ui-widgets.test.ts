@@ -77,8 +77,8 @@ describe('ui-widgets: перечисление виджетов проекта',
     writeFileSync(join(widgetsDir(projectRoot), 'clock.tsx'), HOOK_WIDGET);
 
     const other = tempDir('other-project-');
-    mkdirSync(join(other, '.stepcast', 'widgets'), { recursive: true });
-    writeFileSync(join(other, '.stepcast', 'widgets', 'gauge.tsx'), HOOK_WIDGET);
+    mkdirSync(join(other, '.burnex', 'widgets'), { recursive: true });
+    writeFileSync(join(other, '.burnex', 'widgets', 'gauge.tsx'), HOOK_WIDGET);
     seedRun(runsRoot, other, { runId: 'b' });
 
     // Ломаем указатель так, чтобы у одного проекта путь пропал, а у другого остался.
@@ -186,9 +186,9 @@ describe('ui-widgets: устаревание по голым импортам', 
       join(widgetsDir(projectRoot), 'clock.tsx'),
       "import { NotAName } from '@burnex/ui';\nexport default function Clock() { return null; }\n",
     );
-    const before = readdirSync(join(projectRoot, '.stepcast'));
+    const before = readdirSync(join(projectRoot, '.burnex'));
     buildProjectWidgets(projectRoot);
-    const after = readdirSync(join(projectRoot, '.stepcast'));
+    const after = readdirSync(join(projectRoot, '.burnex'));
     assert.deepEqual(after, before);
   });
 });
@@ -445,9 +445,9 @@ describe('ui-widgets: отказ подъёма компилятора', () => {
   });
 });
 
-/** Пакет с манифестом и виджетами: `<корень>/.stepcast/packages/<имя>/widgets/<id>.tsx`. */
+/** Пакет с манифестом и виджетами: `<корень>/.burnex/packages/<имя>/widgets/<id>.tsx`. */
 function writePackageWidgets(root: string, name: string, ids: readonly string[], manifest?: string): string {
-  const dir = join(root, '.stepcast', 'packages', name);
+  const dir = join(root, '.burnex', 'packages', name);
   mkdirSync(join(dir, 'widgets'), { recursive: true });
   writeFileSync(
     join(dir, 'package.yml'),
@@ -472,8 +472,8 @@ describe('ui-widgets: виджеты пакетов (packages-directory-layer)',
   it('виджет пакета home находится, когда выше ничего нет; свободный home виджеты не читаются', () => {
     const { projectRoot, home } = makeJournalBed();
     writePackageWidgets(home, 'tools', ['gauge']);
-    mkdirSync(join(home, '.stepcast', 'widgets'), { recursive: true });
-    writeFileSync(join(home, '.stepcast', 'widgets', 'ignored.tsx'), HOOK_WIDGET);
+    mkdirSync(join(home, '.burnex', 'widgets'), { recursive: true });
+    writeFileSync(join(home, '.burnex', 'widgets', 'ignored.tsx'), HOOK_WIDGET);
 
     assert.deepEqual(listProjectWidgetIds(projectRoot, { home }), ['gauge']);
     assert.deepEqual(buildProjectWidgets(projectRoot, { home })[0]?.source, { layer: 'home', package: 'tools' });

@@ -4,14 +4,14 @@ import { describe, it } from 'node:test';
 import type { InstallManifest } from '../src/parts/install/manifest.js';
 import { pickLatestTag, planUpdate } from '../src/parts/install/plan.js';
 
-const CURRENT = '/h/.stepcast/releases/current';
+const CURRENT = '/h/.burnex/releases/current';
 
 const MANAGED: InstallManifest = {
   method: 'managed',
   repo: 'https://example.com/stepcast.git',
   ref: 'v0.3.0',
   version: '0.3.0',
-  releases_dir: '/h/.stepcast/releases',
+  releases_dir: '/h/.burnex/releases',
 };
 
 const CHECKOUT: InstallManifest = { method: 'checkout', dir: '/work/stepcast' };
@@ -34,7 +34,7 @@ describe('install-plan: managed', () => {
           args: [`${CURRENT}/install.sh`, '--repo', MANAGED.method === 'managed' ? MANAGED.repo : '', '--ref', 'v0.4.0'],
           cwd: CURRENT,
           // И под прежним именем: install.sh текущего релиза может знать только его.
-          env: { BURNEX_HOME: '/h/.stepcast', STEPCAST_HOME: '/h/.stepcast' },
+          env: { BURNEX_HOME: '/h/.burnex', STEPCAST_HOME: '/h/.burnex' },
         },
       ],
     });
@@ -56,8 +56,8 @@ describe('install-plan: managed', () => {
     const custom: InstallManifest = { ...MANAGED, bin_dir: '/opt/bin' } as InstallManifest;
     const plan = planUpdate(custom, { latestTag: 'v0.4.0' });
     assert.deepEqual(plan.kind === 'run' ? plan.steps[0]?.env : undefined, {
-      BURNEX_HOME: '/h/.stepcast',
-      STEPCAST_HOME: '/h/.stepcast',
+      BURNEX_HOME: '/h/.burnex',
+      STEPCAST_HOME: '/h/.burnex',
       BURNEX_BIN_DIR: '/opt/bin',
       STEPCAST_BIN_DIR: '/opt/bin',
     });

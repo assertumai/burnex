@@ -32,7 +32,7 @@ async function cli(project: Project, argv: readonly string[]): Promise<{ code: E
 
 function projectWithExample(): Project {
   const project = makeProject();
-  cpSync(EXAMPLE, join(project.root, '.stepcast', 'packages', 'hello'), { recursive: true });
+  cpSync(EXAMPLE, join(project.root, '.burnex', 'packages', 'hello'), { recursive: true });
   return project;
 }
 

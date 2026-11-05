@@ -8,6 +8,7 @@ import { listProjects } from '../pipeline/run/journal/reader.js';
 import { findPackageRoot } from '../pipeline/domain/package-schema.js';
 import { StepManifestSchema } from '../pipeline/document/schema.js';
 import { describeSchemaFailure } from '../../kernel/schema-failure.js';
+import { cabinetDir, homeRoot } from '../../kernel/dirs.js';
 
 /**
  * Каталог переиспособных шагов для экрана «Шаги» (design.md изменения
@@ -58,8 +59,8 @@ export interface StepsOverview {
 const LAYERS: readonly StepLayerName[] = ['project', 'home', 'builtin'];
 
 function layerDir(layer: StepLayerName, projectPath: string, home: string): string {
-  if (layer === 'project') return join(projectPath, '.stepcast', 'steps');
-  if (layer === 'home') return join(home, '.stepcast', 'steps');
+  if (layer === 'project') return join(cabinetDir(projectPath), 'steps');
+  if (layer === 'home') return join(homeRoot(home), 'steps');
   return join(findPackageRoot(fileURLToPath(new URL('.', import.meta.url))), 'src', 'builtin', 'steps');
 }
 

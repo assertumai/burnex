@@ -46,7 +46,7 @@ function currentContentOf(projectPath: string, target: string): string | null {
 }
 
 /**
- * Действующий режим доставки проекта. Неразбираемый `.stepcast/config.yml`
+ * Действующий режим доставки проекта. Неразбираемый `.burnex/config.yml`
  * одного проекта не гасит очередь остальных: причина идёт негодной записью с
  * именем файла — тем же правилом, каким негодная запись очереди показывается
  * по имени и не отменяет чтения соседних (`ui-daemon`, «Наблюдение очереди её
@@ -65,7 +65,7 @@ function deliveryMode(
     return {
       mode: 'queue',
       failure: {
-        file: '.stepcast/config.yml',
+        file: '.burnex/config.yml',
         reason: `project configuration cannot be parsed, delivery mode falls back to queue: ${message}`,
       },
     };

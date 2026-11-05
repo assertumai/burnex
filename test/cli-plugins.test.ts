@@ -51,8 +51,8 @@ export default {
 `;
 
 function withPlugin(body: string, config = 'plugins: ["./plugins/hello.mjs"]\n'): Project {
-  const project = makeProject({ '.stepcast/config.yml': config });
-  const path = join(project.root, '.stepcast', 'plugins', 'hello.mjs');
+  const project = makeProject({ '.burnex/config.yml': config });
+  const path = join(project.root, '.burnex', 'plugins', 'hello.mjs');
   mkdirSync(dirname(path), { recursive: true });
   writeFileSync(path, body);
   return project;
@@ -105,7 +105,7 @@ export default {
   });
 
   it('отказ загрузки плагина прекращает любую команду, включая config', async () => {
-    const project = makeProject({ '.stepcast/config.yml': 'plugins: ["./plugins/нет.mjs"]\n' });
+    const project = makeProject({ '.burnex/config.yml': 'plugins: ["./plugins/нет.mjs"]\n' });
 
     const outcome = await cli(project, ['config']);
 
@@ -134,7 +134,7 @@ export default {
     // Расположение печатается наравне с текстом, как у прочих отказов
     // загрузки: реестр про конфигурацию не знает, и файл объявления дописывает
     // загрузчик — иначе отказ приходит без ответа на вопрос «где объявлено».
-    assert.match(outcome.stderr, /где: .*\.stepcast[/\\]config\.yml: plugins/);
+    assert.match(outcome.stderr, /где: .*\.burnex[/\\]config\.yml: plugins/);
   });
 
   it('отчёт config отсылает к команде, печатающей итоговое дерево со слоями', async () => {
@@ -149,7 +149,7 @@ export default {
   it('строка, отключённая патчем, не числится в отчёте действующей, но вклад её слоя показан объявленным', async () => {
     const project = withPlugin(HELLO_PLUGIN);
     writeFileSync(
-      join(project.root, '.stepcast', 'plugins.patch.yml'),
+      join(project.root, '.burnex', 'plugins.patch.yml'),
       'version: 1\nkind: plugins-patch\nplugins:\n  - id: ./plugins/hello.mjs\n    use: ./plugins/hello.mjs\n    enabled: false\n',
     );
 
@@ -169,11 +169,11 @@ export default {
 
   it('строка, добавленная одним лишь патчем, числится в отчёте действующей', async () => {
     const project = makeProject({});
-    const path = join(project.root, '.stepcast', 'plugins', 'hello.mjs');
+    const path = join(project.root, '.burnex', 'plugins', 'hello.mjs');
     mkdirSync(dirname(path), { recursive: true });
     writeFileSync(path, HELLO_PLUGIN);
     writeFileSync(
-      join(project.root, '.stepcast', 'plugins.patch.yml'),
+      join(project.root, '.burnex', 'plugins.patch.yml'),
       'version: 1\nkind: plugins-patch\nplugins:\n  - id: hello\n    use: ./plugins/hello.mjs\n',
     );
 
@@ -231,28 +231,28 @@ jobs:
 
   function project(): Project {
     const box = withPlugin(PREDICATE_PLUGIN, 'plugins: ["./plugins/hello.mjs"]\n');
-    writeFileSync(join(box.root, 'stepcast.yml'), PIPELINE);
+    writeFileSync(join(box.root, 'burnex.yml'), PIPELINE);
     return box;
   }
 
   it('burnex lint принимает документ с предикатом плагина', async () => {
-    const outcome = await cli(project(), ['lint', 'stepcast.yml']);
+    const outcome = await cli(project(), ['lint', 'burnex.yml']);
 
     assert.equal(outcome.code, ExitCode.ok, outcome.stderr);
     assert.match(outcome.stdout, /^ok: /m);
   });
 
   it('burnex run исполняет шаг с предикатом плагина', async () => {
-    const outcome = await cli(project(), ['run', 'stepcast.yml', '--quiet']);
+    const outcome = await cli(project(), ['run', 'burnex.yml', '--quiet']);
 
     assert.equal(outcome.code, ExitCode.ok, outcome.stderr);
     assert.match(outcome.stdout, /success/);
   });
 
   it('без объявленного плагина тот же документ отклоняется', async () => {
-    const box = makeProject({ 'stepcast.yml': PIPELINE });
+    const box = makeProject({ 'burnex.yml': PIPELINE });
 
-    const outcome = await cli(box, ['lint', 'stepcast.yml']);
+    const outcome = await cli(box, ['lint', 'burnex.yml']);
 
     assert.equal(outcome.code, ExitCode.configError);
     // Диагностику разбора печатает сама команда, а не обработчик ошибок.
@@ -300,19 +300,19 @@ jobs:
 
   function project(): Project {
     const box = withPlugin(BACKEND_PLUGIN, 'plugins: ["./plugins/hello.mjs"]\n');
-    writeFileSync(join(box.root, 'stepcast.yml'), PIPELINE);
+    writeFileSync(join(box.root, 'burnex.yml'), PIPELINE);
     return box;
   }
 
   it('burnex lint видит бэкенд, объявленный умолчаниями плагина', async () => {
-    const outcome = await cli(project(), ['lint', 'stepcast.yml']);
+    const outcome = await cli(project(), ['lint', 'burnex.yml']);
 
     assert.equal(outcome.code, ExitCode.ok, outcome.stdout + outcome.stderr);
     assert.match(outcome.stdout, /^ok: /m);
   });
 
   it('burnex run --dry-run доходит до проверки с тем же бэкендом', async () => {
-    const outcome = await cli(project(), ['run', 'stepcast.yml', '--dry-run']);
+    const outcome = await cli(project(), ['run', 'burnex.yml', '--dry-run']);
 
     assert.equal(outcome.code, ExitCode.ok, outcome.stdout + outcome.stderr);
     assert.match(outcome.stdout, /проверка пройдена/);
