@@ -94,7 +94,7 @@ describe('pipeline-definition: разрешение путей предикат�
   });
 });
 
-const STEPCAST_SCHEMA_JOB = `
+const BURNEX_SCHEMA_JOB = `
 version: 1
 kind: job
 name: probe
@@ -110,7 +110,7 @@ steps:
       - schema: stepcast:backlog-slots
 `;
 
-const STEPCAST_SCHEMA_PIPELINE = `
+const BURNEX_SCHEMA_PIPELINE = `
 version: 1
 kind: pipeline
 name: probe
@@ -122,8 +122,8 @@ jobs:
 describe('pipeline-definition: ссылка stepcast:<имя> в местах объявления схемы', () => {
   it('разрешается во всех трёх местах в один и тот же файл схемы пакета', () => {
     const project = makeProject({
-      'stepcast.yml': STEPCAST_SCHEMA_PIPELINE,
-      '.stepcast/jobs/probe.yml': STEPCAST_SCHEMA_JOB,
+      'stepcast.yml': BURNEX_SCHEMA_PIPELINE,
+      '.stepcast/jobs/probe.yml': BURNEX_SCHEMA_JOB,
     });
 
     const { pipeline } = expandPipeline({
@@ -142,7 +142,7 @@ describe('pipeline-definition: ссылка stepcast:<имя> в местах о
 
   it('until.check принимает ту же форму и разрешает тот же файл', () => {
     const project = makeProject({
-      'stepcast.yml': STEPCAST_SCHEMA_PIPELINE,
+      'stepcast.yml': BURNEX_SCHEMA_PIPELINE,
       '.stepcast/jobs/probe.yml': `
 version: 1
 kind: job

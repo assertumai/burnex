@@ -86,7 +86,7 @@ jobs:
   build:
     steps:
       - id: check
-        run: [sh, -c, 'test -d "$STEPCAST_JOB_DIR/scratch" && echo найден > найден.txt']
+        run: [sh, -c, 'test -d "$BURNEX_JOB_DIR/scratch" && echo найден > найден.txt']
         expect: [{ exit_code: 0 }]
 `,
     });
@@ -130,7 +130,7 @@ jobs:
   build:
     steps:
       - id: draft
-        run: [sh, -c, 'echo черновик > "$STEPCAST_JOB_DIR/scratch/заметка.txt"']
+        run: [sh, -c, 'echo черновик > "$BURNEX_JOB_DIR/scratch/заметка.txt"']
         expect: [{ exit_code: 0 }]
 `,
     });
@@ -156,7 +156,7 @@ jobs:
   build:
     steps:
       - id: sweep
-        run: [sh, -c, 'rm -rf "$STEPCAST_SCRATCH"']
+        run: [sh, -c, 'rm -rf "$BURNEX_SCRATCH"']
         expect: [{ exit_code: 0 }]
 `,
     });

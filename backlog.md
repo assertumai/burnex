@@ -746,7 +746,7 @@ done_when: `name` в `package.json` — `burnex`; подпути `burnex/plugin`
 
 ## rename-env-burnex
 
-status: todo
+status: done
 title: Переменные окружения BURNEX_* с чтением STEPCAST_* на переходный период
 group: rename-burnex
 why: Шаги, плагины, `install.sh` и пайплайны пользователей читают `STEPCAST_HOME`, `STEPCAST_BIN`, `STEPCAST_JOB_DIR` и ещё три десятка имён; переименование без переходного периода сломало бы чужие пайплайны первым же прогоном.

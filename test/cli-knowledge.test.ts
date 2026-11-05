@@ -246,20 +246,20 @@ describe('CLI: burnex knowledge check --publish', () => {
     return dir;
   }
 
-  /** Позвать knowledge с заданным (или отсутствующим) STEPCAST_JOB_DIR, восстановив окружение после. */
+  /** Позвать knowledge с заданным (или отсутствующим) BURNEX_JOB_DIR, восстановив окружение после. */
   async function knowledgeAsStep(
     box: { root: string; home: string },
     argv: readonly string[],
     jobDir: string | undefined,
   ): Promise<Result> {
-    const previous = process.env['STEPCAST_JOB_DIR'];
-    if (jobDir === undefined) delete process.env['STEPCAST_JOB_DIR'];
-    else process.env['STEPCAST_JOB_DIR'] = jobDir;
+    const previous = process.env['BURNEX_JOB_DIR'];
+    if (jobDir === undefined) delete process.env['BURNEX_JOB_DIR'];
+    else process.env['BURNEX_JOB_DIR'] = jobDir;
     try {
       return await knowledge(box, argv);
     } finally {
-      if (previous === undefined) delete process.env['STEPCAST_JOB_DIR'];
-      else process.env['STEPCAST_JOB_DIR'] = previous;
+      if (previous === undefined) delete process.env['BURNEX_JOB_DIR'];
+      else process.env['BURNEX_JOB_DIR'] = previous;
     }
   }
 

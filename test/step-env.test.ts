@@ -23,7 +23,7 @@ function onPlatform<T>(platform: NodeJS.Platform, run: () => T): T {
   }
 }
 
-describe('injectedVariables: STEPCAST_SKIP_EXIT_CODE', () => {
+describe('injectedVariables: BURNEX_SKIP_EXIT_CODE', () => {
   const base: InjectedContext = {
     runId: 'r',
     runDir: '/r',
@@ -39,11 +39,25 @@ describe('injectedVariables: STEPCAST_SKIP_EXIT_CODE', () => {
   };
 
   it('выставляется при объявленном коде', () => {
-    assert.equal(injectedVariables({ ...base, skipExitCode: 78 }).STEPCAST_SKIP_EXIT_CODE, '78');
+    assert.equal(injectedVariables({ ...base, skipExitCode: 78 }).BURNEX_SKIP_EXIT_CODE, '78');
   });
 
   it('не выставляется, когда код не объявлен', () => {
+    assert.equal('BURNEX_SKIP_EXIT_CODE' in injectedVariables(base), false);
     assert.equal('STEPCAST_SKIP_EXIT_CODE' in injectedVariables(base), false);
+  });
+
+  // Переходный период переименования (kernel/env-names.ts): пайплайны,
+  // написанные до него, читают STEPCAST_* и должны получать те же значения.
+  it('каждая переменная выставляется и под прежним именем STEPCAST_*', () => {
+    const env = injectedVariables({ ...base, skipExitCode: 78, needs: { NEEDS_B_SHA: 'abc' } });
+    for (const [name, value] of Object.entries(env)) {
+      if (!name.startsWith('BURNEX_')) continue;
+      assert.equal(env[`STEPCAST_${name.slice('BURNEX_'.length)}`], value, name);
+    }
+    assert.equal(env.STEPCAST_JOB_DIR, '/r/j');
+    assert.equal(env.STEPCAST_SKIP_EXIT_CODE, '78');
+    assert.equal('STEPCAST_NEEDS_B_SHA' in env, false);
   });
 
   // `stepEnv` читает из контекста прогона немного: хватает урезанного слепка.
@@ -70,16 +84,16 @@ describe('injectedVariables: STEPCAST_SKIP_EXIT_CODE', () => {
 
   it('stepEnv отдаёт код командному шагу и его проверкам', () => {
     const step = { ...common, kind: 'run', skipExitCode: 78 } as unknown as Parameters<typeof stepEnv>[0];
-    assert.equal(stepEnv(step, job, 1, context, '/r/j/s').STEPCAST_SKIP_EXIT_CODE, '78');
-    assert.equal(stepEnv(step, job, 1, context, '/r/j/s', 'check').STEPCAST_SKIP_EXIT_CODE, '78');
+    assert.equal(stepEnv(step, job, 1, context, '/r/j/s').BURNEX_SKIP_EXIT_CODE, '78');
+    assert.equal(stepEnv(step, job, 1, context, '/r/j/s', 'check').BURNEX_SKIP_EXIT_CODE, '78');
   });
 
   it('работа без ключа attempts получает номер попытки 1 из 1', () => {
     const step = { ...common, kind: 'run' } as unknown as Parameters<typeof stepEnv>[0];
     for (const grant of ['step', 'check'] as const) {
       const env = stepEnv(step, job, 1, context, '/r/j/s', grant);
-      assert.equal(env.STEPCAST_JOB_ATTEMPT, '1');
-      assert.equal(env.STEPCAST_JOB_ATTEMPT_MAX, '1');
+      assert.equal(env.BURNEX_JOB_ATTEMPT, '1');
+      assert.equal(env.BURNEX_JOB_ATTEMPT_MAX, '1');
     }
   });
 
@@ -89,18 +103,18 @@ describe('injectedVariables: STEPCAST_SKIP_EXIT_CODE', () => {
     const second = { ...context, jobAttempt: 2 } as unknown as Parameters<typeof stepEnv>[3];
     for (const grant of ['step', 'check'] as const) {
       const env = stepEnv(step, retrying, 1, second, '/r/j/s', grant);
-      assert.equal(env.STEPCAST_JOB_ATTEMPT, '2');
-      assert.equal(env.STEPCAST_JOB_ATTEMPT_MAX, '3');
+      assert.equal(env.BURNEX_JOB_ATTEMPT, '2');
+      assert.equal(env.BURNEX_JOB_ATTEMPT_MAX, '3');
     }
   });
 
-  it('STEPCAST_JOB_OUTPUTS есть только у шага run и его проверок', () => {
+  it('BURNEX_JOB_OUTPUTS есть только у шага run и его проверок', () => {
     const of = (kind: string): Parameters<typeof stepEnv>[0] =>
       ({ ...common, kind }) as unknown as Parameters<typeof stepEnv>[0];
     for (const grant of ['step', 'check'] as const) {
-      assert.equal(stepEnv(of('run'), job, 1, context, '/r/j/s', grant).STEPCAST_JOB_OUTPUTS, '/r/jobs/j/outputs.env');
-      assert.equal('STEPCAST_JOB_OUTPUTS' in stepEnv(of('agent'), job, 1, context, '/r/j/s', grant), false);
-      assert.equal('STEPCAST_JOB_OUTPUTS' in stepEnv(of('script'), job, 1, context, '/r/j/s', grant), false);
+      assert.equal(stepEnv(of('run'), job, 1, context, '/r/j/s', grant).BURNEX_JOB_OUTPUTS, '/r/jobs/j/outputs.env');
+      assert.equal('BURNEX_JOB_OUTPUTS' in stepEnv(of('agent'), job, 1, context, '/r/j/s', grant), false);
+      assert.equal('BURNEX_JOB_OUTPUTS' in stepEnv(of('script'), job, 1, context, '/r/j/s', grant), false);
     }
   });
 
@@ -112,9 +126,9 @@ describe('injectedVariables: STEPCAST_SKIP_EXIT_CODE', () => {
     } as unknown as Parameters<typeof stepEnv>[3];
     for (const grant of ['step', 'check'] as const) {
       const env = stepEnv(step, job, 1, looped, '/r/j/s', grant);
-      assert.equal(env.STEPCAST_LOOP, 'fix-loop');
-      assert.equal(env.STEPCAST_LOOP_ITERATION, '2');
-      assert.equal(env.STEPCAST_LOOP_ITERATION_MAX, '3');
+      assert.equal(env.BURNEX_LOOP, 'fix-loop');
+      assert.equal(env.BURNEX_LOOP_ITERATION, '2');
+      assert.equal(env.BURNEX_LOOP_ITERATION_MAX, '3');
     }
   });
 
@@ -122,13 +136,13 @@ describe('injectedVariables: STEPCAST_SKIP_EXIT_CODE', () => {
     const step = { ...common, kind: 'run' } as unknown as Parameters<typeof stepEnv>[0];
     for (const grant of ['step', 'check'] as const) {
       const env = stepEnv(step, job, 1, context, '/r/j/s', grant);
-      assert.equal('STEPCAST_LOOP' in env, false);
-      assert.equal('STEPCAST_LOOP_ITERATION' in env, false);
-      assert.equal('STEPCAST_LOOP_ITERATION_MAX' in env, false);
+      assert.equal('BURNEX_LOOP' in env, false);
+      assert.equal('BURNEX_LOOP_ITERATION' in env, false);
+      assert.equal('BURNEX_LOOP_ITERATION_MAX' in env, false);
     }
-    assert.equal('STEPCAST_LOOP' in injectedVariables(base), false);
+    assert.equal('BURNEX_LOOP' in injectedVariables(base), false);
     assert.equal(
-      injectedVariables({ ...base, loop: { id: 'l', iteration: 1, maxIterations: 1 } }).STEPCAST_LOOP_ITERATION,
+      injectedVariables({ ...base, loop: { id: 'l', iteration: 1, maxIterations: 1 } }).BURNEX_LOOP_ITERATION,
       '1',
     );
   });
@@ -136,8 +150,8 @@ describe('injectedVariables: STEPCAST_SKIP_EXIT_CODE', () => {
   it('stepEnv не выставляет переменную без кода и агентскому шагу', () => {
     const run = { ...common, kind: 'run' } as unknown as Parameters<typeof stepEnv>[0];
     const agent = { ...common, kind: 'agent' } as unknown as Parameters<typeof stepEnv>[0];
-    assert.equal('STEPCAST_SKIP_EXIT_CODE' in stepEnv(run, job, 1, context, '/r/j/s'), false);
-    assert.equal('STEPCAST_SKIP_EXIT_CODE' in stepEnv(agent, job, 1, context, '/r/j/s'), false);
+    assert.equal('BURNEX_SKIP_EXIT_CODE' in stepEnv(run, job, 1, context, '/r/j/s'), false);
+    assert.equal('BURNEX_SKIP_EXIT_CODE' in stepEnv(agent, job, 1, context, '/r/j/s'), false);
   });
 });
 

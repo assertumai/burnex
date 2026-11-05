@@ -2,6 +2,7 @@ import { resolve as resolvePath } from 'node:path';
 
 import { resolveConfig, type Config } from '../config/resolve.js';
 import { ExitCode, StepcastError, type ExitCodeValue } from '../../../kernel/errors.js';
+import { readEngineEnv } from '../../../kernel/env-names.js';
 import { findProjectRoot } from '../run/journal/paths.js';
 import { runOwner } from '../domain/backlog/index.js';
 import { finishOwnerOfRun } from '../run/journal/owner.js';
@@ -92,9 +93,9 @@ export async function runMergeLanesCommand(
 
   // «Последний прогон» здесь не подставляется: команда коммитит и стирает
   // дерево, и ошибиться прогоном по умолчанию она не должна иметь возможности.
-  const runId = args.positional[0] ?? process.env.STEPCAST_RUN_ID;
+  const runId = args.positional[0] ?? readEngineEnv(process.env, 'RUN_ID', { warn: false });
   if (runId === undefined) {
-    throw new StepcastError('не назван прогон: укажите его позиционным аргументом либо переменной STEPCAST_RUN_ID');
+    throw new StepcastError('не назван прогон: укажите его позиционным аргументом либо переменной BURNEX_RUN_ID');
   }
 
   const { config } = resolveConfig({ cwd });

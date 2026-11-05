@@ -37,6 +37,7 @@ import { atomicWrite } from '../run/journal/writer.js';
 import { findProjectRoot, shortRunId } from '../run/journal/paths.js';
 import { finishOwnerOfRun, runOwnerJudge } from '../run/journal/owner.js';
 import { ExitCode, StepcastError, type ExitCodeValue } from '../../../kernel/errors.js';
+import { readEngineEnv } from '../../../kernel/env-names.js';
 import { readLaneItem, takenLanes } from '../domain/lanes/item.js';
 import { commitPath, nestedRepoOf } from '../domain/lanes/tree.js';
 import { commandRow } from '../../../kernel/cli/commandRow.js';
@@ -410,7 +411,7 @@ function runPickLanes(
  * значило бы платить вторым процессом за то, что здесь уже в руках.
  *
  * Пишется, только когда команда исполняется внутри шага прогона: вне его
- * `STEPCAST_JOB_DIR` нет, и публиковать некуда — но и отказывать не за что,
+ * `BURNEX_JOB_DIR` нет, и публиковать некуда — но и отказывать не за что,
  * `backlog pick` остаётся командой, работающей без прогона.
  *
  * Для нескольких дорожек заголовок и слаг пишутся по ключу на дорожку
@@ -430,7 +431,7 @@ function publishPickedTitles(
   chosen: readonly BacklogEntry[],
   writeErr: (line: string) => void,
 ): void {
-  const jobDir = process.env.STEPCAST_JOB_DIR;
+  const jobDir = readEngineEnv(process.env, 'JOB_DIR', { warn: false });
   if (jobDir === undefined || jobDir.trim() === '') return;
 
   const patch: Record<string, string> = {};

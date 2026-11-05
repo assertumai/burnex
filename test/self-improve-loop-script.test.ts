@@ -112,7 +112,7 @@ function run(bed: Bed, scenario: readonly string[], env: Record<string, string> 
     encoding: 'utf8',
     env: {
       ...testBaseEnv(),
-      STEPCAST_LOOP_ENGINE_DIR: bed.engine,
+      BURNEX_LOOP_ENGINE_DIR: bed.engine,
       SCENARIO_FILE: join(bed.scratch, 'scenario'),
       COUNTER_FILE: join(bed.scratch, 'counter'),
       CALLS_LOG: join(bed.scratch, 'calls.log'),
@@ -251,18 +251,18 @@ describe('scripts/self-improve-loop.sh', () => {
     assert.deepEqual(calls(bed), []);
   });
 
-  it('без STEPCAST_LOOP_ENGINE_DIR worktree движка лежит в <git common dir>/stepcast-loop-engine', () => {
+  it('без BURNEX_LOOP_ENGINE_DIR worktree движка лежит в <git common dir>/stepcast-loop-engine', () => {
     const bed = makeBed();
-    const result = run(bed, ['none 0'], { STEPCAST_LOOP_ENGINE_DIR: '' });
+    const result = run(bed, ['none 0'], { BURNEX_LOOP_ENGINE_DIR: '' });
 
     assert.equal(result.status, 0);
     assert.ok(existsSync(join(bed.repo, '.git/stepcast-loop-engine/dist/src/bin.js')));
     assert.equal(calls(bed).length, 1);
   });
 
-  it('относительный STEPCAST_LOOP_ENGINE_DIR считается от текущего каталога, а не от корня копии', () => {
+  it('относительный BURNEX_LOOP_ENGINE_DIR считается от текущего каталога, а не от корня копии', () => {
     const bed = makeBed();
-    const result = run(bed, ['none 0'], { STEPCAST_LOOP_ENGINE_DIR: 'engine-rel' }, bed.scratch);
+    const result = run(bed, ['none 0'], { BURNEX_LOOP_ENGINE_DIR: 'engine-rel' }, bed.scratch);
 
     assert.equal(result.status, 0, result.stderr);
     assert.ok(existsSync(join(bed.scratch, 'engine-rel/dist/src/bin.js')));

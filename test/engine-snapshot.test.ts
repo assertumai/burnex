@@ -175,7 +175,7 @@ describe('run-engine-snapshot: pinEngine — снятие снимка', () => {
     );
   });
 
-  it('точка входа, не покрытая объявленным files, — отказ, а не снимок с висящим STEPCAST_BIN', () => {
+  it('точка входа, не покрытая объявленным files, — отказ, а не снимок с висящим BURNEX_BIN', () => {
     // npm кладёт файлы из `bin` в пакет независимо от `files`, так что такое
     // объявление законно, а снимок по нему точку входа теряет.
     const root = tempDir('stepcast-engine-');
@@ -377,7 +377,7 @@ jobs:
   build:
     steps:
       - id: check
-        run: [sh, -c, 'test "$STEPCAST_BIN" = "$STEPCAST_RUN_DIR/engine/dist/src/bin.js"']
+        run: [sh, -c, 'test "$BURNEX_BIN" = "$BURNEX_RUN_DIR/engine/dist/src/bin.js"']
         expect: [{ exit_code: 0 }]
 `;
 
@@ -413,7 +413,7 @@ jobs:
   build:
     steps:
       - id: check
-        run: [sh, -c, 'test -n "$STEPCAST_BIN"']
+        run: [sh, -c, 'test -n "$BURNEX_BIN"']
         expect: [{ exit_code: 0 }]
 `,
     });
@@ -447,8 +447,8 @@ jobs:
   });
 });
 
-describe('step-execution: STEPCAST_BIN — точка входа движка этого прогона', () => {
-  it('шаг видит STEPCAST_BIN, ведущий в каталог прогона', async () => {
+describe('step-execution: BURNEX_BIN — точка входа движка этого прогона', () => {
+  it('шаг видит BURNEX_BIN, ведущий в каталог прогона', async () => {
     const project = makeProject({ 'stepcast.yml': CHECK_BIN_PIPELINE });
     const engineRoot = project.path('vendor/engine');
     mkdirSync(join(engineRoot, 'dist', 'src'), { recursive: true });
@@ -474,7 +474,7 @@ jobs:
   build:
     steps:
       - id: check
-        run: [sh, -c, 'test "$STEPCAST_BIN" = "${engine.entry}"']
+        run: [sh, -c, 'test "$BURNEX_BIN" = "${engine.entry}"']
         expect: [{ exit_code: 0 }]
 `,
     });
@@ -506,10 +506,10 @@ jobs:
   build:
     steps:
       - id: rewrite
-        run: [sh, -c, 'printf %s "$STEPCAST_BIN" > "$STEPCAST_ARTIFACTS/bin1.txt"; printf %s REWRITTEN > "${entry}"']
+        run: [sh, -c, 'printf %s "$BURNEX_BIN" > "$BURNEX_ARTIFACTS/bin1.txt"; printf %s REWRITTEN > "${entry}"']
         expect: [{ exit_code: 0 }]
       - id: read
-        run: [sh, -c, 'printf %s "$STEPCAST_BIN" > "$STEPCAST_ARTIFACTS/bin2.txt"; cat "$STEPCAST_BIN" > "$STEPCAST_ARTIFACTS/content.txt"']
+        run: [sh, -c, 'printf %s "$BURNEX_BIN" > "$BURNEX_ARTIFACTS/bin2.txt"; cat "$BURNEX_BIN" > "$BURNEX_ARTIFACTS/content.txt"']
         expect: [{ exit_code: 0 }]
 `,
     );
@@ -519,7 +519,7 @@ jobs:
     assert.equal(result.status, 'success');
     const bin1 = readFileSync(join(result.journal.paths.artifacts, 'bin1.txt'), 'utf8');
     const bin2 = readFileSync(join(result.journal.paths.artifacts, 'bin2.txt'), 'utf8');
-    assert.equal(bin1, bin2, 'STEPCAST_BIN обязан быть одинаковым у обоих шагов');
+    assert.equal(bin1, bin2, 'BURNEX_BIN обязан быть одинаковым у обоих шагов');
     assert.equal(
       readFileSync(join(result.journal.paths.artifacts, 'content.txt'), 'utf8'),
       'ORIGINAL',

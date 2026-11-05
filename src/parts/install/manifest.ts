@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { z } from 'zod';
 
 import { StepcastError } from '../../kernel/errors.js';
+import { readEngineEnv } from '../../kernel/env-names.js';
 
 /**
  * Паспорт установки `~/.stepcast/install.json`: как поставлен движок и,
@@ -20,7 +21,7 @@ const managed = z
     ref: z.string(),
     version: z.string(),
     releases_dir: z.string(),
-    /** Каталог лаунчера (`STEPCAST_BIN_DIR` установки); у паспортов до этого поля — умолчание install.sh. */
+    /** Каталог лаунчера (`BURNEX_BIN_DIR` установки); у паспортов до этого поля — умолчание install.sh. */
     bin_dir: z.string().optional(),
     installed_at: z.string().optional(),
   })
@@ -42,18 +43,18 @@ const METHODS = 'managed|checkout|npm';
 const FILE_NAME = 'install.json';
 
 /**
- * Домашний каталог stepcast: `$STEPCAST_HOME`, иначе `~/.stepcast`. Пустая
- * переменная считается отсутствующей — как `${STEPCAST_HOME:-…}` в install.sh.
+ * Домашний каталог движка: `$BURNEX_HOME` (переходно — `$STEPCAST_HOME`),
+ * иначе `~/.stepcast`. Пустая переменная считается отсутствующей — как
+ * `${BURNEX_HOME:-…}` в install.sh.
  */
 export function stepcastHome(
   env: Readonly<Record<string, string | undefined>> = process.env,
   home: string = homedir(),
 ): string {
-  const override = env.STEPCAST_HOME;
-  return override !== undefined && override !== '' ? override : join(home, '.stepcast');
+  return readEngineEnv(env, 'HOME') ?? join(home, '.stepcast');
 }
 
-/** Путь паспорта: `$STEPCAST_HOME/install.json`, иначе `~/.stepcast/install.json`. */
+/** Путь паспорта: `$BURNEX_HOME/install.json`, иначе `~/.stepcast/install.json`. */
 export function installManifestPath(
   env: Readonly<Record<string, string | undefined>> = process.env,
   home: string = homedir(),

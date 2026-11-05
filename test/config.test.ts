@@ -1503,7 +1503,8 @@ describe('backends.<id>.credentials', () => {
   for (const [name, variable] of [
     ['строчные буквы', 'openai_key'],
     ['цифра первой', '1KEY'],
-    ['префикс STEPCAST_', 'STEPCAST_TOKEN'],
+    ['префикс BURNEX_', 'BURNEX_TOKEN'],
+    ['прежний префикс STEPCAST_', 'STEPCAST_TOKEN'],
   ] as const) {
     it(`недопустимое имя переменной (${name}) отклоняется разбором`, () => {
       const box = sandbox({
@@ -1531,7 +1532,7 @@ describe('backends.<id>.credentials', () => {
     });
 
     assert.equal(validate(document('OPENAI_API_KEY')), true, JSON.stringify(validate.errors));
-    for (const variable of ['openai_key', '1KEY', 'STEPCAST_TOKEN']) {
+    for (const variable of ['openai_key', '1KEY', 'BURNEX_TOKEN', 'STEPCAST_TOKEN']) {
       assert.equal(validate(document(variable)), false, variable);
     }
   });

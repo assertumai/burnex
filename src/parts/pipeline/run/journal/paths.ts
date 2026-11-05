@@ -152,7 +152,7 @@ export function jobDir(paths: RunPaths, jobId: string): string {
 
 /**
  * Файл выходов работы: шаги `run` дописывают в него `ключ=значение`
- * (`$STEPCAST_JOB_OUTPUTS`). Один на работу — набор выходов свойство работы,
+ * (`$BURNEX_JOB_OUTPUTS`). Один на работу — набор выходов свойство работы,
  * а не шага.
  */
 export function jobOutputsPath(paths: RunPaths, jobId: string): string {

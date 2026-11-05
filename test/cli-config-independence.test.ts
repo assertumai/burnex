@@ -68,15 +68,15 @@ export default {
 };
 `;
 
-/** Позвать `data set` внутри STEPCAST_JOB_DIR, восстановив окружение после вызова. */
+/** Позвать `data set` внутри BURNEX_JOB_DIR, восстановив окружение после вызова. */
 async function withJobDir<T>(dir: string, fn: () => Promise<T>): Promise<T> {
-  const original = process.env.STEPCAST_JOB_DIR;
-  process.env.STEPCAST_JOB_DIR = dir;
+  const original = process.env.BURNEX_JOB_DIR;
+  process.env.BURNEX_JOB_DIR = dir;
   try {
     return await fn();
   } finally {
-    if (original === undefined) delete process.env.STEPCAST_JOB_DIR;
-    else process.env.STEPCAST_JOB_DIR = original;
+    if (original === undefined) delete process.env.BURNEX_JOB_DIR;
+    else process.env.BURNEX_JOB_DIR = original;
   }
 }
 

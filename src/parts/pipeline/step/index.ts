@@ -2,6 +2,7 @@ import { spawn } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 
 import { StepcastError } from '../../../kernel/errors.js';
+import { envName, readEngineEnv } from '../../../kernel/env-names.js';
 import { mergeJobData } from '../run/journal/data.js';
 import { atomicWrite } from '../run/journal/writer.js';
 
@@ -13,17 +14,17 @@ import { atomicWrite } from '../run/journal/writer.js';
  * же писатель, что и `burnex data`, `log()` — обычный `console.log`,
  * `exec()` — дочерний процесс без оболочки.
  *
- * Работает по одним лишь `STEPCAST_INPUT`, `STEPCAST_OUTPUT` и
- * `STEPCAST_JOB_DIR` (design.md, решение 10): ни путей, ни идентификаторов
+ * Работает по одним лишь `BURNEX_INPUT`, `BURNEX_OUTPUT` и
+ * `BURNEX_JOB_DIR` (design.md, решение 10): ни путей, ни идентификаторов
  * аргументами не принимает, и потому годится в любом процессе, унаследовавшем
  * окружение шага, — не только в самом файле скрипта.
  */
 
-function requireEnv(name: string): string {
-  const value = process.env[name];
+function requireEnv(suffix: string): string {
+  const value = readEngineEnv(process.env, suffix, { warn: false });
   if (value === undefined || value.trim() === '') {
     throw new StepcastError('Библиотека stepcast/step работает только внутри шага прогона', {
-      hint: `Переменная ${name} приходит от движка в окружении шага script; вне прогона читать и писать некуда`,
+      hint: `Переменная ${envName(suffix)} приходит от движка в окружении шага script; вне прогона читать и писать некуда`,
     });
   }
   return value;
@@ -31,12 +32,12 @@ function requireEnv(name: string): string {
 
 /** Прочитать и разобрать вход шага. Файл существует всегда — ветки «входа нет» здесь нет. */
 export function input<T = unknown>(): T {
-  return JSON.parse(readFileSync(requireEnv('STEPCAST_INPUT'), 'utf8')) as T;
+  return JSON.parse(readFileSync(requireEnv('INPUT'), 'utf8')) as T;
 }
 
 /** Записать выход шага целиком и атомарно. Повторный вызов заменяет записанное, а не дописывает. */
 export function output(value: unknown): void {
-  atomicWrite(requireEnv('STEPCAST_OUTPUT'), `${JSON.stringify(value, null, 2)}\n`);
+  atomicWrite(requireEnv('OUTPUT'), `${JSON.stringify(value, null, 2)}\n`);
 }
 
 /**
@@ -47,14 +48,14 @@ export function output(value: unknown): void {
 export function publish(key: string, value: string): void;
 export function publish(values: Readonly<Record<string, string>>): void;
 export function publish(keyOrValues: string | Readonly<Record<string, string>>, value?: string): void {
-  const dir = requireEnv('STEPCAST_JOB_DIR');
+  const dir = requireEnv('JOB_DIR');
   const patch = typeof keyOrValues === 'string' ? { [keyOrValues]: value ?? '' } : keyOrValues;
   mergeJobData(dir, patch);
 }
 
 /** Строка в лог шага — `stdout`, тот же поток, что и у самого скрипта. */
 export function log(...parts: readonly unknown[]): void {
-  requireEnv('STEPCAST_JOB_DIR');
+  requireEnv('JOB_DIR');
   console.log(...parts);
 }
 
@@ -71,7 +72,7 @@ export interface ExecResult {
 
 /**
  * Дочерний процесс без оболочки, наследующий окружение и рабочую директорию
- * шага, — тем и годится передать `STEPCAST_INPUT`/`STEPCAST_OUTPUT` дальше,
+ * шага, — тем и годится передать `BURNEX_INPUT`/`BURNEX_OUTPUT` дальше,
  * скрипту на другом языке или ещё одному `node`.
  *
  * Потоки дочернего процесса идут двумя путями сразу: собираются в
@@ -85,7 +86,7 @@ export async function exec(
   args: readonly string[] = [],
   options: ExecOptions = {},
 ): Promise<ExecResult> {
-  requireEnv('STEPCAST_JOB_DIR');
+  requireEnv('JOB_DIR');
 
   return await new Promise<ExecResult>((resolve, reject) => {
     const child = spawn(command, args, { stdio: ['ignore', 'pipe', 'pipe'] });

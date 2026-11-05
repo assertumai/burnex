@@ -2635,7 +2635,7 @@ jobs:
     lane: a
     steps:
       - id: шаг
-        run: [sh, -c, 'printf "export const a = 2;\\n" > src/a.ts && printf "%s" "{\\"id\\": \\"a-note\\", \\"title\\": \\"Заметка о правке\\", \\"scope\\": [\\"src/**\\"], \\"anchors\\": [\\"src/a.ts\\"], \\"body\\": \\"Заметка.\\"}" > note.json && node "$STEPCAST_BIN" knowledge write --file note.json']
+        run: [sh, -c, 'printf "export const a = 2;\\n" > src/a.ts && printf "%s" "{\\"id\\": \\"a-note\\", \\"title\\": \\"Заметка о правке\\", \\"scope\\": [\\"src/**\\"], \\"anchors\\": [\\"src/a.ts\\"], \\"body\\": \\"Заметка.\\"}" > note.json && node "$BURNEX_BIN" knowledge write --file note.json']
         expect: [{ exit_code: 0 }]
 `;
 
@@ -3073,8 +3073,8 @@ describe('CLI: burnex merge-lanes', () => {
     // гоняет `npm run check` внутри шага) она задана, и без очистки команда
     // ушла бы по ветке резолва прогона — отказ был бы тот же кодом, но не
     // тем, который проверяет этот сценарий.
-    const previous = process.env.STEPCAST_RUN_ID;
-    delete process.env.STEPCAST_RUN_ID;
+    const previous = process.env.BURNEX_RUN_ID;
+    delete process.env.BURNEX_RUN_ID;
     try {
       const out = await cli(project.root, project.home, [
         '--lanes',
@@ -3087,12 +3087,12 @@ describe('CLI: burnex merge-lanes', () => {
       assert.equal(out.code, ExitCode.configError);
       assert.match(out.stderr, /не назван прогон/);
     } finally {
-      if (previous !== undefined) process.env.STEPCAST_RUN_ID = previous;
+      if (previous !== undefined) process.env.BURNEX_RUN_ID = previous;
     }
     assert.equal(readFileSync(backlogFile, 'utf8'), '# Очередь\n');
   });
 
-  it('прогон из STEPCAST_RUN_ID: позиционный аргумент не задан', async () => {
+  it('прогон из BURNEX_RUN_ID: позиционный аргумент не задан', async () => {
     const project = makeProject({ 'stepcast.yml': twoLanePipeline(SUCCESS_A, SUCCESS_B) });
     gitInit(project);
     commit(project, 'начальный');
@@ -3102,14 +3102,14 @@ describe('CLI: burnex merge-lanes', () => {
     commit(project, 'добавлена очередь');
     writeItem(result.journal.paths.dir, 'a', 'a-item', 'A');
 
-    const previous = process.env.STEPCAST_RUN_ID;
-    process.env.STEPCAST_RUN_ID = result.journal.paths.runId;
+    const previous = process.env.BURNEX_RUN_ID;
+    process.env.BURNEX_RUN_ID = result.journal.paths.runId;
     try {
       const out = await cli(project.root, project.home, ['--lanes', 'all', '--check', 'exit 0', '--file', backlogFile]);
       assert.equal(out.code, ExitCode.ok, out.stderr);
     } finally {
-      if (previous === undefined) delete process.env.STEPCAST_RUN_ID;
-      else process.env.STEPCAST_RUN_ID = previous;
+      if (previous === undefined) delete process.env.BURNEX_RUN_ID;
+      else process.env.BURNEX_RUN_ID = previous;
     }
   });
 });

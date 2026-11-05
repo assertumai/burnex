@@ -338,7 +338,7 @@
                   "pattern": "^[A-Z_][A-Z0-9_]*$"
                 },
                 {
-                  "pattern": "^(?!STEPCAST_)"
+                  "pattern": "^(?!BURNEX_|STEPCAST_)"
                 }
               ]
             },

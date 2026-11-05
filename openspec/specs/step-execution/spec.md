@@ -31,7 +31,7 @@ Windows.
 Система SHALL формировать окружение шага, наследуя окружение своего процесса
 целиком и накладывая поверх, в порядке возрастания приоритета: `env_files`,
 `env` пайплайна, `env` на месте подключения работы, `env` в файле работы, `env`
-шага. Затем MUST добавляться переменные `STEPCAST_*`, не подлежащие
+шага. Затем MUST добавляться переменные `BURNEX_*`, не подлежащие
 переопределению, и последним MUST применяться фильтр `env_deny`.
 
 #### Scenario: Перекрытие по уровням
@@ -48,11 +48,11 @@ Windows.
 #### Scenario: Инжектируемые переменные
 
 - **WHEN** шаг исполняется
-- **THEN** его окружение содержит `STEPCAST_RUN_ID`, `STEPCAST_RUN_DIR`, `STEPCAST_JOB`, `STEPCAST_JOB_DIR`, `STEPCAST_STEP`, `STEPCAST_STEP_DIR`, `STEPCAST_ATTEMPT`, `STEPCAST_WORKSPACE`, `STEPCAST_ARTIFACTS`
+- **THEN** его окружение содержит `BURNEX_RUN_ID`, `BURNEX_RUN_DIR`, `BURNEX_JOB`, `BURNEX_JOB_DIR`, `BURNEX_STEP`, `BURNEX_STEP_DIR`, `BURNEX_ATTEMPT`, `BURNEX_WORKSPACE`, `BURNEX_ARTIFACTS`
 
 #### Scenario: Инжектируемые переменные не переопределяются
 
-- **WHEN** шаг объявляет `env` с ключом `STEPCAST_JOB`
+- **WHEN** шаг объявляет `env` с ключом `BURNEX_JOB`
 - **THEN** действующим остаётся значение, подставленное системой
 
 ### Requirement: Ограничение времени шага

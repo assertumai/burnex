@@ -5,6 +5,7 @@ import {
   type JobData,
 } from '../run/journal/data.js';
 import { ExitCode, StepcastError, type ExitCodeValue } from '../../../kernel/errors.js';
+import { readEngineEnv } from '../../../kernel/env-names.js';
 import { commandRow } from '../../../kernel/cli/commandRow.js';
 import type { ParsedArgs } from '../../../kernel/cli/args.js';
 
@@ -13,7 +14,7 @@ import type { ParsedArgs } from '../../../kernel/cli/args.js';
  * ходу её исполнения. Их показывает витрина подписью узла (`display`) и
  * читают работы ниже по графу подстановкой `${jobs.<работа>.data.<ключ>}`.
  *
- * Целевая работа выводится из `STEPCAST_JOB_DIR`, а не принимается
+ * Целевая работа выводится из `BURNEX_JOB_DIR`, а не принимается
  * аргументом, и путей команда не принимает вовсе. Причин три, и все три —
  * свойства устройства, а не соглашения:
  *
@@ -40,10 +41,10 @@ function stringFlag(flags: ParsedArgs['flags'], name: string): string | undefine
 
 /** Каталог работы из окружения шага. Вне шага прогона команда не работает. */
 function jobDirFromEnv(env: Readonly<Record<string, string | undefined>>): string {
-  const dir = env.STEPCAST_JOB_DIR;
+  const dir = readEngineEnv(env, 'JOB_DIR', { warn: false });
   if (dir === undefined || dir.trim() === '') {
     throw new StepcastError('Команда data работает только внутри шага прогона', {
-      hint: 'Целевая работа берётся из переменной STEPCAST_JOB_DIR, которую движок инжектирует в каждый шаг; вне прогона писать некуда',
+      hint: 'Целевая работа берётся из переменной BURNEX_JOB_DIR, которую движок инжектирует в каждый шаг; вне прогона писать некуда',
     });
   }
   return dir;
@@ -153,7 +154,7 @@ function runGet(
 
 /**
  * Независима от конфигурации (design.md изменения `cli-commands-as-rows`,
- * Решение 4): целевая работа выводится из `STEPCAST_JOB_DIR`, и ни
+ * Решение 4): целевая работа выводится из `BURNEX_JOB_DIR`, и ни
  * конфигурация, ни реестр вкладов команде не нужны.
  */
 export const row = commandRow(

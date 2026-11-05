@@ -44,7 +44,7 @@ jobs:
   check:
     steps:
       - id: verify
-        run: [sh, -c, 'echo "$STEPCAST_LOOP:$STEPCAST_LOOP_ITERATION:$STEPCAST_LOOP_ITERATION_MAX" >> trace.txt; test "$(cat counter.txt)" -ge ${options.threshold}']
+        run: [sh, -c, 'echo "$BURNEX_LOOP:$BURNEX_LOOP_ITERATION:$BURNEX_LOOP_ITERATION_MAX" >> trace.txt; test "$(cat counter.txt)" -ge ${options.threshold}']
         expect: [{ exit_code: 0 }]
   fix:
     needs: [check]
@@ -227,7 +227,7 @@ jobs:
     data: [flag]
     steps:
       - id: publish
-        run: [sh, -c, 'if [ ! -f seen ]; then touch seen; printf %s "{\\"flag\\": \\"x\\"}" > "$STEPCAST_JOB_DIR/data.json"; fi']
+        run: [sh, -c, 'if [ ! -f seen ]; then touch seen; printf %s "{\\"flag\\": \\"x\\"}" > "$BURNEX_JOB_DIR/data.json"; fi']
         expect: [{ exit_code: 0 }]
 `,
     });
@@ -252,12 +252,12 @@ jobs:
   inside:
     steps:
       - id: s
-        run: [sh, -c, 'echo "in=$STEPCAST_LOOP" > inside.txt']
+        run: [sh, -c, 'echo "in=$BURNEX_LOOP" > inside.txt']
         expect: [{ exit_code: 0 }]
   outside:
     steps:
       - id: s
-        run: [sh, -c, 'env | grep -c "^STEPCAST_LOOP" > outside.txt; true']
+        run: [sh, -c, 'env | grep -c "^BURNEX_LOOP" > outside.txt; true']
         expect: [{ exit_code: 0 }]
 `,
     });
@@ -389,7 +389,7 @@ describe('job-group-loops: изолированные деревья', () => {
     // У `a` два последователя, цепочки нет: `b` и `c` засеваются деревом `a`.
     // Выход прохода — `c`, и во втором проходе `a` продолжает его каталог.
     const append = (name: string): string =>
-      `[sh, -c, 'echo ${name}$STEPCAST_LOOP_ITERATION >> log.txt']`;
+      `[sh, -c, 'echo ${name}$BURNEX_LOOP_ITERATION >> log.txt']`;
     const project = repoProject(`
 kind: pipeline
 workspace: { mode: worktree }

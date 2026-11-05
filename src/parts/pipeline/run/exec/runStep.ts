@@ -39,7 +39,7 @@ export interface RunStepOptions {
   readonly step: CommandStep;
   readonly cwd: string;
   readonly stepDir: string;
-  /** Окружение на попытку: STEPCAST_ATTEMPT меняется от попытки к попытке. */
+  /** Окружение на попытку: BURNEX_ATTEMPT меняется от попытки к попытке. */
   readonly env: (plan: AttemptPlan) => Readonly<Record<string, string>>;
   readonly stallTimeoutMs?: number;
   readonly graceMs?: number;

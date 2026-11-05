@@ -269,11 +269,11 @@ describe('launchd: agentState по выводу launchctl print', () => {
 });
 
 async function withoutStepcastHome<T>(fn: () => Promise<T>): Promise<T> {
-  const saved = process.env.STEPCAST_HOME;
-  delete process.env.STEPCAST_HOME;
+  const saved = process.env.BURNEX_HOME;
+  delete process.env.BURNEX_HOME;
   try {
     return await fn();
   } finally {
-    if (saved !== undefined) process.env.STEPCAST_HOME = saved;
+    if (saved !== undefined) process.env.BURNEX_HOME = saved;
   }
 }

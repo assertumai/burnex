@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Устанавливает stepcast: клонирует ссылку, собирает и раскладывает релиз в
-# $STEPCAST_HOME/releases/<имя>, переключает current и ставит лаунчер
-# `stepcast` в $STEPCAST_BIN_DIR.
+# $BURNEX_HOME/releases/<имя>, переключает current и ставит лаунчер
+# `stepcast` в $BURNEX_BIN_DIR.
 #
 #   curl -fsSL https://raw.githubusercontent.com/assertumai/stepcast/main/scripts/install.sh | bash
 #   bash scripts/install.sh [--repo URL] [--ref REF] [--force]
@@ -13,15 +13,15 @@ set -euo pipefail
 
 usage() {
   cat <<'EOF'
-install.sh — установка stepcast в $STEPCAST_HOME/releases (по умолчанию ~/.stepcast)
-и лаунчер stepcast в $STEPCAST_BIN_DIR (по умолчанию ~/.local/bin).
+install.sh — установка stepcast в $BURNEX_HOME/releases (по умолчанию ~/.stepcast)
+и лаунчер stepcast в $BURNEX_BIN_DIR (по умолчанию ~/.local/bin).
 
   --repo URL     откуда клонировать (по умолчанию GitHub; подойдёт и путь)
   --ref REF      тег, ветка или sha; по умолчанию последний тег vX.Y.Z
   --force        заменить чужой файл на месте лаунчера
   --from-dir DIR разложить уже собранное дерево без клонирования
                  (только для scripts/release-local.sh; паспорт и лаунчер
-                 не трогаются; каталог релизов можно задать STEPCAST_RELEASES_DIR)
+                 не трогаются; каталог релизов можно задать BURNEX_RELEASES_DIR)
   --name NAME    имя релиза для --from-dir (иначе <ts>-from-dir)
 EOF
 }
@@ -33,9 +33,11 @@ FORCE=0
 FROM_DIR=""
 NAME=""
 
-STEPCAST_HOME="${STEPCAST_HOME:-$HOME/.stepcast}"
-BIN_DIR="${STEPCAST_BIN_DIR:-$HOME/.local/bin}"
-RELEASES_DIR="$STEPCAST_HOME/releases"
+# Прежние имена STEPCAST_* читаются один выпуск переходного периода.
+BURNEX_HOME="${BURNEX_HOME:-${STEPCAST_HOME:-$HOME/.stepcast}}"
+BIN_DIR="${BURNEX_BIN_DIR:-${STEPCAST_BIN_DIR:-$HOME/.local/bin}}"
+BURNEX_RELEASES_DIR="${BURNEX_RELEASES_DIR:-${STEPCAST_RELEASES_DIR:-}}"
+RELEASES_DIR="$BURNEX_HOME/releases"
 
 die() {
   echo "install.sh: $*" >&2
@@ -59,10 +61,10 @@ while [ "$#" -gt 0 ]; do
 done
 
 # release-local.sh исторически принимал любой каталог релизов. Только для
-# --from-dir: у установки каталог релизов выводится из STEPCAST_HOME и
+# --from-dir: у установки каталог релизов выводится из BURNEX_HOME и
 # записывается в паспорт.
-if [ -n "$FROM_DIR" ] && [ -n "${STEPCAST_RELEASES_DIR:-}" ]; then
-  RELEASES_DIR="$STEPCAST_RELEASES_DIR"
+if [ -n "$FROM_DIR" ] && [ -n "$BURNEX_RELEASES_DIR" ]; then
+  RELEASES_DIR="$BURNEX_RELEASES_DIR"
 fi
 
 command -v git >/dev/null 2>&1 || die "нужен git"
@@ -201,8 +203,8 @@ echo "==> лаунчер: $LAUNCHER -> $RELEASES_DIR/current/dist/src/bin.js"
 
 # Паспорт пишется последним и атомарно: по нему `burnex update` узнаёт
 # способ установки, а полупрозрачный файл хуже отсутствующего.
-mkdir -p "$STEPCAST_HOME"
-PASSPORT_TMP="$STEPCAST_HOME/install.json.tmp-$$"
+mkdir -p "$BURNEX_HOME"
+PASSPORT_TMP="$BURNEX_HOME/install.json.tmp-$$"
 # bin_dir нужен `burnex update`: без него обновление нестандартной установки
 # поставило бы второй лаунчер в ~/.local/bin.
 INSTALL_REPO="$REPO" INSTALL_REF="$REF" INSTALL_VERSION="$SRC_VERSION" INSTALL_RELEASES="$RELEASES_DIR" \
@@ -211,7 +213,7 @@ INSTALL_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
   node -e 'const e = process.env; console.log(JSON.stringify({
     method: "managed", repo: e.INSTALL_REPO, ref: e.INSTALL_REF, version: e.INSTALL_VERSION,
     releases_dir: e.INSTALL_RELEASES, bin_dir: e.INSTALL_BIN_DIR, installed_at: e.INSTALL_AT }, null, 2))' > "$PASSPORT_TMP"
-mv "$PASSPORT_TMP" "$STEPCAST_HOME/install.json"
+mv "$PASSPORT_TMP" "$BURNEX_HOME/install.json"
 PASSPORT_TMP=""
 
 case ":$PATH:" in

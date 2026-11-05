@@ -67,13 +67,13 @@ describe('result-contract: предикат границ изменений', ()
   // Заход 616c1b: агент клал черновики живой проверки в системный временный
   // каталог, но описывал их относительным путём — они ложились внутрь
   // рабочего дерева и заваливали границу правок. Теперь для черновиков есть
-  // объявленный каталог вне дерева (`$STEPCAST_JOB_DIR/scratch`); шаг,
+  // объявленный каталог вне дерева (`$BURNEX_JOB_DIR/scratch`); шаг,
   // писавший только туда, обязан пройти `changed_only`, а перечисленных путей
   // в отказе быть не должно — черновики в якорь не входят.
-  it('черновики в $STEPCAST_JOB_DIR/scratch не идут против changed_only', async () => {
+  it('черновики в $BURNEX_JOB_DIR/scratch не идут против changed_only', async () => {
     const project = makeProject({
       'stepcast.yml': bounded(
-        'mkdir -p src && echo код > src/a.ts && echo черновик > "$STEPCAST_JOB_DIR/scratch/verify.log"',
+        'mkdir -p src && echo код > src/a.ts && echo черновик > "$BURNEX_JOB_DIR/scratch/verify.log"',
         '["src/**"]',
       ),
     });

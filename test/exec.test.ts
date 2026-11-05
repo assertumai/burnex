@@ -158,13 +158,13 @@ describe('step-execution: окружение', () => {
       cwd: '/tmp',
     });
 
-    assert.equal(env.STEPCAST_RUN_ID, 'r1');
-    assert.equal(env.STEPCAST_JOB, 'build');
-    assert.equal(env.STEPCAST_STEP, 'compile');
-    assert.equal(env.STEPCAST_ATTEMPT, '2');
-    assert.equal(env.STEPCAST_WORKSPACE, '/work');
-    assert.equal(env.STEPCAST_BIN, '/usr/local/lib/node_modules/stepcast/dist/src/bin.js');
-    assert.equal(env.STEPCAST_SCRATCH, '/runs/r1/jobs/build/scratch');
+    assert.equal(env.BURNEX_RUN_ID, 'r1');
+    assert.equal(env.BURNEX_JOB, 'build');
+    assert.equal(env.BURNEX_STEP, 'compile');
+    assert.equal(env.BURNEX_ATTEMPT, '2');
+    assert.equal(env.BURNEX_WORKSPACE, '/work');
+    assert.equal(env.BURNEX_BIN, '/usr/local/lib/node_modules/stepcast/dist/src/bin.js');
+    assert.equal(env.BURNEX_SCRATCH, '/runs/r1/jobs/build/scratch');
   });
 
   // Сценарий: «Инжектируемые переменные не переопределяются»
@@ -174,18 +174,18 @@ describe('step-execution: окружение', () => {
       envFiles: [],
       pipeline: {},
       job: {},
-      step: { STEPCAST_JOB: 'подделка', STEPCAST_BIN: 'подделка', STEPCAST_SCRATCH: 'подделка' },
+      step: { BURNEX_JOB: 'подделка', BURNEX_BIN: 'подделка', BURNEX_SCRATCH: 'подделка' },
       injected: {
-        STEPCAST_JOB: 'build',
-        STEPCAST_BIN: '/real/bin.js',
-        STEPCAST_SCRATCH: '/runs/r1/jobs/build/scratch',
+        BURNEX_JOB: 'build',
+        BURNEX_BIN: '/real/bin.js',
+        BURNEX_SCRATCH: '/runs/r1/jobs/build/scratch',
       },
       deny: [],
       cwd: '/tmp',
     });
-    assert.equal(env.STEPCAST_JOB, 'build');
-    assert.equal(env.STEPCAST_BIN, '/real/bin.js');
-    assert.equal(env.STEPCAST_SCRATCH, '/runs/r1/jobs/build/scratch');
+    assert.equal(env.BURNEX_JOB, 'build');
+    assert.equal(env.BURNEX_BIN, '/real/bin.js');
+    assert.equal(env.BURNEX_SCRATCH, '/runs/r1/jobs/build/scratch');
   });
 
   it('переменные stepcast не попадают под запреты', () => {
@@ -195,12 +195,14 @@ describe('step-execution: окружение', () => {
       pipeline: {},
       job: {},
       step: {},
-      injected: { STEPCAST_RUN_ID: 'r1', STEPCAST_SCRATCH: '/runs/r1/jobs/build/scratch' },
-      deny: ['STEPCAST_*'],
+      injected: { BURNEX_RUN_ID: 'r1', BURNEX_SCRATCH: '/runs/r1/jobs/build/scratch', STEPCAST_RUN_ID: 'r1' },
+      deny: ['BURNEX_*', 'STEPCAST_*'],
       cwd: '/tmp',
     });
+    assert.equal(env.BURNEX_RUN_ID, 'r1');
+    assert.equal(env.BURNEX_SCRATCH, '/runs/r1/jobs/build/scratch');
+    // Прежнее имя переходного периода — тоже переменная движка.
     assert.equal(env.STEPCAST_RUN_ID, 'r1');
-    assert.equal(env.STEPCAST_SCRATCH, '/runs/r1/jobs/build/scratch');
     assert.deepEqual(denied, []);
   });
 });
@@ -531,7 +533,7 @@ describe('step-execution: шаг целиком', () => {
       }),
       cwd: dir,
       stepDir: dir,
-      env: (plan) => ({ PATH: process.env.PATH ?? '', STEPCAST_ATTEMPT: String(plan.attempt) }),
+      env: (plan) => ({ PATH: process.env.PATH ?? '', BURNEX_ATTEMPT: String(plan.attempt) }),
     });
 
     assert.equal(result.status, 'failed');
@@ -576,7 +578,7 @@ describe('step-execution: шаг целиком', () => {
   });
 });
 
-describe('step-execution: STEPCAST_SCRATCH в прогоне', () => {
+describe('step-execution: BURNEX_SCRATCH в прогоне', () => {
   it('доходит до командного шага', async () => {
     const project = makeProject({
       'stepcast.yml': `
@@ -588,7 +590,7 @@ jobs:
   build:
     steps:
       - id: show
-        run: [sh, -c, 'echo "$STEPCAST_SCRATCH" > seen.txt']
+        run: [sh, -c, 'echo "$BURNEX_SCRATCH" > seen.txt']
         expect: [{ exit_code: 0 }]
 `,
     });
@@ -622,10 +624,10 @@ jobs:
   build:
     steps:
       - id: write
-        run: [sh, -c, 'echo черновик > "$STEPCAST_SCRATCH/заметка.txt"']
+        run: [sh, -c, 'echo черновик > "$BURNEX_SCRATCH/заметка.txt"']
         expect: [{ exit_code: 0 }]
       - id: read
-        run: [sh, -c, 'cat "$STEPCAST_SCRATCH/заметка.txt" > прочитано.txt']
+        run: [sh, -c, 'cat "$BURNEX_SCRATCH/заметка.txt" > прочитано.txt']
         expect: [{ exit_code: 0 }]
 `,
     });
@@ -659,7 +661,7 @@ jobs:
         - cmd: 'false'
     steps:
       - id: append
-        run: [sh, -c, 'echo "$STEPCAST_SCRATCH" >> seen.txt']
+        run: [sh, -c, 'echo "$BURNEX_SCRATCH" >> seen.txt']
         expect: [{ exit_code: 0 }]
 `,
     });

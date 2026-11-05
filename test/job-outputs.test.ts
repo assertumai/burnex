@@ -48,7 +48,7 @@ function initRepo(project: Project): void {
 function publish(id: string, text: string): string {
   return `
       - id: ${id}
-        run: [sh, -c, 'printf "${text}" >> "$STEPCAST_JOB_OUTPUTS"']
+        run: [sh, -c, 'printf "${text}" >> "$BURNEX_JOB_OUTPUTS"']
         expect: [{ exit_code: 0 }]`;
 }
 
@@ -231,9 +231,9 @@ jobs:
           - sh
           - -c
           - |
-            if [ "$STEPCAST_JOB_ATTEMPT" = 1 ]; then echo stale=1 >> "$STEPCAST_JOB_OUTPUTS"; exit 1; fi
-            [ -s "$STEPCAST_JOB_OUTPUTS" ] && exit 9
-            echo fresh=2 >> "$STEPCAST_JOB_OUTPUTS"
+            if [ "$BURNEX_JOB_ATTEMPT" = 1 ]; then echo stale=1 >> "$BURNEX_JOB_OUTPUTS"; exit 1; fi
+            [ -s "$BURNEX_JOB_OUTPUTS" ] && exit 9
+            echo fresh=2 >> "$BURNEX_JOB_OUTPUTS"
         expect: [{ exit_code: 0 }]
 `,
     });
@@ -342,7 +342,7 @@ jobs:
     steps:
       - id: p
         external: true
-        run: [sh, -c, 'echo sha=1 >> "$STEPCAST_JOB_OUTPUTS"']
+        run: [sh, -c, 'echo sha=1 >> "$BURNEX_JOB_OUTPUTS"']
         expect: [{ exit_code: 0 }]
 `,
     });
@@ -369,7 +369,7 @@ jobs:
   build:
     steps:${publish('a', `${keys('a')}\\n`)}
       - id: b
-        run: [sh, -c, 'printf "${keys('b')}\\n" > "$STEPCAST_JOB_OUTPUTS"']
+        run: [sh, -c, 'printf "${keys('b')}\\n" > "$BURNEX_JOB_OUTPUTS"']
         expect: [{ exit_code: 0 }]
 `,
     });
@@ -395,7 +395,7 @@ jobs:
         - cmd: 'test -f done.txt'
     steps:
       - id: p
-        run: [sh, -c, 'if [ -f once.txt ]; then echo sha=abc >> "$STEPCAST_JOB_OUTPUTS"; touch done.txt; else touch once.txt; fi']
+        run: [sh, -c, 'if [ -f once.txt ]; then echo sha=abc >> "$BURNEX_JOB_OUTPUTS"; touch done.txt; else touch once.txt; fi']
         expect: [{ exit_code: 0 }]
 `,
     });
@@ -450,8 +450,8 @@ jobs:
           - sh
           - -c
           - |
-            [ -s "$STEPCAST_JOB_OUTPUTS" ] && exit 9
-            echo "pass$STEPCAST_LOOP_ITERATION=x" >> "$STEPCAST_JOB_OUTPUTS"
+            [ -s "$BURNEX_JOB_OUTPUTS" ] && exit 9
+            echo "pass$BURNEX_LOOP_ITERATION=x" >> "$BURNEX_JOB_OUTPUTS"
         expect: [{ exit_code: 0 }]
 `,
     });
@@ -538,7 +538,7 @@ jobs:
   build:
     steps:
       - id: p
-        run: [sh, -c, 'echo sha=1 >> "$STEPCAST_JOB_OUTPUTS"; exit 1']
+        run: [sh, -c, 'echo sha=1 >> "$BURNEX_JOB_OUTPUTS"; exit 1']
         expect: [{ exit_code: 0 }]${consumer('[build]', 'echo "[$${NEEDS_BUILD_sha:-пусто}]" > got.txt','\n    on: always')}
 `,
     });
@@ -602,10 +602,10 @@ jobs:
     outputs: [sha]
     steps:
       - id: p
-        run: [sh, -c, 'echo "sha=$TAG" >> "$STEPCAST_JOB_OUTPUTS"']
+        run: [sh, -c, 'echo "sha=$TAG" >> "$BURNEX_JOB_OUTPUTS"']
         expect: [{ exit_code: 0 }]
       - id: q
-        run: [sh, -c, 'if [ -n "$BRANCH" ]; then echo "branch=$BRANCH" >> "$STEPCAST_JOB_OUTPUTS"; fi']
+        run: [sh, -c, 'if [ -n "$BRANCH" ]; then echo "branch=$BRANCH" >> "$BURNEX_JOB_OUTPUTS"; fi']
         expect: [{ exit_code: 0 }]
   deploy:
     needs: [build]

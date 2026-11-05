@@ -66,14 +66,20 @@ describe('install-manifest: разбор паспорта', () => {
 });
 
 describe('install-manifest: путь паспорта', () => {
-  it('берёт STEPCAST_HOME, иначе ~/.stepcast', () => {
-    assert.equal(installManifestPath({ STEPCAST_HOME: '/opt/sc' }, '/home/u'), '/opt/sc/install.json');
+  it('берёт BURNEX_HOME, иначе ~/.stepcast', () => {
+    assert.equal(installManifestPath({ BURNEX_HOME: '/opt/sc' }, '/home/u'), '/opt/sc/install.json');
     assert.equal(installManifestPath({}, '/home/u'), '/home/u/.stepcast/install.json');
-    assert.equal(installManifestPath({ STEPCAST_HOME: '' }, '/home/u'), '/home/u/.stepcast/install.json');
+    assert.equal(installManifestPath({ BURNEX_HOME: '' }, '/home/u'), '/home/u/.stepcast/install.json');
   });
 
-  it('пустой STEPCAST_HOME — умолчание и для домашнего каталога: каталог релизов не становится относительным', () => {
-    assert.equal(stepcastHome({ STEPCAST_HOME: '' }, '/home/u'), '/home/u/.stepcast');
-    assert.equal(stepcastHome({ STEPCAST_HOME: '/opt/sc' }, '/home/u'), '/opt/sc');
+  it('пустой BURNEX_HOME — умолчание и для домашнего каталога: каталог релизов не становится относительным', () => {
+    assert.equal(stepcastHome({ BURNEX_HOME: '' }, '/home/u'), '/home/u/.stepcast');
+    assert.equal(stepcastHome({ BURNEX_HOME: '/opt/sc' }, '/home/u'), '/opt/sc');
+  });
+
+  it('прежнее имя STEPCAST_HOME читается, пока нет нового; новое побеждает', () => {
+    assert.equal(stepcastHome({ STEPCAST_HOME: '/old' }, '/home/u'), '/old');
+    assert.equal(stepcastHome({ BURNEX_HOME: '/new', STEPCAST_HOME: '/old' }, '/home/u'), '/new');
+    assert.equal(installManifestPath({ STEPCAST_HOME: '/old' }, '/home/u'), '/old/install.json');
   });
 });

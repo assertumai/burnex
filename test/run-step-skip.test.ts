@@ -89,11 +89,11 @@ describe('step-execution: код пропуска', () => {
       step: makeStep({
         skipExitCode: 78,
         attempts: { max: 3, escalation: [] },
-        command: ['sh', '-c', 'if [ "$STEPCAST_ATTEMPT" = 1 ]; then exit 1; else exit 78; fi'],
+        command: ['sh', '-c', 'if [ "$BURNEX_ATTEMPT" = 1 ]; then exit 1; else exit 78; fi'],
       }),
       cwd: dir,
       stepDir: dir,
-      env: (plan) => ({ ...env(), STEPCAST_ATTEMPT: String(plan.attempt) }),
+      env: (plan) => ({ ...env(), BURNEX_ATTEMPT: String(plan.attempt) }),
     });
     assert.equal(result.status, 'skipped');
     assert.deepEqual(

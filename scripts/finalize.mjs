@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * Завершение захода петли больше не ведёт этот скрипт — работа `finalize`
- * зовёт `burnex backlog settle` напрямую через `$STEPCAST_BIN`
+ * зовёт `burnex backlog settle` напрямую через `$BURNEX_BIN`
  * (`.stepcast/jobs/finalize.yml`). Файл остаётся заглушкой, а не исчезает:
  * физическое удаление вне прав работы `implement-express`
  * (openspec/changes/agent-cannot-clean-up/proposal.md) — тело, несущее

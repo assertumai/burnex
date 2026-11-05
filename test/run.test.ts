@@ -823,7 +823,7 @@ jobs:
   });
 });
 
-describe('step-execution: STEPCAST_BIN', () => {
+describe('step-execution: BURNEX_BIN', () => {
   it('указывает на исполняющий движок и не переопределяется объявленным env', async () => {
     // Сверяется с точкой входа движка этого прогона, а не с `process.argv[1]`:
     // под `node --test` argv[1] — файл теста, и движок он не называет
@@ -836,8 +836,8 @@ jobs:
   probe:
     steps:
       - id: check
-        run: 'test "$STEPCAST_BIN" = "${locateEngine().entry}"'
-        env: { STEPCAST_BIN: подделка }
+        run: 'test "$BURNEX_BIN" = "${locateEngine().entry}"'
+        env: { BURNEX_BIN: подделка }
         expect: [{ exit_code: 0 }]
 `,
     });
@@ -954,7 +954,7 @@ jobs:
 
 describe('step-execution: шаг script', () => {
   // Сценарий: «Рабочая директория и окружение»
-  it('исполняется на sh в рабочей директории работы, с STEPCAST_* и логами', async () => {
+  it('исполняется на sh в рабочей директории работы, с BURNEX_* и логами', async () => {
     const project = makeProject({
       'stepcast.yml': `
 kind: pipeline
@@ -968,7 +968,7 @@ jobs:
         expect: [{ exit_code: 0 }]
 `,
     });
-    project.write('.stepcast/scripts/greet.sh', '#!/bin/sh\necho "job=$STEPCAST_JOB arg=$1"\npwd\n');
+    project.write('.stepcast/scripts/greet.sh', '#!/bin/sh\necho "job=$BURNEX_JOB arg=$1"\npwd\n');
 
     const result = await runWithScriptRoots(project, project.config, isolatedScriptRoots(project));
     assert.equal(result.status, 'success');
@@ -996,7 +996,7 @@ jobs:
     });
     project.write(
       '.stepcast/scripts/report.py',
-      'import os, sys\nprint("job", os.environ.get("STEPCAST_JOB"), "args", sys.argv[1:])\n',
+      'import os, sys\nprint("job", os.environ.get("BURNEX_JOB"), "args", sys.argv[1:])\n',
     );
 
     const result = await runWithScriptRoots(project, project.config, isolatedScriptRoots(project));
@@ -1029,7 +1029,7 @@ jobs:
   });
 
   // Сценарий: «Предикаты и попытки действуют так же»
-  it('повторяет попытку по STEPCAST_ATTEMPT и проходит вторым разом', async () => {
+  it('повторяет попытку по BURNEX_ATTEMPT и проходит вторым разом', async () => {
     const project = makeProject({
       'stepcast.yml': `
 kind: pipeline
@@ -1045,7 +1045,7 @@ jobs:
     });
     project.write(
       '.stepcast/scripts/flaky.sh',
-      '#!/bin/sh\n[ "$STEPCAST_ATTEMPT" = "1" ] && exit 1\nexit 0\n',
+      '#!/bin/sh\n[ "$BURNEX_ATTEMPT" = "1" ] && exit 1\nexit 0\n',
     );
 
     const result = await runWithScriptRoots(project, project.config, isolatedScriptRoots(project));
@@ -1233,7 +1233,7 @@ jobs:
     });
     project.write(
       '.stepcast/scripts/probe.sh',
-      '#!/bin/sh\necho \'{"reason": "найден TODO в src/index.ts:42"}\' > "$STEPCAST_OUTPUT"\nexit 1\n',
+      '#!/bin/sh\necho \'{"reason": "найден TODO в src/index.ts:42"}\' > "$BURNEX_OUTPUT"\nexit 1\n',
     );
 
     const result = await runWithScriptRoots(project, project.config, isolatedScriptRoots(project));
@@ -1286,7 +1286,7 @@ jobs:
   build:
     steps:
       - id: c
-        run: [sh, -c, 'test "$STEPCAST_ATTEMPT" = "3"']
+        run: [sh, -c, 'test "$BURNEX_ATTEMPT" = "3"']
         attempts: { max: 3 }
         expect: [{ exit_code: 0 }, { script: probe.sh }]
 `,
@@ -1344,7 +1344,7 @@ jobs:
     });
     project.write(
       '.stepcast/scripts/probe.sh',
-      '#!/bin/sh\necho out-line\necho err-line 1>&2\necho \'{"reason": "причина"}\' > "$STEPCAST_OUTPUT"\nexit 1\n',
+      '#!/bin/sh\necho out-line\necho err-line 1>&2\necho \'{"reason": "причина"}\' > "$BURNEX_OUTPUT"\nexit 1\n',
     );
 
     const result = await runWithScriptRoots(project, project.config, isolatedScriptRoots(project));
@@ -1363,7 +1363,7 @@ jobs:
 
 describe('step-execution: контракт входа и выхода script', () => {
   // Сценарий: «Вход доезжает файлом» / «Выход доезжает файлом»
-  it('sh видит STEPCAST_INPUT/STEPCAST_OUTPUT, читает вход и пишет выход, работа публикует его и следующая работа читает', async () => {
+  it('sh видит BURNEX_INPUT/BURNEX_OUTPUT, читает вход и пишет выход, работа публикует его и следующая работа читает', async () => {
     const project = makeProject({
       'stepcast.yml': `
 kind: pipeline
@@ -1386,7 +1386,7 @@ jobs:
       '.stepcast/scripts/plan.sh',
       '#!/bin/sh\n' +
         'echo "log line"\n' +
-        'python3 -c "import json,os; d=json.load(open(os.environ[\'STEPCAST_INPUT\'])); json.dump({\'slug\': d[\'slug\']+\'-planned\'}, open(os.environ[\'STEPCAST_OUTPUT\'], \'w\'))"\n',
+        'python3 -c "import json,os; d=json.load(open(os.environ[\'BURNEX_INPUT\'])); json.dump({\'slug\': d[\'slug\']+\'-planned\'}, open(os.environ[\'BURNEX_OUTPUT\'], \'w\'))"\n',
     );
 
     const result = await runWithScriptRoots(project, project.config, isolatedScriptRoots(project));
@@ -1419,7 +1419,7 @@ jobs:
         script: noop.sh
 `,
     });
-    project.write('.stepcast/scripts/noop.sh', '#!/bin/sh\ncat "$STEPCAST_INPUT"\n');
+    project.write('.stepcast/scripts/noop.sh', '#!/bin/sh\ncat "$BURNEX_INPUT"\n');
 
     const result = await runWithScriptRoots(project, project.config, isolatedScriptRoots(project));
     assert.equal(result.status, 'success');
@@ -1428,7 +1428,7 @@ jobs:
   });
 
   // Сценарий: «Переменные контракта у прочих шагов»
-  it('шаг run не получает STEPCAST_INPUT/STEPCAST_OUTPUT', async () => {
+  it('шаг run не получает BURNEX_INPUT/BURNEX_OUTPUT', async () => {
     const project = makeProject({
       'stepcast.yml': `
 kind: pipeline
@@ -1437,7 +1437,7 @@ jobs:
   build:
     steps:
       - id: c
-        run: [sh, -c, 'echo "input=$STEPCAST_INPUT output=$STEPCAST_OUTPUT"']
+        run: [sh, -c, 'echo "input=$BURNEX_INPUT output=$BURNEX_OUTPUT"']
 `,
     });
 
@@ -1449,7 +1449,7 @@ jobs:
   });
 
   // Сценарий: «Скрипт на Python без библиотеки»
-  it('python без SDK читает вход, логирует в stdout, пишет выход и публикует данные через STEPCAST_BIN', async () => {
+  it('python без SDK читает вход, логирует в stdout, пишет выход и публикует данные через BURNEX_BIN', async () => {
     const project = makeProject({
       'stepcast.yml': `
 kind: pipeline
@@ -1468,10 +1468,10 @@ jobs:
       '.stepcast/scripts/work.py',
       [
         'import json, os, subprocess',
-        "d = json.load(open(os.environ['STEPCAST_INPUT']))",
+        "d = json.load(open(os.environ['BURNEX_INPUT']))",
         "print('hello', d['name'])",
-        "json.dump({'greeting': 'hi ' + d['name']}, open(os.environ['STEPCAST_OUTPUT'], 'w'))",
-        "subprocess.run(['node', os.environ['STEPCAST_BIN'], 'data', 'set', 'status', 'ok'], check=True)",
+        "json.dump({'greeting': 'hi ' + d['name']}, open(os.environ['BURNEX_OUTPUT'], 'w'))",
+        "subprocess.run(['node', os.environ['BURNEX_BIN'], 'data', 'set', 'status', 'ok'], check=True)",
         '',
       ].join('\n'),
     );
@@ -1517,13 +1517,13 @@ jobs:
     });
     project.write(
       '.stepcast/scripts/plan.sh',
-      '#!/bin/sh\ncat > "$STEPCAST_OUTPUT" <<\'JSON\'\n{"item": {"slug": "add-oauth", "repos": ["ui"]}}\nJSON\n',
+      '#!/bin/sh\ncat > "$BURNEX_OUTPUT" <<\'JSON\'\n{"item": {"slug": "add-oauth", "repos": ["ui"]}}\nJSON\n',
     );
     project.write(
       '.stepcast/scripts/take.py',
       [
         'import json, os',
-        "d = json.load(open(os.environ['STEPCAST_INPUT']))",
+        "d = json.load(open(os.environ['BURNEX_INPUT']))",
         "assert isinstance(d['item'], dict), d['item']",
         "print('repos', d['item']['repos'][0], '|', d['title'])",
         '',
@@ -1554,7 +1554,7 @@ jobs:
         attempts: { max: 2 }
 `,
     });
-    project.write('.stepcast/scripts/bad.sh', '#!/bin/sh\necho "не json" > "$STEPCAST_OUTPUT"\n');
+    project.write('.stepcast/scripts/bad.sh', '#!/bin/sh\necho "не json" > "$BURNEX_OUTPUT"\n');
 
     const result = await runWithScriptRoots(project, project.config, isolatedScriptRoots(project));
     assert.equal(result.status, 'failed');
@@ -1609,7 +1609,7 @@ jobs:
       'schema.json',
       JSON.stringify({ type: 'object', required: ['ok'], properties: { ok: { const: true } } }),
     );
-    project.write('.stepcast/scripts/wrong.sh', '#!/bin/sh\necho \'{"ok": false}\' > "$STEPCAST_OUTPUT"\n');
+    project.write('.stepcast/scripts/wrong.sh', '#!/bin/sh\necho \'{"ok": false}\' > "$BURNEX_OUTPUT"\n');
 
     const result = await runWithScriptRoots(project, project.config, isolatedScriptRoots(project));
     assert.equal(result.status, 'failed');
@@ -1640,7 +1640,7 @@ jobs:
     project.write(
       '.stepcast/scripts/flaky.sh',
       '#!/bin/sh\n' +
-        'if [ "$STEPCAST_ATTEMPT" = "1" ]; then echo \'{"stale": true}\' > "$STEPCAST_OUTPUT"; exit 1; fi\n' +
+        'if [ "$BURNEX_ATTEMPT" = "1" ]; then echo \'{"stale": true}\' > "$BURNEX_OUTPUT"; exit 1; fi\n' +
         'exit 0\n',
     );
 
@@ -1705,7 +1705,7 @@ jobs:
     project.write(
       '.stepcast/scripts/stale.sh',
       '#!/bin/sh\n' +
-        'if [ "$STEPCAST_ATTEMPT" = "1" ]; then echo \'{"ok": false}\' > "$STEPCAST_OUTPUT"; exit 0; fi\n' +
+        'if [ "$BURNEX_ATTEMPT" = "1" ]; then echo \'{"ok": false}\' > "$BURNEX_OUTPUT"; exit 0; fi\n' +
         'exit 1\n',
     );
 
@@ -1734,8 +1734,8 @@ output_schema: ./output.schema.json
 `;
   const GREET_MAIN = `
 const fs = require('node:fs');
-const input = JSON.parse(fs.readFileSync(process.env.STEPCAST_INPUT, 'utf8'));
-fs.writeFileSync(process.env.STEPCAST_OUTPUT, JSON.stringify({ greeting: 'привет, ' + input.name }));
+const input = JSON.parse(fs.readFileSync(process.env.BURNEX_INPUT, 'utf8'));
+fs.writeFileSync(process.env.BURNEX_OUTPUT, JSON.stringify({ greeting: 'привет, ' + input.name }));
 `;
   const GREET_OUTPUT_SCHEMA = JSON.stringify({
     type: 'object',
@@ -1822,11 +1822,11 @@ params:
     project.write(
       '.stepcast/steps/echo-item/main.cjs',
       "const fs = require('node:fs');\n" +
-        "fs.copyFileSync(process.env.STEPCAST_INPUT, process.env.STEPCAST_OUTPUT);\n",
+        "fs.copyFileSync(process.env.BURNEX_INPUT, process.env.BURNEX_OUTPUT);\n",
     );
     project.write(
       '.stepcast/scripts/plan.sh',
-      '#!/bin/sh\necho \'{"item": {"slug": "bug-42", "count": 3}, "files": ["a.ts", "b.ts"]}\' > "$STEPCAST_OUTPUT"\n',
+      '#!/bin/sh\necho \'{"item": {"slug": "bug-42", "count": 3}, "files": ["a.ts", "b.ts"]}\' > "$BURNEX_OUTPUT"\n',
     );
 
     const result = await runWithStepRoots(project, isolatedStepRoots(project));
@@ -1871,7 +1871,7 @@ jobs:
     project.write('.stepcast/steps/greet/step.yml', GREET_MANIFEST);
     project.write(
       '.stepcast/steps/greet/main.cjs',
-      "const fs = require('node:fs');\nfs.writeFileSync(process.env.STEPCAST_OUTPUT, JSON.stringify({ wrong: true }));\n",
+      "const fs = require('node:fs');\nfs.writeFileSync(process.env.BURNEX_OUTPUT, JSON.stringify({ wrong: true }));\n",
     );
     project.write('.stepcast/steps/greet/output.schema.json', GREET_OUTPUT_SCHEMA);
 
@@ -1948,7 +1948,7 @@ jobs:
       '.stepcast/steps/greet/step.yml',
       GREET_MANIFEST.replace('name: { type: string, default: world }', 'name: { type: integer }'),
     );
-    project.write('.stepcast/scripts/plan.sh', '#!/bin/sh\necho \'{"name": "not-a-number"}\' > "$STEPCAST_OUTPUT"\n');
+    project.write('.stepcast/scripts/plan.sh', '#!/bin/sh\necho \'{"name": "not-a-number"}\' > "$BURNEX_OUTPUT"\n');
 
     const result = await runWithStepRoots(project, isolatedStepRoots(project));
     assert.equal(result.status, 'failed');
@@ -2194,7 +2194,7 @@ jobs:
       '.stepcast/scripts/plain.cjs',
       'const fs = require("node:fs");\n' +
         'console.log("cjs ran");\n' +
-        'fs.writeFileSync(process.env.STEPCAST_OUTPUT, JSON.stringify({ from: "тело" }));\n',
+        'fs.writeFileSync(process.env.BURNEX_OUTPUT, JSON.stringify({ from: "тело" }));\n',
     );
 
     const result = await runWithScriptRoots(project, project.config, isolatedScriptRoots(project));

@@ -7,6 +7,7 @@ import { Ajv2020 } from 'ajv/dist/2020.js';
 import type { ErrorObject, ValidateFunction } from 'ajv';
 
 import { StepcastError } from '../../../kernel/errors.js';
+import { withLegacyNames } from '../../../kernel/env-names.js';
 import { runProcess } from '../run/exec/process.js';
 import type { RunJournal } from '../run/journal/writer.js';
 import { describeScriptUnresolved } from '../document/expand.js';
@@ -256,8 +257,7 @@ async function evaluateScript(
       // Свой вход и выход, отдельные от контракта самого шага (если это шаг
       // `script`): предикат — второй, независимый вызов, а не продолжение
       // того же контракта.
-      STEPCAST_INPUT: join(dir, 'input.json'),
-      STEPCAST_OUTPUT: outputPath,
+      ...withLegacyNames({ BURNEX_INPUT: join(dir, 'input.json'), BURNEX_OUTPUT: outputPath }),
     },
     timeoutMs: call.timeoutMs,
     ...(call.stallTimeoutMs === undefined ? {} : { stallTimeoutMs: call.stallTimeoutMs }),

@@ -58,7 +58,7 @@ jobs:
     needs: [research]
     steps:
       - id: check
-        run: [sh, -c, 'test -s "$STEPCAST_ARTIFACTS/research.json"']
+        run: [sh, -c, 'test -s "$BURNEX_ARTIFACTS/research.json"']
         expect: [{ exit_code: 0 }]
 
   triage:
@@ -70,5 +70,5 @@ jobs:
     budget_exempt: true
     steps:
       - id: explain
-        run: [sh, -c, 'echo "прогон $STEPCAST_RUN_ID завершился отказом, см. status.json"']
+        run: [sh, -c, 'echo "прогон $BURNEX_RUN_ID завершился отказом, см. status.json"']
         expect: [{ exit_code: 0 }]

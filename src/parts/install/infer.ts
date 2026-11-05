@@ -12,7 +12,7 @@ export interface InferProbes {
   readonly isGitTree: (dir: string) => boolean;
   /** `name` из `package.json` корня; `undefined`, если прочесть нельзя. */
   readonly readPackageName: (dir: string) => string | undefined;
-  /** Каталог релизов `install.sh`: `$STEPCAST_HOME/releases` или `~/.stepcast/releases`. */
+  /** Каталог релизов `install.sh`: `$BURNEX_HOME/releases` или `~/.stepcast/releases`. */
   readonly releasesDir: string;
 }
 

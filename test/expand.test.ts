@@ -5254,8 +5254,8 @@ params:
 `;
   const ECHO_MAIN = `
 const fs = require('node:fs');
-const input = JSON.parse(fs.readFileSync(process.env.STEPCAST_INPUT, 'utf8'));
-fs.writeFileSync(process.env.STEPCAST_OUTPUT, JSON.stringify(input));
+const input = JSON.parse(fs.readFileSync(process.env.BURNEX_INPUT, 'utf8'));
+fs.writeFileSync(process.env.BURNEX_OUTPUT, JSON.stringify(input));
 `;
 
   function writeEchoStep(project: Project): void {
@@ -5346,8 +5346,8 @@ params:
 `;
   const ECHO_MAIN = `
 const fs = require('node:fs');
-const input = JSON.parse(fs.readFileSync(process.env.STEPCAST_INPUT, 'utf8'));
-fs.writeFileSync(process.env.STEPCAST_OUTPUT, JSON.stringify(input));
+const input = JSON.parse(fs.readFileSync(process.env.BURNEX_INPUT, 'utf8'));
+fs.writeFileSync(process.env.BURNEX_OUTPUT, JSON.stringify(input));
 `;
 
   function writeEchoStep(project: Project, manifest = ECHO_MANIFEST): void {

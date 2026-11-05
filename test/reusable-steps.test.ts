@@ -54,8 +54,8 @@ function writeStepDir(
 
 const GREET_MAIN = `
 const fs = require('node:fs');
-const input = JSON.parse(fs.readFileSync(process.env.STEPCAST_INPUT, 'utf8'));
-fs.writeFileSync(process.env.STEPCAST_OUTPUT, JSON.stringify({ greeting: 'привет, ' + input.name }));
+const input = JSON.parse(fs.readFileSync(process.env.BURNEX_INPUT, 'utf8'));
+fs.writeFileSync(process.env.BURNEX_OUTPUT, JSON.stringify({ greeting: 'привет, ' + input.name }));
 `;
 
 const GREET_MANIFEST = `

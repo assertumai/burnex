@@ -21,7 +21,7 @@
 `node_modules` целевого репозитория и из глобальной установки.
 
 Код шага этого слоя обязан опираться только на контракт файлов —
-`process.env.STEPCAST_INPUT`/`STEPCAST_OUTPUT` и разбор JSON, — а не на
+`process.env.BURNEX_INPUT`/`BURNEX_OUTPUT` и разбор JSON, — а не на
 библиотеку `stepcast/step` или на обёртку раннера (design.md изменения
 reusable-steps, решение 12): любой проект вправе переопределить раннер
 `node` и снять с него обёртку (`wrapper: none`), и встроенный шаг обязан

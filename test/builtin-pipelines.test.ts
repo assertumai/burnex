@@ -144,10 +144,10 @@ describe('builtin pipelines: stepcast:migrate-widgets', () => {
     const agent = step as Extract<typeof step, { readonly kind: 'agent' }>;
     const allow = agent.permissions?.allow ?? [];
 
-    const command = /^\s*(node "\$STEPCAST_BIN" propose .+)$/m.exec(agent.prompt)?.[1];
+    const command = /^\s*(node "\$BURNEX_BIN" propose .+)$/m.exec(agent.prompt)?.[1];
     assert.ok(
       command !== undefined,
-      'промпт обязан учить надёжной форме вызова движка: node "$STEPCAST_BIN" propose …',
+      'промпт обязан учить надёжной форме вызова движка: node "$BURNEX_BIN" propose …',
     );
 
     const bashPrefixes = allow
@@ -183,7 +183,7 @@ describe('builtin pipelines: stepcast:migrate-widgets', () => {
  * результат в очередь», «Мигрировать нечего»): агентский шаг заменён
  * подставным процессом, который ведёт себя ровно как агент, следующий
  * промпту, — правит виджет, кладёт исправленную версию в
- * `$STEPCAST_SCRATCH` и ставит её в очередь настоящей командой `stepcast
+ * `$BURNEX_SCRATCH` и ставит её в очередь настоящей командой `stepcast
  * propose` (собранным бинарём этого же дерева), а не притворяется, что
  * поставил.
  */

@@ -91,7 +91,17 @@ describe('pipeline-secrets: объявление в документе пайп�
     assert.match(error.message, /\^\[a-z\]\[a-z0-9_-\]\{0,63\}\$/);
   });
 
-  it('отклоняет env с префиксом STEPCAST_', () => {
+  it('отклоняет env с префиксом BURNEX_', () => {
+    const project = makeProject({
+      'stepcast.yml': pipelineWith(
+        '  tok:\n    provider: env-file\n    file: .env\n    env: BURNEX_TOKEN\n',
+        '      - { id: a, run: [echo, ok] }\n',
+      ),
+    });
+    assert.match(thrown(() => expand(project)).message, /BURNEX_/);
+  });
+
+  it('отклоняет env с прежним префиксом STEPCAST_: переходный период его не освобождает', () => {
     const project = makeProject({
       'stepcast.yml': pipelineWith(
         '  tok:\n    provider: env-file\n    file: .env\n    env: STEPCAST_TOKEN\n',

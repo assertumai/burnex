@@ -9,7 +9,7 @@ import { exec, input, log, output, publish } from '../src/parts/pipeline/step/in
 import { tempDir } from './tmp.js';
 
 /**
- * Библиотека `stepcast/step` работает по одним лишь `STEPCAST_*` (design.md,
+ * Библиотека `stepcast/step` работает по одним лишь `BURNEX_*` (design.md,
  * решение 10) — тест выставляет их сам, как это делает движок в окружении
  * шага, а не запускает настоящий подпроцесс.
  */
@@ -22,7 +22,7 @@ function jobDir(declared: readonly string[] = []): string {
   return dir;
 }
 
-/** Выполнить `fn` с заданными `STEPCAST_*`, восстановив окружение по завершении. */
+/** Выполнить `fn` с заданными `BURNEX_*`, восстановив окружение по завершении. */
 async function withStepEnv<T>(
   vars: Readonly<Record<string, string | undefined>>,
   fn: () => Promise<T> | T,
@@ -49,7 +49,7 @@ describe('step-sdk: input/output/publish/log/exec по переменным ок
     const inputPath = join(dir, 'input.json');
     writeFileSync(inputPath, JSON.stringify({ slug: 'bug-42' }));
 
-    await withStepEnv({ STEPCAST_INPUT: inputPath }, () => {
+    await withStepEnv({ BURNEX_INPUT: inputPath }, () => {
       assert.deepEqual(input(), { slug: 'bug-42' });
     });
   });
@@ -58,7 +58,7 @@ describe('step-sdk: input/output/publish/log/exec по переменным ок
     const dir = tempDir('step-sdk-');
     const outputPath = join(dir, 'output.json');
 
-    await withStepEnv({ STEPCAST_OUTPUT: outputPath }, () => {
+    await withStepEnv({ BURNEX_OUTPUT: outputPath }, () => {
       output({ ok: true, n: 1 });
       output({ ok: true, n: 2 });
     });
@@ -69,13 +69,13 @@ describe('step-sdk: input/output/publish/log/exec по переменным ок
   it('publish(ключ, значение) неотличим от burnex data set: та же проверка объявленного состава', async () => {
     const dir = jobDir(['slug']);
 
-    await withStepEnv({ STEPCAST_JOB_DIR: dir }, () => {
+    await withStepEnv({ BURNEX_JOB_DIR: dir }, () => {
       publish('slug', 'bug-42');
     });
     assert.deepEqual(readJobData(dir), { slug: 'bug-42' });
 
     await assert.rejects(
-      withStepEnv({ STEPCAST_JOB_DIR: dir }, async () => publish('not-declared', 'x')),
+      withStepEnv({ BURNEX_JOB_DIR: dir }, async () => publish('not-declared', 'x')),
       (error: unknown) => {
         assert.ok(error instanceof StepcastError);
         assert.match(error.message, /не объявляла ключ данных/);
@@ -86,19 +86,19 @@ describe('step-sdk: input/output/publish/log/exec по переменным ок
 
   it('publish(отображение) пишет несколько ключей разом', async () => {
     const dir = jobDir(['a', 'b']);
-    await withStepEnv({ STEPCAST_JOB_DIR: dir }, () => {
+    await withStepEnv({ BURNEX_JOB_DIR: dir }, () => {
       publish({ a: '1', b: '2' });
     });
     assert.deepEqual(readJobData(dir), { a: '1', b: '2' });
   });
 
-  it('log() печатает в stdout, не бросая вне присутствия STEPCAST_JOB_DIR названно', async () => {
+  it('log() печатает в stdout, не бросая вне присутствия BURNEX_JOB_DIR названно', async () => {
     const dir = jobDir([]);
     const original = console.log;
     const lines: unknown[][] = [];
     console.log = (...args: unknown[]) => lines.push(args);
     try {
-      await withStepEnv({ STEPCAST_JOB_DIR: dir }, () => {
+      await withStepEnv({ BURNEX_JOB_DIR: dir }, () => {
         log('привет', 1);
       });
     } finally {
@@ -109,7 +109,7 @@ describe('step-sdk: input/output/publish/log/exec по переменным ок
 
   it('exec() запускает процесс без оболочки и отдаёт код возврата и stdout', async () => {
     const dir = jobDir([]);
-    const result = await withStepEnv({ STEPCAST_JOB_DIR: dir }, () =>
+    const result = await withStepEnv({ BURNEX_JOB_DIR: dir }, () =>
       exec('node', ['-e', 'console.log("hi")']),
     );
     assert.equal(result.exitCode, 0);
@@ -128,7 +128,7 @@ describe('step-sdk: input/output/publish/log/exec по переменным ок
     process.stdout.write = capture as typeof process.stdout.write;
     process.stderr.write = capture as typeof process.stderr.write;
     try {
-      await withStepEnv({ STEPCAST_JOB_DIR: dir }, () =>
+      await withStepEnv({ BURNEX_JOB_DIR: dir }, () =>
         exec('node', ['-e', 'console.log("в лог"); console.error("в стерр")']),
       );
     } finally {
@@ -144,13 +144,13 @@ describe('step-sdk: input/output/publish/log/exec по переменным ок
   it('exec() отказывает по умолчанию при ненулевом коде возврата', async () => {
     const dir = jobDir([]);
     await assert.rejects(
-      withStepEnv({ STEPCAST_JOB_DIR: dir }, () => exec('node', ['-e', 'process.exit(3)'])),
+      withStepEnv({ BURNEX_JOB_DIR: dir }, () => exec('node', ['-e', 'process.exit(3)'])),
     );
   });
 
   // Сценарий: «Вызов вне шага»
   it('вызов вне шага прогона отказывает названно', async () => {
-    await withStepEnv({ STEPCAST_INPUT: undefined, STEPCAST_OUTPUT: undefined, STEPCAST_JOB_DIR: undefined }, () => {
+    await withStepEnv({ BURNEX_INPUT: undefined, BURNEX_OUTPUT: undefined, BURNEX_JOB_DIR: undefined }, () => {
       assert.throws(() => input(), (error: unknown) => {
         assert.ok(error instanceof StepcastError);
         assert.match(error.message, /работает только внутри шага прогона/);

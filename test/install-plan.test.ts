@@ -33,7 +33,8 @@ describe('install-plan: managed', () => {
           cmd: 'bash',
           args: [`${CURRENT}/install.sh`, '--repo', MANAGED.method === 'managed' ? MANAGED.repo : '', '--ref', 'v0.4.0'],
           cwd: CURRENT,
-          env: { STEPCAST_HOME: '/h/.stepcast' },
+          // И под прежним именем: install.sh текущего релиза может знать только его.
+          env: { BURNEX_HOME: '/h/.stepcast', STEPCAST_HOME: '/h/.stepcast' },
         },
       ],
     });
@@ -55,7 +56,9 @@ describe('install-plan: managed', () => {
     const custom: InstallManifest = { ...MANAGED, bin_dir: '/opt/bin' } as InstallManifest;
     const plan = planUpdate(custom, { latestTag: 'v0.4.0' });
     assert.deepEqual(plan.kind === 'run' ? plan.steps[0]?.env : undefined, {
+      BURNEX_HOME: '/h/.stepcast',
       STEPCAST_HOME: '/h/.stepcast',
+      BURNEX_BIN_DIR: '/opt/bin',
       STEPCAST_BIN_DIR: '/opt/bin',
     });
   });

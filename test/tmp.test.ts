@@ -158,8 +158,8 @@ describe('test/tmp: песочница временных файлов тест�
     );
   });
 
-  it('STEPCAST_TEST_KEEP=1 оставляет корень и печатает его путь', () => {
-    const { status, lines, stderr } = runFixture('success', { ...process.env, STEPCAST_TEST_KEEP: '1' });
+  it('BURNEX_TEST_KEEP=1 оставляет корень и печатает его путь', () => {
+    const { status, lines, stderr } = runFixture('success', { ...process.env, BURNEX_TEST_KEEP: '1' });
     const [root] = lines;
     try {
       assert.equal(status, 0);
@@ -174,8 +174,8 @@ describe('test/tmp: песочница временных файлов тест�
   // Прерывание с клавиатуры — обычный конец прогона, ради разбора которого
   // корень и сохраняют: умирающий от сигнала процесс обработчиков `exit` не
   // исполняет, и путь пришлось бы искать вручную.
-  it('STEPCAST_TEST_KEEP=1 печатает путь и при прерывании сигналом', async () => {
-    const { signal, root, stderr } = await signalOutcome('SIGINT', { ...process.env, STEPCAST_TEST_KEEP: '1' });
+  it('BURNEX_TEST_KEEP=1 печатает путь и при прерывании сигналом', async () => {
+    const { signal, root, stderr } = await signalOutcome('SIGINT', { ...process.env, BURNEX_TEST_KEEP: '1' });
     try {
       assert.equal(signal, 'SIGINT');
       assert.equal(existsSync(root), true, 'сохранённый корень обязан пережить прерывание');

@@ -1,6 +1,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { isAbsolute, resolve as resolvePath } from 'node:path';
 
+import { isEngineVariable, withLegacyNames } from '../../../../kernel/env-names.js';
 import { compileNameGlob } from '../../domain/lint.js';
 
 /**
@@ -80,9 +81,9 @@ export function buildStepEnv(layers: EnvLayers): BuiltEnv {
   const denied: DeniedVariable[] = [];
 
   for (const name of Object.keys(env)) {
-    // Собственные переменные stepcast под запрет не попадают: они описывают
-    // прогон, а не несут учётных данных.
-    if (name.startsWith('STEPCAST_')) continue;
+    // Собственные переменные движка (под обоими именами переходного периода)
+    // под запрет не попадают: они описывают прогон, а не несут учётных данных.
+    if (isEngineVariable(name)) continue;
     const hit = matchers.find(({ matcher }) => matcher.test(name));
     if (hit === undefined) continue;
     delete env[name];
@@ -154,7 +155,7 @@ export interface InjectedContext {
   readonly attempt: number;
   /**
    * Номер попытки работы и её предел. Есть у каждой работы — `1` и `1` без
-   * объявления `attempts`, — в отличие от `STEPCAST_ITERATION`: скрипту,
+   * объявления `attempts`, — в отличие от `BURNEX_ITERATION`: скрипту,
    * решающему «последняя попытка — черновик не публиковать», не нужно
    * ветвиться на отсутствие переменной.
    */
@@ -163,7 +164,7 @@ export interface InjectedContext {
   /**
    * Цикл по группе работ, в котором исполняется работа. Есть только у
    * участника: отсутствие переменных отвечает на вопрос «я в цикле?» так же,
-   * как отсутствие `STEPCAST_ITERATION` — на вопрос «я в until?».
+   * как отсутствие `BURNEX_ITERATION` — на вопрос «я в until?».
    */
   readonly loop?: { readonly id: string; readonly iteration: number; readonly maxIterations: number };
   readonly workspace: string;
@@ -186,7 +187,7 @@ export interface InjectedContext {
    */
   readonly skipExitCode?: number;
   /**
-   * Файл выходов работы (`STEPCAST_JOB_OUTPUTS`). Передан вызывающим только
+   * Файл выходов работы (`BURNEX_JOB_OUTPUTS`). Передан вызывающим только
    * для шага `run`: `script` публикует через свой контракт, агент — через
    * `burnex data` (job-outputs-key-value, design.md, цели и не-цели).
    */
@@ -198,36 +199,41 @@ export interface InjectedContext {
   readonly needs?: Readonly<Record<string, string>>;
 }
 
+/**
+ * Переменные движка для шага. Каждая `BURNEX_*` выставляется и под прежним
+ * именем `STEPCAST_*` — один выпуск переходного периода (`kernel/env-names.ts`);
+ * `NEEDS_*` двойников не получают.
+ */
 export function injectedVariables(context: InjectedContext): Record<string, string> {
-  return {
-    STEPCAST_RUN_ID: context.runId,
-    STEPCAST_RUN_DIR: context.runDir,
-    STEPCAST_BIN: context.binPath,
-    STEPCAST_JOB: context.jobId,
-    STEPCAST_JOB_DIR: context.jobDir,
-    ...(context.stepId === undefined ? {} : { STEPCAST_STEP: context.stepId }),
-    ...(context.stepDir === undefined ? {} : { STEPCAST_STEP_DIR: context.stepDir }),
-    STEPCAST_ATTEMPT: String(context.attempt),
-    STEPCAST_JOB_ATTEMPT: String(context.jobAttempt),
-    STEPCAST_JOB_ATTEMPT_MAX: String(context.jobAttemptMax),
-    STEPCAST_WORKSPACE: context.workspace,
-    STEPCAST_ARTIFACTS: context.artifacts,
-    STEPCAST_SCRATCH: context.scratch,
-    ...(context.iteration === undefined ? {} : { STEPCAST_ITERATION: String(context.iteration) }),
+  return withLegacyNames({
+    BURNEX_RUN_ID: context.runId,
+    BURNEX_RUN_DIR: context.runDir,
+    BURNEX_BIN: context.binPath,
+    BURNEX_JOB: context.jobId,
+    BURNEX_JOB_DIR: context.jobDir,
+    ...(context.stepId === undefined ? {} : { BURNEX_STEP: context.stepId }),
+    ...(context.stepDir === undefined ? {} : { BURNEX_STEP_DIR: context.stepDir }),
+    BURNEX_ATTEMPT: String(context.attempt),
+    BURNEX_JOB_ATTEMPT: String(context.jobAttempt),
+    BURNEX_JOB_ATTEMPT_MAX: String(context.jobAttemptMax),
+    BURNEX_WORKSPACE: context.workspace,
+    BURNEX_ARTIFACTS: context.artifacts,
+    BURNEX_SCRATCH: context.scratch,
+    ...(context.iteration === undefined ? {} : { BURNEX_ITERATION: String(context.iteration) }),
     ...(context.loop === undefined
       ? {}
       : {
-          STEPCAST_LOOP: context.loop.id,
-          STEPCAST_LOOP_ITERATION: String(context.loop.iteration),
-          STEPCAST_LOOP_ITERATION_MAX: String(context.loop.maxIterations),
+          BURNEX_LOOP: context.loop.id,
+          BURNEX_LOOP_ITERATION: String(context.loop.iteration),
+          BURNEX_LOOP_ITERATION_MAX: String(context.loop.maxIterations),
         }),
     ...(context.previousFailurePath === undefined
       ? {}
-      : { STEPCAST_PREV_FAILURE: context.previousFailurePath }),
-    ...(context.contractInputPath === undefined ? {} : { STEPCAST_INPUT: context.contractInputPath }),
-    ...(context.contractOutputPath === undefined ? {} : { STEPCAST_OUTPUT: context.contractOutputPath }),
-    ...(context.skipExitCode === undefined ? {} : { STEPCAST_SKIP_EXIT_CODE: String(context.skipExitCode) }),
-    ...(context.jobOutputsPath === undefined ? {} : { STEPCAST_JOB_OUTPUTS: context.jobOutputsPath }),
+      : { BURNEX_PREV_FAILURE: context.previousFailurePath }),
+    ...(context.contractInputPath === undefined ? {} : { BURNEX_INPUT: context.contractInputPath }),
+    ...(context.contractOutputPath === undefined ? {} : { BURNEX_OUTPUT: context.contractOutputPath }),
+    ...(context.skipExitCode === undefined ? {} : { BURNEX_SKIP_EXIT_CODE: String(context.skipExitCode) }),
+    ...(context.jobOutputsPath === undefined ? {} : { BURNEX_JOB_OUTPUTS: context.jobOutputsPath }),
     ...context.needs,
-  };
+  });
 }

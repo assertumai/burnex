@@ -1,6 +1,6 @@
 // Встроенный переиспользуемый шаг: перечень изменённых файлов рабочего
 // дерева. Написан на голом контракте (design.md изменения reusable-steps,
-// решение 12) — только `process.env.STEPCAST_INPUT`/`STEPCAST_OUTPUT`,
+// решение 12) — только `process.env.BURNEX_INPUT`/`BURNEX_OUTPUT`,
 // `node:fs` и `node:child_process`. Ни импорта `stepcast/step`, ни расчёта
 // на default export обёртки раннера: шаг обязан работать одинаково из
 // глобальной установки, из node_modules целевого проекта, из исходников — и
@@ -9,7 +9,7 @@
 import { execFileSync } from 'node:child_process';
 import { readFileSync, writeFileSync } from 'node:fs';
 
-const input = JSON.parse(readFileSync(process.env.STEPCAST_INPUT, 'utf8'));
+const input = JSON.parse(readFileSync(process.env.BURNEX_INPUT, 'utf8'));
 const ref = input.ref ?? 'HEAD';
 const includeUntracked = input.include_untracked ?? false;
 
@@ -25,4 +25,4 @@ const files = includeUntracked
   ? [...new Set([...tracked, ...gitLines(['ls-files', '--others', '--exclude-standard'])])].sort()
   : tracked;
 
-writeFileSync(process.env.STEPCAST_OUTPUT, JSON.stringify({ files }));
+writeFileSync(process.env.BURNEX_OUTPUT, JSON.stringify({ files }));

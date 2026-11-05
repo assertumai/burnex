@@ -506,20 +506,20 @@ describe('CLI: burnex backlog pick публикует данные работы'
     return dir;
   }
 
-  /** Позвать backlog с заданным (или отсутствующим) `STEPCAST_JOB_DIR`, восстановив окружение после. */
+  /** Позвать backlog с заданным (или отсутствующим) `BURNEX_JOB_DIR`, восстановив окружение после. */
   async function backlogAsStep(
     cwd: string,
     argv: readonly string[],
     jobDir: string | undefined,
   ): Promise<Result> {
-    const previous = process.env.STEPCAST_JOB_DIR;
-    if (jobDir === undefined) delete process.env.STEPCAST_JOB_DIR;
-    else process.env.STEPCAST_JOB_DIR = jobDir;
+    const previous = process.env.BURNEX_JOB_DIR;
+    if (jobDir === undefined) delete process.env.BURNEX_JOB_DIR;
+    else process.env.BURNEX_JOB_DIR = jobDir;
     try {
       return await backlog(cwd, argv);
     } finally {
-      if (previous === undefined) delete process.env.STEPCAST_JOB_DIR;
-      else process.env.STEPCAST_JOB_DIR = previous;
+      if (previous === undefined) delete process.env.BURNEX_JOB_DIR;
+      else process.env.BURNEX_JOB_DIR = previous;
     }
   }
 

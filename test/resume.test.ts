@@ -421,7 +421,7 @@ ${steps}
         run: [sh, -c, 'test ! -e результат.txt && echo r > результат.txt']
         expect: [{ exit_code: 0 }]
       - id: проверка
-        run: [sh, -c, 'test "$STEPCAST_JOB_ATTEMPT" = 2']
+        run: [sh, -c, 'test "$BURNEX_JOB_ATTEMPT" = 2']
         expect: [{ exit_code: 0 }]`),
       },
       { git: true },
@@ -1509,7 +1509,7 @@ jobs:
     session: per_step
     steps:
       - id: пишет
-        run: [sh, -c, 'echo "{\\"v\\":1}" > "$STEPCAST_RUN_DIR/item.json"']
+        run: [sh, -c, 'echo "{\\"v\\":1}" > "$BURNEX_RUN_DIR/item.json"']
         expect: [{ exit_code: 0 }]
       - id: думает
         agent: fake
@@ -1608,7 +1608,7 @@ jobs:
     session: per_step
     steps:
       - id: пишет
-        run: [sh, -c, 'echo "{\\"v\\":1}" > "$STEPCAST_RUN_DIR/item.json"']
+        run: [sh, -c, 'echo "{\\"v\\":1}" > "$BURNEX_RUN_DIR/item.json"']
         expect: [{ exit_code: 0 }]
       - id: думает
         agent: fake
@@ -1759,7 +1759,7 @@ kind: job
 session: per_step
 steps:
   - id: пишет
-    run: [sh, -c, 'echo "{}" > "$STEPCAST_RUN_DIR/item.json"']
+    run: [sh, -c, 'echo "{}" > "$BURNEX_RUN_DIR/item.json"']
     expect: [{ exit_code: 0 }]
   - id: думает
     agent: fake
@@ -1789,7 +1789,7 @@ kind: job
 session: per_step
 steps:
   - id: пишет
-    run: [sh, -c, 'echo "{}" > "$STEPCAST_RUN_DIR/item.json"']
+    run: [sh, -c, 'echo "{}" > "$BURNEX_RUN_DIR/item.json"']
     expect: [{ exit_code: 0 }]
   - id: думает
     agent: fake
@@ -1970,8 +1970,8 @@ params:
 `;
   const GREET_MAIN =
     "const fs = require('node:fs');\n" +
-    "const input = JSON.parse(fs.readFileSync(process.env.STEPCAST_INPUT, 'utf8'));\n" +
-    "fs.writeFileSync(process.env.STEPCAST_OUTPUT, JSON.stringify({ greeting: 'привет, ' + input.name }));\n";
+    "const input = JSON.parse(fs.readFileSync(process.env.BURNEX_INPUT, 'utf8'));\n" +
+    "fs.writeFileSync(process.env.BURNEX_OUTPUT, JSON.stringify({ greeting: 'привет, ' + input.name }));\n";
 
   const USES_PIPELINE = `
 version: 1
@@ -2053,7 +2053,7 @@ jobs:
       'неподходящее.txt': 'исходно',
       'schema.json': JSON.stringify({ type: 'object' }),
     });
-    b.project.write('.stepcast/scripts/plan.sh', '#!/bin/sh\necho \'{"slug":"add-oauth"}\' > "$STEPCAST_OUTPUT"\n');
+    b.project.write('.stepcast/scripts/plan.sh', '#!/bin/sh\necho \'{"slug":"add-oauth"}\' > "$BURNEX_OUTPUT"\n');
 
     const first = await firstRun(b);
     assert.equal(first.status, 'success');
@@ -2086,8 +2086,8 @@ output_schema: ./output.schema.json
 `;
   const GREET_MAIN =
     "const fs = require('node:fs');\n" +
-    "const input = JSON.parse(fs.readFileSync(process.env.STEPCAST_INPUT, 'utf8'));\n" +
-    "fs.writeFileSync(process.env.STEPCAST_OUTPUT, JSON.stringify({ greeting: 'привет, ' + input.name }));\n";
+    "const input = JSON.parse(fs.readFileSync(process.env.BURNEX_INPUT, 'utf8'));\n" +
+    "fs.writeFileSync(process.env.BURNEX_OUTPUT, JSON.stringify({ greeting: 'привет, ' + input.name }));\n";
   const GREET_OUTPUT_SCHEMA = JSON.stringify({
     type: 'object',
     properties: { greeting: { type: 'string' } },
@@ -3531,7 +3531,7 @@ jobs:
       '  цикл:\n    session: per_step\n    attempts: { max: 2 }\n',
     ).replace(
       "run: [sh, -c, 'n=$(",
-      "run: [sh, -c, 'test \"$STEPCAST_JOB_ATTEMPT\" = 2 || exit 1; n=$(",
+      "run: [sh, -c, 'test \"$BURNEX_JOB_ATTEMPT\" = 2 || exit 1; n=$(",
     );
     assert.notEqual(pipeline, LOOP_PIPELINE);
     const b = bed({ 'сырьё.txt': 'вход', 'stepcast.yml': pipeline }, { git: true });

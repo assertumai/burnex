@@ -9,6 +9,7 @@ import {
   RelativeRepoPathSchema,
 } from '../config/schema.js';
 import { StepcastError } from '../../../kernel/errors.js';
+import { isEngineVariable } from '../../../kernel/env-names.js';
 
 /**
  * Схемы документов пайплайна и работы в исходном виде — до подстановок и
@@ -208,8 +209,8 @@ const SecretDeclarationSchema = z
     env: z
       .string()
       .regex(SECRET_ENV_PATTERN, 'env секрета — имя переменной окружения')
-      .refine((value) => !value.startsWith('STEPCAST_'), {
-        message: 'env секрета не может начинаться с STEPCAST_: префикс принадлежит движку',
+      .refine((value) => !isEngineVariable(value), {
+        message: 'env секрета не может начинаться с BURNEX_ или STEPCAST_: префикс принадлежит движку',
       })
       .optional(),
   })
@@ -819,7 +820,7 @@ export function buildDocumentSchemas(
     // проверяется тем же разбором, что и ключ при записи (`assertDataKey`).
     data: z.array(z.string()).optional(),
     // Имена выходов, которые работа обязана опубликовать в
-    // `$STEPCAST_JOB_OUTPUTS`. Форму имени проверяет разбор документа тем же
+    // `$BURNEX_JOB_OUTPUTS`. Форму имени проверяет разбор документа тем же
     // выражением, что и движок (`run/jobOutputs.ts`): здесь нужно сообщение с
     // именем работы, а схема его не знает.
     outputs: z.array(z.string()).optional(),

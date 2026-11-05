@@ -105,9 +105,9 @@ describe('CLI: burnex init — очередь предложений не гря
     gitCommit(project.root, 'первый коммит');
 
     // Снять окружение прогона на время вызова: эта проверка может сама
-    // гоняться внутри stepcast и унаследовать `STEPCAST_RUN_DIR` от внешнего
+    // гоняться внутри stepcast и унаследовать `BURNEX_RUN_DIR` от внешнего
     // прогона (`test/helpers.ts`, `testBaseEnv`).
-    const runEnvNames = ['STEPCAST_RUN_DIR', 'STEPCAST_RUN_ID', 'STEPCAST_JOB', 'STEPCAST_STEP'] as const;
+    const runEnvNames = ['BURNEX_RUN_DIR', 'BURNEX_RUN_ID', 'BURNEX_JOB', 'BURNEX_STEP'] as const;
     const previous = runEnvNames.map((name) => [name, process.env[name]] as const);
     for (const name of runEnvNames) delete process.env[name];
     try {

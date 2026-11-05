@@ -59,7 +59,7 @@ function data(
   runDataCommand(
     parseArgs(['data', ...argv], DATA_COMMANDS),
     (line) => lines.push(line),
-    dir === undefined ? {} : { STEPCAST_JOB_DIR: dir },
+    dir === undefined ? {} : { BURNEX_JOB_DIR: dir },
   );
   return { lines };
 }
@@ -211,7 +211,7 @@ describe('job-display-data: команда burnex data', () => {
   });
 
   // Сценарий: «Вызов вне шага прогона»
-  it('отказывает без STEPCAST_JOB_DIR, называя причину', () => {
+  it('отказывает без BURNEX_JOB_DIR, называя причину', () => {
     assert.throws(
       () => data(undefined, ['set', 'title', 'что-нибудь']),
       (error: unknown) =>
@@ -346,7 +346,7 @@ jobs:
       title: \${jobs.slots.data.title}
     steps:
       - id: publish
-        run: [sh, -c, 'printf %s "{\\"title\\": \\"Выбрано: Расход деньгами и токенами\\"}" > "$STEPCAST_JOB_DIR/data.json"']
+        run: [sh, -c, 'printf %s "{\\"title\\": \\"Выбрано: Расход деньгами и токенами\\"}" > "$BURNEX_JOB_DIR/data.json"']
         expect: [{ exit_code: 0 }]
       - id: after
         run: [echo, дальше]
@@ -387,7 +387,7 @@ jobs:
     data: [slug]
     steps:
       - id: publish
-        run: [sh, -c, 'printf %s "{\\"slug\\": \\"nested-repo-anchor\\"}" > "$STEPCAST_JOB_DIR/data.json"']
+        run: [sh, -c, 'printf %s "{\\"slug\\": \\"nested-repo-anchor\\"}" > "$BURNEX_JOB_DIR/data.json"']
         expect: [{ exit_code: 0 }]
   вторая:
     needs: [первая]
@@ -414,7 +414,7 @@ jobs:
     data: [slug]
     steps:
       - id: publish
-        run: [sh, -c, 'printf %s "{\\"slug\\": \\"есть\\"}" > "$STEPCAST_JOB_DIR/data.json"']
+        run: [sh, -c, 'printf %s "{\\"slug\\": \\"есть\\"}" > "$BURNEX_JOB_DIR/data.json"']
         expect: [{ exit_code: 0 }]
   вторая:
     needs: [первая]
@@ -465,7 +465,7 @@ jobs:
   slots:
     steps:
       - id: publish
-        run: [sh, -c, 'printf %s "{\\"title\\": \\"мимо объявления\\"}" > "$STEPCAST_JOB_DIR/data.json"']
+        run: [sh, -c, 'printf %s "{\\"title\\": \\"мимо объявления\\"}" > "$BURNEX_JOB_DIR/data.json"']
         expect: [{ exit_code: 0 }]
 `,
     });
@@ -490,7 +490,7 @@ jobs:
   slots:
     steps:
       - id: publish
-        run: [sh, -c, 'printf %s "{\\"slug\\": \\"мимо объявления\\"}" > "$STEPCAST_JOB_DIR/data.json"; exit 3']
+        run: [sh, -c, 'printf %s "{\\"slug\\": \\"мимо объявления\\"}" > "$BURNEX_JOB_DIR/data.json"; exit 3']
         expect: [{ exit_code: 0 }]
 `,
     });
@@ -515,7 +515,7 @@ jobs:
     data: [title]
     steps:
       - id: publish
-        run: [sh, -c, 'printf %s "{\\"title\\": \\"объявлен\\", \\"slug\\": \\"не объявлен\\"}" > "$STEPCAST_JOB_DIR/data.json"']
+        run: [sh, -c, 'printf %s "{\\"title\\": \\"объявлен\\", \\"slug\\": \\"не объявлен\\"}" > "$BURNEX_JOB_DIR/data.json"']
         expect: [{ exit_code: 0 }]
 `,
     });
@@ -537,7 +537,7 @@ jobs:
   первая:
     steps:
       - id: publish
-        run: [sh, -c, 'printf %s "{\\"slug\\": \\"мимо объявления\\"}" > "$STEPCAST_JOB_DIR/data.json"']
+        run: [sh, -c, 'printf %s "{\\"slug\\": \\"мимо объявления\\"}" > "$BURNEX_JOB_DIR/data.json"']
         expect: [{ exit_code: 0 }]
   вторая:
     needs: [первая]
@@ -903,7 +903,7 @@ jobs:
     data: [slug]
     steps:
       - id: publish
-        run: [sh, -c, 'printf %s "{\\"slug\\": \\"nested-repo-anchor\\"}" > "$STEPCAST_JOB_DIR/data.json"']
+        run: [sh, -c, 'printf %s "{\\"slug\\": \\"nested-repo-anchor\\"}" > "$BURNEX_JOB_DIR/data.json"']
         expect: [{ exit_code: 0 }]
   вторая:
     needs: [первая]
@@ -973,7 +973,7 @@ jobs:
     const ХВОСТ = `
     steps:
       - id: publish
-        run: [sh, -c, 'printf %s "{\\"slug\\": \\"nested-repo-anchor\\"}" > "$STEPCAST_JOB_DIR/data.json"']
+        run: [sh, -c, 'printf %s "{\\"slug\\": \\"nested-repo-anchor\\"}" > "$BURNEX_JOB_DIR/data.json"']
         expect: [{ exit_code: 0 }]
   вторая:
     needs: [первая]

@@ -375,7 +375,7 @@ export const JobRecordSchema = z
      */
     data: z.record(z.string(), z.string()).optional(),
     /**
-     * Выходы, принятые движком из `$STEPCAST_JOB_OUTPUTS` (job-outputs-key-value).
+     * Выходы, принятые движком из `$BURNEX_JOB_OUTPUTS` (job-outputs-key-value).
      * Источник для переменных `NEEDS_*` потребителей — запись, а не файл. Поле
      * необязательно: запись прогона прежней версии читается как работа без выходов.
      */

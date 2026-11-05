@@ -14,7 +14,7 @@ function capture(): { lines: string[]; write: (line: string) => void } {
   return { lines, write: (line) => lines.push(line) };
 }
 
-/** Переменные STEPCAST_* окружения шага — устанавливаются на время вызова и снимаются после. */
+/** Переменные BURNEX_* окружения шага — устанавливаются на время вызова и снимаются после. */
 function withStepEnv<T>(vars: Readonly<Record<string, string | undefined>>, fn: () => T): T {
   const previous = new Map<string, string | undefined>();
   for (const [name, value] of Object.entries(vars)) {
@@ -48,13 +48,13 @@ function withFakeHome<T>(fn: () => T): T {
 
 /**
  * Снять окружение прогона на время вызова: сама эта проверка почти наверняка
- * гоняется самим stepcast (петля саморазвития) и наследует `STEPCAST_RUN_DIR`
+ * гоняется самим stepcast (петля саморазвития) и наследует `BURNEX_RUN_DIR`
  * и соседей от внешнего прогона (`test/helpers.ts`, `testBaseEnv`) — без
  * снятия команда сочла бы себя вызванной изнутри чужого, настоящего прогона.
  */
 function withoutRunEnv<T>(fn: () => T): T {
   return withStepEnv(
-    { STEPCAST_RUN_DIR: undefined, STEPCAST_RUN_ID: undefined, STEPCAST_JOB: undefined, STEPCAST_STEP: undefined },
+    { BURNEX_RUN_DIR: undefined, BURNEX_RUN_ID: undefined, BURNEX_JOB: undefined, BURNEX_STEP: undefined },
     fn,
   );
 }
@@ -76,10 +76,10 @@ describe('cli propose: постановка из шага прогона', () =>
     const code = await withFakeHome(() =>
       withStepEnv(
         {
-          STEPCAST_RUN_DIR: journal.paths.dir,
-          STEPCAST_RUN_ID: journal.paths.runId,
-          STEPCAST_JOB: 'migrate',
-          STEPCAST_STEP: 'agent',
+          BURNEX_RUN_DIR: journal.paths.dir,
+          BURNEX_RUN_ID: journal.paths.runId,
+          BURNEX_JOB: 'migrate',
+          BURNEX_STEP: 'agent',
         },
         () =>
           runProposeCommand(

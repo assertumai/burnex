@@ -107,7 +107,7 @@ export function gitCommit(dir: string, message: string): void {
 }
 
 /**
- * Окружение процесса без `STEPCAST_*`. Тесты, гоняемые самим stepcast (петля
+ * Окружение процесса без `BURNEX_*`. Тесты, гоняемые самим stepcast (петля
  * саморазвития), наследуют эти переменные от внешнего прогона — без очистки
  * они просачиваются в проверяемый пайплайн, будто это настоящие шаг или
  * работа.
@@ -115,7 +115,7 @@ export function gitCommit(dir: string, message: string): void {
 export function testBaseEnv(): Record<string, string | undefined> {
   const env: Record<string, string | undefined> = {};
   for (const [name, value] of Object.entries(process.env)) {
-    if (name.startsWith('STEPCAST_')) continue;
+    if (name.startsWith('BURNEX_')) continue;
     env[name] = value;
   }
   return env;

@@ -151,7 +151,7 @@ jobs:
 });
 
 describe('knowledge-source: --record внутри шага прогона', () => {
-  /** Шаг, зовущий настоящий CLI движка через `$STEPCAST_BIN` — так же, как это делает работа `merge`. */
+  /** Шаг, зовущий настоящий CLI движка через `$BURNEX_BIN` — так же, как это делает работа `merge`. */
   function pipelineCalling(record: boolean): string {
     return `
 version: 1
@@ -162,7 +162,7 @@ jobs:
   проверка:
     steps:
       - id: check
-        run: 'node "$STEPCAST_BIN" knowledge check${record ? ' --record' : ''}'
+        run: 'node "$BURNEX_BIN" knowledge check${record ? ' --record' : ''}'
         expect: [{ exit_code: 0 }]
 `;
   }

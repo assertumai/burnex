@@ -368,7 +368,7 @@ jobs:
     assert.throws(
       () => resolveLate(job, SCOPE),
       (error: Error & { hint?: string }) =>
-        /STEPCAST_STEP_DIR/.test(error.hint ?? '') && /id, dir, workspace, scratch/.test(error.hint ?? ''),
+        /BURNEX_STEP_DIR/.test(error.hint ?? '') && /id, dir, workspace, scratch/.test(error.hint ?? ''),
     );
   });
 });

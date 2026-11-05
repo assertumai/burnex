@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { describe, it } from 'node:test';
 import { parse as parseYaml } from 'yaml';
 
+import { withLegacyNames } from '../src/kernel/env-names.js';
 import { createFakeBackend, initLine, resultLine } from '../src/parts/pipeline/backend/fake.js';
 import { resolveConfig, type Config } from '../src/parts/pipeline/config/resolve.js';
 import { expandPipeline } from '../src/parts/pipeline/document/expand.js';
@@ -277,6 +278,10 @@ describe('self-improvement-loop: переносимость файлов пет�
    * конфигурации сама. Состав вдобавок не публикуется подстановкой
    * `${project.*}`, и файлу работы прочитать его неоткуда.
    */
+  // Собственные работы петли пока зовут движок прежним именем `$STEPCAST_BIN`:
+  // их исполняет и установленный релиз, который о `BURNEX_*` ещё не знает,
+  // а новый движок выставляет оба имени (kernel/env-names.ts). Перевод файлов
+  // работ на `BURNEX_*` — пункт rename-identifiers-and-repo-burnex.
   it('шаг проверки чистоты в slots.yml зовёт $STEPCAST_BIN assert-clean, а не git status', () => {
     const text = readFileSync(join(JOBS_DIR, 'slots.yml'), 'utf8');
     assert.match(text, /"\$STEPCAST_BIN"\s+assert-clean/);
@@ -847,7 +852,7 @@ jobs:
   seed:
     steps:
       - id: write
-        run: [sh, -c, 'printf "{}" > "$STEPCAST_RUN_DIR/item-a.json"']
+        run: [sh, -c, 'printf "{}" > "$BURNEX_RUN_DIR/item-a.json"']
         expect: [{ exit_code: 0 }]
   plan-a:
     uses: ${JOBS_DIR}/plan.yml
@@ -1004,7 +1009,7 @@ jobs:
   seed:
     steps:
       - id: write
-        run: [sh, -c, 'printf "{}" > "$STEPCAST_RUN_DIR/item-a.json"']
+        run: [sh, -c, 'printf "{}" > "$BURNEX_RUN_DIR/item-a.json"']
         expect: [{ exit_code: 0 }]
   implement-express-a:
     uses: ${JOBS_DIR}/implement-express.yml
@@ -1417,7 +1422,7 @@ jobs:
  * прежние команды `guard-clean-tree` и `merge-lanes`, непустой снимает
  * предусловие чистоты и добавляет `--onto`. Команды раскрываются настоящим
  * `expandPipeline` над настоящим пайплайном и исполняются настоящим `sh` с
- * подменённым `STEPCAST_BIN`, который лишь записывает argv: так проверяется
+ * подменённым `BURNEX_BIN`, который лишь записывает argv: так проверяется
  * то, что реально выполнится, а не текст YAML.
  */
 describe('self-improve.yml: вход onto', () => {
@@ -1441,7 +1446,8 @@ describe('self-improve.yml: вход onto', () => {
     writeFileSync(fakeBin, '#!/bin/sh\nprintf "%s\\n" "$*" >> "$CALLS_LOG"\n', { mode: 0o755 });
     const result = spawnSync(command[0]!, command.slice(1), {
       encoding: 'utf8',
-      env: { ...testBaseEnv(), STEPCAST_BIN: fakeBin, STEPCAST_RUN_ID: 'run-1', CALLS_LOG: log },
+      // Под обоими именами, как выставляет движок: файлы работ петли пока читают STEPCAST_*.
+      env: { ...testBaseEnv(), ...withLegacyNames({ BURNEX_BIN: fakeBin, BURNEX_RUN_ID: 'run-1' }), CALLS_LOG: log },
     });
     const calls = existsSync(log) ? readFileSync(log, 'utf8').split('\n').filter((line) => line !== '') : [];
     return { status: result.status ?? -1, calls };

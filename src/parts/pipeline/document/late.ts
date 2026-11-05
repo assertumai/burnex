@@ -19,13 +19,13 @@ import type { Job, Step } from './model.js';
  */
 
 /** Состав пространства `run`. Величины уровня шага приходят переменными
- * окружения `STEPCAST_JOB_DIR` и `STEPCAST_STEP_DIR`: на уровне работы у них
+ * окружения `BURNEX_JOB_DIR` и `BURNEX_STEP_DIR`: на уровне работы у них
  * нет значения, и обещать их подстановкой было бы неправдой. */
 export interface RunScope {
   readonly id: string;
   readonly dir: string;
   readonly workspace: string;
-  /** Каталог черновиков работы — тот же, что доходит до шага `STEPCAST_SCRATCH`. */
+  /** Каталог черновиков работы — тот же, что доходит до шага `BURNEX_SCRATCH`. */
   readonly scratch: string;
 }
 
@@ -68,7 +68,7 @@ const RUN_NAMES = ['id', 'dir', 'workspace', 'scratch'];
 function explain(scope: LateScope) {
   return (expression: string, namespace: string, path: string): string | undefined => {
     if (namespace === 'run') {
-      return `Пространство run содержит только ${RUN_NAMES.join(', ')}; величины уровня шага приходят переменными STEPCAST_JOB_DIR и STEPCAST_STEP_DIR`;
+      return `Пространство run содержит только ${RUN_NAMES.join(', ')}; величины уровня шага приходят переменными BURNEX_JOB_DIR и BURNEX_STEP_DIR`;
     }
 
     if (namespace === 'env') {

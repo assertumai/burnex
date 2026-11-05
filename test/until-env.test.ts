@@ -18,7 +18,7 @@ async function run(project: Project, engineLocator?: () => EngineLocation): Prom
     projectRoot: project.root,
     cwd: project.root,
     // Сам этот тест может исполняться шагом stepcast (петля саморазвития), и
-    // тогда process.env уже несёт STEPCAST_STEP снаружи — без очистки
+    // тогда process.env уже несёт BURNEX_STEP снаружи — без очистки
     // проверка «переменная шага сюда не доходит» была бы неверной по причине,
     // не имеющей отношения к движку.
     baseEnv: testBaseEnv(),
@@ -38,7 +38,7 @@ jobs:
     until:
       max_iterations: 1
       check:
-        - cmd: 'test "$STEPCAST_JOB_ATTEMPT" = 1 && test "$STEPCAST_JOB_ATTEMPT_MAX" = 1'
+        - cmd: 'test "$BURNEX_JOB_ATTEMPT" = 1 && test "$BURNEX_JOB_ATTEMPT_MAX" = 1'
     steps:
       - id: noop
         run: [echo, ok]
@@ -125,7 +125,7 @@ jobs:
     until:
       max_iterations: 1
       check:
-        - cmd: 'test "$FROM_PIPELINE$FROM_JOB$STEPCAST_JOB" = "11looped"'
+        - cmd: 'test "$FROM_PIPELINE$FROM_JOB$BURNEX_JOB" = "11looped"'
     steps:
       - id: noop
         run: [echo, ok]
@@ -136,7 +136,7 @@ jobs:
     assert.equal((await run(project)).status, 'success');
   });
 
-  it('STEPCAST_BIN доходит до проверки цикла', async () => {
+  it('BURNEX_BIN доходит до проверки цикла', async () => {
     const project = makeProject({
       'stepcast.yml': `
 version: 1
@@ -148,7 +148,7 @@ jobs:
     until:
       max_iterations: 1
       check:
-        - cmd: 'test -n "$STEPCAST_BIN"'
+        - cmd: 'test -n "$BURNEX_BIN"'
     steps:
       - id: noop
         run: [echo, ok]
@@ -161,12 +161,12 @@ jobs:
 
   /**
    * merge-check-rebuilds-engine: движок правимого дерева фиксируется снимком
-   * в каталоге прогона, и `STEPCAST_BIN` называет его точку входа — тем же
-   * значением, что видит шаг (run-engine-snapshot, «STEPCAST_BIN называет
+   * в каталоге прогона, и `BURNEX_BIN` называет его точку входа — тем же
+   * значением, что видит шаг (run-engine-snapshot, «BURNEX_BIN называет
    * точку входа движка этого прогона»). Проверка цикла — не шаг, и обязана
    * получать то же самое, а не прежнее `process.argv[1]`.
    */
-  it('STEPCAST_BIN проверки цикла ведёт в каталог прогона, когда движок снят снимком', async () => {
+  it('BURNEX_BIN проверки цикла ведёт в каталог прогона, когда движок снят снимком', async () => {
     const project = makeProject({
       'stepcast.yml': `
 version: 1
@@ -178,7 +178,7 @@ jobs:
     until:
       max_iterations: 1
       check:
-        - cmd: 'test "$STEPCAST_BIN" = "$STEPCAST_RUN_DIR/engine/dist/src/bin.js"'
+        - cmd: 'test "$BURNEX_BIN" = "$BURNEX_RUN_DIR/engine/dist/src/bin.js"'
     steps:
       - id: noop
         run: [echo, ok]
@@ -209,7 +209,7 @@ jobs:
     until:
       max_iterations: 1
       check:
-        - cmd: 'test -z "$STEPCAST_STEP"'
+        - cmd: 'test -z "$BURNEX_STEP"'
     steps:
       - id: noop
         run: [echo, ok]

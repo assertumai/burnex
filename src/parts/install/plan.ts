@@ -1,5 +1,6 @@
 import { dirname, join } from 'node:path';
 
+import { withLegacyNames } from '../../kernel/env-names.js';
 import type { InstallManifest } from './manifest.js';
 
 /** Одна команда плана; исполнитель внедряется, вывод идёт в терминал как есть. */
@@ -111,12 +112,14 @@ export function planUpdate(method: InstallManifest, inputs: UpdateInputs): Updat
             cmd: 'bash',
             args: [join(release, 'install.sh'), '--repo', method.repo, '--ref', target],
             cwd: release,
-            // install.sh берёт каталоги от STEPCAST_HOME и STEPCAST_BIN_DIR: установка могла
+            // install.sh берёт каталоги от BURNEX_HOME и BURNEX_BIN_DIR: установка могла
             // идти не в умолчаниях, и без них обновление поставило бы второй лаунчер.
-            env: {
-              STEPCAST_HOME: dirname(method.releases_dir),
-              ...(method.bin_dir === undefined ? {} : { STEPCAST_BIN_DIR: method.bin_dir }),
-            },
+            // Под прежними именами тоже: install.sh текущего релиза может быть
+            // старше переименования и знать только их.
+            env: withLegacyNames({
+              BURNEX_HOME: dirname(method.releases_dir),
+              ...(method.bin_dir === undefined ? {} : { BURNEX_BIN_DIR: method.bin_dir }),
+            }),
           },
         ],
       };

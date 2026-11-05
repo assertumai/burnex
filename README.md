@@ -1,8 +1,10 @@
 # Burnex
 
-Движок пайплайнов для разработки с ИИ-агентами. Прежнее имя проекта — Burnex:
-пакет npm, каталоги `.stepcast/` и переменные `STEPCAST_*` пока носят его,
-бинарник `stepcast` остаётся псевдонимом `burnex`.
+Движок пайплайнов для разработки с ИИ-агентами. Прежнее имя проекта —
+Stepcast: пакет npm и каталоги `.stepcast/` пока носят его, бинарник
+`stepcast` остаётся псевдонимом `burnex`, а переменные `STEPCAST_*` один
+выпуск читаются наравне с `BURNEX_*` ([docs/release.md](docs/release.md),
+«Переход со stepcast»).
 
 Агент — это тип шага, а не оркестратор. Топология работ, условия перехода,
 бюджеты, повторы и проверка результата описаны декларативно и исполняются
@@ -80,7 +82,7 @@ Node ≥ 22. Если `~/.local/bin` не в `PATH`, скрипт печатае
   `… | bash -s -- --ref main`.
 - `--repo <адрес или путь>` — другой репозиторий (форк, `git@…`, локальный путь).
 - `--force` — заменить чужой файл на месте лаунчера (например, `npm link`).
-- `STEPCAST_HOME` (по умолчанию `~/.stepcast`) и `STEPCAST_BIN_DIR` (по
+- `BURNEX_HOME` (по умолчанию `~/.stepcast`) и `BURNEX_BIN_DIR` (по
   умолчанию `~/.local/bin`) переносят каталог релизов и лаунчер.
 
 Сбой на любом шаге оставляет прежний `current` нетронутым. Скрипт пишет
@@ -97,7 +99,7 @@ burnex update --no-restart # не перезапускать демон витр
 `update` обновляет тем способом, каким движок поставлен:
 
 - **managed** (через `install.sh`) — запускает `install.sh` из
-  `releases/current` с теми же `STEPCAST_HOME` и `STEPCAST_BIN_DIR`, что
+  `releases/current` с теми же `BURNEX_HOME` и `BURNEX_BIN_DIR`, что
   при установке; ничего не делает, только если установлен ровно этот тег
   (сборка ветки или sha обновляется всегда);
 - **checkout** (рабочее дерево с `npm link`) — `git pull --ff-only`, `npm ci`,
@@ -228,4 +230,4 @@ lint` предупреждает, если записанная схема ус�
 | Пакеты | `.stepcast/packages/<имя>/package.yml` и `~/.stepcast/packages/<имя>/` — [docs/packages.md](docs/packages.md) |
 | Конфиг | `~/.stepcast/config.yml` и `.stepcast/config.yml` |
 | Прогоны | `~/.stepcast/runs/<project>/<run>/` |
-| Переменные | `STEPCAST_*` |
+| Переменные | `BURNEX_*` (переходно читаются и `STEPCAST_*`) |

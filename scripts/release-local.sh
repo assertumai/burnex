@@ -17,9 +17,10 @@ set -euo pipefail
 
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
-# STEPCAST_RELEASES_DIR, как и прежде, — любой каталог: install.sh в режиме
-# --from-dir берёт его вместо $STEPCAST_HOME/releases.
-RELEASES_DIR="${STEPCAST_RELEASES_DIR:-${STEPCAST_HOME:-$HOME/.stepcast}/releases}"
+# BURNEX_RELEASES_DIR, как и прежде, — любой каталог: install.sh в режиме
+# --from-dir берёт его вместо $BURNEX_HOME/releases.
+# Прежние имена STEPCAST_* читаются один выпуск переходного периода.
+RELEASES_DIR="${BURNEX_RELEASES_DIR:-${STEPCAST_RELEASES_DIR:-${BURNEX_HOME:-${STEPCAST_HOME:-$HOME/.stepcast}}/releases}}"
 
 cd "$REPO_DIR"
 

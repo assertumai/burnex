@@ -9,7 +9,7 @@
 #
 # Переменные:
 #   MAX_RUNS                  потолок итераций, по умолчанию 20
-#   STEPCAST_LOOP_ENGINE_DIR  каталог worktree движка; по умолчанию
+#   BURNEX_LOOP_ENGINE_DIR  каталог worktree движка; по умолчанию
 #                             <git common dir>/stepcast-loop-engine;
 #                             относительный путь считается от текущего каталога
 #
@@ -67,10 +67,12 @@ fi
 # Внутри .git каталог не видят ни git status, ни ESLint, ни tsc копии.
 # Путь делается абсолютным сразу: git -C "$REPO_DIR" worktree add считал бы
 # относительный от корня копии, а [ -d ] и cd — от текущего каталога.
-if [ -n "${STEPCAST_LOOP_ENGINE_DIR:-}" ]; then
-  case "$STEPCAST_LOOP_ENGINE_DIR" in
-    /*) ENGINE_DIR="$STEPCAST_LOOP_ENGINE_DIR" ;;
-    *) ENGINE_DIR="$PWD/$STEPCAST_LOOP_ENGINE_DIR" ;;
+# Прежнее имя STEPCAST_LOOP_ENGINE_DIR читается один выпуск переходного периода.
+BURNEX_LOOP_ENGINE_DIR="${BURNEX_LOOP_ENGINE_DIR:-${STEPCAST_LOOP_ENGINE_DIR:-}}"
+if [ -n "$BURNEX_LOOP_ENGINE_DIR" ]; then
+  case "$BURNEX_LOOP_ENGINE_DIR" in
+    /*) ENGINE_DIR="$BURNEX_LOOP_ENGINE_DIR" ;;
+    *) ENGINE_DIR="$PWD/$BURNEX_LOOP_ENGINE_DIR" ;;
   esac
 else
   ENGINE_DIR="$(git -C "$REPO_DIR" rev-parse --path-format=absolute --git-common-dir)/stepcast-loop-engine"
@@ -106,7 +108,7 @@ prepare_engine() {
   fi
   rm -rf "$ENGINE_DIR/dist"
   (cd "$ENGINE_DIR" && npm run build) >&2 || return 1
-  # tsc не ставит бит исполнения, а шаги зовут движок через $STEPCAST_BIN напрямую.
+  # tsc не ставит бит исполнения, а шаги зовут движок через $BURNEX_BIN напрямую.
   chmod +x "$ENGINE_DIR/dist/src/bin.js" || return 1
 }
 

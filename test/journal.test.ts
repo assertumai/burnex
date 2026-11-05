@@ -1184,7 +1184,7 @@ jobs:
   // проверяется именно момент записи, а не её наличие в конце.
   it('перечень частей записан до первого шага и переживает обрыв работы', async () => {
     const result = await runComposite(
-      'cp "$STEPCAST_RUN_DIR/status.json" "$STEPCAST_RUN_DIR/снимок.json"; exit 1',
+      'cp "$BURNEX_RUN_DIR/status.json" "$BURNEX_RUN_DIR/снимок.json"; exit 1',
     );
     assert.equal(result.status, 'failed');
 

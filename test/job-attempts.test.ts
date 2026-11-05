@@ -64,7 +64,7 @@ function attemptEvents(result: RunResult, job: string): string[] {
 }
 
 /** Журнал вне дерева: переживает откат и копит строки по всем попыткам. */
-const LOG = '"$STEPCAST_RUN_DIR/attempts.log"';
+const LOG = '"$BURNEX_RUN_DIR/attempts.log"';
 
 const FLAKY = `
 version: 1
@@ -76,10 +76,10 @@ jobs:
     data: [summary]
     steps:
       - id: write
-        run: [sh, -c, 'echo "$STEPCAST_JOB_ATTEMPT/$STEPCAST_JOB_ATTEMPT_MAX" >> ${LOG}; test ! -e dirty.txt && echo x > dirty.txt']
+        run: [sh, -c, 'echo "$BURNEX_JOB_ATTEMPT/$BURNEX_JOB_ATTEMPT_MAX" >> ${LOG}; test ! -e dirty.txt && echo x > dirty.txt']
         expect: [{ exit_code: 0 }]
       - id: check
-        run: [sh, -c, 'if [ "$STEPCAST_JOB_ATTEMPT" = 1 ]; then printf %s "{\\"summary\\": \\"draft\\"}" > "$STEPCAST_JOB_DIR/data.json"; exit 1; fi']
+        run: [sh, -c, 'if [ "$BURNEX_JOB_ATTEMPT" = 1 ]; then printf %s "{\\"summary\\": \\"draft\\"}" > "$BURNEX_JOB_DIR/data.json"; exit 1; fi']
         expect: [{ exit_code: 0 }]
   notify:
     needs: [work]
@@ -138,7 +138,7 @@ describe('job-attempts: успех со второй попытки', () => {
     // ещё идёт, а упавший `check` первой попытки уже не числится.
     const pipeline = FLAKY.replace(
       `>> ${LOG};`,
-      `>> ${LOG}; [ "$STEPCAST_JOB_ATTEMPT" = 2 ] && cp "$STEPCAST_RUN_DIR/status.json" "$STEPCAST_RUN_DIR/mid.json";`,
+      `>> ${LOG}; [ "$BURNEX_JOB_ATTEMPT" = 2 ] && cp "$BURNEX_RUN_DIR/status.json" "$BURNEX_RUN_DIR/mid.json";`,
     );
     assert.notEqual(pipeline, FLAKY);
     const result = await run(repo({ 'stepcast.yml': pipeline }));
@@ -180,7 +180,7 @@ jobs:
     attempts: { max: 2 }
     steps:
       - id: flaky
-        run: [sh, -c, 'test "$STEPCAST_JOB_ATTEMPT" = 2']
+        run: [sh, -c, 'test "$BURNEX_JOB_ATTEMPT" = 2']
         expect: [{ exit_code: 0 }]
   b:
     steps:
@@ -209,7 +209,7 @@ jobs:
     attempts: { max: 2 }
     steps:
       - id: bad
-        run: [sh, -c, 'echo "$STEPCAST_JOB_ATTEMPT" >> ${LOG}; exit 1']
+        run: [sh, -c, 'echo "$BURNEX_JOB_ATTEMPT" >> ${LOG}; exit 1']
         expect: [{ exit_code: 0 }]
 `,
       }),
@@ -239,7 +239,7 @@ jobs:
     steps:
       - id: nothing
         skip_exit_code: 78
-        run: [sh, -c, 'echo "$STEPCAST_JOB_ATTEMPT" >> ${LOG}; exit 78']
+        run: [sh, -c, 'echo "$BURNEX_JOB_ATTEMPT" >> ${LOG}; exit 78']
 `,
       }),
     );
@@ -264,7 +264,7 @@ jobs:
         - cmd: "false"
     steps:
       - id: step
-        run: [sh, -c, 'echo "$STEPCAST_JOB_ATTEMPT" >> ${LOG}']
+        run: [sh, -c, 'echo "$BURNEX_JOB_ATTEMPT" >> ${LOG}']
         expect: [{ exit_code: 0 }]
 `,
       }),
@@ -292,7 +292,7 @@ jobs:
     attempts: { max: 2 }
     steps:
       - id: bad
-        run: [sh, -c, 'echo "$STEPCAST_JOB_ATTEMPT" >> ${LOG}; exit 1']
+        run: [sh, -c, 'echo "$BURNEX_JOB_ATTEMPT" >> ${LOG}; exit 1']
         expect: [{ exit_code: 0 }]
 `,
       }),
@@ -382,7 +382,7 @@ jobs:
     attempts: { max: 3 }
     steps:
       - id: slow
-        run: [sh, -c, 'echo "$STEPCAST_JOB_ATTEMPT" >> ${LOG}; sleep 30']
+        run: [sh, -c, 'echo "$BURNEX_JOB_ATTEMPT" >> ${LOG}; sleep 30']
         expect: [{ exit_code: 0 }]
 `,
     });
@@ -453,7 +453,7 @@ jobs:
     attempts: { max: 3 }
     steps:
       - id: gate
-        run: [sh, -c, 'test "$STEPCAST_JOB_ATTEMPT" = 2']
+        run: [sh, -c, 'test "$BURNEX_JOB_ATTEMPT" = 2']
         expect: [{ exit_code: 0 }]
       - id: think
         agent: fake

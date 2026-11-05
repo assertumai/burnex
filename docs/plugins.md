@@ -1574,18 +1574,18 @@ module specifier», без файла и без причины. Поэтому �
 ## Библиотека шага: stepcast/step
 
 Контракт входа и выхода шага `script` (`docs/pipeline-format.md`, раздел
-`script`) — это переменные окружения `STEPCAST_INPUT`, `STEPCAST_OUTPUT` и
-`STEPCAST_JOB_DIR` и разбор JSON. Скрипту на любом языке этого достаточно,
+`script`) — это переменные окружения `BURNEX_INPUT`, `BURNEX_OUTPUT` и
+`BURNEX_JOB_DIR` и разбор JSON. Скрипту на любом языке этого достаточно,
 библиотека без надобности:
 
 ```python
 import json, os, subprocess
 
-data = json.load(open(os.environ["STEPCAST_INPUT"]))
+data = json.load(open(os.environ["BURNEX_INPUT"]))
 print("готовлю", data["slug"])  # лог — stdout, он не идёт в выход
-json.dump({"ready": True}, open(os.environ["STEPCAST_OUTPUT"], "w"))
+json.dump({"ready": True}, open(os.environ["BURNEX_OUTPUT"], "w"))
 subprocess.run(
-    ["node", os.environ["STEPCAST_BIN"], "data", "set", "status", "ok"],
+    ["node", os.environ["BURNEX_BIN"], "data", "set", "status", "ok"],
     check=True,
 )
 ```
@@ -1619,8 +1619,8 @@ publish('status', 'ok');
   собираются в результат вызова и по мере поступления попадают в `stdout.log`
   и `stderr.log` шага — лог шага не молчит, пока тот работает.
 
-Все пять берут всё нужное из `STEPCAST_INPUT`, `STEPCAST_OUTPUT` и
-`STEPCAST_JOB_DIR` и не принимают путей аргументами — отсюда их главное
+Все пять берут всё нужное из `BURNEX_INPUT`, `BURNEX_OUTPUT` и
+`BURNEX_JOB_DIR` и не принимают путей аргументами — отсюда их главное
 свойство: библиотека работает в любом процессе, унаследовавшем окружение шага,
 не только в самом файле скрипта, но и в дочернем процессе, который он
 запустил. Вызов вне шага прогона — переменной нет — отказывает названно, а не
@@ -1641,7 +1641,7 @@ export default function (input) {
 ```
 
 Модуль без экспорта по умолчанию отрабатывает как обычный скрипт — читает
-`STEPCAST_INPUT`, пишет `STEPCAST_OUTPUT` сам, — и обёртка сверх этого ничего
+`BURNEX_INPUT`, пишет `BURNEX_OUTPUT` сам, — и обёртка сверх этого ничего
 не делает.
 
 Что считается объявленной точкой входа, решает формат модуля — тем же

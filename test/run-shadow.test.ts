@@ -229,7 +229,7 @@ describe('run --shadow: исполнение', () => {
     assert.deepEqual(action.secrets, ['svc']);
     // Только объявленный `env:` (пайплайн, работа, шаг): ни переменных
     // окружения процесса (`PATH` из базового окружения теста), ни внедрённых
-    // `STEPCAST_*`, ни переменной секрета — его имя несёт поле `secrets`.
+    // `BURNEX_*`, ни переменной секрета — его имя несёт поле `secrets`.
     assert.deepEqual(action.env_names, ['LOCAL_ONLY', 'STAGE']);
     const raw = readFileSync(join(stepDir(result.journal.paths, 'build', 2, 'push'), 'action-1.json'), 'utf8');
     assert.equal(raw.includes(ENV_VALUE), false, 'значения env не пишутся');

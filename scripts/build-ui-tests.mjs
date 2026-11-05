@@ -35,7 +35,7 @@ const TEST_DIR = join(ROOT, 'ui', 'test');
 // Каталог вывода переопределяется переменной окружения: параллельные
 // сборки (несколько заходов агента в одном дереве) не должны стирать друг
 // друга — `rmSync` ниже чистит именно этот каталог.
-const OUT_DIR = process.env.STEPCAST_UI_TEST_OUT ?? join(ROOT, 'dist', 'ui-test');
+const OUT_DIR = process.env.BURNEX_UI_TEST_OUT ?? process.env.STEPCAST_UI_TEST_OUT ?? join(ROOT, 'dist', 'ui-test');
 
 function collectTestFiles(dir) {
   let entries;

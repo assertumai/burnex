@@ -155,4 +155,4 @@
 #### Scenario: Шага у проверки нет
 
 - **WHEN** исполняется команда условия сходимости
-- **THEN** переменные `STEPCAST_STEP` и `STEPCAST_STEP_DIR` не объявлены
+- **THEN** переменные `BURNEX_STEP` и `BURNEX_STEP_DIR` не объявлены

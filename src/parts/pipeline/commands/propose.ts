@@ -3,6 +3,7 @@ import { basename, dirname, resolve as resolvePath } from 'node:path';
 
 import { resolveConfig } from '../config/resolve.js';
 import { ExitCode, isStepcastError, StepcastError, type ExitCodeValue } from '../../../kernel/errors.js';
+import { readEngineEnv } from '../../../kernel/env-names.js';
 import { findProjectRoot, runPaths } from '../run/journal/paths.js';
 import { readManifest } from '../run/journal/reader.js';
 import type { PipelineCommandEnv } from '../contract.js';
@@ -17,7 +18,7 @@ import type { ParsedArgs } from '../../../kernel/cli/args.js';
  * `burnex propose <цель> --from <файл>` — единственный писатель очереди
  * предложений (`ui-proposals`, design.md Решение 2, 4, 7), тем же приёмом,
  * каким `burnex decide` — единственный писатель решения. Пайплайн зовёт её
- * командным шагом через `$STEPCAST_BIN`, агент — из своего `Bash`, если шаг
+ * командным шагом через `$BURNEX_BIN`, агент — из своего `Bash`, если шаг
  * это право ему дал.
  */
 
@@ -58,9 +59,9 @@ async function resolveContent(
 
 /** Происхождение из окружения шага — пусто, если команда вызвана руками, вне прогона. */
 function originFromEnv(): ProposalOrigin {
-  const run = process.env['STEPCAST_RUN_ID'];
-  const job = process.env['STEPCAST_JOB'];
-  const step = process.env['STEPCAST_STEP'];
+  const run = readEngineEnv(process.env, 'RUN_ID', { warn: false });
+  const job = readEngineEnv(process.env, 'JOB', { warn: false });
+  const step = readEngineEnv(process.env, 'STEP', { warn: false });
   return {
     ...(run === undefined ? {} : { run }),
     ...(job === undefined ? {} : { job }),
@@ -70,13 +71,13 @@ function originFromEnv(): ProposalOrigin {
 
 /**
  * Проект, чья очередь принимает предложение (`ui-proposals`, Решение 4):
- * внутри шага — по каталогу прогона (`STEPCAST_RUN_DIR`) и манифесту, который
+ * внутри шага — по каталогу прогона (`BURNEX_RUN_DIR`) и манифесту, который
  * несёт настоящий корень проекта независимо от режима рабочей директории
  * шага (`worktree`/`copy` работают во временном дереве, которое снимет
  * уборка прогона); вне прогона — каталог запуска, как у любой другой команды.
  */
 function resolveProjectRoot(cwd: string): string {
-  const runDir = process.env['STEPCAST_RUN_DIR'];
+  const runDir = readEngineEnv(process.env, 'RUN_DIR', { warn: false });
   if (runDir === undefined || runDir.trim() === '') return findProjectRoot(cwd);
 
   const runId = basename(runDir);
@@ -137,7 +138,7 @@ export async function runProposeCommand(
 /**
  * Встроенная команда, тем же приёмом, что `decide` (`ui-proposals`,
  * design.md изменения `agent-edits-widgets`, Решение 2): единственный
- * писатель очереди читает `STEPCAST_RUN_DIR`/`STEPCAST_JOB`/`STEPCAST_STEP`
+ * писатель очереди читает `BURNEX_RUN_DIR`/`BURNEX_JOB`/`BURNEX_STEP`
  * из окружения шага напрямую, публиковать их плагинам ради одной команды
  * незачем.
  */

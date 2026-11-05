@@ -10,6 +10,7 @@ import { KnowledgeWriteRequestSchema, type KnowledgeSource } from '../domain/kno
 import { mergeJobData } from '../run/journal/data.js';
 import type { KnowledgeDeclaration } from '../document/model.js';
 import { ExitCode, StepcastError, type ExitCodeValue } from '../../../kernel/errors.js';
+import { readEngineEnv } from '../../../kernel/env-names.js';
 import { commandRow } from '../../../kernel/cli/commandRow.js';
 import { PIPELINE_SERVICES } from '../services.js';
 import type { ParsedArgs } from '../../../kernel/cli/args.js';
@@ -165,10 +166,10 @@ function runCheck(
   // Отказ до вызова check: --publish вне шага прогона не имеет куда писать, и
   // это стоит сказать раньше, чем проверка вообще начнётся.
   const publishKey = stringFlag(args.flags, 'publish');
-  const jobDir = env.STEPCAST_JOB_DIR;
+  const jobDir = readEngineEnv(env, 'JOB_DIR', { warn: false });
   if (publishKey !== undefined && (jobDir === undefined || jobDir.trim() === '')) {
     throw new StepcastError('Флаг --publish работает только внутри шага прогона', {
-      hint: 'Целевая работа берётся из переменной STEPCAST_JOB_DIR, которую движок инжектирует в каждый шаг; вне прогона публиковать некуда',
+      hint: 'Целевая работа берётся из переменной BURNEX_JOB_DIR, которую движок инжектирует в каждый шаг; вне прогона публиковать некуда',
     });
   }
 

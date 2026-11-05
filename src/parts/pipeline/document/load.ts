@@ -3,6 +3,7 @@ import { parse as parseYaml } from 'yaml';
 import type { z } from 'zod';
 
 import { StepcastError } from '../../../kernel/errors.js';
+import { isEngineVariable } from '../../../kernel/env-names.js';
 import { describeSchemaFailure } from '../../../kernel/schema-failure.js';
 import { SECRET_ENV_PATTERN, SECRET_NAME_PATTERN, WIRING_KEYS } from './schema.js';
 
@@ -193,11 +194,11 @@ function checkSecretDeclarations(rawSecrets: unknown, file: string): void {
     if (typeof env !== 'string' || !SECRET_ENV_PATTERN.test(env)) {
       throw new StepcastError(`env секрета ${name} — не имя переменной окружения`, { file, at: `${at}.env` });
     }
-    if (env.startsWith('STEPCAST_')) {
-      throw new StepcastError(`env секрета ${name} начинается с STEPCAST_: префикс принадлежит движку`, {
+    if (isEngineVariable(env)) {
+      throw new StepcastError(`env секрета ${name} начинается с BURNEX_ или STEPCAST_: префикс принадлежит движку`, {
         file,
         at: `${at}.env`,
-        hint: 'Выберите другое имя переменной: движок не даёт переопределять свои STEPCAST_*',
+        hint: 'Выберите другое имя переменной: движок не даёт переопределять свои BURNEX_* и их прежние имена STEPCAST_*',
       });
     }
   }

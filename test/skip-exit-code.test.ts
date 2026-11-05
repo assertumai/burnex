@@ -108,7 +108,7 @@ jobs:
   it('script без файла выхода — skipped, а не отказ контракта', async () => {
     const project = makeProject({
       'out.json': '{"type":"object"}',
-      '.stepcast/scripts/probe.sh': '#!/bin/sh\nexit "$STEPCAST_SKIP_EXIT_CODE"\n',
+      '.stepcast/scripts/probe.sh': '#!/bin/sh\nexit "$BURNEX_SKIP_EXIT_CODE"\n',
       'stepcast.yml': `
 version: 1
 kind: pipeline
@@ -127,7 +127,7 @@ jobs:
     const job = jobOf(result, 'работа');
     assert.equal(job?.status, 'skipped');
     assert.equal(job?.skip, 'declared');
-    assert.equal(job?.steps[0]?.attempts[0]?.exit_code, 77, 'код взят из STEPCAST_SKIP_EXIT_CODE');
+    assert.equal(job?.steps[0]?.attempts[0]?.exit_code, 77, 'код взят из BURNEX_SKIP_EXIT_CODE');
   });
 
   it('другой ненулевой код при объявленном коде пропуска — отказ как прежде', async () => {
@@ -161,7 +161,7 @@ jobs:
 });
 
 describe('skip-exit-code: окружение', () => {
-  it('STEPCAST_SKIP_EXIT_CODE есть у шага и в окружении check, когда код унаследован', async () => {
+  it('BURNEX_SKIP_EXIT_CODE есть у шага и в окружении check, когда код унаследован', async () => {
     const project = makeProject({
       'stepcast.yml': `
 version: 1
@@ -172,9 +172,9 @@ jobs:
   работа:
     steps:
       - id: шаг
-        run: [sh, -c, 'echo "шаг=$STEPCAST_SKIP_EXIT_CODE" > env.txt']
+        run: [sh, -c, 'echo "шаг=$BURNEX_SKIP_EXIT_CODE" > env.txt']
         expect:
-          - cmd: 'echo "проверка=$STEPCAST_SKIP_EXIT_CODE" >> env.txt'
+          - cmd: 'echo "проверка=$BURNEX_SKIP_EXIT_CODE" >> env.txt'
 `,
     });
     const result = await run(project);
@@ -192,7 +192,7 @@ jobs:
   работа:
     steps:
       - id: шаг
-        run: [sh, -c, 'if [ -z "$STEPCAST_SKIP_EXIT_CODE" ]; then echo нет > env.txt; else echo есть > env.txt; fi']
+        run: [sh, -c, 'if [ -z "$BURNEX_SKIP_EXIT_CODE" ]; then echo нет > env.txt; else echo есть > env.txt; fi']
 `,
     });
     await run(project);
