@@ -3,7 +3,7 @@ import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, it } from 'node:test';
 
-import { StepcastError } from '../src/kernel/errors.js';
+import { BurnexError } from '../src/kernel/errors.js';
 import { parseRoute } from '../src/parts/ui/routes.js';
 import { buildRouteTable, homeRoutesPath, projectRoutesPath, writeRouteRow } from '../src/parts/ui/routesFile.js';
 import { tempDir } from './tmp.js';
@@ -135,7 +135,7 @@ describe('ui-routes-file: сборка таблицы трёх слоёв', () =
     assert.throws(
       () => buildRouteTable({ home, builtinPath: missing }),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.equal(error.file, missing);
         assert.match(error.message, /cannot be read/);
         return true;
@@ -152,7 +152,7 @@ describe('ui-routes-file: сборка таблицы трёх слоёв', () =
     assert.throws(
       () => buildRouteTable({ home, builtinPath: broken }),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.equal(error.file, broken);
         return true;
       },
@@ -197,7 +197,7 @@ describe('ui-routes-file: сборка таблицы трёх слоёв', () =
     assert.throws(
       () => buildRouteTable({ home, projectRoot }),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.match(error.message, /screen-run\b/);
         assert.match(error.message, /my-runs/);
         assert.match(error.message, /routes\.yml/);
@@ -216,7 +216,7 @@ describe('ui-routes-file: сборка таблицы трёх слоёв', () =
     assert.throws(
       () => buildRouteTable({ home, projectRoot }),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.match(error.message, /reserved path/);
         return true;
       },
@@ -233,7 +233,7 @@ describe('ui-routes-file: сборка таблицы трёх слоёв', () =
     assert.throws(
       () => buildRouteTable({ home, projectRoot }),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.match(error.message, /my-widget/);
         assert.match(error.message, /nope/);
         assert.equal(error.file, projectRoutesPath(projectRoot));
@@ -249,7 +249,7 @@ describe('ui-routes-file: сборка таблицы трёх слоёв', () =
     assert.throws(
       () => buildRouteTable({ home, projectRoot }),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.equal(error.file, projectRoutesPath(projectRoot));
         return true;
       },
@@ -263,7 +263,7 @@ describe('ui-routes-file: сборка таблицы трёх слоёв', () =
     assert.throws(
       () => buildRouteTable({ home, projectRoot }),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.match(error.message, /my-half/);
         return true;
       },
@@ -306,7 +306,7 @@ describe('ui-routes-file: сборка таблицы трёх слоёв', () =
     assert.throws(
       () => buildRouteTable({ home, projectRoot }),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.match(error.message, /my-dashboard/);
         assert.match(error.message, /nope/);
         return true;
@@ -324,7 +324,7 @@ describe('ui-routes-file: сборка таблицы трёх слоёв', () =
     assert.throws(
       () => buildRouteTable({ home, projectRoot }),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.equal(error.file, projectRoutesPath(projectRoot));
         assert.match(error.message, /bogus/);
         return true;
@@ -401,7 +401,7 @@ describe('ui-routes-file: запись строки в слой через Docum
     assert.throws(
       () => writeRouteRow('home', { id: 'my-route', path: '/new', target: { screen: 'screen-runs' } }, { home }),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.equal(error.file, path);
         assert.match(error.message, /is not valid YAML/);
         assert.match(String(error.at), /line 5/);

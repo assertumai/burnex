@@ -141,14 +141,14 @@ const HELP_TEXT = `ошибка: Не указана команда
       --file — repos: файл с документом дорожек вместо стандартного ввода`;
 
 describe('cli-help-baseline: эталон справки и кодов возврата до переезда команд в строки', () => {
-  it('stepcast без аргументов печатает справку дословно и отказывает кодом ошибки конфигурации', async () => {
+  it('burnex без аргументов печатает справку дословно и отказывает кодом ошибки конфигурации', async () => {
     const outcome = await cli(makeProject({}), []);
     assert.equal(outcome.code, ExitCode.configError);
     assert.equal(outcome.stdout, '');
     assert.equal(outcome.stderr, HELP_TEXT);
   });
 
-  it('stepcast --help печатает ту же справку дословно, тем же кодом возврата', async () => {
+  it('burnex --help печатает ту же справку дословно, тем же кодом возврата', async () => {
     const outcome = await cli(makeProject({}), ['--help']);
     assert.equal(outcome.code, ExitCode.configError);
     assert.equal(outcome.stdout, '');

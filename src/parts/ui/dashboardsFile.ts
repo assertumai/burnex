@@ -3,7 +3,7 @@ import { basename, dirname, extname, join } from 'node:path';
 import { Document, isMap, isSeq, parse as parseYaml, parseDocument, type Node, type YAMLMap } from 'yaml';
 import { z } from 'zod';
 
-import { StepcastError } from '../../kernel/errors.js';
+import { BurnexError } from '../../kernel/errors.js';
 import { buildPackageIndex, lookupInPackages, resourceLayers, type PackageResourcePath } from '../packages/index.js';
 import { describeSchemaFailure } from '../../kernel/schema-failure.js';
 import { checkDashboardDocument, DashboardDocumentError, type DashboardDefinition } from './dashboards.js';
@@ -102,7 +102,7 @@ function parseDashboardDocument(path: string): DashboardFileDocument {
   try {
     text = readFileSync(path, 'utf8');
   } catch (error) {
-    throw new StepcastError(`Dashboard file cannot be read: ${path}`, {
+    throw new BurnexError(`Dashboard file cannot be read: ${path}`, {
       file: path,
       hint: (error as NodeJS.ErrnoException).message,
       cause: error,
@@ -113,13 +113,13 @@ function parseDashboardDocument(path: string): DashboardFileDocument {
   try {
     raw = parseYaml(text);
   } catch (error) {
-    throw new StepcastError(`Dashboard file is not valid YAML: ${path}`, { file: path, cause: error });
+    throw new BurnexError(`Dashboard file is not valid YAML: ${path}`, { file: path, cause: error });
   }
 
   const parsed = DashboardDocumentSchema.safeParse(raw);
   if (!parsed.success) {
     const failure = describeSchemaFailure(parsed.error);
-    throw new StepcastError(`Dashboard file ${path} does not match the format: ${failure.message}`, {
+    throw new BurnexError(`Dashboard file ${path} does not match the format: ${failure.message}`, {
       file: path,
       ...(failure.at === undefined ? {} : { at: failure.at }),
       hint: 'The format is described in docs/dashboards.md; schema: schema/dashboard.schema.json',
@@ -183,7 +183,7 @@ function buildOneDashboard(
     checkDashboardDocument(document);
   } catch (error) {
     if (error instanceof DashboardDocumentError) {
-      throw new StepcastError(`Dashboard ${id} (${path}): ${error.message}`, {
+      throw new BurnexError(`Dashboard ${id} (${path}): ${error.message}`, {
         file: path,
         at: error.cellIds.join(', '),
       });
@@ -210,15 +210,15 @@ type DashboardSearchLayer =
  * `<home>/.burnex/packages`, как и свободные дашборды home.
  */
 function dashboardSearchLayers(options: DashboardBuildOptions): readonly DashboardSearchLayer[] {
-  const homeStepcastDir = homeRoot(options.home);
+  const homeBurnexDir = homeRoot(options.home);
   const index = buildPackageIndex({
     ...(options.projectRoot === undefined ? {} : { projectRoot: options.projectRoot }),
-    globalPath: join(homeStepcastDir, 'config.yml'),
+    globalPath: join(homeBurnexDir, 'config.yml'),
   });
   const layers: DashboardSearchLayer[] = [];
   for (const layer of resourceLayers(index, 'dashboards', {
     ...(options.projectRoot === undefined ? {} : { projectRoot: options.projectRoot }),
-    homeStepcastDir,
+    homeBurnexDir,
   })) {
     if (layer.source === 'project' || layer.source === 'home') {
       layers.push({ kind: 'free', layer: layer.source, dir: layer.path });
@@ -259,14 +259,14 @@ export function buildDashboards(options: DashboardBuildOptions): DashboardsBuild
     if (located === undefined) continue;
     try {
       if ('conflict' in located) {
-        throw new StepcastError(
+        throw new BurnexError(
           `Dashboard ${id} is provided by two packages of one layer: ${located.conflict[0]} and ${located.conflict[1]}`,
           { file: located.path, hint: 'Rename the dashboard in one package, remove one package, or put your own copy in .burnex/dashboards' },
         );
       }
       dashboards.push(buildOneDashboard(id, located.layer, located.path, located.package));
     } catch (error) {
-      if (error instanceof StepcastError) {
+      if (error instanceof BurnexError) {
         failures.push({
           id,
           layer: located.layer,
@@ -325,13 +325,13 @@ export function writableDashboardPath(
   fromPackage = false,
 ): string {
   if (!isSafeSegment(id)) {
-    throw new StepcastError(`Dashboard id ${id} is invalid`, {
+    throw new BurnexError(`Dashboard id ${id} is invalid`, {
       hint: 'id is a single safe path segment, without separators and without stepping up the tree',
     });
   }
   if (layer === 'home' && !fromPackage) return dashboardPath(homeDashboardsDirPath(options.home), id);
   if (options.projectRoot === undefined) {
-    throw new StepcastError('The daemon does not know the project root: there is nowhere to write the project dashboards layer', {
+    throw new BurnexError('The daemon does not know the project root: there is nowhere to write the project dashboards layer', {
       hint: 'Start the dashboard in the project directory (burnex up) or save the dashboard to the home layer',
     });
   }
@@ -486,7 +486,7 @@ export function writeDashboard(
     checkDashboardDocument(toDefinition(document));
   } catch (error) {
     if (error instanceof DashboardDocumentError) {
-      throw new StepcastError(`Dashboard ${id} not saved: ${error.message}`, {
+      throw new BurnexError(`Dashboard ${id} not saved: ${error.message}`, {
         at: error.cellIds.join(', '),
         hint: 'Fix the layout: cells must not repeat, exceed the grid columns or overlap',
       });
@@ -502,12 +502,12 @@ export function writeDashboard(
   if (fromPackage !== undefined) {
     const source = buildDashboards(options).dashboards.find((entry) => entry.id === id && entry.package === fromPackage);
     if (source === undefined) {
-      throw new StepcastError(`Dashboard ${id} of package ${fromPackage} is no longer there`, {
+      throw new BurnexError(`Dashboard ${id} of package ${fromPackage} is no longer there`, {
         hint: 'Reload the dashboard and repeat the edit',
       });
     }
     if (!fingerprintsEqual(baseFingerprint, dashboardFingerprint(source.file)) || existsSync(path)) {
-      throw new StepcastError(`Dashboard file ${id} has changed since it was opened`, {
+      throw new BurnexError(`Dashboard file ${id} has changed since it was opened`, {
         file: path,
         hint: 'Reload the dashboard and repeat the edit',
       });
@@ -515,7 +515,7 @@ export function writeDashboard(
   } else {
     const currentFingerprint = dashboardFingerprint(path);
     if (!fingerprintsEqual(baseFingerprint, currentFingerprint)) {
-      throw new StepcastError(`Dashboard file ${id} has changed since it was opened`, {
+      throw new BurnexError(`Dashboard file ${id} has changed since it was opened`, {
         file: path,
         hint: 'Reload the dashboard and repeat the edit',
       });
@@ -528,7 +528,7 @@ export function writeDashboard(
     try {
       text = readFileSync(path, 'utf8');
     } catch (error) {
-      throw new StepcastError(`Dashboard file cannot be read: ${path}`, {
+      throw new BurnexError(`Dashboard file cannot be read: ${path}`, {
         file: path,
         hint: (error as NodeJS.ErrnoException).message,
         cause: error,
@@ -544,7 +544,7 @@ export function writeDashboard(
     const parseFailure = doc.errors[0];
     if (parseFailure !== undefined) {
       const pos = parseFailure.linePos?.[0];
-      throw new StepcastError(
+      throw new BurnexError(
         `Dashboard file ${path} is not valid YAML, write cancelled: ${parseFailure.message}`,
         {
           file: path,
@@ -556,7 +556,7 @@ export function writeDashboard(
     const existing = DashboardDocumentSchema.safeParse(doc.toJS());
     if (!existing.success) {
       const failure = describeSchemaFailure(existing.error);
-      throw new StepcastError(`Dashboard file ${path} does not match the format, write cancelled: ${failure.message}`, {
+      throw new BurnexError(`Dashboard file ${path} does not match the format, write cancelled: ${failure.message}`, {
         file: path,
         ...(failure.at === undefined ? {} : { at: failure.at }),
         hint: 'Fix the file by hand before saving a dashboard from the dashboard editor',

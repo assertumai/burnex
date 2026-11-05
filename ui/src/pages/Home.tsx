@@ -235,7 +235,7 @@ export function Home({
         <p>
           The daemon behind this page watches the run journals of every project it knows about, launches pipelines
           on request and keeps this dashboard live. The engine, its CLI and this dashboard are all called
-          <code>burnex</code>; <code>stepcast</code> is the former name and still works as an alias of the CLI.
+          <code>burnex</code>; <code>stepcast</code> is the former name.
         </p>
       </section>
 

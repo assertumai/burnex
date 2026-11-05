@@ -2,7 +2,7 @@ import { realpathSync } from 'node:fs';
 import { resolve as resolvePath } from 'node:path';
 
 import { resolveConfig } from '../config/resolve.js';
-import { ExitCode, StepcastError, type ExitCodeValue } from '../../../kernel/errors.js';
+import { ExitCode, BurnexError, type ExitCodeValue } from '../../../kernel/errors.js';
 import { findProjectRoot } from '../run/journal/paths.js';
 import { assertCleanTree } from '../domain/lanes/tree.js';
 import { commandRow } from '../../../kernel/cli/commandRow.js';
@@ -36,7 +36,7 @@ function stringFlag(flags: ParsedArgs['flags'], name: string): string | undefine
 function parseAllowList(raw: string): readonly string[] {
   const paths = raw.split(',').map((entry) => entry.trim());
   if (paths.some((path) => path === '')) {
-    throw new StepcastError('ключ --allow требует непустого перечня путей через запятую');
+    throw new BurnexError('ключ --allow требует непустого перечня путей через запятую');
   }
   return paths;
 }

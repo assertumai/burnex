@@ -41,8 +41,8 @@
 # перед коммитом. work finalize
 # проставляет failed пунктам дорожек, которые до done не дошли.
 #
-#   stepcast lint .burnex/pipelines/self-improve.yml
-#   stepcast run  .burnex/pipelines/self-improve.yml
+#   burnex lint .burnex/pipelines/self-improve.yml
+#   burnex run  .burnex/pipelines/self-improve.yml
 #
 # Требует чистого рабочего дерева: отказ прошлого захода останавливает петлю до
 # разбора человеком, а не наслаивает следующее улучшение на сломанный код.
@@ -57,7 +57,7 @@ name: self-improve
 
 # Секция project (команда проверки, инструменты, практика спецификации,
 # границы правок) объявлена в .burnex/config.yml, а не здесь: команды
-# движка (stepcast assert-clean, stepcast project repos) читают конфигурацию
+# движка (burnex assert-clean, burnex project repos) читают конфигурацию
 # напрямую и подстановки этого документа не видят вовсе, а объявление
 # репозитория, читаемое ими, обязано быть видно и им. Работы и промпты петли
 # это не затрагивает: они по-прежнему видят действующее значение подстановкой
@@ -142,12 +142,12 @@ budget:
 # ключей и ведёт себя ровно как прежде. Заполняет его витрина, когда человек
 # переводит пункт в колонку in progress на доске и выбирает этот пайплайн:
 #
-#   stepcast run .burnex/pipelines/self-improve.yml --input item=<слаг>
+#   burnex run .burnex/pipelines/self-improve.yml --input item=<слаг>
 #
 # onto — ветка, на вершину которой заход сводит результат. Заполняет его
 # scripts/self-improve-loop.sh; пустое значение — прежнее поведение:
 #
-#   stepcast run .burnex/pipelines/self-improve.yml --input onto=<ветка>
+#   burnex run .burnex/pipelines/self-improve.yml --input onto=<ветка>
 inputs:
   item: { type: string, default: '' }
   onto: { type: string, default: '' }
@@ -165,7 +165,7 @@ jobs:
     # Подпись узла в витрине. Самоссылка законна ровно здесь: display не
     # проходит через раскрытие определения работы (там данных ещё нет) — его
     # раскрывает витрина в момент отрисовки, когда pick-lanes уже записала
-    # выбранный заголовок командой stepcast data.
+    # выбранный заголовок командой burnex data.
     display:
       title: ${jobs.slots.data.title}
 

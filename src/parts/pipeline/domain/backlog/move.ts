@@ -1,4 +1,4 @@
-import { StepcastError } from '../../../../kernel/errors.js';
+import { BurnexError } from '../../../../kernel/errors.js';
 import { parse, type BacklogEntry } from './parse.js';
 import { withFields } from './write.js';
 
@@ -30,7 +30,7 @@ function blockOf(entries: readonly BacklogEntry[], index: number, lineCount: num
 
 function indexOfSlug(entries: readonly BacklogEntry[], slug: string, file: string): number {
   const index = entries.findIndex((entry) => entry.slug === slug);
-  if (index < 0) throw new StepcastError(`пункт «${slug}» в очереди не найден`, { file, at: slug });
+  if (index < 0) throw new BurnexError(`пункт «${slug}» в очереди не найден`, { file, at: slug });
   return index;
 }
 
@@ -53,7 +53,7 @@ function insertBlock(text: string, block: readonly string[], before: string | un
   const lines = text.split('\n');
   const entries = parse(text);
   const body = trimTrailingBlank(block);
-  if (body.length === 0) throw new StepcastError('перенос пустого пункта', { file });
+  if (body.length === 0) throw new BurnexError('перенос пустого пункта', { file });
 
   if (before === undefined) {
     // Пустой файл-получатель (архив, которого ещё не было) не получает

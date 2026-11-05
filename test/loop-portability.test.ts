@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { describe, it } from 'node:test';
 import { parse as parseYaml } from 'yaml';
 
-import { withLegacyNames } from '../src/kernel/env-names.js';
+
 import { createFakeBackend, initLine, resultLine } from '../src/parts/pipeline/backend/fake.js';
 import { resolveConfig, type Config } from '../src/parts/pipeline/config/resolve.js';
 import { expandPipeline } from '../src/parts/pipeline/document/expand.js';
@@ -278,13 +278,9 @@ describe('self-improvement-loop: переносимость файлов пет�
    * конфигурации сама. Состав вдобавок не публикуется подстановкой
    * `${project.*}`, и файлу работы прочитать его неоткуда.
    */
-  // Собственные работы петли пока зовут движок прежним именем `$STEPCAST_BIN`:
-  // их исполняет и установленный релиз, который о `BURNEX_*` ещё не знает,
-  // а новый движок выставляет оба имени (kernel/env-names.ts). Перевод файлов
-  // работ на `BURNEX_*` — пункт rename-identifiers-and-repo-burnex.
-  it('шаг проверки чистоты в slots.yml зовёт $STEPCAST_BIN assert-clean, а не git status', () => {
+  it('шаг проверки чистоты в slots.yml зовёт $BURNEX_BIN assert-clean, а не git status', () => {
     const text = readFileSync(join(JOBS_DIR, 'slots.yml'), 'utf8');
-    assert.match(text, /"\$STEPCAST_BIN"\s+assert-clean/);
+    assert.match(text, /"\$BURNEX_BIN"\s+assert-clean/);
     assert.doesNotMatch(text, /git status/);
   });
 });
@@ -1243,7 +1239,7 @@ jobs:
  * не сузило бы проверку до настоящих ссылок.
  */
 describe('self-improvement-loop: ссылки файлов работ петли не покидают .burnex/', () => {
-  const STEPCAST_DIR = join(ROOT, '.burnex');
+  const CABINET_DIR = join(ROOT, '.burnex');
 
   interface DeclaredRef {
     readonly key: string;
@@ -1313,7 +1309,7 @@ describe('self-improvement-loop: ссылки файлов работ петли
         if (ref.value.startsWith('stepcast:')) return false;
 
         const resolved = isAbsolute(ref.value) ? ref.value : resolvePath(dirname(file), ref.value);
-        const rel = relativePath(STEPCAST_DIR, resolved);
+        const rel = relativePath(CABINET_DIR, resolved);
         return rel === '' || rel.startsWith('..') || isAbsolute(rel);
       })
       .map((ref) => `${file}: ${ref.key} = ${ref.value}`);
@@ -1446,8 +1442,7 @@ describe('self-improve.yml: вход onto', () => {
     writeFileSync(fakeBin, '#!/bin/sh\nprintf "%s\\n" "$*" >> "$CALLS_LOG"\n', { mode: 0o755 });
     const result = spawnSync(command[0]!, command.slice(1), {
       encoding: 'utf8',
-      // Под обоими именами, как выставляет движок: файлы работ петли пока читают STEPCAST_*.
-      env: { ...testBaseEnv(), ...withLegacyNames({ BURNEX_BIN: fakeBin, BURNEX_RUN_ID: 'run-1' }), CALLS_LOG: log },
+      env: { ...testBaseEnv(), BURNEX_BIN: fakeBin, BURNEX_RUN_ID: 'run-1', CALLS_LOG: log },
     });
     const calls = existsSync(log) ? readFileSync(log, 'utf8').split('\n').filter((line) => line !== '') : [];
     return { status: result.status ?? -1, calls };

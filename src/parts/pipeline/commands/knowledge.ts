@@ -9,7 +9,7 @@ import { createKnowledgeSource } from '../domain/knowledge/source.js';
 import { KnowledgeWriteRequestSchema, type KnowledgeSource } from '../domain/knowledge/types.js';
 import { mergeJobData } from '../run/journal/data.js';
 import type { KnowledgeDeclaration } from '../document/model.js';
-import { ExitCode, StepcastError, type ExitCodeValue } from '../../../kernel/errors.js';
+import { ExitCode, BurnexError, type ExitCodeValue } from '../../../kernel/errors.js';
 import { readEngineEnv } from '../../../kernel/env-names.js';
 import { commandRow } from '../../../kernel/cli/commandRow.js';
 import { PIPELINE_SERVICES } from '../services.js';
@@ -52,7 +52,7 @@ function listFlag(flags: ParsedArgs['flags'], name: string): readonly string[] |
     .map((item) => item.trim())
     .filter((item) => item !== '');
   if (items.length === 0) {
-    throw new StepcastError(`Флаг --${name} не называет ни одного значения`);
+    throw new BurnexError(`Флаг --${name} не называет ни одного значения`);
   }
   return items;
 }
@@ -65,7 +65,7 @@ export function runKnowledgeCommand(
 ): ExitCodeValue {
   const action = args.positional[0] as Action | undefined;
   if (action === undefined || !ACTIONS.includes(action)) {
-    throw new StepcastError(`Неизвестная подкоманда knowledge: ${action ?? 'нет'}`, {
+    throw new BurnexError(`Неизвестная подкоманда knowledge: ${action ?? 'нет'}`, {
       hint: `Допустимы: ${ACTIONS.join(', ')}`,
     });
   }
@@ -90,7 +90,7 @@ export function runKnowledgeCommand(
   });
 
   if (source === undefined) {
-    throw new StepcastError('Практика памяти не объявлена', {
+    throw new BurnexError('Практика памяти не объявлена', {
       hint: 'Объявите project.knowledge в .burnex/config.yml или разверните её: burnex init --knowledge fs',
     });
   }
@@ -130,7 +130,7 @@ function runSelect(
   const id = listFlag(args.flags, 'id');
 
   if ((scope === undefined) === (id === undefined)) {
-    throw new StepcastError('Отбор требует ровно одного из --scope и --id', {
+    throw new BurnexError('Отбор требует ровно одного из --scope и --id', {
       hint: 'burnex knowledge select --scope "src/**"  ·  burnex knowledge select --id <id>',
     });
   }
@@ -168,7 +168,7 @@ function runCheck(
   const publishKey = stringFlag(args.flags, 'publish');
   const jobDir = readEngineEnv(env, 'JOB_DIR', { warn: false });
   if (publishKey !== undefined && (jobDir === undefined || jobDir.trim() === '')) {
-    throw new StepcastError('Флаг --publish работает только внутри шага прогона', {
+    throw new BurnexError('Флаг --publish работает только внутри шага прогона', {
       hint: 'Целевая работа берётся из переменной BURNEX_JOB_DIR, которую движок инжектирует в каждый шаг; вне прогона публиковать некуда',
     });
   }
@@ -239,7 +239,7 @@ function runWrite(
   // командная строка, где `--file -` отказывает, а `--file=-` работает, —
   // ловушка, а не соглашение.
   if (fromStdin === (file !== undefined)) {
-    throw new StepcastError('Запись требует ровно одного из --file и --stdin', {
+    throw new BurnexError('Запись требует ровно одного из --file и --stdin', {
       hint: 'burnex knowledge write --file unit.json  ·  … --stdin',
     });
   }
@@ -249,7 +249,7 @@ function runWrite(
   try {
     payload = JSON.parse(text);
   } catch (error) {
-    throw new StepcastError('Описание единицы знания не разбирается как JSON', { cause: error });
+    throw new BurnexError('Описание единицы знания не разбирается как JSON', { cause: error });
   }
 
   // Список наравне с одиночным описанием: слияние освобождает место группами,
@@ -262,7 +262,7 @@ function runWrite(
     Array.isArray(payload) ? payload : [payload],
   );
   if (!parsed.success) {
-    throw new StepcastError('Описание единицы знания не соответствует контракту', {
+    throw new BurnexError('Описание единицы знания не соответствует контракту', {
       hint: parsed.error.issues.map((issue) => issue.message).join('; ').slice(0, 400),
     });
   }

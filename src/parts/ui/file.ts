@@ -1,7 +1,7 @@
 import { openSync, readFileSync, readSync, closeSync, statSync } from 'node:fs';
 import { isAbsolute, resolve as resolvePath, sep } from 'node:path';
 
-import { StepcastError } from '../../kernel/errors.js';
+import { BurnexError } from '../../kernel/errors.js';
 
 /** Потолок отдачи: `stdout.log` агентского шага бывает крупным. */
 export const MAX_FILE_BYTES = 1024 * 1024;
@@ -61,7 +61,7 @@ export function trimPartialUtf8(buffer: Buffer, side: FileSide): Buffer {
  */
 export function resolveJournalPath(runDir: string, requested: string): string {
   if (isAbsolute(requested)) {
-    throw new StepcastError('Journal file path must be relative', {
+    throw new BurnexError('Journal file path must be relative', {
       hint: 'Absolute paths are not accepted',
     });
   }
@@ -72,7 +72,7 @@ export function resolveJournalPath(runDir: string, requested: string): string {
   // Сравнение с разделителем на конце: иначе каталог-сосед с общим префиксом
   // (`<run>-other`) прошёл бы проверку как вложенный.
   if (target !== root && !target.startsWith(root + sep)) {
-    throw new StepcastError('Path leads outside the run directory', {
+    throw new BurnexError('Path leads outside the run directory', {
       hint: 'The dashboard serves only files inside the run',
     });
   }

@@ -7,7 +7,7 @@ import { describe, it } from 'node:test';
 import { run as runCli, type CliIo } from '../src/parts/cli/main.js';
 import { REASON_LIMIT } from '../src/parts/pipeline/domain/backlog/index.js';
 import type { Config } from '../src/parts/pipeline/config/resolve.js';
-import { ExitCode, StepcastError, type ExitCodeValue } from '../src/kernel/errors.js';
+import { ExitCode, BurnexError, type ExitCodeValue } from '../src/kernel/errors.js';
 import { expandPipeline } from '../src/parts/pipeline/document/expand.js';
 import { runPaths } from '../src/parts/pipeline/run/journal/paths.js';
 import { finishOwnerOfRun } from '../src/parts/pipeline/run/journal/owner.js';
@@ -638,7 +638,7 @@ describe('core: mergeLanes — публикация поверх нечисто�
           file: project.path('backlog.md'),
         }),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.match(error.message, /публикация прервалась/);
         assert.equal(error.file, recovery);
         return true;
@@ -871,7 +871,7 @@ jobs:
           file: backlogFile,
         }),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.equal(error.exitCode, ExitCode.configError);
         assert.match(error.message, /нет ни одной работы с меткой lane/);
         return true;
@@ -905,7 +905,7 @@ jobs:
           file: backlogFile,
         }),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.equal(error.exitCode, ExitCode.configError);
         assert.match(error.message, /b/);
         assert.match(error.hint ?? '', /all/);
@@ -1146,7 +1146,7 @@ jobs:
     assert.equal(readFileSync(backlogFile, 'utf8'), '# Очередь\n');
   });
 
-  it('неизвестная дорожка отказывает кодом 2 (StepcastError), перечисляя известные, ничего не накладывая', async () => {
+  it('неизвестная дорожка отказывает кодом 2 (BurnexError), перечисляя известные, ничего не накладывая', async () => {
     const project = makeProject({ 'burnex.yml': twoLanePipeline(SUCCESS_A, SUCCESS_B) });
     gitInit(project);
     commit(project, 'начальный');
@@ -1167,7 +1167,7 @@ jobs:
           file: backlogFile,
         }),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.equal(error.exitCode, ExitCode.configError);
         assert.match(error.message, /нет-такой/);
         assert.match(error.hint ?? '', /a/);
@@ -1479,7 +1479,7 @@ describe('core: mergeLanes — дорожка без взятого пункта
           file: backlogFile,
         }),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.equal(error.exitCode, ExitCode.configError);
         assert.match(error.file ?? '', /item-a\.json$/);
         return true;
@@ -1801,7 +1801,7 @@ describe('core: mergeLanes — составной прогон', () => {
           // repoChecks не объявлен вовсе — у backend нет команды проверки.
         }),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.equal(error.exitCode, ExitCode.configError);
         assert.match(error.message, /backend/);
         assert.match(error.message, /a/);
@@ -1841,7 +1841,7 @@ describe('core: mergeLanes — составной прогон', () => {
           ]),
         }),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.match(error.message, /не совпадает с действующим/);
         return true;
       },
@@ -1910,7 +1910,7 @@ describe('core: mergeLanes — составной прогон', () => {
           ]),
         }),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.equal(error.exitCode, ExitCode.configError);
         assert.match(error.message, /backend/);
         assert.match(error.message, /a-item/);
@@ -1963,7 +1963,7 @@ describe('core: mergeLanes — составной прогон', () => {
         repoChecks,
       });
     } catch (error) {
-      if (error instanceof StepcastError && /оборвал/.test(error.message)) brokenMergeDetected = true;
+      if (error instanceof BurnexError && /оборвал/.test(error.message)) brokenMergeDetected = true;
       else throw error;
     }
     assert.equal(brokenMergeDetected, false);
@@ -2199,7 +2199,7 @@ describe('core: mergeLanes — предусловие чистого дерев�
           check: 'exit 0',
           file: project.path('backlog.md'),
         }),
-      StepcastError,
+      BurnexError,
     );
   });
 
@@ -2218,7 +2218,7 @@ describe('core: mergeLanes — предусловие чистого дерев�
           check: 'exit 0',
           file: project.path('backlog.md'),
         }),
-      StepcastError,
+      BurnexError,
     );
   });
 
@@ -2269,7 +2269,7 @@ describe('core: mergeLanes — предусловие чистого дерев�
           check: 'exit 0',
           file: backlogFile,
         }),
-      StepcastError,
+      BurnexError,
     );
   });
 
@@ -2315,7 +2315,7 @@ describe('core: mergeLanes — предусловие чистого дерев�
           check: 'exit 0',
           file: join(dir, 'backlog.md'),
         }),
-      StepcastError,
+      BurnexError,
     );
   });
 
@@ -2352,7 +2352,7 @@ describe('core: mergeLanes — предусловие чистого дерев�
           nestedRepos: ['backend'],
         }),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.match(error.message, /backend/);
         return true;
       },
@@ -2705,7 +2705,7 @@ describe('core: applyRun --lane — отказ повторного наложе
     assert.throws(
       () => applyRun({ paths: result.journal.paths, cwd: project.root, lane: 'a' }),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.match(error.message, /уже сведена/);
         return true;
       },

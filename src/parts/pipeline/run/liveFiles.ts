@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { cpSync, existsSync, lstatSync, mkdirSync, readFileSync, readlinkSync, readdirSync, rmSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 
-import { StepcastError } from '../../../kernel/errors.js';
+import { BurnexError } from '../../../kernel/errors.js';
 import type { LiveFile } from '../document/model.js';
 
 export interface LiveFileSnapshot {
@@ -64,7 +64,7 @@ export function assertLiveFilesUnchanged(
 ): void {
   for (const live of liveFiles) {
     if (fingerprint(join(sourceRoot, live.path)) === snapshot.fingerprints[live.path]) continue;
-    throw new StepcastError(`Живой файл изменился параллельно: ${live.path}`, {
+    throw new BurnexError(`Живой файл изменился параллельно: ${live.path}`, {
       file: join(sourceRoot, live.path),
       hint: 'Повторите операцию с актуальным содержимым; чужая правка не была перезаписана',
     });

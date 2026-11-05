@@ -4474,7 +4474,7 @@ describe('ui-dashboard: маршрут модуля виджета', () => {
     const res = await fetchWithHeaders(server, `/widgets/${encodeURIComponent(key)}/broken.js`);
     assert.equal(res.code, 200);
     assert.equal(res.headers['x-stepcast-widget-error'], '1');
-    assert.match(res.body, /__stepcastWidgetError/);
+    assert.match(res.body, /__burnexWidgetError/);
     assert.match(res.body, /broken\.tsx/);
   });
 

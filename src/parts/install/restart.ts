@@ -1,7 +1,7 @@
 import { spawnSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 
-import { ExitCode, StepcastError } from '../../kernel/errors.js';
+import { ExitCode, BurnexError } from '../../kernel/errors.js';
 import {
   daemonPaths,
   isAlive,
@@ -54,7 +54,7 @@ export async function restartDaemon(
   if (host.platform === 'darwin' && host.launchctl(['print', target]).status === 0) {
     const result = host.launchctl(['kickstart', '-k', target]);
     if (result.status !== 0) {
-      throw new StepcastError('Обновление прошло, но launchctl не перезапустил агент витрины', {
+      throw new BurnexError('Обновление прошло, но launchctl не перезапустил агент витрины', {
         exitCode: ExitCode.jobFailed,
         hint: result.stderr.trim() === '' ? `код возврата ${result.status}` : result.stderr.trim(),
       });
@@ -78,7 +78,7 @@ export async function restartDaemon(
 
   await host.stopDaemon();
   if (!host.spawnUp(options.newEntry, daemon.cwd)) {
-    throw new StepcastError('Обновление прошло, но витрина не поднялась заново', {
+    throw new BurnexError('Обновление прошло, но витрина не поднялась заново', {
       exitCode: ExitCode.jobFailed,
       hint: `Поднимите её сами: burnex up в ${daemon.cwd}`,
     });

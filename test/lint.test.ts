@@ -16,7 +16,7 @@ import { buildPublishedSchemas, pluginPredicateEntries, pluginStepKindEntries } 
 import { hasErrors, lintPipeline, type Diagnostic } from '../src/parts/pipeline/domain/lint.js';
 import type { StepKindContribution } from '../src/parts/pipeline/contract.js';
 import { DECLARATIVE_CONTRIBUTION_FIELDS } from '../src/parts/pipeline/contract.js';
-import { ExitCode, StepcastError, type ExitCodeValue } from '../src/kernel/errors.js';
+import { ExitCode, BurnexError, type ExitCodeValue } from '../src/kernel/errors.js';
 import { gitCommit, gitInit, makeProject, withHome, type Project } from './helpers.js';
 import { tempDir } from './tmp.js';
 
@@ -2038,7 +2038,7 @@ jobs:
     assert.throws(
       () =>
         expandPipeline({ pipelinePath: project.path('burnex.yml'), config: project.config }),
-      StepcastError,
+      BurnexError,
     );
   });
 });
@@ -2586,7 +2586,7 @@ jobs:
     assert.throws(
       () => lint(project),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.match(error.message, /inherit/);
         assert.equal(error.at, 'workspace');
         return true;
@@ -2609,7 +2609,7 @@ jobs:
     assert.throws(
       () => lint(project),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.match(error.message, /inherit/);
         return true;
       },
@@ -2817,7 +2817,7 @@ jobs:
 
   it('лишний ключ рядом с item_refs отклоняется', () => {
     const project = makeProject({ 'burnex.yml': pipeline('{ item_refs: item.json, required: true }') });
-    assert.throws(() => lint(project), StepcastError);
+    assert.throws(() => lint(project), BurnexError);
   });
 });
 
@@ -2888,7 +2888,7 @@ jobs:
 `,
     });
 
-    assert.throws(() => lint(project), StepcastError);
+    assert.throws(() => lint(project), BurnexError);
   });
 
   // Задача 3.6: ни одной формы селектора — та же природа промаха.
@@ -2908,7 +2908,7 @@ jobs:
     assert.throws(
       () => lint(project),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.match(error.message, /ни scope, ни id/);
         return true;
       },
@@ -2931,7 +2931,7 @@ jobs:
     assert.throws(
       () => lint(project),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.match(error.message, /и scope, и id/);
         return true;
       },
@@ -2957,7 +2957,7 @@ jobs:
     assert.throws(
       () => lint(project),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.match(error.message, /только true/);
         return true;
       },

@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
 import type { ParsedArgs } from '../src/kernel/cli/args.js';
-import { ExitCode, StepcastError } from '../src/kernel/errors.js';
+import { ExitCode, BurnexError } from '../src/kernel/errors.js';
 import { runUpdateCommand, type UpdateHost } from '../src/parts/install/commands/update.js';
 import type { UpdateStep } from '../src/parts/install/plan.js';
 import type { RestartHost } from '../src/parts/install/restart.js';
@@ -103,7 +103,7 @@ describe('install-update: команда update', () => {
 
     await assert.rejects(
       runUpdateCommand(args(), () => undefined, host),
-      (error: unknown) => error instanceof StepcastError && /отцеплен/.test(error.message),
+      (error: unknown) => error instanceof BurnexError && /отцеплен/.test(error.message),
     );
     assert.deepEqual(executed, []);
   });
@@ -128,7 +128,7 @@ describe('install-update: команда update', () => {
 
     await assert.rejects(
       runUpdateCommand(args(), () => undefined, host),
-      (error: unknown) => error instanceof StepcastError && /незакоммиченные/.test(error.message),
+      (error: unknown) => error instanceof BurnexError && /незакоммиченные/.test(error.message),
     );
     assert.deepEqual(executed, []);
   });
@@ -138,7 +138,7 @@ describe('install-update: команда update', () => {
 
     await assert.rejects(
       runUpdateCommand(args(), () => undefined, host),
-      (error: unknown) => error instanceof StepcastError && /install\.sh/.test(error.hint ?? ''),
+      (error: unknown) => error instanceof BurnexError && /install\.sh/.test(error.hint ?? ''),
     );
   });
 

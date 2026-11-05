@@ -1,4 +1,4 @@
-import { StepcastError } from './errors.js';
+import { BurnexError } from './errors.js';
 
 /**
  * Разбор величин из конфигурации и пайплайна.
@@ -25,7 +25,7 @@ const DURATION_PATTERN = /^(\d+(?:\.\d+)?)([a-zA-Z]*)$/;
 
 function fail(message: string, hint: string, at?: string, source?: string): never {
   const fullHint = source === undefined ? hint : `${hint}. Значение получено из ${source}`;
-  throw new StepcastError(message, at === undefined ? { hint: fullHint } : { hint: fullHint, at });
+  throw new BurnexError(message, at === undefined ? { hint: fullHint } : { hint: fullHint, at });
 }
 
 /** Токены: целое число либо число с суффиксом `k` или `M`. */

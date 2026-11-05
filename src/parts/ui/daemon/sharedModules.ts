@@ -26,14 +26,14 @@ import { isSafeSegment, sharedModuleHref } from '../routes.js';
  */
 
 /** Ключ, под которым страница публикует свои экземпляры на `window` (`ui/src/main.tsx`). */
-export const WIDGET_RUNTIME_GLOBAL = '__stepcastWidgetRuntime';
+export const WIDGET_RUNTIME_GLOBAL = '__burnexWidgetRuntime';
 
 /**
  * Имя экспорта модуля ошибки компиляции (`errorModuleText`, `src/parts/ui/widgets.ts`)
  * — здесь, а не там, потому что имя читает и браузер (`ui/src/widgetHost.tsx`),
  * а модуль `widgets.ts` в браузерную сборку не попадает: он держит `node:fs`.
  */
-export const WIDGET_ERROR_EXPORT = '__stepcastWidgetError';
+export const WIDGET_ERROR_EXPORT = '__burnexWidgetError';
 
 /**
  * Имя экспорта стилей собранной браузерной половины плагина (`src/parts/ui/widgets.ts`,
@@ -45,7 +45,7 @@ export const WIDGET_ERROR_EXPORT = '__stepcastWidgetError';
  * этим экспортом, а не побочным эффектом импорта — так стиль можно снять
  * вместе с областью строки, а не оставить в документе навсегда.
  */
-export const WIDGET_STYLE_EXPORT = '__stepcastWidgetStyle';
+export const WIDGET_STYLE_EXPORT = '__burnexWidgetStyle';
 
 export type SharedModuleSpecifier =
   | 'react'

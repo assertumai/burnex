@@ -4,7 +4,7 @@ import { existsSync, mkdirSync, readdirSync, realpathSync, writeFileSync } from 
 import { join } from 'node:path';
 import { describe, it } from 'node:test';
 
-import { StepcastError } from '../src/kernel/errors.js';
+import { BurnexError } from '../src/kernel/errors.js';
 import { addWorktree, removeWorktree } from '../src/parts/pipeline/run/worktrees.js';
 import { tempDir } from './tmp.js';
 
@@ -167,7 +167,7 @@ describe('run-worktrees: адресное снятие', () => {
     assert.equal(worktreeNames(innerRepo).length, 0, 'запись вложенного дерева не должна остаться');
   });
 
-  it('отказывает StepcastError на пути вне директории прогона и не трогает каталог', () => {
+  it('отказывает BurnexError на пути вне директории прогона и не трогает каталог', () => {
     const { repoDir, runDir } = bed();
     // Путь — само рабочее дерево проекта, а не что-то внутри runDir.
     const outsidePath = repoDir;
@@ -175,7 +175,7 @@ describe('run-worktrees: адресное снятие', () => {
     assert.throws(
       () => removeWorktree({ repoDir, path: outsidePath, runDir }),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.match(error.message, /вне директории прогона/);
         return true;
       },

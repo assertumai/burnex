@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
-import { StepcastError } from '../src/kernel/errors.js';
+import { BurnexError } from '../src/kernel/errors.js';
 import { expandPipeline } from '../src/parts/pipeline/document/expand.js';
 import { lintPipeline, type Diagnostic } from '../src/parts/pipeline/domain/lint.js';
 import { makeProject } from './helpers.js';
@@ -384,7 +384,7 @@ jobs:
     assert.throws(
       () => expandPipeline({ pipelinePath: project.path('burnex.yml'), config: project.config }),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.match(error.message, /Файл не найден/);
         assert.match(error.file ?? '', /burnex:implement$/);
         return true;
@@ -409,7 +409,7 @@ steps:
     assert.throws(
       () => expandPipeline({ pipelinePath: project.path('burnex.yml'), config: project.config }),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.match(error.message, /Не удалось прочитать файл промпта/);
         return true;
       },

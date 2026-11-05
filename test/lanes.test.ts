@@ -9,7 +9,7 @@ import { assertCleanTree, commitAll, currentCommit, headMessage, resetToCommit }
 import { runCheck } from '../src/parts/pipeline/domain/lanes/check.js';
 import { hasLaneItem, readLaneItem, takenLanes } from '../src/parts/pipeline/domain/lanes/item.js';
 import { mergedLanes, readLaneMerge, writeLaneMerge } from '../src/parts/pipeline/domain/lanes/mergeRecord.js';
-import { StepcastError } from '../src/kernel/errors.js';
+import { BurnexError } from '../src/kernel/errors.js';
 import type { JobRecord } from '../src/parts/pipeline/run/journal/schema.js';
 import { gitCommit, gitInit } from './helpers.js';
 import { tempDir } from './tmp.js';
@@ -163,13 +163,13 @@ describe('lanes: tree', () => {
   it('assertCleanTree отказывает на незакоммиченной правке отслеживаемого файла', () => {
     const dir = makeRepo();
     writeFileSync(join(dir, 'seed.txt'), 'правка\n');
-    assert.throws(() => assertCleanTree(dir), StepcastError);
+    assert.throws(() => assertCleanTree(dir), BurnexError);
   });
 
   it('assertCleanTree отказывает на неотслеживаемом файле', () => {
     const dir = makeRepo();
     writeFileSync(join(dir, 'новый.txt'), 'новое\n');
-    assert.throws(() => assertCleanTree(dir), StepcastError);
+    assert.throws(() => assertCleanTree(dir), BurnexError);
   });
 
   it('assertCleanTree прощает правку названного учётного файла', () => {
@@ -180,7 +180,7 @@ describe('lanes: tree', () => {
 
     assert.doesNotThrow(() => assertCleanTree(dir, { allow: ['backlog.md'] }));
     assert.doesNotThrow(() => assertCleanTree(dir, { allow: [join(dir, 'backlog.md')] }));
-    assert.throws(() => assertCleanTree(dir), StepcastError, 'без allow правка по-прежнему отказывает');
+    assert.throws(() => assertCleanTree(dir), BurnexError, 'без allow правка по-прежнему отказывает');
   });
 
   it('assertCleanTree прощает неотслеживаемый учётный файл', () => {
@@ -193,12 +193,12 @@ describe('lanes: tree', () => {
     const dir = makeRepo();
     writeFileSync(join(dir, 'backlog.md'), 'очередь\n');
     writeFileSync(join(dir, 'seed.txt'), 'правка агента\n');
-    assert.throws(() => assertCleanTree(dir, { allow: ['backlog.md'] }), StepcastError);
+    assert.throws(() => assertCleanTree(dir, { allow: ['backlog.md'] }), BurnexError);
   });
 
   it('assertCleanTree отказывает вне репозитория git', () => {
     const dir = tempDir('lanes-notgit-');
-    assert.throws(() => assertCleanTree(dir), StepcastError);
+    assert.throws(() => assertCleanTree(dir), BurnexError);
   });
 
   it('assertCleanTree отказывает на грязном вложенном при чистом корне', () => {
@@ -208,7 +208,7 @@ describe('lanes: tree', () => {
     // Корень сам по себе чист: `.gitignore` прячет вложенный от `git status`
     // корня целиком. Это ровно тот случай, ради которого заводится обход по
     // объявленному составу — без него assertCleanTree(root) не бросит вовсе.
-    assert.throws(() => assertCleanTree(root, { nested: [nestedName] }), StepcastError);
+    assert.throws(() => assertCleanTree(root, { nested: [nestedName] }), BurnexError);
   });
 
   it('сообщение называет нечистый вложенный репозиторий по имени', () => {
@@ -218,7 +218,7 @@ describe('lanes: tree', () => {
     assert.throws(
       () => assertCleanTree(root, { nested: [nestedName] }),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.match(error.message, /backend/);
         return true;
       },
@@ -245,7 +245,7 @@ describe('lanes: tree', () => {
     assert.throws(
       () => assertCleanTree(root, { nested: ['backend', 'public-site'] }),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.match(error.message, /корень/);
         assert.match(error.message, /backend/);
         assert.match(error.message, /public-site/);
@@ -257,7 +257,7 @@ describe('lanes: tree', () => {
   it('неотслеживаемый файл во вложенном учитывается наравне с изменённым', () => {
     const { root, nestedName } = makeNestedRepo();
     writeFileSync(join(root, nestedName, 'новый.txt'), 'новое во вложенном\n');
-    assert.throws(() => assertCleanTree(root, { nested: [nestedName] }), StepcastError);
+    assert.throws(() => assertCleanTree(root, { nested: [nestedName] }), BurnexError);
   });
 
   it('allow во вложенном репозитории прощает правку там, а не в корне', () => {
@@ -278,7 +278,7 @@ describe('lanes: tree', () => {
     assert.throws(
       () => assertCleanTree(root, { nested: [nestedName], allow: ['backlog.md'] }),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.match(error.message, new RegExp(nestedName));
         return true;
       },
@@ -292,7 +292,7 @@ describe('lanes: tree', () => {
     assert.throws(
       () => assertCleanTree(dir, { nested: ['plain-subdir'] }),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.match(error.message, /plain-subdir/);
         return true;
       },
@@ -304,7 +304,7 @@ describe('lanes: tree', () => {
     assert.throws(
       () => assertCleanTree(dir, { nested: ['нет-такого'] }),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         // Отсутствие каталога и каталог без git — разные починки (опечатка в
         // составе против несклонированной части), и формулировки те же, что
         // у предстартовой проверки состава (`checkWorkspaceAvailability`).
@@ -321,7 +321,7 @@ describe('lanes: tree', () => {
     assert.throws(
       () => assertCleanTree(dir, { nested: ['не-каталог'] }),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.match(error.message, /не является рабочим деревом git: не-каталог/);
         return true;
       },
@@ -341,7 +341,7 @@ describe('lanes: tree', () => {
     assert.throws(
       () => assertCleanTree(dir),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.equal(
           error.message,
           'Дерево запуска не чисто: есть незакоммиченные либо неотслеживаемые изменения',
@@ -358,7 +358,7 @@ describe('lanes: tree', () => {
     assert.throws(
       () => assertCleanTree(root, { nested: [nestedName] }),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.match(error.message, /есть в: корень$/);
         return true;
       },
@@ -377,7 +377,7 @@ describe('lanes: tree', () => {
     assert.throws(
       () => assertCleanTree(root, { nested: [nestedName] }),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.match(error.message, /есть в: корень$/, 'сам вложенный при этом чист');
         return true;
       },
@@ -398,7 +398,7 @@ describe('lanes: tree', () => {
     assert.throws(
       () => assertCleanTree(root, { nested: [nestedName] }),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.match(error.message, /есть в: корень$/, 'ссылка сдвинулась в корне, вложенный чист');
         return true;
       },
@@ -507,12 +507,12 @@ describe('lanes: item', () => {
     assert.deepEqual(readLaneItem(dir, 'a'), { lane: 'a', slug: 'a-item', title: 'Заголовок' });
   });
 
-  it('файл без слага — StepcastError с кодом ошибки конфигурации, называющий файл', () => {
+  it('файл без слага — BurnexError с кодом ошибки конфигурации, называющий файл', () => {
     const dir = tempDir('lanes-item-');
     const path = join(dir, 'item-a.json');
     writeFileSync(path, JSON.stringify({ title: 'без слага' }));
     assert.throws(() => readLaneItem(dir, 'a'), (error: unknown) => {
-      assert.ok(error instanceof StepcastError);
+      assert.ok(error instanceof BurnexError);
       assert.equal(error.exitCode, 2);
       assert.equal(error.file, path);
       return true;
@@ -558,18 +558,18 @@ describe('lanes: mergeRecord', () => {
     assert.equal(readLaneMerge(dir, 'a'), undefined);
   });
 
-  it('readLaneMerge на битом файле — StepcastError с именем файла', () => {
+  it('readLaneMerge на битом файле — BurnexError с именем файла', () => {
     const dir = tempDir('lanes-merge-');
     const path = join(dir, 'merge-a.json');
     writeFileSync(path, 'не json{{{');
     assert.throws(() => readLaneMerge(dir, 'a'), (error: unknown) => {
-      assert.ok(error instanceof StepcastError);
+      assert.ok(error instanceof BurnexError);
       assert.equal(error.file, path);
       return true;
     });
   });
 
-  it('readLaneMerge на записи с незнакомым исходом — StepcastError, а не молчаливое «не сведена»', () => {
+  it('readLaneMerge на записи с незнакомым исходом — BurnexError, а не молчаливое «не сведена»', () => {
     // Тихая деградация здесь опаснее отказа: на этой записи держится отказ от
     // повторного наложения сведённой дорожки, и запись другой версии движка
     // выключала бы щит вместо того, чтобы назвать себя.
@@ -577,23 +577,23 @@ describe('lanes: mergeRecord', () => {
     const path = join(dir, 'merge-a.json');
     writeFileSync(path, JSON.stringify({ lane: 'a', kind: 'слито', at: '2026-09-05T00:00:00.000Z' }));
     assert.throws(() => readLaneMerge(dir, 'a'), (error: unknown) => {
-      assert.ok(error instanceof StepcastError);
+      assert.ok(error instanceof BurnexError);
       assert.equal(error.file, path);
       assert.match(error.message, /знакомого исхода/);
       return true;
     });
   });
 
-  it('readLaneMerge на записи без исхода — StepcastError', () => {
+  it('readLaneMerge на записи без исхода — BurnexError', () => {
     const dir = tempDir('lanes-merge-');
     writeFileSync(join(dir, 'merge-a.json'), JSON.stringify({ lane: 'a', at: '2026-09-05T00:00:00.000Z' }));
-    assert.throws(() => readLaneMerge(dir, 'a'), StepcastError);
+    assert.throws(() => readLaneMerge(dir, 'a'), BurnexError);
   });
 
-  it('readLaneMerge на записи без момента — StepcastError', () => {
+  it('readLaneMerge на записи без момента — BurnexError', () => {
     const dir = tempDir('lanes-merge-');
     writeFileSync(join(dir, 'merge-a.json'), JSON.stringify({ lane: 'a', kind: 'merged' }));
-    assert.throws(() => readLaneMerge(dir, 'a'), StepcastError);
+    assert.throws(() => readLaneMerge(dir, 'a'), BurnexError);
   });
 
   it('mergedLanes перечисляет дорожки с записью исхода, как takenLanes — item', () => {

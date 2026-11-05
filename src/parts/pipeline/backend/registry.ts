@@ -1,5 +1,5 @@
 import type { Config } from '../config/resolve.js';
-import { StepcastError } from '../../../kernel/errors.js';
+import { BurnexError } from '../../../kernel/errors.js';
 import { builtinRegistry } from '../../builtin.js';
 import { availableNames, type Registry } from '../../../kernel/registry.js';
 import type { BackendAdapter } from './types.js';
@@ -20,17 +20,17 @@ export function resolveAdapter(
 ): BackendAdapter {
   const backend = config.backends[name];
   if (backend === undefined) {
-    throw new StepcastError(`Неизвестный бэкенд ${name}`, {
+    throw new BurnexError(`Неизвестный бэкенд ${name}`, {
       hint: `Настроены: ${Object.keys(config.backends).sort().join(', ')}`,
     });
   }
   if (!backend.enabled) {
-    throw new StepcastError(`Бэкенд ${name} выключен в конфигурации`);
+    throw new BurnexError(`Бэкенд ${name} выключен в конфигурации`);
   }
 
   const contribution = registry.backends.get(name);
   if (contribution === undefined) {
-    throw new StepcastError(`Адаптер бэкенда ${name} не предоставлен ни встроенно, ни плагином`, {
+    throw new BurnexError(`Адаптер бэкенда ${name} не предоставлен ни встроенно, ни плагином`, {
       hint: `Доступны: ${availableNames(registry, 'backends').join(', ')}. Плагин, дающий адаптер, объявляется ключом plugins (docs/plugins.md)`,
     });
   }
@@ -51,7 +51,7 @@ export function resolveAdapter(
 function assertDeclaredCapabilities(adapter: BackendAdapter, name: string): void {
   const source: unknown = adapter.capabilities.sessionIdSource;
   if (source === 'engine' || source === 'backend') return;
-  throw new StepcastError(
+  throw new BurnexError(
     `Адаптер бэкенда ${name} не объявил направление идентификатора сессии (capabilities.sessionIdSource)`,
     {
       hint: "Объявите 'engine' — идентификатор заводит движок и передаёт бэкенду — либо 'backend' — идентификатор заводит бэкенд и сообщает его записью потока (docs/plugins.md)",

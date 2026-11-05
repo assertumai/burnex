@@ -3,14 +3,14 @@ import { describe, it } from 'node:test';
 import { z } from 'zod';
 
 import { definePlugin } from '../src/plugin/index.js';
-import type { StepcastPlugin } from '../src/kernel/contract.js';
+import type { BurnexPlugin } from '../src/kernel/contract.js';
 import {
   DECLARATIVE_CONTRIBUTION_FIELDS,
   defineBackend,
   definePipelinePlugin,
   definePredicate,
   defineStepKind,
-  StepcastPluginSchema,
+  BurnexPluginSchema,
   type PipelinePlugin,
   type StepKindInput,
 } from '../src/parts/pipeline/contract.js';
@@ -28,7 +28,7 @@ import { createPipelineKernel } from './helpers.js';
 
 describe('plugin-helpers: тождество в рантайме', () => {
   it('definePlugin возвращает переданный объект', () => {
-    const source: StepcastPlugin = { name: 'identity-plugin' };
+    const source: BurnexPlugin = { name: 'identity-plugin' };
     assert.equal(definePlugin(source), source);
   });
 
@@ -113,8 +113,8 @@ describe('plugin-helpers: вклад из хелпера принимается 
     };
   }
 
-  it('плагин из хелперов проходит StepcastPluginSchema', () => {
-    assert.equal(StepcastPluginSchema.safeParse(pluginFromHelpers()).success, true);
+  it('плагин из хелперов проходит BurnexPluginSchema', () => {
+    assert.equal(BurnexPluginSchema.safeParse(pluginFromHelpers()).success, true);
   });
 
   it('плагин из хелперов собирается в реестр — те же имена вкладов и те же умолчания бэкенда, что у эквивалента из литералов', async () => {
@@ -157,7 +157,7 @@ describe('plugin-helpers: zod-модель через границу не про
       ],
     };
 
-    const parsed = StepcastPluginSchema.safeParse(plugin);
+    const parsed = BurnexPluginSchema.safeParse(plugin);
     assert.equal(parsed.success, false);
     assert.equal(parsed.error?.issues[0]?.path.join('.'), 'predicates.0.schema');
   });
@@ -175,14 +175,14 @@ describe('plugin-helpers: zod-модель через границу не про
       ],
     };
 
-    const parsed = StepcastPluginSchema.safeParse(plugin);
+    const parsed = BurnexPluginSchema.safeParse(plugin);
     assert.equal(parsed.success, false);
     assert.equal(parsed.error?.issues[0]?.path.join('.'), 'steps.0.fields');
   });
 });
 
 describe('plugin-helpers: форма document публикуется наравне с прочими вкладами', () => {
-  it('вклад с document собирается хелпером без приведений и проходит StepcastPluginSchema', () => {
+  it('вклад с document собирается хелпером без приведений и проходит BurnexPluginSchema', () => {
     const contribution = defineStepKind<{ readonly target: string; readonly to: unknown }>({
       name: 'deploy-kind',
       title: 'Деплой',
@@ -207,7 +207,7 @@ describe('plugin-helpers: форма document публикуется нарав�
     });
 
     assert.equal(
-      StepcastPluginSchema.safeParse({ name: 'deploy-steps', steps: [contribution] }).success,
+      BurnexPluginSchema.safeParse({ name: 'deploy-steps', steps: [contribution] }).success,
       true,
     );
   });
@@ -226,7 +226,7 @@ describe('plugin-helpers: форма document публикуется нарав�
       ],
     };
 
-    const parsed = StepcastPluginSchema.safeParse(plugin);
+    const parsed = BurnexPluginSchema.safeParse(plugin);
     assert.equal(parsed.success, false);
     assert.equal(parsed.error?.issues[0]?.path.join('.'), 'steps.0.native');
   });
@@ -394,7 +394,7 @@ function typeCheckDomainKeyInKernelHelper(): void {
 void typeCheckDomainKeyInKernelHelper;
 
 function typeCheckDomainKeyInKernelPluginType(): void {
-  const plugin: StepcastPlugin = {
+  const plugin: BurnexPlugin = {
     name: 'kernel-only',
     // @ts-expect-error — та же граница в аннотации литерала: доменные ключи несёт только `PipelinePlugin`
     backends: {},

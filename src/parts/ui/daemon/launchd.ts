@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 
-import { StepcastError } from '../../../kernel/errors.js';
+import { BurnexError } from '../../../kernel/errors.js';
 
 /**
  * Автозапуск демона витрины через launchd (macOS).
@@ -13,7 +13,14 @@ import { StepcastError } from '../../../kernel/errors.js';
  * читая конфигурации.
  */
 
-export const AGENT_LABEL = 'ai.stepcast.daemon';
+export const AGENT_LABEL = 'ai.burnex.daemon';
+/**
+ * Метка агента до переименования. Установленный ею демон выгружается и его
+ * plist удаляется при `up --install` и `down --uninstall`: иначе после обновления
+ * рядом поднялся бы второй демон на том же порту (`docs/release.md`,
+ * «Переход со stepcast»).
+ */
+export const LEGACY_AGENT_LABEL = 'ai.stepcast.daemon';
 
 /**
  * Путь входа, который переживает обновление: `install.sh` перекладывает
@@ -44,6 +51,19 @@ export function systemHost(): LaunchdHost {
 
 export function agentPlistPath(home: string): string {
   return join(home, 'Library', 'LaunchAgents', `${AGENT_LABEL}.plist`);
+}
+
+function legacyAgentPlistPath(home: string): string {
+  return join(home, 'Library', 'LaunchAgents', `${LEGACY_AGENT_LABEL}.plist`);
+}
+
+/** Выгрузить и убрать агент прежней метки, если он установлен. Возвращает, был ли plist. */
+function removeLegacyAgent(host: LaunchdHost): boolean {
+  const plist = legacyAgentPlistPath(host.home);
+  if (!existsSync(plist)) return false;
+  host.launchctl(['bootout', `${domain(host)}/${LEGACY_AGENT_LABEL}`]);
+  rmSync(plist, { force: true });
+  return true;
 }
 
 export interface PlistOptions {
@@ -103,7 +123,7 @@ export function renderPlist(options: PlistOptions): string {
 /** Отказ до любых побочных эффектов: ни файла, ни вызова `launchctl`. */
 export function requireMacos(host: LaunchdHost, flag: string): void {
   if (host.platform === 'darwin') return;
-  throw new StepcastError(`${flag} работает только на macOS`, {
+  throw new BurnexError(`${flag} работает только на macOS`, {
     hint: 'Автозапуск демона устроен через launchd, которого нет на этой системе',
   });
 }
@@ -134,10 +154,11 @@ export function installAgent(host: LaunchdHost, options: PlistOptions): string {
   mkdirSync(join(plist, '..'), { recursive: true });
   writeFileSync(plist, renderPlist(options));
 
+  removeLegacyAgent(host);
   bootout(host);
   const result = host.launchctl(['bootstrap', domain(host), plist]);
   if (result.status !== 0) {
-    throw new StepcastError('launchctl не загрузил агент автозапуска', {
+    throw new BurnexError('launchctl не загрузил агент автозапуска', {
       hint: result.stderr.trim() === '' ? `код возврата ${result.status}` : result.stderr.trim(),
     });
   }
@@ -150,7 +171,11 @@ export function installAgent(host: LaunchdHost, options: PlistOptions): string {
  * зовётся, поэтому обычный `down` безопасен везде.
  */
 export function unloadAgent(host: LaunchdHost): boolean {
-  if (host.platform !== 'darwin' || !existsSync(agentPlistPath(host.home))) return false;
+  if (host.platform !== 'darwin') return false;
+  if (existsSync(legacyAgentPlistPath(host.home))) {
+    host.launchctl(['bootout', `${domain(host)}/${LEGACY_AGENT_LABEL}`]);
+  }
+  if (!existsSync(agentPlistPath(host.home))) return false;
   return bootout(host);
 }
 
@@ -158,11 +183,12 @@ export function unloadAgent(host: LaunchdHost): boolean {
 export function removeAgent(host: LaunchdHost): boolean {
   requireMacos(host, '--uninstall');
 
+  const legacyExisted = removeLegacyAgent(host);
   const plist = agentPlistPath(host.home);
   const existed = existsSync(plist);
   if (existed) bootout(host);
   rmSync(plist, { force: true });
-  return existed;
+  return existed || legacyExisted;
 }
 
 export type AgentState =

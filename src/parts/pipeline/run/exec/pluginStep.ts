@@ -1,5 +1,5 @@
 import { evaluatePredicates, validateAgainstSchema } from '../../expect/evaluate.js';
-import { StepcastError } from '../../../../kernel/errors.js';
+import { BurnexError } from '../../../../kernel/errors.js';
 import type { DecisionRecord, PredicateResult, StepRecord, Usage } from '../journal/schema.js';
 import type { Job, PluginStep } from '../../document/model.js';
 import { validateStepKindFields } from '../../document/expand.js';
@@ -169,7 +169,7 @@ export async function runPluginStep(
           value: {
             attempt: plan.attempt,
             status: 'failed',
-            reason: error instanceof StepcastError ? error.message : String(error),
+            reason: error instanceof BurnexError ? error.message : String(error),
             started_at: now,
             finished_at: now,
           },
@@ -216,7 +216,7 @@ export async function runPluginStep(
               // не внятным отказом, а исключением из записи журнала.
               const problem = jsonRepresentationProblem(action, 'action');
               if (problem !== undefined) {
-                throw new StepcastError(
+                throw new BurnexError(
                   `Шаг ${job.id}.${step.id}: описание внешнего действия для act не представимо в JSON — ${problem}`,
                 );
               }

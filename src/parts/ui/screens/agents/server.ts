@@ -1,4 +1,4 @@
-import { isStepcastError } from '../../../../kernel/errors.js';
+import { isBurnexError } from '../../../../kernel/errors.js';
 import { readBody, sendJson } from '../../daemon/http.js';
 import { readModels } from '../../models.js';
 import { readSettings, writeSettings } from '../../settings.js';
@@ -42,8 +42,8 @@ const handleWrite: ApiHandler = async (req, res, env) => {
   try {
     sendJson(res, 200, await writeSettings(patch, env.home, env.kernelCache));
   } catch (error) {
-    const message = isStepcastError(error) ? error.message : (error as Error).message;
-    sendJson(res, isStepcastError(error) ? 400 : 500, { error: message });
+    const message = isBurnexError(error) ? error.message : (error as Error).message;
+    sendJson(res, isBurnexError(error) ? 400 : 500, { error: message });
   }
 };
 

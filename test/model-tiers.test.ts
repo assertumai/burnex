@@ -5,7 +5,7 @@ import codexPlugin from '../src/parts/backends/codex/index.js';
 import { isForeignModel, modelOwners } from '../src/parts/pipeline/config/modelTiers.js';
 import { resolveConfig } from '../src/parts/pipeline/config/resolve.js';
 import { backendsKnowingModel } from '../src/parts/pipeline/run/budget/priceCatalog.js';
-import { StepcastError } from '../src/kernel/errors.js';
+import { BurnexError } from '../src/kernel/errors.js';
 import { expandPipeline } from '../src/parts/pipeline/document/expand.js';
 import { serializeLock } from '../src/parts/pipeline/document/lock.js';
 import { asAgent, makeProject } from './helpers.js';
@@ -88,7 +88,7 @@ backends:
     ]) {
       assert.throws(
         () => expand(JOB, `backends:\n  claude:\n    model_tiers:\n      ${modelTiers}\n`),
-        (error: unknown) => error instanceof StepcastError,
+        (error: unknown) => error instanceof BurnexError,
       );
     }
   });
@@ -173,7 +173,7 @@ inputs:
   level: { type: string, default: "   " }
 effort: \${inputs.level}
 ${JOB}`), (error: unknown) =>
-      error instanceof StepcastError && /effort/.test(error.message) && error.at === 'effort');
+      error instanceof BurnexError && /effort/.test(error.message) && error.at === 'effort');
   });
 
   it('rejects empty effort produced by reusable-job parameter interpolation', () => {
@@ -193,7 +193,7 @@ steps:
     with:
       level: " "
 `, TIERS_CONFIG, files), (error: unknown) =>
-      error instanceof StepcastError && /effort/.test(error.message) && error.at === 'jobs.work.effort');
+      error instanceof BurnexError && /effort/.test(error.message) && error.at === 'jobs.work.effort');
   });
 
   it('inherits effort independently through config, pipeline, job and step', () => {
@@ -288,7 +288,7 @@ jobs:
   it('accepts custom tiers and rejects malformed tier maps', () => {
     assert.equal(selection(`model_tier: nope\n${JOB}`).model, 'sonnet');
     assert.equal(selection(`model_tier: typo\n${JOB}`, 'backends:\n  claude:\n    model_tiers:\n      typo: opus\n').model, 'opus');
-    assert.throws(() => expand(JOB, 'backends:\n  claude:\n    model_tiers:\n      deep: " "\n'), (error: unknown) => error instanceof StepcastError && (error.at ?? '').includes('model_tiers'));
+    assert.throws(() => expand(JOB, 'backends:\n  claude:\n    model_tiers:\n      deep: " "\n'), (error: unknown) => error instanceof BurnexError && (error.at ?? '').includes('model_tiers'));
   });
 
   it('locks the effective model without retaining tier selection in executable steps', () => {

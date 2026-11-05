@@ -1,5 +1,5 @@
 import type { ResolvedConfig } from './pipeline/config/resolve.js';
-import { StepcastError } from '../kernel/errors.js';
+import { BurnexError } from '../kernel/errors.js';
 import { applyPluginTree, walkPluginTree, type LoadOptions, type LoadResult, type RowOutcome } from '../kernel/load.js';
 import type { Introspection } from '../kernel/introspect.js';
 import type { Kernel } from '../kernel/kernel.js';
@@ -49,8 +49,8 @@ export type DefaultLoadOptions = Omit<LoadOptions, 'declarativeFields'>;
  * вызывающего, — тот путь идёт мимо `builtinRows` обеих сторон и этим отказом
  * не задевается.
  */
-function duplicateBuiltinRow(id: string): StepcastError {
-  return new StepcastError(`Строка ${id} названа и перечнем движка, и перечнем вызывающего`, {
+function duplicateBuiltinRow(id: string): BurnexError {
+  return new BurnexError(`Строка ${id} названа и перечнем движка, и перечнем вызывающего`, {
     at: 'plugins',
     hint: 'Замена встроенной строки делается патчем (plugins.patch.yml), а не второй записью в перечне — см. docs/plugins.md',
   });

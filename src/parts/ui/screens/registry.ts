@@ -3,7 +3,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import { Service, type Context } from 'cordis';
 
 import type { Config } from '../../pipeline/config/resolve.js';
-import { StepcastError } from '../../../kernel/errors.js';
+import { BurnexError } from '../../../kernel/errors.js';
 import { isBuiltinRowFiber, rowScope, type BuiltinRow } from '../../../kernel/load.js';
 import type { Kernel } from '../../../kernel/kernel.js';
 import type { KernelCache } from '../pipelines.js';
@@ -154,7 +154,7 @@ export class ScreensService extends Service {
     const owner = this.ctx.fiber.name;
     const existing = this.entries.get(declaration.id);
     if (existing !== undefined) {
-      throw new StepcastError(
+      throw new BurnexError(
         `Screen ${declaration.id} is declared twice: by ${existing.owner} and ${owner}`,
         {
           hint: 'Overriding a screen is not supported: remove one of the rows or name the screen differently',
@@ -218,7 +218,7 @@ export class ApiService extends Service implements ApiRoutes {
     const key = routeKey(method, path);
     const existing = this.routes.get(key);
     if (existing !== undefined) {
-      throw new StepcastError(
+      throw new BurnexError(
         `Route ${method} ${path} is taken: it is declared by ${existing.owner} and ${owner}`,
         {
           hint: 'Overriding a route is not supported: remove one of the rows or name the path differently',

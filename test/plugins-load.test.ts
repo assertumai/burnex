@@ -4,10 +4,10 @@ import { join } from 'node:path';
 import { describe, it } from 'node:test';
 
 import { resolveConfig } from '../src/parts/pipeline/config/resolve.js';
-import { ExitCode, StepcastError } from '../src/kernel/errors.js';
+import { ExitCode, BurnexError } from '../src/kernel/errors.js';
 import {
   DECLARATIVE_CONTRIBUTION_FIELDS,
-  StepcastPluginSchema,
+  BurnexPluginSchema,
   type DeclarativeContributionFields,
   type PipelinePlugin,
 } from '../src/parts/pipeline/contract.js';
@@ -85,7 +85,7 @@ describe('plugins-load: мягкий отказ каталожной строк�
     await assert.rejects(
       () => loadPlugins(config, { projectRoot: place.root }),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.match(error.message, /не загружается/);
         return true;
       },
@@ -147,7 +147,7 @@ describe('plugins-load: мягкий отказ каталожной строк�
       // Вызывающий (витрина) заводит свой вклад в области строки и отказывает:
       // строка обязана стать отказавшей и не оставить за собой ни вклада.
       onDirectoryRow: () => {
-        throw new StepcastError('сервис состава плагинов отказал');
+        throw new BurnexError('сервис состава плагинов отказал');
       },
     });
 
@@ -210,7 +210,7 @@ describe('plugins-load: адаптер декларативной формы о�
    * таблице после правки схемы, вело бы в никуда.
    */
   it('ключи схемы декларативной формы и таблица сервисов не расходятся', () => {
-    const schemaKeys = Object.keys(StepcastPluginSchema.shape).filter((key) => key !== 'name' && key !== 'version');
+    const schemaKeys = Object.keys(BurnexPluginSchema.shape).filter((key) => key !== 'name' && key !== 'version');
     assert.deepEqual(Object.keys(DECLARATIVE_CONTRIBUTION_FIELDS).sort(), schemaKeys.sort());
 
     // Каждому ключу отвечает ровно одно имя сервиса: двух ключей, ведущих в
@@ -254,7 +254,7 @@ describe('plugins-load: адаптер декларативной формы о�
           withoutPredicates,
         ),
       (error: unknown) =>
-        error instanceof StepcastError &&
+        error instanceof BurnexError &&
         /без-предикатов-в-таблице/.test(error.message) &&
         /predicates/.test(error.message),
     );

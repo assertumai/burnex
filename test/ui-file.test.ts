@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { describe, it } from 'node:test';
 
 import { MAX_FILE_BYTES, readJournalFile, resolveJournalPath } from '../src/parts/ui/file.js';
-import { StepcastError } from '../src/kernel/errors.js';
+import { BurnexError } from '../src/kernel/errors.js';
 import { tempDir } from './tmp.js';
 
 function bed(): string {
@@ -30,14 +30,14 @@ describe('ui-dashboard: чтение файла журнала', () => {
   it('отклоняет путь, ведущий за пределы каталога прогона', () => {
     const runDir = bed();
 
-    assert.throws(() => resolveJournalPath(runDir, '../секрет.txt'), StepcastError);
-    assert.throws(() => resolveJournalPath(runDir, 'jobs/../../секрет.txt'), StepcastError);
-    assert.throws(() => resolveJournalPath(runDir, '/etc/passwd'), StepcastError);
+    assert.throws(() => resolveJournalPath(runDir, '../секрет.txt'), BurnexError);
+    assert.throws(() => resolveJournalPath(runDir, 'jobs/../../секрет.txt'), BurnexError);
+    assert.throws(() => resolveJournalPath(runDir, '/etc/passwd'), BurnexError);
   });
 
   it('не принимает каталог-сосед с общим префиксом за вложенный', () => {
     const runDir = bed();
-    assert.throws(() => resolveJournalPath(runDir, '../run-other/файл'), StepcastError);
+    assert.throws(() => resolveJournalPath(runDir, '../run-other/файл'), BurnexError);
   });
 
   it('не помечает усечённым файл меньше потолка и отдаёт его целиком', () => {

@@ -2,7 +2,7 @@ import { execFileSync } from 'node:child_process';
 import { realpathSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 
-import { ExitCode, StepcastError } from '../../../../kernel/errors.js';
+import { ExitCode, BurnexError } from '../../../../kernel/errors.js';
 import {
   acquire,
   readOwner,
@@ -69,7 +69,7 @@ export function backlogLockPath(file: string): string {
  */
 export type { LockOwner };
 
-export class BacklogLockTimeoutError extends StepcastError {}
+export class BacklogLockTimeoutError extends BurnexError {}
 
 function timeoutError(path: string, command: string, waitedMs: number): BacklogLockTimeoutError {
   const owner = readOwner(path);

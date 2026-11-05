@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { describe, it } from 'node:test';
 
-import { StepcastError } from '../src/kernel/errors.js';
+import { BurnexError } from '../src/kernel/errors.js';
 import { judgeVerdictSchemaPath } from '../src/parts/pipeline/expect/verdict.js';
 import { packagedSchemaPath } from '../src/parts/pipeline/domain/package-schema.js';
 import { tempDir } from './tmp.js';
@@ -66,19 +66,19 @@ describe('package-schema: схема, поставляемая пакетом', 
 
   it('отказывает на имени с .. до обращения к файловой системе', () => {
     assert.throws(() => packagedSchemaPath('../../etc/passwd'), (error: unknown) => {
-      assert.ok(error instanceof StepcastError);
+      assert.ok(error instanceof BurnexError);
       assert.match(error.message, /kebab-case/);
       return true;
     });
   });
 
   it('отказывает на пустом имени', () => {
-    assert.throws(() => packagedSchemaPath(''), StepcastError);
+    assert.throws(() => packagedSchemaPath(''), BurnexError);
   });
 
   it('отказывает на неизвестном имени, называя перечень поставляемых схем', () => {
     assert.throws(() => packagedSchemaPath('no-such'), (error: unknown) => {
-      assert.ok(error instanceof StepcastError);
+      assert.ok(error instanceof BurnexError);
       assert.match(error.message, /no-such/);
       assert.match(error.hint ?? '', /backlog-slots/);
       return true;
@@ -107,7 +107,7 @@ describe('package-schema: схема, поставляемая пакетом', 
       (error: unknown) => {
         // Тип сверяется по имени: копия ядра несёт собственный класс ошибки,
         // и `instanceof` через границу двух загрузок модуля не работает.
-        assert.equal((error as Error).name, 'StepcastError');
+        assert.equal((error as Error).name, 'BurnexError');
         assert.equal((error as { exitCode?: number }).exitCode, 2);
         assert.match((error as { hint?: string }).hint ?? '', /установка пакета burnex неполна/);
         return true;

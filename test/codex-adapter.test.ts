@@ -12,7 +12,7 @@ import codexPlugin, {
 import type { BackendConfig } from '../src/parts/pipeline/surface.js';
 import type { AgentInvocation, BackendAdapter, BackendEvent } from '../src/parts/pipeline/backend/types.js';
 import { createSessionRegistry, executeAgentStep } from '../src/parts/pipeline/run/exec/agentStep.js';
-import { StepcastError } from '../src/kernel/errors.js';
+import { BurnexError } from '../src/kernel/errors.js';
 import type { AgentStep } from '../src/parts/pipeline/document/model.js';
 import { tempDir } from './tmp.js';
 
@@ -166,7 +166,7 @@ describe('codex-backend: перевод политики доступа', () => 
     assert.throws(
       () => adapter.launch(invocation({ permissions: { mode: 'acceptEdits' } })),
       (error: unknown) =>
-        error instanceof StepcastError &&
+        error instanceof BurnexError &&
         /codex/.test(error.message) &&
         /acceptEdits/.test(error.message) &&
         /read-only, workspace-write, danger-full-access/.test(error.hint ?? ''),

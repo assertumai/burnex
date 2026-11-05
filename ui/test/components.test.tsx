@@ -7,7 +7,7 @@ import { describe, it } from 'node:test';
 import { renderToStaticMarkup } from 'react-dom/server';
 
 import { SHARED_MODULES } from '../../src/parts/ui/daemon/sharedModules.ts';
-import * as StepcastUi from '@burnex/ui';
+import * as BurnexUi from '@burnex/ui';
 import {
   Button,
   Card,
@@ -66,7 +66,7 @@ const ROOT_UI = join(fileURLToPath(new URL('../../', import.meta.url)), 'ui', 's
 
 describe('ui-components: состав библиотеки не расходится с таблицей', () => {
   it('каждое объявленное имя действительно экспортируется', () => {
-    const mod = StepcastUi as unknown as Record<string, unknown>;
+    const mod = BurnexUi as unknown as Record<string, unknown>;
     const missing = SHARED_MODULES['@burnex/ui'].names.filter(
       (name) => !Object.prototype.hasOwnProperty.call(mod, name),
     );
@@ -75,7 +75,7 @@ describe('ui-components: состав библиотеки не расходит
 
   it('модуль не экспортирует лишнего сверх объявленного перечня', () => {
     const declared = new Set(SHARED_MODULES['@burnex/ui'].names);
-    const extra = Object.keys(StepcastUi).filter((name) => !declared.has(name));
+    const extra = Object.keys(BurnexUi).filter((name) => !declared.has(name));
     assert.deepEqual(extra, [], 'модуль экспортирует имя, не названное записью таблицы');
   });
 });

@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
 import { evaluate, parseExpression, references } from '../src/parts/pipeline/domain/expr/parse.js';
-import { StepcastError } from '../src/kernel/errors.js';
+import { BurnexError } from '../src/kernel/errors.js';
 
 const scope = {
   inputs: { skip_review: false, count: 3, name: 'foo' },
@@ -40,7 +40,7 @@ describe('язык выражений', () => {
   it('трактует пустоту списка через истинность, а не через литерал', () => {
     // Литерала списка в грамматике нет намеренно: «есть ли находки» выражается
     // самой ссылкой, и второй способ сказать то же самое не нужен.
-    assert.throws(() => parseExpression('jobs.plan.output.findings == []'), StepcastError);
+    assert.throws(() => parseExpression('jobs.plan.output.findings == []'), BurnexError);
     assert.equal(check('not jobs.plan.output.findings'), true, 'пустой список ложен');
     assert.equal(
       evaluate(parseExpression('jobs.r.output.findings'), {
@@ -69,11 +69,11 @@ describe('язык выражений', () => {
   });
 
   it('отклоняет то, чего нет в грамматике', () => {
-    assert.throws(() => parseExpression('inputs.count + 1'), StepcastError);
-    assert.throws(() => parseExpression('len(inputs.name)'), StepcastError);
-    assert.throws(() => parseExpression('inputs.count === 3'), StepcastError);
-    assert.throws(() => parseExpression('(inputs.a'), StepcastError);
-    assert.throws(() => parseExpression('inputs.a inputs.b'), StepcastError);
-    assert.throws(() => parseExpression('"незакрытая'), StepcastError);
+    assert.throws(() => parseExpression('inputs.count + 1'), BurnexError);
+    assert.throws(() => parseExpression('len(inputs.name)'), BurnexError);
+    assert.throws(() => parseExpression('inputs.count === 3'), BurnexError);
+    assert.throws(() => parseExpression('(inputs.a'), BurnexError);
+    assert.throws(() => parseExpression('inputs.a inputs.b'), BurnexError);
+    assert.throws(() => parseExpression('"незакрытая'), BurnexError);
   });
 });

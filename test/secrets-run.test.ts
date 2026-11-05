@@ -3,7 +3,7 @@ import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, it } from 'node:test';
 
-import { StepcastError } from '../src/kernel/errors.js';
+import { BurnexError } from '../src/kernel/errors.js';
 import { applyDeclarativePlugin } from '../src/kernel/load.js';
 import { registryFromKernel, type Registry } from '../src/kernel/registry.js';
 import { createBuiltinKernel } from '../src/parts/builtin.js';
@@ -93,13 +93,13 @@ ${steps}
 const ENV_FILE = { '.env.local': `SVC_CRED=${SECRET}\n` };
 
 describe('secrets: разрешение до каталога прогона', () => {
-  async function refused(files: Record<string, string>, registry?: Registry): Promise<StepcastError> {
+  async function refused(files: Record<string, string>, registry?: Registry): Promise<BurnexError> {
     const project = makeProject(files);
     const runsRoot = tempDir('runs-');
     try {
       await start(project, { runsRoot, ...(registry === undefined ? {} : { registry }) });
     } catch (error) {
-      assert.ok(error instanceof StepcastError, `ожидался StepcastError, пришло ${String(error)}`);
+      assert.ok(error instanceof BurnexError, `ожидался BurnexError, пришло ${String(error)}`);
       assert.deepEqual(readdirSync(runsRoot), [], 'отказ не оставляет каталога прогона');
       return error;
     }
@@ -252,7 +252,7 @@ describe('secrets: возобновление', () => {
           baseEnv: testBaseEnv(),
           resume: { plan, source },
         }),
-      (error: unknown) => error instanceof StepcastError && /короче 8 символов/.test(error.message),
+      (error: unknown) => error instanceof BurnexError && /короче 8 символов/.test(error.message),
     );
     assert.deepEqual(readdirSync(join(runsRoot, projectDir[0]!)).sort(), before, 'нового каталога прогона нет');
   });
@@ -589,7 +589,7 @@ jobs:
     const runsRoot = tempDir('runs-');
 
     await assert.rejects(start(project, { registry, runsRoot }), (error: unknown) => {
-      assert.ok(error instanceof StepcastError);
+      assert.ok(error instanceof BurnexError);
       assert.equal(error.at, 'secrets.gh-token');
       assert.match(error.message, /только на macOS/);
       assert.doesNotMatch(error.message, /не найдена/);
@@ -659,7 +659,7 @@ describe('secrets: проба для витрины', () => {
       assert.equal(probe.ok, false);
       if (probe.ok) return;
       assert.equal(probe.status, status);
-      assert.ok(refused instanceof StepcastError);
+      assert.ok(refused instanceof BurnexError);
       assert.equal(probe.error.message, refused.message);
       assert.equal(probe.error.at, refused.at);
       assert.equal(probe.error.hint, refused.hint);

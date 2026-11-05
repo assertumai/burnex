@@ -1,7 +1,7 @@
 import { spawn } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 
-import { StepcastError } from '../../../kernel/errors.js';
+import { BurnexError } from '../../../kernel/errors.js';
 import { envName, readEngineEnv } from '../../../kernel/env-names.js';
 import { mergeJobData } from '../run/journal/data.js';
 import { atomicWrite } from '../run/journal/writer.js';
@@ -23,7 +23,7 @@ import { atomicWrite } from '../run/journal/writer.js';
 function requireEnv(suffix: string): string {
   const value = readEngineEnv(process.env, suffix, { warn: false });
   if (value === undefined || value.trim() === '') {
-    throw new StepcastError('Библиотека burnex/step работает только внутри шага прогона', {
+    throw new BurnexError('Библиотека burnex/step работает только внутри шага прогона', {
       hint: `Переменная ${envName(suffix)} приходит от движка в окружении шага script; вне прогона читать и писать некуда`,
     });
   }
@@ -101,13 +101,13 @@ export async function exec(
       process.stderr.write(chunk);
     });
     child.on('error', (error) => {
-      reject(new StepcastError(`Не удалось запустить ${command}: ${error.message}`, { cause: error }));
+      reject(new BurnexError(`Не удалось запустить ${command}: ${error.message}`, { cause: error }));
     });
     child.on('close', (code) => {
       const exitCode = code ?? -1;
       if (exitCode !== 0 && options.allowFailure !== true) {
         reject(
-          new StepcastError(`Команда ${command} завершилась кодом ${exitCode}`, {
+          new BurnexError(`Команда ${command} завершилась кодом ${exitCode}`, {
             ...(stderr.trim() === '' ? {} : { hint: stderr.trim() }),
           }),
         );

@@ -29,13 +29,13 @@ const LIST = slot<Record<string, never>, 'list'>('list', 'list');
 interface PluginModule {
   readonly default?: (ctx: Context) => void;
   /** Ошибка сборки, пришедшая исполняемым модулем, — то же имя экспорта, что у виджета (`src/parts/ui/daemon/sharedModules.ts`). */
-  readonly __stepcastWidgetError?: {
+  readonly __burnexWidgetError?: {
     readonly file: string;
     readonly line: number;
     readonly column: number;
     readonly text: string;
   };
-  readonly __stepcastWidgetStyle?: string;
+  readonly __burnexWidgetStyle?: string;
 }
 
 type ModuleProgram = PluginModule | (() => PluginModule | Promise<PluginModule>);
@@ -401,7 +401,7 @@ describe('hot-swap: отказы замены', () => {
     // чтения этого экспорта сломанная половина применилась бы как пустая —
     // молча, без единой строки в диагностиках.
     loader.set('a', '2', {
-      __stepcastWidgetError: { file: '/plugins/a/index.tsx', line: 3, column: 5, text: 'Expected identifier' },
+      __burnexWidgetError: { file: '/plugins/a/index.tsx', line: 3, column: 5, text: 'Expected identifier' },
     });
     await kernel.ctx.plugins.reconcile([{ id: 'a', version: '2' }]);
     const diagnostics = await kernel.settle();
@@ -531,7 +531,7 @@ describe('hot-swap: стили принадлежат области строк�
     Marker.displayName = label;
     return {
       default: (ctx) => ctx.slots.contribute(LIST, { component: Marker }),
-      __stepcastWidgetStyle: css,
+      __burnexWidgetStyle: css,
     };
   }
 

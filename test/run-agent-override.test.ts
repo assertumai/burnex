@@ -3,7 +3,7 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, it } from 'node:test';
 
-import { ExitCode, StepcastError } from '../src/kernel/errors.js';
+import { ExitCode, BurnexError } from '../src/kernel/errors.js';
 import type { ParsedArgs } from '../src/kernel/cli/types.js';
 import { resolveConfigWithAgent } from '../src/parts/pipeline/config/agentOverride.js';
 import { runRunCommand } from '../src/parts/pipeline/commands/run.js';
@@ -107,7 +107,7 @@ describe('resolveConfigWithAgent: слой флага над defaults.agent', ()
     assert.throws(
       () => withHome(b.project.home, () => resolveConfigWithAgent({ cwd: b.project.root, agent: 'nope' })),
       (error) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.match(error.message, /nope/);
         assert.match(error.hint ?? '', /claude/);
         assert.match(error.hint ?? '', /codex/);

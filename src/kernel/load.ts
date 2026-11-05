@@ -5,9 +5,9 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import { findPackageRoot } from './packageRoot.js';
 
-import { isStepcastError, StepcastError } from './errors.js';
+import { isBurnexError, BurnexError } from './errors.js';
 import { isContextPlugin, type ContextPlugin, type ContextPluginObject } from './contract.js';
-import { StepcastPluginSchema, type DeclarativeContributionFields, type PipelinePlugin } from '../parts/pipeline/contract.js';
+import { BurnexPluginSchema, type DeclarativeContributionFields, type PipelinePlugin } from '../parts/pipeline/contract.js';
 import { translateReservedNameConflict, unresolvedFibers, type Context, type Fiber, type Kernel } from './kernel.js';
 import { readPluginManifest, type PluginManifest } from './tree/manifest.js';
 import { registryFromKernel, type Registry } from './registry.js';
@@ -49,7 +49,7 @@ function declaredIn(row: TreeRow): string | undefined {
 
 /**
  * `{ file }`, если строка пришла из файла, иначе пустой объект — спред в
- * опции `StepcastError`. Отдельная функция, а не повторный вызов
+ * опции `BurnexError`. Отдельная функция, а не повторный вызов
  * `declaredIn(row)` в самом спреде: `exactOptionalPropertyTypes` не умеет
  * сузить второй вызов той же функции по проверке первого.
  */
@@ -228,7 +228,7 @@ export function resolveModulePath(row: TreeRow, options: LoadOptions): string {
     }
   }
 
-  throw new StepcastError(`Модуль плагина ${spec} не найден`, {
+  throw new BurnexError(`Модуль плагина ${spec} не найден`, {
     ...fileOption(row),
     at: 'plugins',
     hint: `Искали от: ${roots.join(', ')}. Установите пакет в проект либо назовите путь, начав его с ./`,
@@ -242,9 +242,9 @@ export function resolveModulePath(row: TreeRow, options: LoadOptions): string {
  * загружая их (`burnex plugins` с готовым реестром): текст отказа обязан быть
  * один и тот же.
  */
-export function rowFailureError(row: TreeRow): StepcastError | undefined {
+export function rowFailureError(row: TreeRow): BurnexError | undefined {
   if (row.failure === undefined) return undefined;
-  return new StepcastError(row.failure.message, {
+  return new BurnexError(row.failure.message, {
     ...(row.source.kind === 'directory' ? { file: row.source.dir } : fileOption(row)),
     at: 'plugins',
     ...(row.failure.hint === undefined ? {} : { hint: row.failure.hint }),
@@ -259,13 +259,13 @@ export type Recognized =
  * Прочитать и опознать форму объекта, экспортированного модулем по
  * умолчанию. Функция или объект с `apply` — плагин контекста, проверяется
  * только тем, что тело исполнимо; всё прочее — прежняя проверка
- * `StepcastPluginSchema` до исполнения кода плагина. Значение, не подошедшее
+ * `BurnexPluginSchema` до исполнения кода плагина. Значение, не подошедшее
  * ни под одну форму, называет обе в отказе.
  */
 function toPlugin(module: unknown, row: TreeRow, path: string): Recognized {
   const exported = (module as { default?: unknown } | undefined)?.default;
   if (exported === undefined) {
-    throw new StepcastError(`Модуль плагина ${row.use} не экспортирует объект по умолчанию`, {
+    throw new BurnexError(`Модуль плагина ${row.use} не экспортирует объект по умолчанию`, {
       ...fileOption(row),
       at: 'plugins',
       hint: `Модуль ${path} обязан объявить export default с полями name и вкладами (docs/plugins.md)`,
@@ -282,18 +282,18 @@ function toPlugin(module: unknown, row: TreeRow, path: string): Recognized {
   // объекта, которого нет. Объект, похожий на декларативный, но неверной
   // формы, идёт прежним путём — его отказ называет конкретное поле.
   if (typeof exported !== 'object' || exported === null) {
-    throw new StepcastError(`Модуль плагина ${row.use} не опознан ни одной формой плагина`, {
+    throw new BurnexError(`Модуль плагина ${row.use} не опознан ни одной формой плагина`, {
       ...fileOption(row),
       at: 'plugins',
       hint: `Модуль ${path} обязан экспортировать по умолчанию либо декларативный объект вкладов, либо функцию над контекстом (объект с apply) — см. docs/plugins.md`,
     });
   }
 
-  const parsed = StepcastPluginSchema.safeParse(exported);
+  const parsed = BurnexPluginSchema.safeParse(exported);
   if (!parsed.success) {
     const issue = parsed.error.issues[0];
     const where = issue === undefined || issue.path.length === 0 ? 'корень объекта' : issue.path.join('.');
-    throw new StepcastError(
+    throw new BurnexError(
       `Плагин ${row.use} не соответствует контракту: ${where} — ${issue?.message ?? 'неверная форма'}`,
       {
         ...fileOption(row),
@@ -306,7 +306,7 @@ function toPlugin(module: unknown, row: TreeRow, path: string): Recognized {
 }
 
 /**
- * Ключи декларативной формы — ключи схемы `StepcastPluginSchema`, кроме
+ * Ключи декларативной формы — ключи схемы `BurnexPluginSchema`, кроме
  * `name` и `version` (design.md изменения `cli-commands-as-rows`, Решение
  * 11): те же имена, что называет `test/plugins-load.test.ts`, сверяя их с
  * таблицей. Вычислены от схемы, а не перечислены строками здесь второй раз —
@@ -319,7 +319,7 @@ function toPlugin(module: unknown, row: TreeRow, path: string): Recognized {
  * неизвестный, не зарегистрировал бы ничего и не отказал бы — то самое
  * молчание, ради устранения которого заведён `unknownDeclarativeField`.
  */
-const DECLARATIVE_FORM_KEYS = Object.keys(StepcastPluginSchema.shape).filter(
+const DECLARATIVE_FORM_KEYS = Object.keys(BurnexPluginSchema.shape).filter(
   (key) => key !== 'name' && key !== 'version',
 ) as (keyof DeclarativeContributionFields)[];
 
@@ -331,8 +331,8 @@ function declaresField(plugin: PipelinePlugin, key: keyof DeclarativeContributio
 }
 
 /** Отказ: плагин объявил ключ декларативной формы, которого таблица сборки не называет (design.md, Решение 11). */
-function unknownDeclarativeField(plugin: PipelinePlugin, key: string): StepcastError {
-  return new StepcastError(
+function unknownDeclarativeField(plugin: PipelinePlugin, key: string): BurnexError {
+  return new BurnexError(
     `Плагин ${plugin.name} объявляет ключ декларативной формы ${key}, которого таблица сборки не называет`,
     { at: 'plugins', hint: 'Ключ декларативной формы неизвестен составу сборки — обновите его таблицу (src/parts/load.ts) либо снимите ключ' },
   );
@@ -400,7 +400,7 @@ export function toContextPlugin(plugin: PipelinePlugin, fields: DeclarativeContr
 function pluginName(plugin: ContextPlugin): string {
   const name = plugin.name;
   if (name === undefined || name === '' || name === 'default') {
-    throw new StepcastError('Плагин контекста обязан иметь имя: назовите функцию или добавьте поле name', {
+    throw new BurnexError('Плагин контекста обязан иметь имя: назовите функцию или добавьте поле name', {
       at: 'plugins',
       hint: 'export default function myPlugin(ctx) { … } — имя функции и есть имя плагина (docs/plugins.md)',
     });
@@ -429,7 +429,7 @@ function tentativePluginName(recognized: Recognized): string | undefined {
  */
 function requireDeclarativeFields(fields: DeclarativeContributionFields | undefined): DeclarativeContributionFields {
   if (fields === undefined) {
-    throw new StepcastError(
+    throw new BurnexError(
       'Внутренняя ошибка: декларативный плагин применён без таблицы ключей декларативной формы',
       { hint: 'Передайте таблицу: LoadOptions.declarativeFields на пути дерева либо явным параметром applyDeclarativePlugin/applyPlugin' },
     );
@@ -509,9 +509,9 @@ export function applyContextPlugin(kernel: Kernel, plugin: ContextPlugin, source
  * пустым хвостом сказал бы читателю, что поставки нет вовсе, вместо того что
  * произошло на деле — состав дефолта до обхода не дошёл.
  */
-function unknownBuiltinRow(row: TreeRow, name: string, rows: readonly BuiltinRow[]): StepcastError {
+function unknownBuiltinRow(row: TreeRow, name: string, rows: readonly BuiltinRow[]): BurnexError {
   const names = rows.map((candidate) => candidate.id);
-  return new StepcastError(`Строка ${row.id} называет несуществующую встроенную строку burnex:${name}`, {
+  return new BurnexError(`Строка ${row.id} называет несуществующую встроенную строку burnex:${name}`, {
     ...fileOption(row),
     at: 'plugins',
     hint:
@@ -523,8 +523,8 @@ function unknownBuiltinRow(row: TreeRow, name: string, rows: readonly BuiltinRow
 
 /** Дописать отказ ядра (конфликт имён) расположением строки — тем же составом полей, что у прочих отказов загрузки. */
 function withRowLocation(error: unknown, row: TreeRow): never {
-  if (!isStepcastError(error) || error.file !== undefined) throw error;
-  throw new StepcastError(error.message, {
+  if (!isBurnexError(error) || error.file !== undefined) throw error;
+  throw new BurnexError(error.message, {
     exitCode: error.exitCode,
     ...fileOption(row),
     at: error.at ?? 'plugins',
@@ -534,8 +534,8 @@ function withRowLocation(error: unknown, row: TreeRow): never {
 }
 
 /** Отказ: имя, объявленное серверной половиной каталожного плагина, разошлось с именем каталога (design.md, Решение 4). */
-function pluginNameMismatch(row: TreeRow, declaredName: string, manifestPath: string): StepcastError {
-  return new StepcastError(
+function pluginNameMismatch(row: TreeRow, declaredName: string, manifestPath: string): BurnexError {
+  return new BurnexError(
     `Серверная половина плагина ${row.id} называет себя ${declaredName} — имя плагина обязано совпадать с именем каталога`,
     {
       file: manifestPath,
@@ -571,7 +571,7 @@ async function applyDirectoryTreeRow(
   try {
     module = await load(pathToFileURL(manifest.server).href);
   } catch (error) {
-    throw new StepcastError(
+    throw new BurnexError(
       `Серверная половина плагина ${row.id} не загружается: ${error instanceof Error ? error.message : String(error)}`,
       { file: manifest.manifestPath, at: 'server', hint: `Модуль: ${manifest.server}`, cause: error },
     );
@@ -743,7 +743,7 @@ async function applyTreeRow(
   try {
     module = await load(pathToFileURL(path).href);
   } catch (error) {
-    throw new StepcastError(
+    throw new BurnexError(
       `Модуль плагина ${row.use} не загружается: ${error instanceof Error ? error.message : String(error)}`,
       {
         ...fileOption(row),
@@ -787,14 +787,14 @@ function rowOf(fiber: Fiber, declaredBy: ReadonlyMap<Fiber, TreeRow>): TreeRow |
 function unresolvedInjectFailure(
   fibers: readonly Fiber[],
   declaredBy: ReadonlyMap<Fiber, TreeRow>,
-): { readonly row: TreeRow | undefined; readonly error: StepcastError } | undefined {
+): { readonly row: TreeRow | undefined; readonly error: BurnexError } | undefined {
   const first = unresolvedFibers(fibers)[0];
   if (first === undefined) return undefined;
   const row = rowOf(first.fiber, declaredBy);
   const file = row === undefined ? undefined : declaredIn(row);
   return {
     row,
-    error: new StepcastError(
+    error: new BurnexError(
       `Плагин ${first.plugin} ждёт сервис ${first.missing.join(', ')}, которого не регистрирует ни один из объявленных плагинов`,
       {
         ...(file === undefined ? {} : { file }),
@@ -815,7 +815,7 @@ function unresolvedInjectFailure(
 function markRowFailed(
   outcomes: RowOutcome[],
   row: TreeRow,
-  error: StepcastError,
+  error: BurnexError,
   requested: readonly RequestedService[],
 ): void {
   const index = outcomes.findIndex((outcome) => outcome.row === row);
@@ -838,7 +838,7 @@ async function settleRows(
   kernel: Kernel,
   declaredBy: Map<Fiber, TreeRow>,
   outcomes: RowOutcome[],
-): Promise<{ readonly row: TreeRow | undefined; readonly error: StepcastError } | undefined> {
+): Promise<{ readonly row: TreeRow | undefined; readonly error: BurnexError } | undefined> {
   // Каждый заход снимает ровно одну область и выбрасывает её из `declaredBy` —
   // счётчик здесь только затем, чтобы неожиданное состояние не стало вечным
   // циклом в долгоживущем демоне.
@@ -868,7 +868,7 @@ async function settleRows(
 export interface RowOutcome {
   readonly row: TreeRow;
   readonly status: 'active' | 'disabled' | 'failed' | 'not-attempted';
-  readonly error?: StepcastError;
+  readonly error?: BurnexError;
   /**
    * Область строки — только у строки, применённой к своей области (плагин,
    * каталожная строка, строка поставки витрины). Осмотр (`introspect.ts`,
@@ -949,7 +949,7 @@ export async function applyPluginTree(kernel: Kernel, resolved: PluginTreeSource
       outcomes.push({
         row,
         status: 'failed',
-        error: isStepcastError(error) ? error : new StepcastError(error instanceof Error ? error.message : String(error)),
+        error: isBurnexError(error) ? error : new BurnexError(error instanceof Error ? error.message : String(error)),
       });
     }
   }
@@ -1018,7 +1018,7 @@ export async function walkPluginTree(
       outcomes.push({
         row,
         status: 'failed',
-        error: isStepcastError(error) ? error : new StepcastError(error instanceof Error ? error.message : String(error)),
+        error: isBurnexError(error) ? error : new BurnexError(error instanceof Error ? error.message : String(error)),
       });
       if (row.source.kind !== 'directory') stopped = true;
     }

@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { describe, it } from 'node:test';
 
 import { createWatcher } from '../src/parts/ui/daemon/watcher.js';
-import { StepcastError } from '../src/kernel/errors.js';
+import { BurnexError } from '../src/kernel/errors.js';
 import { cleanupRun, removeRunWithStats } from '../src/parts/pipeline/run/cleanup.js';
 import { projectKey } from '../src/parts/pipeline/run/journal/paths.js';
 import { removeUsageRecords } from '../src/parts/pipeline/run/journal/usageStore.js';
@@ -751,7 +751,7 @@ describe('ui-routes: часть отпечатка наблюдателя', () =
     assert.throws(
       () => createWatcher({ runsRoot, home, intervalMs: 10_000, builtinRoutesPath: missing }),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.equal(error.file, missing);
         return true;
       },

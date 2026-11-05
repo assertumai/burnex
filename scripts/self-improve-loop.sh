@@ -67,8 +67,8 @@ fi
 # Внутри .git каталог не видят ни git status, ни ESLint, ни tsc копии.
 # Путь делается абсолютным сразу: git -C "$REPO_DIR" worktree add считал бы
 # относительный от корня копии, а [ -d ] и cd — от текущего каталога.
-# Прежнее имя STEPCAST_LOOP_ENGINE_DIR читается один выпуск переходного периода.
-BURNEX_LOOP_ENGINE_DIR="${BURNEX_LOOP_ENGINE_DIR:-${STEPCAST_LOOP_ENGINE_DIR:-}}"
+# Прежнее имя BURNEX_LOOP_ENGINE_DIR читается один выпуск переходного периода.
+BURNEX_LOOP_ENGINE_DIR="${BURNEX_LOOP_ENGINE_DIR:-${BURNEX_LOOP_ENGINE_DIR:-}}"
 if [ -n "$BURNEX_LOOP_ENGINE_DIR" ]; then
   case "$BURNEX_LOOP_ENGINE_DIR" in
     /*) ENGINE_DIR="$BURNEX_LOOP_ENGINE_DIR" ;;

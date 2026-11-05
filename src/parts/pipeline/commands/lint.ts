@@ -2,7 +2,7 @@ import { expandPipeline } from '../document/expand.js';
 import { hasErrors, lintPipeline, type Diagnostic } from '../domain/lint.js';
 import { resolveConfig, type Config } from '../config/resolve.js';
 import type { Registry } from '../../../kernel/registry.js';
-import { ExitCode, isStepcastError, type ExitCodeValue } from '../../../kernel/errors.js';
+import { ExitCode, isBurnexError, type ExitCodeValue } from '../../../kernel/errors.js';
 import { defaultPipelineName, hasLegacyCabinet, legacyCabinetDiagnostic } from '../../../kernel/dirs.js';
 import { resolvePipelineTarget } from '../domain/package-schema.js';
 import type { PipelineCommandEnv } from '../contract.js';
@@ -52,7 +52,7 @@ export function runLintCommand(
     });
   } catch (error) {
     // Без раскрытия проверять нечего, поэтому такая ошибка одна и фатальна.
-    if (!isStepcastError(error)) throw error;
+    if (!isBurnexError(error)) throw error;
     for (const line of formatDiagnostic({
       severity: 'error',
       message: error.message,

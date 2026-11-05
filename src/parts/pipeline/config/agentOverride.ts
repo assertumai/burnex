@@ -1,4 +1,4 @@
-import { StepcastError } from '../../../kernel/errors.js';
+import { BurnexError } from '../../../kernel/errors.js';
 import { contributionOwner, type Registry } from '../../../kernel/registry.js';
 import { resolveConfig, type Config } from './resolve.js';
 
@@ -44,7 +44,7 @@ export function resolveConfigWithAgent(options: {
   });
   const known = Object.keys(resolved.config.backends);
   if (!known.includes(options.agent)) {
-    throw new StepcastError(`Неизвестный агент ${options.agent}: --agent принимает имя бэкенда`, {
+    throw new BurnexError(`Неизвестный агент ${options.agent}: --agent принимает имя бэкенда`, {
       hint: `Известны: ${known.sort().join(', ')}`,
     });
   }

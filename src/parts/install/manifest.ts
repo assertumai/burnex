@@ -3,7 +3,7 @@ import { join } from 'node:path';
 
 import { z } from 'zod';
 
-import { StepcastError } from '../../kernel/errors.js';
+import { BurnexError } from '../../kernel/errors.js';
 import { readEngineEnv } from '../../kernel/env-names.js';
 import { homeRoot } from '../../kernel/dirs.js';
 
@@ -48,7 +48,7 @@ const FILE_NAME = 'install.json';
  * иначе `~/.burnex`. Пустая переменная считается отсутствующей — как
  * `${BURNEX_HOME:-…}` в install.sh.
  */
-export function stepcastHome(
+export function burnexHome(
   env: Readonly<Record<string, string | undefined>> = process.env,
   home: string = homedir(),
 ): string {
@@ -60,7 +60,7 @@ export function installManifestPath(
   env: Readonly<Record<string, string | undefined>> = process.env,
   home: string = homedir(),
 ): string {
-  return join(stepcastHome(env, home), FILE_NAME);
+  return join(burnexHome(env, home), FILE_NAME);
 }
 
 /** Разбор текста паспорта; отказ называет причину и то, что ожидалось. */
@@ -71,12 +71,12 @@ export function parseInstallManifest(text: string, file?: string): InstallManife
   try {
     raw = JSON.parse(text);
   } catch (error) {
-    throw new StepcastError('Паспорт установки не разбирается как JSON', { ...where, cause: error });
+    throw new BurnexError('Паспорт установки не разбирается как JSON', { ...where, cause: error });
   }
 
   const method = typeof raw === 'object' && raw !== null ? (raw as Record<string, unknown>).method : undefined;
   if (method !== 'managed' && method !== 'checkout' && method !== 'npm') {
-    throw new StepcastError(
+    throw new BurnexError(
       method === undefined
         ? `В паспорте установки нет поля method (${METHODS})`
         : `Неизвестный способ установки в паспорте: ${JSON.stringify(method)} (допустимы ${METHODS})`,
@@ -87,7 +87,7 @@ export function parseInstallManifest(text: string, file?: string): InstallManife
   const parsed = InstallManifestSchema.safeParse(raw);
   if (!parsed.success) {
     const field = parsed.error.issues[0]?.path.join('.') ?? '';
-    throw new StepcastError(
+    throw new BurnexError(
       `В паспорте установки (method: ${method}) не задано или неверно поле ${field === '' ? '?' : field}`,
       { ...where, ...(field === '' ? {} : { at: field }) },
     );

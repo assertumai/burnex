@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 
-import { StepcastError } from '../../../kernel/errors.js';
+import { BurnexError } from '../../../kernel/errors.js';
 import type { AwaitingDecision, DecisionEffect, DecisionRecord } from './journal/schema.js';
 import type { Pipeline } from '../document/model.js';
 import type { StepKindDecisionResult } from '../contract.js';
@@ -81,7 +81,7 @@ export function selectAwaiting(
   step?: string,
 ): AwaitingDecision {
   if (awaiting.length === 0) {
-    throw new StepcastError('Прогон не ждёт решения', {
+    throw new BurnexError('Прогон не ждёт решения', {
       hint: 'burnex status покажет, идёт ли прогон и чего он ждёт',
     });
   }
@@ -94,12 +94,12 @@ export function selectAwaiting(
 
     const byName = awaiting.filter((item) => item.step === step);
     if (byName.length === 0) {
-      throw new StepcastError(`Прогон не ждёт решения на шаге ${step}`, {
+      throw new BurnexError(`Прогон не ждёт решения на шаге ${step}`, {
         hint: `Ожидающие шаги: ${listSteps(awaiting)}`,
       });
     }
     if (byName.length > 1) {
-      throw new StepcastError(`Шаг ${step} ждёт решения в нескольких работах — назовите работа/шаг`, {
+      throw new BurnexError(`Шаг ${step} ждёт решения в нескольких работах — назовите работа/шаг`, {
         hint: `Ожидающие шаги: ${listSteps(byName)}`,
       });
     }
@@ -107,7 +107,7 @@ export function selectAwaiting(
   }
 
   if (awaiting.length > 1) {
-    throw new StepcastError('Прогон ждёт решения на нескольких шагах — укажите --step', {
+    throw new BurnexError('Прогон ждёт решения на нескольких шагах — укажите --step', {
       hint: `Ожидающие шаги: ${listSteps(awaiting)}`,
     });
   }
@@ -140,23 +140,23 @@ export function validateDecision(
 ): ValidatedDecision {
   const spec = awaiting.outcomes[proposed.outcome];
   if (spec === undefined) {
-    throw new StepcastError(`Исход ${proposed.outcome} не входит в перечень ожидания`, {
+    throw new BurnexError(`Исход ${proposed.outcome} не входит в перечень ожидания`, {
       hint: `Допустимы: ${Object.keys(awaiting.outcomes).join(', ')}`,
     });
   }
 
   if (spec.effect === 'reject' && (proposed.reason === undefined || proposed.reason.trim() === '')) {
-    throw new StepcastError('Отклонение требует причины', { hint: 'Укажите --reason «почему»' });
+    throw new BurnexError('Отклонение требует причины', { hint: 'Укажите --reason «почему»' });
   }
 
   if (spec.effect === 'restart') {
     if (proposed.restartFrom === undefined) {
-      throw new StepcastError('Перезапуск требует шага, с которого продолжить', {
+      throw new BurnexError('Перезапуск требует шага, с которого продолжить', {
         hint: 'Укажите --from job[/step]',
       });
     }
     if (knownSteps !== undefined && !knownSteps.has(proposed.restartFrom)) {
-      throw new StepcastError(`Шаг ${proposed.restartFrom} в прогоне не найден`, {
+      throw new BurnexError(`Шаг ${proposed.restartFrom} в прогоне не найден`, {
         hint: `Доступны: ${[...knownSteps].sort().join(', ')}`,
       });
     }

@@ -29,10 +29,10 @@
  * | `EvaluationInput`, `PredicateResult`, `Usage`                  | `burnex/pipeline`|
  * | `Config`, `BackendConfig`, `Registry`                          | `burnex/pipeline`|
  * | `defineBackend`, `definePredicate`, `defineStepKind`           | `burnex/pipeline`|
- * | доменные ключи `StepcastPlugin` (`backends`, `predicates`, `steps`) — теперь `PipelinePlugin` | `burnex/pipeline` (`definePipelinePlugin`) |
+ * | доменные ключи `BurnexPlugin` (`backends`, `predicates`, `steps`) — теперь `PipelinePlugin` | `burnex/pipeline` (`definePipelinePlugin`) |
  *
  * Имена, оставшиеся здесь, импортируются прежним спецификом без единой
- * правки: `StepcastError`, `parseDuration`, `runProcess`, `definePlugin`,
+ * правки: `BurnexError`, `parseDuration`, `runProcess`, `definePlugin`,
  * контекст ядра, каркас CLI.
  */
 
@@ -44,7 +44,7 @@ export type {
   ContextPluginObject,
   LoadedPlugin,
   PluginDiagnostic,
-  StepcastPlugin,
+  BurnexPlugin,
 } from '../kernel/contract.js';
 
 /**
@@ -89,5 +89,5 @@ export type { CliIo, CommandSpec, FlagKind, FlagSpec, ParsedArgs } from '../kern
 export { runProcess, DEFAULT_GRACE_MS } from '../parts/pipeline/run/exec/process.js';
 export type { ProcessOptions, ProcessResult, ProcessOutcome } from '../parts/pipeline/run/exec/process.js';
 
-export { ExitCode, StepcastError, isStepcastError } from '../kernel/errors.js';
+export { ExitCode, BurnexError, isBurnexError } from '../kernel/errors.js';
 export type { ExitCodeValue } from '../kernel/errors.js';

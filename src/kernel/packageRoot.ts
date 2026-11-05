@@ -1,7 +1,7 @@
 import { existsSync } from 'node:fs';
 import { dirname, join, parse as parsePath } from 'node:path';
 
-import { StepcastError } from './errors.js';
+import { BurnexError } from './errors.js';
 
 /**
  * Корень пакета burnex: ближайший каталог с `package.json` вверх по
@@ -15,7 +15,7 @@ export function findPackageRoot(from: string): string {
     if (existsSync(join(current, 'package.json'))) return current;
     const parent = dirname(current);
     if (parent === current || parent === parsePath(current).root) {
-      throw new StepcastError('Не удалось найти корень пакета burnex');
+      throw new BurnexError('Не удалось найти корень пакета burnex');
     }
     current = parent;
   }

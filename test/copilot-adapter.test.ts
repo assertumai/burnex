@@ -7,7 +7,7 @@ import { describe, it } from 'node:test';
 import { createCopilotAdapter, MAX_ARG_BYTES } from '../src/parts/backends/copilot/index.js';
 import type { BackendConfig } from '../src/parts/pipeline/surface.js';
 import type { AgentInvocation } from '../src/parts/pipeline/backend/types.js';
-import { StepcastError } from '../src/kernel/errors.js';
+import { BurnexError } from '../src/kernel/errors.js';
 import { expandPipeline } from '../src/parts/pipeline/document/expand.js';
 import { discoverModels, resetModelDiscoveryCache } from '../src/parts/pipeline/backend/models.js';
 import { lintPipeline } from '../src/parts/pipeline/domain/lint.js';
@@ -66,7 +66,7 @@ describe('copilot-backend: сборка запуска', () => {
     assert.throws(
       () => adapter.launch(invocation({ prompt: 'я'.repeat(70 * 1024) })),
       (error: unknown) =>
-        error instanceof StepcastError && /copilot/.test(error.message) && /128 KiB/.test(error.message),
+        error instanceof BurnexError && /copilot/.test(error.message) && /128 KiB/.test(error.message),
     );
     assert.doesNotThrow(() => adapter.launch(invocation({ prompt: 'a'.repeat(100 * 1024) })));
   });
@@ -81,7 +81,7 @@ describe('copilot-backend: сборка запуска', () => {
     for (const length of [fits + 1, MAX_ARG_BYTES - 1, MAX_ARG_BYTES]) {
       assert.throws(
         () => adapter.launch(invocation({ prompt: 'a'.repeat(length) })),
-        (error: unknown) => error instanceof StepcastError && /copilot/.test(error.message),
+        (error: unknown) => error instanceof BurnexError && /copilot/.test(error.message),
         `промпт ${length} байт`,
       );
     }
@@ -151,7 +151,7 @@ describe('copilot-backend: доступ', () => {
       assert.throws(
         () => adapter.launch(invocation({ permissions: { mode } })),
         (error: unknown) =>
-          error instanceof StepcastError && /copilot/.test(error.message) && /permissions\.mode/.test(error.message),
+          error instanceof BurnexError && /copilot/.test(error.message) && /permissions\.mode/.test(error.message),
         mode,
       );
     }
@@ -162,7 +162,7 @@ describe('copilot-backend: доступ', () => {
       assert.throws(
         () => adapter.launch(invocation({ permissions: { [key]: ['Bash(git *)'] } })),
         (error: unknown) =>
-          error instanceof StepcastError && /copilot/.test(error.message) && error.message.includes(`permissions.${key}`),
+          error instanceof BurnexError && /copilot/.test(error.message) && error.message.includes(`permissions.${key}`),
       );
     }
     assert.doesNotThrow(() => adapter.launch(invocation({ permissions: { allow: [], deny: [] } })));
@@ -172,18 +172,18 @@ describe('copilot-backend: доступ', () => {
     const configured = createCopilotAdapter({ ...CONFIG, permissions: { mode: 'enabled' } });
     assert.throws(
       () => configured.launch(invocation()),
-      (error: unknown) => error instanceof StepcastError && /permissions\.mode/.test(error.message),
+      (error: unknown) => error instanceof BurnexError && /permissions\.mode/.test(error.message),
     );
     assert.throws(
       () => createCopilotAdapter({ ...CONFIG, permissions: { deny: ['shell(rm)'] } }).launch(invocation()),
-      (error: unknown) => error instanceof StepcastError && /permissions\.deny/.test(error.message),
+      (error: unknown) => error instanceof BurnexError && /permissions\.deny/.test(error.message),
     );
   });
 
   it('enforce: strict отказывает', () => {
     assert.throws(
       () => adapter.launch(invocation({ permissions: { enforce: 'strict' } })),
-      (error: unknown) => error instanceof StepcastError && /copilot/.test(error.message) && /strict/.test(error.message),
+      (error: unknown) => error instanceof BurnexError && /copilot/.test(error.message) && /strict/.test(error.message),
     );
   });
 
@@ -382,7 +382,7 @@ process.stdout.write(fs.readFileSync(path.join(${JSON.stringify(FIXTURES)}, 'ans
 
       await assert.rejects(
         run(project),
-        (error: unknown) => error instanceof StepcastError && message.test(error.message),
+        (error: unknown) => error instanceof BurnexError && message.test(error.message),
         name,
       );
       assert.equal(existsSync(calls), false, `${name}: скрипт не должен был запуститься`);

@@ -1,4 +1,4 @@
-import { StepcastError } from '../../../kernel/errors.js';
+import { BurnexError } from '../../../kernel/errors.js';
 import { availableNames, type Registry } from '../../../kernel/registry.js';
 import type { BackendCredential, Config } from '../config/resolve.js';
 import { SecretProviderUnavailableError } from '../contract.js';
@@ -50,8 +50,8 @@ interface Target {
   readonly env: string;
 }
 
-function refusal(target: Target, reason: string, hint?: string): StepcastError {
-  return new StepcastError(`${target.refused}: ${reason}`, {
+function refusal(target: Target, reason: string, hint?: string): BurnexError {
+  return new BurnexError(`${target.refused}: ${reason}`, {
     at: target.at,
     ...(hint === undefined ? {} : { hint }),
   });
@@ -61,13 +61,13 @@ function refusal(target: Target, reason: string, hint?: string): StepcastError {
  * Исход пробы. `provider-unavailable` — провайдера нет в реестре либо он сам
  * сказал, что здесь работать не может (`SecretProviderUnavailableError`);
  * `not-found` — провайдер работал, годного значения нет. Витрина показывает
- * статус, запуск — `error`: тексты отказов один и тот же `StepcastError`.
+ * статус, запуск — `error`: тексты отказов один и тот же `BurnexError`.
  */
 export type SecretProbeStatus = 'not-found' | 'provider-unavailable';
 
 export type SecretProbe =
   | { readonly ok: true; readonly value: string }
-  | { readonly ok: false; readonly status: SecretProbeStatus; readonly error: StepcastError };
+  | { readonly ok: false; readonly status: SecretProbeStatus; readonly error: BurnexError };
 
 async function probeTarget(
   target: Target,
@@ -75,7 +75,7 @@ async function probeTarget(
   projectRoot: string,
   signal: AbortSignal,
 ): Promise<SecretProbe> {
-  const fail = (status: SecretProbeStatus, error: StepcastError): SecretProbe => ({ ok: false, status, error });
+  const fail = (status: SecretProbeStatus, error: BurnexError): SecretProbe => ({ ok: false, status, error });
 
   const provider = registry.secretProviders.get(target.provider);
   if (provider === undefined) {
@@ -110,7 +110,7 @@ async function probeTarget(
   } catch (error) {
     return fail(
       error instanceof SecretProviderUnavailableError ? 'provider-unavailable' : 'not-found',
-      new StepcastError(
+      new BurnexError(
         `${target.refused}: провайдер ${target.provider} завершился ошибкой: ${error instanceof Error ? error.message : String(error)}`,
         { at: target.at, cause: error },
       ),

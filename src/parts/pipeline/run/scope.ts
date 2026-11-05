@@ -1,4 +1,4 @@
-import { StepcastError } from '../../../kernel/errors.js';
+import { BurnexError } from '../../../kernel/errors.js';
 import { bookkeepAsync, type BookkeepingScope } from './bookkeeping.js';
 
 /**
@@ -52,7 +52,7 @@ export function createScope(bookkeeping?: BookkeepingScope): ResourceScope {
       if (disposed) {
         // Молча потерять ресурс хуже, чем упасть: область снята, снимать его
         // больше некому, и утечка обнаружилась бы через прогон и через сутки.
-        throw new StepcastError(
+        throw new BurnexError(
           `Регистрация обратной операции «${operation}» в уже снятой области ресурсов`,
           { hint: 'Это дефект движка: ресурс захвачен после снятия своей области' },
         );

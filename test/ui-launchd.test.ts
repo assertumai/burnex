@@ -15,7 +15,7 @@ import {
   type PlistOptions,
 } from '../src/parts/ui/daemon/launchd.js';
 import type { ParsedArgs } from '../src/kernel/cli/args.js';
-import { StepcastError } from '../src/kernel/errors.js';
+import { BurnexError } from '../src/kernel/errors.js';
 import { tempDir } from './tmp.js';
 
 function args(command: string, flags: ParsedArgs['flags'] = {}): ParsedArgs {
@@ -57,7 +57,7 @@ describe('launchd: plist', () => {
     assert.match(plist, /<key>PATH<\/key>\s*<string>\/a:\/b<\/string>/);
     assert.match(plist, /<key>SSH_AUTH_SOCK<\/key>\s*<string>\/tmp\/agent.sock<\/string>/);
     assert.match(plist, /<string>up<\/string>\s*<string>--foreground<\/string>/);
-    assert.match(plist, /<key>Label<\/key>\s*<string>ai.stepcast.daemon<\/string>/);
+    assert.match(plist, /<key>Label<\/key>\s*<string>ai.burnex.daemon<\/string>/);
   });
 
   it('не пишет незаданную или пустую переменную', () => {
@@ -99,7 +99,7 @@ describe('launchd: команды', () => {
     calls.length = 0;
 
     runDownCommand(args('down'), () => undefined, '.', host);
-    assert.deepEqual(calls, [['bootout', `gui/501/ai.stepcast.daemon`]]);
+    assert.deepEqual(calls, [['bootout', `gui/501/ai.burnex.daemon`]]);
     assert.equal(existsSync(agentPlistPath(home)), true);
 
     runDownCommand(args('down', { uninstall: true }), () => undefined, '.', host);
@@ -121,9 +121,9 @@ describe('launchd: команды', () => {
 
     await assert.rejects(
       runUpCommand(args('up', { install: true }), () => undefined, tempDir('cwd-'), host),
-      (error: unknown) => error instanceof StepcastError && error.message.includes('macOS'),
+      (error: unknown) => error instanceof BurnexError && error.message.includes('macOS'),
     );
-    assert.throws(() => runDownCommand(args('down', { uninstall: true }), () => undefined, '.', host), StepcastError);
+    assert.throws(() => runDownCommand(args('down', { uninstall: true }), () => undefined, '.', host), BurnexError);
 
     assert.deepEqual(calls, []);
     assert.equal(existsSync(join(home, 'Library')), false);
@@ -176,7 +176,7 @@ describe('launchd: устойчивый путь входа через current',
     mkdirSync(engineRoot, { recursive: true });
     writeFileSync(join(home, '.burnex', 'install.json'), JSON.stringify(MANAGED(releases)));
 
-    await withoutStepcastHome(() =>
+    await withoutBurnexHome(() =>
       runUpCommand(args('up', { install: true }), () => undefined, tempDir('cwd-'), host, engineRoot),
     );
 
@@ -189,7 +189,7 @@ describe('launchd: устойчивый путь входа через current',
     mkdirSync(join(home, '.burnex'), { recursive: true });
     writeFileSync(join(home, '.burnex', 'install.json'), '{не json');
 
-    await withoutStepcastHome(() =>
+    await withoutBurnexHome(() =>
       runUpCommand(args('up', { install: true }), () => undefined, tempDir('cwd-'), host),
     );
 
@@ -200,7 +200,7 @@ describe('launchd: устойчивый путь входа через current',
 });
 
 describe('launchd: agentState по выводу launchctl print', () => {
-  const PRINTED = ['ai.stepcast.daemon = {', '\tactive count = 1', '\tstate = running', '\tpid = 4242', '}'].join('\n');
+  const PRINTED = ['ai.burnex.daemon = {', '\tactive count = 1', '\tstate = running', '\tpid = 4242', '}'].join('\n');
 
   /** Хозяин, чей `launchctl print` отвечает заданным кодом и выводом. */
   function hostPrinting(status: number, stdout: string, platform: NodeJS.Platform = 'darwin'): { host: LaunchdHost; calls: string[][]; home: string } {
@@ -226,7 +226,7 @@ describe('launchd: agentState по выводу launchctl print', () => {
       entry: '/h/.burnex/releases/current/dist/src/bin.js',
       entryStable: true,
     });
-    assert.deepEqual(calls, [['print', 'gui/501/ai.stepcast.daemon']]);
+    assert.deepEqual(calls, [['print', 'gui/501/ai.burnex.daemon']]);
   });
 
   it('plist есть, агент не загружен (после down) — без pid', () => {
@@ -240,7 +240,7 @@ describe('launchd: agentState по выводу launchctl print', () => {
   });
 
   it('загружен без запущенного процесса — pid не выдумывается', () => {
-    const { host } = hostPrinting(0, 'ai.stepcast.daemon = {\n\tstate = waiting\n}');
+    const { host } = hostPrinting(0, 'ai.burnex.daemon = {\n\tstate = waiting\n}');
     assert.deepEqual(agentState(host), { supported: true, plist: false, loaded: true });
   });
 
@@ -268,7 +268,7 @@ describe('launchd: agentState по выводу launchctl print', () => {
   });
 });
 
-async function withoutStepcastHome<T>(fn: () => Promise<T>): Promise<T> {
+async function withoutBurnexHome<T>(fn: () => Promise<T>): Promise<T> {
   const saved = process.env.BURNEX_HOME;
   delete process.env.BURNEX_HOME;
   try {

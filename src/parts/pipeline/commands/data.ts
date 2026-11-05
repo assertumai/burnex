@@ -4,7 +4,7 @@ import {
   readJobData,
   type JobData,
 } from '../run/journal/data.js';
-import { ExitCode, StepcastError, type ExitCodeValue } from '../../../kernel/errors.js';
+import { ExitCode, BurnexError, type ExitCodeValue } from '../../../kernel/errors.js';
 import { readEngineEnv } from '../../../kernel/env-names.js';
 import { commandRow } from '../../../kernel/cli/commandRow.js';
 import type { ParsedArgs } from '../../../kernel/cli/args.js';
@@ -43,7 +43,7 @@ function stringFlag(flags: ParsedArgs['flags'], name: string): string | undefine
 function jobDirFromEnv(env: Readonly<Record<string, string | undefined>>): string {
   const dir = readEngineEnv(env, 'JOB_DIR', { warn: false });
   if (dir === undefined || dir.trim() === '') {
-    throw new StepcastError('Команда data работает только внутри шага прогона', {
+    throw new BurnexError('Команда data работает только внутри шага прогона', {
       hint: 'Целевая работа берётся из переменной BURNEX_JOB_DIR, которую движок инжектирует в каждый шаг; вне прогона писать некуда',
     });
   }
@@ -66,7 +66,7 @@ export function runDataCommand(
     case 'get':
       return runGet(dir, key, write);
     default:
-      throw new StepcastError(
+      throw new BurnexError(
         `неизвестное действие «${action ?? ''}» у команды data, ожидалось одно из ${ACTIONS.join(', ')}`,
       );
   }
@@ -78,9 +78,9 @@ function runSet(
   value: string | undefined,
   write: (line: string) => void,
 ): ExitCodeValue {
-  if (key === undefined) throw new StepcastError('set требует ключ первым позиционным аргументом');
+  if (key === undefined) throw new BurnexError('set требует ключ первым позиционным аргументом');
   if (value === undefined) {
-    throw new StepcastError('set требует значение вторым позиционным аргументом', {
+    throw new BurnexError('set требует значение вторым позиционным аргументом', {
       hint: 'Пустое значение объявляется явно: burnex data set ключ ""',
     });
   }
@@ -92,19 +92,19 @@ function runSet(
 
 function runMerge(args: ParsedArgs, dir: string, write: (line: string) => void): ExitCodeValue {
   const raw = stringFlag(args.flags, 'json');
-  if (raw === undefined) throw new StepcastError('merge требует ключа --json с объектом значений');
+  if (raw === undefined) throw new BurnexError('merge требует ключа --json с объектом значений');
 
   let parsed: unknown;
   try {
     parsed = JSON.parse(raw);
   } catch (error) {
-    throw new StepcastError(`ключ --json не разбирается как JSON: ${(error as Error).message}`, {
+    throw new BurnexError(`ключ --json не разбирается как JSON: ${(error as Error).message}`, {
       cause: error,
     });
   }
 
   if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
-    throw new StepcastError('ключ --json требует объекта вида {"ключ": "значение"}');
+    throw new BurnexError('ключ --json требует объекта вида {"ключ": "значение"}');
   }
 
   const patch: Record<string, string> = {};
@@ -116,7 +116,7 @@ function runMerge(args: ParsedArgs, dir: string, write: (line: string) => void):
     if (typeof value === 'string') patch[key] = value;
     else if (typeof value === 'number' || typeof value === 'boolean') patch[key] = String(value);
     else {
-      throw new StepcastError(`значение ключа «${key}» непредставимо строкой`, {
+      throw new BurnexError(`значение ключа «${key}» непредставимо строкой`, {
         hint: 'Данные работы — плоская карта строк: вложенный объект или список здесь не хранится',
       });
     }
@@ -141,7 +141,7 @@ function runGet(
   assertDataKey(key);
   const value = data[key];
   if (value === undefined) {
-    throw new StepcastError(`Работа не публиковала данных по ключу «${key}»`, {
+    throw new BurnexError(`Работа не публиковала данных по ключу «${key}»`, {
       hint:
         Object.keys(data).length === 0
           ? 'Работа не публиковала данных вовсе'

@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 
 import type { BackendConfig } from '../../pipeline/config/resolve.js';
-import { StepcastError } from '../../../kernel/errors.js';
+import { BurnexError } from '../../../kernel/errors.js';
 import { effectivePermissions } from '../../pipeline/backend/permissions.js';
 import type {
   AgentInvocation,
@@ -36,19 +36,10 @@ export const PERMISSIVE_MODES = ['auto', 'acceptEdits', 'dontAsk', 'bypassPermis
  */
 export const DATA_COMMAND_PERMISSION = 'Bash(burnex data *)';
 
-/**
- * То же право под прежним именем бинарника: `stepcast` остаётся псевдонимом
- * `burnex` на время переименования, и промпт пайплайна вправе звать любой из
- * них. Снимается вместе с псевдонимом (пункт очереди
- * `rename-identifiers-and-repo-burnex`).
- */
-export const DATA_COMMAND_ALIAS_PERMISSION = 'Bash(stepcast data *)';
-
 function withDataCommand(allow: readonly string[] | undefined, strict: boolean): readonly string[] {
   const declared = allow ?? [];
-  if (!strict) return declared;
-  const missing = [DATA_COMMAND_PERMISSION, DATA_COMMAND_ALIAS_PERMISSION].filter((right) => !declared.includes(right));
-  return missing.length === 0 ? declared : [...declared, ...missing];
+  if (!strict || declared.includes(DATA_COMMAND_PERMISSION)) return declared;
+  return [...declared, DATA_COMMAND_PERMISSION];
 }
 
 /**
@@ -272,7 +263,7 @@ function prepareSchema(path: string): string {
   try {
     parsed = JSON.parse(readFileSync(path, 'utf8')) as Record<string, unknown>;
   } catch (error) {
-    throw new StepcastError(`Схема вывода не разбирается как JSON: ${(error as Error).message}`, {
+    throw new BurnexError(`Схема вывода не разбирается как JSON: ${(error as Error).message}`, {
       file: path,
       cause: error,
     });

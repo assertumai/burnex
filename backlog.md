@@ -763,7 +763,7 @@ done_when: Корень проекта и кабинет ищутся как `.b
 
 ## rename-identifiers-and-repo-burnex
 
-status: todo
+status: done
 title: Идентификаторы кода, репозиторий и рабочее пространство под именем burnex
 group: rename-burnex
 needs: rename-package-burnex,rename-env-burnex,rename-dirs-burnex

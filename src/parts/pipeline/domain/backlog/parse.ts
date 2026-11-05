@@ -1,4 +1,4 @@
-import { StepcastError } from '../../../../kernel/errors.js';
+import { BurnexError } from '../../../../kernel/errors.js';
 import { BACKLOG_STATUSES, BacklogItemSchema, type BacklogItem, type BacklogRecord } from './schema.js';
 
 /**
@@ -60,7 +60,7 @@ export function parse(text: string): readonly BacklogEntry[] {
     if (heading !== null) {
       const slug = heading[1] as string;
       if (raw.some((entry) => entry.slug === slug)) {
-        throw new StepcastError(`пункт «${slug}» встречается дважды`, { at: slug });
+        throw new BurnexError(`пункт «${slug}» встречается дважды`, { at: slug });
       }
       current = { slug, headingLine: index, lastFieldLine: index, fields: new Map() };
       raw.push(current);
@@ -71,7 +71,7 @@ export function parse(text: string): readonly BacklogEntry[] {
 
     const field = FIELD.exec(line);
     if (field === null) {
-      throw new StepcastError(
+      throw new BurnexError(
         `пункт «${current.slug}», строка ${index + 1}: ожидалось поле вида «ключ: значение»`,
         { at: current.slug },
       );
@@ -116,15 +116,15 @@ function describeFailure(
   raw: RawEntry,
   candidate: Record<string, unknown>,
   issue: SchemaIssue | undefined,
-): StepcastError {
+): BurnexError {
   if (issue === undefined) {
-    return new StepcastError(`пункт «${raw.slug}» не соответствует формату очереди`, { at: raw.slug });
+    return new BurnexError(`пункт «${raw.slug}» не соответствует формату очереди`, { at: raw.slug });
   }
 
   const field = typeof issue.path[0] === 'string' ? issue.path[0] : undefined;
 
   if (field === 'slug') {
-    return new StepcastError(
+    return new BurnexError(
       `заголовок «${raw.slug}» не является слагом в kebab-case: очередь состоит только из пунктов`,
       { at: raw.slug },
     );
@@ -134,48 +134,48 @@ function describeFailure(
   const suffix = line === undefined ? '' : ` (строка ${line + 1})`;
 
   if (issue.code === 'invalid_type') {
-    return new StepcastError(
+    return new BurnexError(
       `пункт «${raw.slug}»: отсутствует обязательное поле «${String(field)}»${suffix}`,
       { at: raw.slug },
     );
   }
 
   if (field === 'status') {
-    return new StepcastError(
+    return new BurnexError(
       `пункт «${raw.slug}»: status «${String(candidate.status)}» не является словом из строчных латинских букв, цифр и _ (известные движку: ${BACKLOG_STATUSES.join(', ')})${suffix}`,
       { at: raw.slug },
     );
   }
 
   if (field === 'track') {
-    return new StepcastError(
+    return new BurnexError(
       `пункт «${raw.slug}»: вес «${String(candidate.track)}» не является слагом в kebab-case${suffix}`,
       { at: raw.slug },
     );
   }
 
   if (field === 'needs') {
-    return new StepcastError(
+    return new BurnexError(
       `пункт «${raw.slug}»: needs «${String(candidate.needs)}» некорректно: ${issue.message}${suffix}`,
       { at: raw.slug },
     );
   }
 
   if (field === 'goal' || field === 'details') {
-    return new StepcastError(
+    return new BurnexError(
       `пункт «${raw.slug}»: ${field} «${String(candidate[field])}» некорректно: ${issue.message}${suffix}`,
       { at: raw.slug },
     );
   }
 
   if (field === 'group') {
-    return new StepcastError(
+    return new BurnexError(
       `пункт «${raw.slug}»: группа «${String(candidate.group)}» не является слагом в kebab-case${suffix}`,
       { at: raw.slug },
     );
   }
 
-  return new StepcastError(`пункт «${raw.slug}»: поле «${String(field)}» некорректно: ${issue.message}${suffix}`, {
+  return new BurnexError(`пункт «${raw.slug}»: поле «${String(field)}» некорректно: ${issue.message}${suffix}`, {
     at: raw.slug,
   });
 }

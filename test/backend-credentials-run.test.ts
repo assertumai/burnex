@@ -3,7 +3,7 @@ import { mkdirSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, it } from 'node:test';
 
-import { StepcastError } from '../src/kernel/errors.js';
+import { BurnexError } from '../src/kernel/errors.js';
 import { applyDeclarativePlugin } from '../src/kernel/load.js';
 import { registryFromKernel, type Registry } from '../src/kernel/registry.js';
 import { createBuiltinKernel } from '../src/parts/builtin.js';
@@ -276,7 +276,7 @@ describe('backend-credentials: разрешение до старта', () => {
     const runsRoot = tempDir('runs-');
 
     await assert.rejects(start(project, state, { runsRoot }), (error: unknown) => {
-      assert.ok(error instanceof StepcastError);
+      assert.ok(error instanceof BurnexError);
       assert.equal(error.at, `backends.fake.credentials.${VARIABLE}`);
       assert.match(error.message, /хранилище недоступно/);
       assert.match(error.message, /backends\.fake\.credentials/);
@@ -312,7 +312,7 @@ describe('backend-credentials: разрешение до старта', () => {
         adapterFor: () => plain,
         resume: { plan, source },
       }),
-      (error: unknown) => error instanceof StepcastError && /хранилище недоступно/.test(error.message),
+      (error: unknown) => error instanceof BurnexError && /хранилище недоступно/.test(error.message),
     );
     assert.equal(state.calls.length, 2, 'возобновление вызвало провайдера ещё раз');
   });

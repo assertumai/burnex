@@ -11,7 +11,7 @@ import {
   KnowledgeWriteRequestSchema,
   type KnowledgeSource,
 } from '../src/parts/pipeline/domain/knowledge/types.js';
-import { StepcastError } from '../src/kernel/errors.js';
+import { BurnexError } from '../src/kernel/errors.js';
 import { anchorHash, gitCommit, gitInit } from './helpers.js';
 import { tempDir } from './tmp.js';
 
@@ -103,7 +103,7 @@ describe('knowledge-fs: разбор единицы знания', () => {
     assert.throws(
       () => parseUnit('Просто текст без шапки.\n', 'knowledge/a.md'),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.match(error.message, /knowledge\/a\.md/);
         return true;
       },
@@ -114,7 +114,7 @@ describe('knowledge-fs: разбор единицы знания', () => {
     assert.throws(
       () => parseUnit('---\nid: a\n---\n\nтело\n', 'knowledge/a.md'),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.equal(error.at, 'title');
         return true;
       },
@@ -124,7 +124,7 @@ describe('knowledge-fs: разбор единицы знания', () => {
   it('отклоняет неизвестный status', () => {
     assert.throws(
       () => parseUnit('---\nid: a\ntitle: б\nstatus: draft\n---\n\nтело\n', 'knowledge/a.md'),
-      StepcastError,
+      BurnexError,
     );
   });
 
@@ -224,7 +224,7 @@ describe('knowledge-fs: разбор единицы знания', () => {
             'knowledge/a.md',
           ),
         (error: unknown) => {
-          assert.ok(error instanceof StepcastError);
+          assert.ok(error instanceof BurnexError);
           assert.match(error.message, /knowledge\/a\.md/);
           assert.equal(error.at, 'anchors.hash');
           return true;
@@ -241,7 +241,7 @@ describe('knowledge-fs: разбор единицы знания', () => {
     assert.throws(
       () => parseUnit('---\nid: 1234567\ntitle: б\n---\n\nтело\n', 'knowledge/a.md'),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.equal(error.at, 'id');
         assert.doesNotMatch(error.message, /без id/);
         assert.match(error.message, /строка/);
@@ -255,7 +255,7 @@ describe('knowledge-fs: разбор единицы знания', () => {
     assert.throws(
       () => parseUnit('---\nid: a\ntitle: 1234567\n---\n\nтело\n', 'knowledge/a.md'),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.equal(error.at, 'title');
         assert.doesNotMatch(error.message, /без title/);
         return true;
@@ -268,7 +268,7 @@ describe('knowledge-fs: разбор единицы знания', () => {
       () =>
         parseUnit('---\nid: a\ntitle: б\nscope:\n  - 1234567\n---\n\nтело\n', 'knowledge/a.md'),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.equal(error.at, 'scope');
         assert.match(error.hint ?? '', /число/);
         return true;
@@ -280,7 +280,7 @@ describe('knowledge-fs: разбор единицы знания', () => {
     assert.throws(
       () => parseUnit('---\ntitle: б\n---\n\nтело\n', 'knowledge/a.md'),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.match(error.message, /без id/);
         return true;
       },
@@ -444,7 +444,7 @@ describe('knowledge-fs: отбор', () => {
 
   it('отказывает на неизвестном идентификаторе', () => {
     const box = repo({});
-    assert.throws(() => box.source().select({ kind: 'id', id: ['нет'] }), StepcastError);
+    assert.throws(() => box.source().select({ kind: 'id', id: ['нет'] }), BurnexError);
   });
 
   it('оглавление отдаётся одной текстовой записью', () => {
@@ -468,7 +468,7 @@ describe('knowledge-fs: отбор', () => {
 
 describe('knowledge-fs: разрешение каталога практики спецификации по имени', () => {
   // Задача 1.1 / Сценарий: «Каждое имя из оглавления разрешается» — падает на
-  // сегодняшнем коде: spec:one даёт StepcastError «Единица знания не найдена».
+  // сегодняшнем коде: spec:one даёт BurnexError «Единица знания не найдена».
   it('всякое имя из оглавления разрешается отбором по имени', () => {
     const box = repo({
       'knowledge/a.md': unit({ id: 'a', title: 'Первая' }),
@@ -554,7 +554,7 @@ describe('knowledge-fs: разрешение каталога практики �
     assert.throws(
       () => source.select({ kind: 'id', id: ['spec:нет-такого'] }),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.match(error.message, /spec:нет-такого/);
         return true;
       },
@@ -600,7 +600,7 @@ describe('knowledge-fs: разрешение каталога практики �
     assert.throws(
       () => source.select({ kind: 'id', id: ['spec:one'] }),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.match(error.message, /openspec\/changes\/one\/notes\.md/);
         assert.match(error.hint ?? '', /каталог/);
         return true;
@@ -613,7 +613,7 @@ describe('knowledge-fs: разрешение каталога практики �
     const source = box.source({ specDir: 'openspec/changes' });
 
     assert.ok(!source.index().some((entry) => entry.id === 'spec:empty'));
-    assert.throws(() => source.select({ kind: 'id', id: ['spec:empty'] }), StepcastError);
+    assert.throws(() => source.select({ kind: 'id', id: ['spec:empty'] }), BurnexError);
   });
 });
 
@@ -1686,7 +1686,7 @@ describe('knowledge-fs: запись', () => {
           body: 'Тело.',
         }),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.match(error.message, /Недопустимый идентификатор/);
         return true;
       },
@@ -2189,7 +2189,7 @@ describe('knowledge-source: контракт внешней команды', () 
     assert.throws(
       () => source.index(),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.match(error.message, /кодом 3/);
         assert.match(error.hint ?? '', /источник сломался/);
         return true;
@@ -2203,7 +2203,7 @@ describe('knowledge-source: контракт внешней команды', () 
     assert.throws(
       () => source.index(),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.match(error.message, /не соответствует контракту/);
         return true;
       },
@@ -2212,7 +2212,7 @@ describe('knowledge-source: контракт внешней команды', () 
 
   it('отказывает на ответе, который не JSON', () => {
     const { source } = stub(`process.stdout.write('не json');`);
-    assert.throws(() => source.index(), StepcastError);
+    assert.throws(() => source.index(), BurnexError);
   });
 
   // Задача 2.4 / Сценарий: «Источник не отвечает»
@@ -2221,7 +2221,7 @@ describe('knowledge-source: контракт внешней команды', () 
     assert.throws(
       () => source.index(),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.match(error.message, /за отведённое время/);
         return true;
       },

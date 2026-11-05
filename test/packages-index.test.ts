@@ -123,7 +123,7 @@ describe('packages-index: указатель пакетов', () => {
     assert.deepEqual(brokenPackages(index).map((p) => p.layer), ['project']);
     const found = findPackage(index, 'hello');
     assert.ok(found !== undefined && 'broken' in found);
-    const layers = resourceLayers(index, 'steps', { projectRoot: r.projectRoot, homeStepcastDir: r.homeDir });
+    const layers = resourceLayers(index, 'steps', { projectRoot: r.projectRoot, homeBurnexDir: r.homeDir });
     const homePackages = layers.find((l) => l.source === 'home-packages');
     assert.deepEqual(homePackages && 'packages' in homePackages ? homePackages.packages.map((p) => p.package) : null, ['tools']);
   });
@@ -151,7 +151,7 @@ describe('packages-index: слои ресурсов', () => {
   it('порядок: свободный проект → пакеты проекта → свободный home → пакеты home → встроенное', () => {
     const r = roots();
     const index = buildPackageIndex({ projectRoot: r.projectRoot, globalPath: r.globalPath });
-    const layers = resourceLayers(index, 'steps', { projectRoot: r.projectRoot, homeStepcastDir: r.homeDir });
+    const layers = resourceLayers(index, 'steps', { projectRoot: r.projectRoot, homeBurnexDir: r.homeDir });
     assert.deepEqual(layers.map((l) => l.source), ['project', 'project-packages', 'home', 'home-packages', 'builtin']);
     assert.deepEqual(layers[0], { source: 'project', path: join(r.projectRoot, '.burnex', 'steps') });
     assert.deepEqual(layers[2], { source: 'home', path: join(r.homeDir, 'steps') });
@@ -161,7 +161,7 @@ describe('packages-index: слои ресурсов', () => {
     const r = roots();
     const index = buildPackageIndex({ projectRoot: r.projectRoot, globalPath: r.globalPath });
     const sources = (kind: Parameters<typeof resourceLayers>[1]) =>
-      resourceLayers(index, kind, { projectRoot: r.projectRoot, homeStepcastDir: r.homeDir }).map((l) => l.source);
+      resourceLayers(index, kind, { projectRoot: r.projectRoot, homeBurnexDir: r.homeDir }).map((l) => l.source);
     assert.deepEqual(sources('widgets'), ['project', 'project-packages', 'home-packages']);
     assert.deepEqual(sources('dashboards'), ['project', 'project-packages', 'home', 'home-packages']);
     assert.deepEqual(sources('plugins'), ['project', 'project-packages', 'home', 'home-packages']);
@@ -173,7 +173,7 @@ describe('packages-index: слои ресурсов', () => {
   it('без проекта свободного слоя проекта нет, слой пакетов проекта пуст', () => {
     const r = roots();
     const index = buildPackageIndex({ globalPath: r.globalPath });
-    const layers = resourceLayers(index, 'widgets', { homeStepcastDir: r.homeDir });
+    const layers = resourceLayers(index, 'widgets', { homeBurnexDir: r.homeDir });
     assert.deepEqual(layers.map((l) => l.source), ['project-packages', 'home-packages']);
   });
 
@@ -181,7 +181,7 @@ describe('packages-index: слои ресурсов', () => {
     const r = roots();
     writePackage(r.projectPackages, 'hello');
     const index = buildPackageIndex({ projectRoot: r.projectRoot, globalPath: r.globalPath });
-    const roots_ = { projectRoot: r.projectRoot, homeStepcastDir: r.homeDir };
+    const roots_ = { projectRoot: r.projectRoot, homeBurnexDir: r.homeDir };
     const widgets = resourceLayers(index, 'widgets', roots_).find((l) => l.source === 'project-packages');
     const routes = resourceLayers(index, 'routes', roots_).find((l) => l.source === 'project-packages');
     assert.deepEqual(widgets && 'packages' in widgets ? widgets.packages : null, [
@@ -196,7 +196,7 @@ describe('packages-index: слои ресурсов', () => {
 describe('packages-index: поиск в слое пакетов', () => {
   function layerPackages(r: Roots, kind: 'steps' | 'widgets', layer: 'project-packages' | 'home-packages') {
     const index = buildPackageIndex({ projectRoot: r.projectRoot, globalPath: r.globalPath });
-    const found = resourceLayers(index, kind, { projectRoot: r.projectRoot, homeStepcastDir: r.homeDir }).find(
+    const found = resourceLayers(index, kind, { projectRoot: r.projectRoot, homeBurnexDir: r.homeDir }).find(
       (l) => l.source === layer,
     );
     assert.ok(found !== undefined && 'packages' in found);

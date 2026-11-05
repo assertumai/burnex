@@ -11,7 +11,7 @@ import { resolveRun } from '../src/parts/pipeline/run/journal/reader.js';
 import { describeComparison, diffRuns, lineDiff } from '../src/parts/pipeline/run/diff.js';
 import { cleanupRun } from '../src/parts/pipeline/run/cleanup.js';
 import { runPipeline, type RunResult } from '../src/parts/pipeline/run/runner.js';
-import { ExitCode, StepcastError } from '../src/kernel/errors.js';
+import { ExitCode, BurnexError } from '../src/kernel/errors.js';
 import { builtinRegistry, createBuiltinKernel } from '../src/parts/builtin.js';
 import { applyDeclarativePlugin } from '../src/kernel/load.js';
 import { DECLARATIVE_CONTRIBUTION_FIELDS } from '../src/parts/pipeline/contract.js';
@@ -363,7 +363,7 @@ describe('run-diff: несравнимые прогоны', () => {
     assert.throws(
       () => diffRuns({ a: a.journal.paths, b: c.journal.paths }),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.match(error.message, /разным проектам/);
         return true;
       },

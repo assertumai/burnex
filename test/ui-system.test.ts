@@ -52,7 +52,7 @@ function launchdHost(options: { platform?: NodeJS.Platform; loaded?: boolean; pi
     uid: 501,
     launchctl: () =>
       options.loaded === true
-        ? { status: 0, stdout: `ai.stepcast.daemon = {\n\tpid = ${options.pid ?? 4242}\n}`, stderr: '' }
+        ? { status: 0, stdout: `ai.burnex.daemon = {\n\tpid = ${options.pid ?? 4242}\n}`, stderr: '' }
         : { status: 113, stdout: '', stderr: '' },
   };
 }

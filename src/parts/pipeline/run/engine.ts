@@ -2,7 +2,7 @@ import { cpSync, existsSync, mkdirSync, readFileSync, realpathSync, statSync, sy
 import { basename, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { StepcastError } from '../../../kernel/errors.js';
+import { BurnexError } from '../../../kernel/errors.js';
 import { findPackageRoot } from '../domain/package-schema.js';
 import { realOrLiteral } from './preflight.js';
 
@@ -37,7 +37,7 @@ function readEnginePackage(engineRoot: string): EnginePackage {
   try {
     return JSON.parse(readFileSync(path, 'utf8')) as EnginePackage;
   } catch (error) {
-    throw new StepcastError(`Не удалось прочитать package.json движка: ${(error as Error).message}`, {
+    throw new BurnexError(`Не удалось прочитать package.json движка: ${(error as Error).message}`, {
       file: path,
       cause: error,
     });
@@ -143,7 +143,7 @@ function copyPackageFiles(engineRoot: string, snapshotDir: string, declared: Eng
       cpSync(source, join(snapshotDir, name), { recursive: true });
     }
   } catch (error) {
-    throw new StepcastError(`Не удалось скопировать пакет движка в снимок: ${(error as Error).message}`, {
+    throw new BurnexError(`Не удалось скопировать пакет движка в снимок: ${(error as Error).message}`, {
       file: snapshotDir,
       cause: error,
     });
@@ -171,7 +171,7 @@ function linkNodeModules(engineRoot: string, snapshotDir: string, declared: Engi
   if (!present) {
     // Пакету без зависимостей разрешать нечего — ссылка была бы висячей.
     if (dependencies.length === 0) return;
-    throw new StepcastError(
+    throw new BurnexError(
       `Зависимости движка не разрешаются из снимка: каталог ${target} отсутствует, а package.json объявляет ${dependencies.join(', ')}`,
       {
         file: target,
@@ -182,7 +182,7 @@ function linkNodeModules(engineRoot: string, snapshotDir: string, declared: Engi
 
   const missing = dependencies.filter((name) => !existsSync(join(target, ...name.split('/'))));
   if (missing.length > 0) {
-    throw new StepcastError(
+    throw new BurnexError(
       `Зависимости движка не разрешаются из снимка: ${missing.join(', ')} нет в ${target}`,
       {
         file: target,
@@ -195,7 +195,7 @@ function linkNodeModules(engineRoot: string, snapshotDir: string, declared: Engi
   try {
     symlinkSync(target, link, process.platform === 'win32' ? 'junction' : 'dir');
   } catch (error) {
-    throw new StepcastError(`Не удалось создать ссылку node_modules в снимке движка: ${(error as Error).message}`, {
+    throw new BurnexError(`Не удалось создать ссылку node_modules в снимке движка: ${(error as Error).message}`, {
       file: link,
       cause: error,
     });
@@ -206,7 +206,7 @@ function linkNodeModules(engineRoot: string, snapshotDir: string, declared: Engi
 function snapshotEntry(engine: EngineLocation, snapshotDir: string): string {
   const inside = relative(engine.root, engine.entry);
   if (inside === '' || inside.startsWith('..') || isAbsolute(inside)) {
-    throw new StepcastError(`Точка входа движка ${engine.entry} лежит вне его пакета ${engine.root}`, {
+    throw new BurnexError(`Точка входа движка ${engine.entry} лежит вне его пакета ${engine.root}`, {
       file: engine.entry,
       hint: 'Снимок копирует пакет целиком: точка входа обязана лежать внутри его корня',
     });
@@ -216,7 +216,7 @@ function snapshotEntry(engine: EngineLocation, snapshotDir: string): string {
 
 /**
  * Снять снимок правимого движка в каталог прогона и вернуть точку входа
- * снимка. Отказ копирования или создания ссылки поднимается `StepcastError`
+ * снимка. Отказ копирования или создания ссылки поднимается `BurnexError`
  * и не проглатывается: молчаливое исполнение незафиксированным движком — то
  * самое поведение, против которого снимок и заводится.
  */
@@ -230,7 +230,7 @@ export function pinEngine(options: {
   try {
     mkdirSync(options.snapshotDir, { recursive: true });
   } catch (error) {
-    throw new StepcastError(`Не удалось создать каталог снимка движка: ${(error as Error).message}`, {
+    throw new BurnexError(`Не удалось создать каталог снимка движка: ${(error as Error).message}`, {
       file: options.snapshotDir,
       cause: error,
     });
@@ -244,7 +244,7 @@ export function pinEngine(options: {
   // `bin: "./cli.js"` — законное объявление. Без этой проверки снимок снялся
   // бы «успешно», а `BURNEX_BIN` всех шагов вёл бы в никуда.
   if (!existsSync(pinnedEntry)) {
-    throw new StepcastError(`Точка входа движка не попала в снимок: ${pinnedEntry} не создан`, {
+    throw new BurnexError(`Точка входа движка не попала в снимок: ${pinnedEntry} не создан`, {
       file: pinnedEntry,
       hint: 'Поле files в package.json движка не покрывает точку входа — добавьте её в files',
     });

@@ -6,7 +6,7 @@ import { isAbsolute, join, resolve as resolvePath } from 'node:path';
 import { Ajv2020 } from 'ajv/dist/2020.js';
 import type { ErrorObject, ValidateFunction } from 'ajv';
 
-import { StepcastError } from '../../../kernel/errors.js';
+import { BurnexError } from '../../../kernel/errors.js';
 import { withLegacyNames } from '../../../kernel/env-names.js';
 import { runProcess } from '../run/exec/process.js';
 import type { RunJournal } from '../run/journal/writer.js';
@@ -233,7 +233,7 @@ async function evaluateScript(
     // Вызывающий обязан передать контракт вызова вместе с разрешённым
     // предикатом — иначе некуда писать `input.json` и нечем ограничить
     // исполнение временем. Внутренняя ошибка движка, а не отказ пользователя.
-    throw new StepcastError('Предикат script вычислен без контракта вызова', {
+    throw new BurnexError('Предикат script вычислен без контракта вызова', {
       hint: 'evaluatePredicates позвана без поля script в EvaluationInput',
     });
   }
@@ -456,7 +456,7 @@ export function validateAgainstSchema(
   try {
     validate = ajv.compile(schema as object);
   } catch (error) {
-    throw new StepcastError(`Схема некорректна: ${(error as Error).message}`, { cause: error });
+    throw new BurnexError(`Схема некорректна: ${(error as Error).message}`, { cause: error });
   }
 
   const passed = validate(value) === true;
@@ -490,7 +490,7 @@ export function validateAgainstSchemaFile(
   try {
     schema = JSON.parse(readFileSync(path, 'utf8'));
   } catch (error) {
-    throw new StepcastError(`Не удалось прочитать схему ${path}: ${(error as Error).message}`, {
+    throw new BurnexError(`Не удалось прочитать схему ${path}: ${(error as Error).message}`, {
       file: path,
       cause: error,
     });
@@ -499,8 +499,8 @@ export function validateAgainstSchemaFile(
   try {
     return validateAgainstSchema(schema, value);
   } catch (error) {
-    if (error instanceof StepcastError) {
-      throw new StepcastError(`Схема ${path} некорректна: ${(error.cause as Error).message}`, {
+    if (error instanceof BurnexError) {
+      throw new BurnexError(`Схема ${path} некорректна: ${(error.cause as Error).message}`, {
         file: path,
         cause: error.cause,
       });

@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
 import { restartDaemon, type RestartHost, type RestartOptions } from '../src/parts/install/restart.js';
-import { StepcastError } from '../src/kernel/errors.js';
+import { BurnexError } from '../src/kernel/errors.js';
 import type { DaemonRecord } from '../src/parts/ui/daemon/daemon.js';
 
 interface Bed {
@@ -52,8 +52,8 @@ describe('install-restart: выбор перезапуска', () => {
 
     assert.equal(await restartDaemon(host, OPTIONS, (line) => out.push(line)), 'kickstarted');
     assert.deepEqual(calls, [
-      'launchctl print gui/501/ai.stepcast.daemon',
-      'launchctl kickstart -k gui/501/ai.stepcast.daemon',
+      'launchctl print gui/501/ai.burnex.daemon',
+      'launchctl kickstart -k gui/501/ai.burnex.daemon',
     ]);
     assert.equal(out.some((line) => line.includes('up --install')), false);
   });
@@ -93,7 +93,7 @@ describe('install-restart: выбор перезапуска', () => {
     const { host, calls } = bed({});
 
     assert.equal(await restartDaemon(host, OPTIONS, () => undefined), 'none');
-    assert.deepEqual(calls, ['launchctl print gui/501/ai.stepcast.daemon']);
+    assert.deepEqual(calls, ['launchctl print gui/501/ai.burnex.daemon']);
   });
 
   it('вне macOS launchctl не зовётся', async () => {
@@ -118,11 +118,11 @@ describe('install-restart: выбор перезапуска', () => {
   it('отказ kickstart и неподнявшийся up — отказы с объяснением, а не тишина', async () => {
     await assert.rejects(
       restartDaemon(bed({ agentLoaded: true, kickstartStatus: 1 }).host, OPTIONS, () => undefined),
-      StepcastError,
+      BurnexError,
     );
     await assert.rejects(
       restartDaemon(bed({ daemon: { ...RECORD, cwd: '/p' }, spawnOk: false }).host, OPTIONS, () => undefined),
-      StepcastError,
+      BurnexError,
     );
   });
 });

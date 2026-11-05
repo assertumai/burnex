@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { resolveConfig } from '../config/resolve.js';
 import { findProjectRoot } from '../run/journal/paths.js';
 import { findStepDir, follow, resolveRun } from '../run/journal/reader.js';
-import { ExitCode, StepcastError, type ExitCodeValue } from '../../../kernel/errors.js';
+import { ExitCode, BurnexError, type ExitCodeValue } from '../../../kernel/errors.js';
 import { commandRow } from '../../../kernel/cli/commandRow.js';
 import { PIPELINE_SERVICES } from '../services.js';
 import type { ParsedArgs } from '../../../kernel/cli/args.js';
@@ -49,7 +49,7 @@ export async function runLogsCommand(
 function stepLogFiles(paths: ReturnType<typeof resolveRun>, target: string): string[] {
   const separator = target.indexOf('/');
   if (separator === -1) {
-    throw new StepcastError(`Шаг адресуется как <работа>/<шаг>, получено ${target}`, {
+    throw new BurnexError(`Шаг адресуется как <работа>/<шаг>, получено ${target}`, {
       hint: 'Например: implement/write-code',
     });
   }
@@ -59,7 +59,7 @@ function stepLogFiles(paths: ReturnType<typeof resolveRun>, target: string): str
   const dir = findStepDir(paths, jobId, stepId);
 
   if (dir === undefined) {
-    throw new StepcastError(`Шаг ${target} в прогоне не найден`, { file: paths.dir });
+    throw new BurnexError(`Шаг ${target} в прогоне не найден`, { file: paths.dir });
   }
 
   return [join(dir, 'stdout.log'), join(dir, 'stderr.log')];

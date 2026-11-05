@@ -71,10 +71,10 @@ interface WidgetPackageLayer {
 
 /** Слои пакетов виджетов в порядке поиска: пакеты проекта, затем пакеты home. Свободный каталог home у виджетов не читается. */
 function widgetLayers(projectPath: string, options: WidgetSourceOptions): readonly WidgetPackageLayer[] {
-  const homeStepcastDir = homeRoot(options.home ?? homedir());
-  const index = buildPackageIndex({ projectRoot: projectPath, globalPath: join(homeStepcastDir, 'config.yml') });
+  const homeBurnexDir = homeRoot(options.home ?? homedir());
+  const index = buildPackageIndex({ projectRoot: projectPath, globalPath: join(homeBurnexDir, 'config.yml') });
   const layers: WidgetPackageLayer[] = [];
-  for (const layer of resourceLayers(index, 'widgets', { projectRoot: projectPath, homeStepcastDir })) {
+  for (const layer of resourceLayers(index, 'widgets', { projectRoot: projectPath, homeBurnexDir })) {
     if (layer.source === 'project-packages') layers.push({ layer: 'project', packages: layer.packages });
     if (layer.source === 'home-packages') layers.push({ layer: 'home', packages: layer.packages });
   }

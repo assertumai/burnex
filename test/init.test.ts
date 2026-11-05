@@ -12,7 +12,7 @@ import type { ParsedArgs } from '../src/kernel/cli/args.js';
 import { expandPipeline } from '../src/parts/pipeline/document/expand.js';
 import { hasErrors, lintPipeline } from '../src/parts/pipeline/domain/lint.js';
 import { runPipeline } from '../src/parts/pipeline/run/runner.js';
-import { ExitCode, StepcastError } from '../src/kernel/errors.js';
+import { ExitCode, BurnexError } from '../src/kernel/errors.js';
 import { gitCommit, gitInit, makeProject, withHome } from './helpers.js';
 import { tempDir } from './tmp.js';
 
@@ -38,7 +38,7 @@ describe('CLI: burnex init', () => {
   it('отказывается перезаписывать существующий burnex.yml без --force', () => {
     const project = makeProject({ 'burnex.yml': 'исходное содержимое\n' });
 
-    assert.throws(() => runInitCommand(args(), () => {}, project.root), StepcastError);
+    assert.throws(() => runInitCommand(args(), () => {}, project.root), BurnexError);
     assert.equal(readFileSync(project.path('burnex.yml'), 'utf8'), 'исходное содержимое\n');
   });
 
@@ -191,7 +191,7 @@ describe('CLI: burnex init --knowledge fs', () => {
     assert.throws(
       () => runInitCommand(args({ knowledge: 'fs' }), () => {}, project.root),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.match(error.message, /knowledge/);
         return true;
       },
@@ -207,7 +207,7 @@ describe('CLI: burnex init --knowledge fs', () => {
 
     assert.throws(
       () => runInitCommand(args({ knowledge: 'fs' }), () => {}, project.root),
-      StepcastError,
+      BurnexError,
     );
   });
 
@@ -268,7 +268,7 @@ describe('CLI: burnex init --knowledge fs', () => {
     const project = makeProject();
     assert.throws(
       () => runInitCommand(args({ knowledge: 'graph' }), () => {}, project.root),
-      StepcastError,
+      BurnexError,
     );
   });
 });

@@ -1,4 +1,4 @@
-import type { StepcastError } from './errors.js';
+import type { BurnexError } from './errors.js';
 import { BUILTIN_OWNER, type Fiber, type Kernel } from './kernel.js';
 import type { RootWindow, RowOutcome } from './load.js';
 import { contributionServices, declaredServices, requestedServices } from './services.js';
@@ -140,7 +140,7 @@ function stateOf(outcome: RowOutcome): IntrospectionState {
   }
 }
 
-function reasonOf(error: StepcastError | undefined): string {
+function reasonOf(error: BurnexError | undefined): string {
   return error?.message ?? 'неизвестная причина';
 }
 

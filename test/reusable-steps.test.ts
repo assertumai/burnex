@@ -4,7 +4,7 @@ import { dirname, join } from 'node:path';
 import { describe, it } from 'node:test';
 
 import { expandPipeline, type ScriptRoots } from '../src/parts/pipeline/document/expand.js';
-import { StepcastError } from '../src/kernel/errors.js';
+import { BurnexError } from '../src/kernel/errors.js';
 import { asScript, makeProject, type Project } from './helpers.js';
 import { tempDir } from './tmp.js';
 
@@ -194,7 +194,7 @@ describe('reusable-step: форма имени uses', () => {
     assert.throws(
       () => expandUses(project, isolatedStepRoots(project)),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.match(error.message, /автор\/имя/);
         return true;
       },
@@ -206,7 +206,7 @@ describe('reusable-step: форма имени uses', () => {
     assert.throws(
       () => expandUses(project, isolatedStepRoots(project)),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.match(error.message, /script/);
         return true;
       },
@@ -215,12 +215,12 @@ describe('reusable-step: форма имени uses', () => {
 
   it('отклоняет пустое имя', () => {
     const project = makeProject({ 'burnex.yml': pipelineWithUses('""') });
-    assert.throws(() => expandUses(project, isolatedStepRoots(project)), StepcastError);
+    assert.throws(() => expandUses(project, isolatedStepRoots(project)), BurnexError);
   });
 
   it('отклоняет имя с пробелом', () => {
     const project = makeProject({ 'burnex.yml': pipelineWithUses('"lint fix"') });
-    assert.throws(() => expandUses(project, isolatedStepRoots(project)), StepcastError);
+    assert.throws(() => expandUses(project, isolatedStepRoots(project)), BurnexError);
   });
 });
 
@@ -525,7 +525,7 @@ describe('reusable-step: параметр не отображением', () => 
     const project = makeProject({
       'burnex.yml': pipelineWithUses('greet', '        with: [a, b]'),
     });
-    assert.throws(() => expandUses(project, isolatedStepRoots(project)), StepcastError);
+    assert.throws(() => expandUses(project, isolatedStepRoots(project)), BurnexError);
   });
 });
 
@@ -576,7 +576,7 @@ jobs:
       assert.throws(
         () => expandUses(project, isolatedStepRoots(project)),
         (error: unknown) => {
-          assert.ok(error instanceof StepcastError);
+          assert.ok(error instanceof BurnexError);
           assert.match(error.message, new RegExp(field));
           // Ключ известен формату — его объявляет манифест; «неизвестный
           // ключ» отправил бы автора искать опечатку там, где её нет.
@@ -603,7 +603,7 @@ jobs:
     assert.throws(
       () => expandUses(project, isolatedStepRoots(project)),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.match(error.message, /script/);
         assert.match(error.message, /объявляет манифест шага/);
         return true;
@@ -623,7 +623,7 @@ jobs:
         run: [echo, hi]
 `,
     });
-    assert.throws(() => expandUses(project, isolatedStepRoots(project)), StepcastError);
+    assert.throws(() => expandUses(project, isolatedStepRoots(project)), BurnexError);
   });
 
   it('отклоняет uses вместе с prompt', () => {
@@ -638,7 +638,7 @@ jobs:
         prompt: привет
 `,
     });
-    assert.throws(() => expandUses(project, isolatedStepRoots(project)), StepcastError);
+    assert.throws(() => expandUses(project, isolatedStepRoots(project)), BurnexError);
   });
 });
 

@@ -3,7 +3,7 @@ import { chmodSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, it } from 'node:test';
 
-import { StepcastError } from '../src/kernel/errors.js';
+import { BurnexError } from '../src/kernel/errors.js';
 import { finishItem, oneLine, readBacklogFile, tailLine, REASON_LIMIT } from '../src/parts/pipeline/domain/backlog/file.js';
 import { tempDir } from './tmp.js';
 
@@ -102,7 +102,7 @@ describe('backlog file: finishItem', () => {
   it('отсутствующий пункт — отказ, называющий слаг и файл', () => {
     const path = makeFile(backlog('in_progress'));
     assert.throws(() => finishItem(path, 'test', 'нет-такого', 'done'), (error: unknown) => {
-      assert.ok(error instanceof StepcastError);
+      assert.ok(error instanceof BurnexError);
       assert.match(error.message, /нет-такого/);
       assert.equal(error.file, path);
       return true;
@@ -128,7 +128,7 @@ describe('backlog file: readBacklogFile', () => {
   it('отсутствующий файл — отказ, называющий путь', () => {
     const path = join(tempDir('backlog-file-'), 'нет-такой-очереди.md');
     assert.throws(() => readBacklogFile(path), (error: unknown) => {
-      assert.ok(error instanceof StepcastError);
+      assert.ok(error instanceof BurnexError);
       assert.equal(error.file, path);
       return true;
     });

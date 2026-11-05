@@ -7,7 +7,7 @@ import {
   resolveInstallMethod,
   type InferProbes,
 } from '../src/parts/install/infer.js';
-import { StepcastError } from '../src/kernel/errors.js';
+import { BurnexError } from '../src/kernel/errors.js';
 
 function probes(overrides: Partial<InferProbes> = {}): InferProbes {
   return {
@@ -35,7 +35,7 @@ describe('install-infer: вывод способа без паспорта', () 
   it('каталог релизов — отказ с подсказкой install.sh, даже внутри git-дерева', () => {
     assert.throws(
       () => inferInstallMethod('/home/u/.burnex/releases/0.3.0', probes({ isGitTree: () => true })),
-      (error: unknown) => error instanceof StepcastError && /install\.sh/.test(error.hint ?? ''),
+      (error: unknown) => error instanceof BurnexError && /install\.sh/.test(error.hint ?? ''),
     );
   });
 
@@ -60,7 +60,7 @@ describe('install-infer: паспорт предпочтительнее выв�
   });
 
   it('битый паспорт не заменяется выводом молча', () => {
-    assert.throws(() => resolveInstallMethod('{', root, probes({ isGitTree: () => true })), StepcastError);
+    assert.throws(() => resolveInstallMethod('{', root, probes({ isGitTree: () => true })), BurnexError);
   });
 });
 

@@ -1,7 +1,7 @@
 import { chmodSync, readFileSync, statSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 
-import { StepcastError, isStepcastError } from '../../../../kernel/errors.js';
+import { BurnexError, isBurnexError } from '../../../../kernel/errors.js';
 import { atomicWrite } from '../../run/journal/writer.js';
 import { withBacklogLock } from './lock.js';
 import { parse, type BacklogEntry } from './parse.js';
@@ -32,7 +32,7 @@ export function readBacklogFile(path: string): string {
     return readFileSync(path, 'utf8');
   } catch (error) {
     const code = (error as NodeJS.ErrnoException).code;
-    throw new StepcastError(
+    throw new BurnexError(
       code === 'ENOENT'
         ? `Файл очереди не найден: ${path}`
         : `Не удалось прочитать файл очереди: ${(error as Error).message}`,
@@ -46,8 +46,8 @@ export function parseBacklogFile(path: string, text: string): readonly BacklogEn
   try {
     return parse(text);
   } catch (error) {
-    if (!isStepcastError(error)) throw error;
-    throw new StepcastError(error.message, {
+    if (!isBurnexError(error)) throw error;
+    throw new BurnexError(error.message, {
       file: path,
       ...(error.at === undefined ? {} : { at: error.at }),
       ...(error.hint === undefined ? {} : { hint: error.hint }),
@@ -76,7 +76,7 @@ export function readArchivedEntries(file: string): readonly BacklogEntry[] {
     text = readFileSync(path, 'utf8');
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === 'ENOENT') return [];
-    throw new StepcastError(`Не удалось прочитать архив очереди: ${(error as Error).message}`, {
+    throw new BurnexError(`Не удалось прочитать архив очереди: ${(error as Error).message}`, {
       file: path,
       cause: error,
     });
@@ -200,7 +200,7 @@ export function finishItem(
     const entries = parseBacklogFile(file, text);
     const entry = entries.find((candidate) => candidate.slug === slug);
     if (entry === undefined) {
-      throw new StepcastError(`пункт «${slug}» в очереди не найден`, { file, at: slug });
+      throw new BurnexError(`пункт «${slug}» в очереди не найден`, { file, at: slug });
     }
 
     if (entry.data.status === 'done' || entry.data.status === 'failed') return 'already-final';

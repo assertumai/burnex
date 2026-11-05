@@ -178,7 +178,7 @@ export type ResourceLayer =
 export interface ResourceLayerRoots {
   readonly projectRoot?: string;
   /** Каталог глобального конфига — корень свободных ресурсов home. */
-  readonly homeStepcastDir: string;
+  readonly homeBurnexDir: string;
 }
 
 /**
@@ -198,7 +198,7 @@ export function resourceLayers(index: PackageIndex, kind: ResourceKind, roots: R
     layers.push({ source: 'project', path: join(cabinetDir(roots.projectRoot), relative) });
   }
   layers.push({ source: 'project-packages', packages: packagesOf('project') });
-  if (free.home) layers.push({ source: 'home', path: join(roots.homeStepcastDir, relative) });
+  if (free.home) layers.push({ source: 'home', path: join(roots.homeBurnexDir, relative) });
   layers.push({ source: 'home-packages', packages: packagesOf('home') });
   if (free.builtin) layers.push({ source: 'builtin' });
   return layers;

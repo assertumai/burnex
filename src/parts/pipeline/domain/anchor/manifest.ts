@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
 import { join, relative } from 'node:path';
 
-import { StepcastError } from '../../../../kernel/errors.js';
+import { BurnexError } from '../../../../kernel/errors.js';
 import { loadIgnoreRules } from './ignore.js';
 import type { Anchor, AnchorComparison, TreeAnchorer } from './types.js';
 
@@ -100,7 +100,7 @@ export function createManifestAnchorer(options: ManifestAnchorerOptions): TreeAn
     },
 
     restore(anchor: Anchor): void {
-      throw new StepcastError(
+      throw new BurnexError(
         `Состояние ${anchor.id} снято хеш-манифестом и восстановлению не подлежит`,
         {
           hint: 'Манифест отвечает, изменилось ли дерево, но содержимого файлов не хранит; вне git возобновление возможно только на уцелевшем каталоге',
@@ -109,7 +109,7 @@ export function createManifestAnchorer(options: ManifestAnchorerOptions): TreeAn
     },
 
     restorePaths(anchor: Anchor): void {
-      throw new StepcastError(
+      throw new BurnexError(
         `Состояние ${anchor.id} снято хеш-манифестом и восстановлению не подлежит`,
         {
           hint: 'Манифест содержимого файлов не хранит; вне git возобновление возможно только на уцелевшем каталоге',

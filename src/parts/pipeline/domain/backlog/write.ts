@@ -1,4 +1,4 @@
-import { StepcastError } from '../../../../kernel/errors.js';
+import { BurnexError } from '../../../../kernel/errors.js';
 import { parse } from './parse.js';
 
 /**
@@ -21,7 +21,7 @@ export function withFields(
     const lines = result.split('\n');
     const entry = parse(result).find((candidate) => candidate.slug === slug);
     if (entry === undefined) {
-      throw new StepcastError(`пункт «${slug}» в очереди не найден`, { at: slug });
+      throw new BurnexError(`пункт «${slug}» в очереди не найден`, { at: slug });
     }
 
     const existing = entry.fields.get(name);
@@ -45,7 +45,7 @@ export function withFields(
  */
 function assertSingleLine(name: string, value: string): void {
   if (!/[\n\r]/.test(value)) return;
-  throw new StepcastError(
+  throw new BurnexError(
     `значение поля «${name}» обязано занимать одну строку: перевод строки сделал бы очередь неразбираемой`,
     { at: name },
   );
@@ -69,7 +69,7 @@ export function withoutFields(text: string, slug: string, names: readonly string
     const lines = result.split('\n');
     const entry = parse(result).find((candidate) => candidate.slug === slug);
     if (entry === undefined) {
-      throw new StepcastError(`пункт «${slug}» в очереди не найден`, { at: slug });
+      throw new BurnexError(`пункт «${slug}» в очереди не найден`, { at: slug });
     }
 
     const existing = entry.fields.get(name);
@@ -109,7 +109,7 @@ export function insertItem(
 
   const entry = parse(text).find((candidate) => candidate.slug === after);
   if (entry === undefined) {
-    throw new StepcastError(`пункт «${after}» в очереди не найден`, { at: after });
+    throw new BurnexError(`пункт «${after}» в очереди не найден`, { at: after });
   }
   const lines = text.split('\n');
   lines.splice(entry.lastFieldLine + 1, 0, ...block);

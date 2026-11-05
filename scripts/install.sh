@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # Устанавливает burnex: клонирует ссылку, собирает и раскладывает релиз в
 # $BURNEX_HOME/releases/<имя>, переключает current и ставит лаунчер
-# `burnex` (с псевдонимом `stepcast`) в $BURNEX_BIN_DIR.
+# `burnex` в $BURNEX_BIN_DIR.
 #
-#   curl -fsSL https://raw.githubusercontent.com/assertumai/stepcast/main/scripts/install.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/assertumai/burnex/main/scripts/install.sh | bash
 #   bash scripts/install.sh [--repo URL] [--ref REF] [--force]
 #
 # `burnex update` в режиме managed запускает копию этого скрипта из текущего
@@ -14,7 +14,7 @@ set -euo pipefail
 usage() {
   cat <<'EOF'
 install.sh — установка burnex в $BURNEX_HOME/releases (по умолчанию ~/.burnex)
-и лаунчер burnex (с псевдонимом stepcast) в $BURNEX_BIN_DIR (по умолчанию ~/.local/bin).
+и лаунчер burnex в $BURNEX_BIN_DIR (по умолчанию ~/.local/bin).
 
   --repo URL     откуда клонировать (по умолчанию GitHub; подойдёт и путь)
   --ref REF      тег, ветка или sha; по умолчанию последний тег vX.Y.Z
@@ -26,7 +26,7 @@ install.sh — установка burnex в $BURNEX_HOME/releases (по умол
 EOF
 }
 
-DEFAULT_REPO="https://github.com/assertumai/stepcast.git"
+DEFAULT_REPO="https://github.com/assertumai/burnex.git"
 REPO="$DEFAULT_REPO"
 REF=""
 FORCE=0
@@ -97,10 +97,10 @@ STRICT_TAG='^v[0-9]+\.[0-9]+\.[0-9]+$'
 
 # Чужой файл на месте лаунчера (например, `npm link`) — отказ до клонирования
 # и сборки: минуты работы не должны кончаться отказом, известным заранее.
-# Лаунчер — `burnex`, рядом ссылка `stepcast` (псевдоним переходного периода);
-# у обоих одна проверка. Прежняя ссылка `stepcast` на наш релиз — своя.
+# Лаунчер — `burnex`. Прежний лаунчер `stepcast`, если это наша ссылка на
+# релиз, убирается: псевдоним снят последним шагом переименования.
 LAUNCHER="$BIN_DIR/burnex"
-ALIAS_LAUNCHER="$BIN_DIR/stepcast"
+LEGACY_LAUNCHER="$BIN_DIR/stepcast"
 check_launcher_free() {
   local launcher="$1"
   if [ -z "$FROM_DIR" ] && { [ -e "$launcher" ] || [ -L "$launcher" ]; }; then
@@ -117,7 +117,6 @@ check_launcher_free() {
   fi
 }
 check_launcher_free "$LAUNCHER"
-check_launcher_free "$ALIAS_LAUNCHER"
 
 if [ -n "$FROM_DIR" ]; then
   SRC="$(cd "$FROM_DIR" && pwd)"
@@ -215,8 +214,14 @@ fi
 
 mkdir -p "$BIN_DIR"
 ln -sfn "$RELEASES_DIR/current/dist/src/bin.js" "$LAUNCHER"
-ln -sfn "$RELEASES_DIR/current/dist/src/bin.js" "$ALIAS_LAUNCHER"
-echo "==> лаунчер: $LAUNCHER -> $RELEASES_DIR/current/dist/src/bin.js (и псевдоним $ALIAS_LAUNCHER)"
+echo "==> лаунчер: $LAUNCHER -> $RELEASES_DIR/current/dist/src/bin.js"
+if [ -L "$LEGACY_LAUNCHER" ]; then
+  case "$(readlink "$LEGACY_LAUNCHER")" in
+    "$RELEASES_DIR"/*|"$HOME/.stepcast/releases"/*|"$HOME/.burnex/releases"/*)
+      rm -f "$LEGACY_LAUNCHER"
+      echo "==> прежний лаунчер $LEGACY_LAUNCHER убран: команда называется burnex" ;;
+  esac
+fi
 
 # Паспорт пишется последним и атомарно: по нему `burnex update` узнаёт
 # способ установки, а полупрозрачный файл хуже отсутствующего.

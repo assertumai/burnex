@@ -6,7 +6,7 @@ import { resolveConfig } from '../../../pipeline/config/resolve.js';
 import { runPaths } from '../../../pipeline/run/journal/paths.js';
 import { isRunAlive, listProjects } from '../../../pipeline/run/journal/reader.js';
 import { planResume, readSourceRun } from '../../../pipeline/run/resumePlan.js';
-import { isStepcastError } from '../../../../kernel/errors.js';
+import { isBurnexError } from '../../../../kernel/errors.js';
 import { INVALID, readBody, readNonNegativeInt, sendJson } from '../../daemon/http.js';
 import { readJournalFile } from '../../file.js';
 import { parseRunAddress, snapshotOrRecord } from '../../runAddress.js';
@@ -55,8 +55,8 @@ const handleFile: ApiHandler = (req, res, env) => {
     sendJson(res, 200, readJournalFile(paths.dir, requested, side));
   } catch (error) {
     // Выход за каталог прогона — ошибка клиента, а не сбой сервера.
-    const message = isStepcastError(error) ? error.message : 'File cannot be read';
-    sendJson(res, isStepcastError(error) ? 400 : 404, { error: message });
+    const message = isBurnexError(error) ? error.message : 'File cannot be read';
+    sendJson(res, isBurnexError(error) ? 400 : 404, { error: message });
   }
 };
 
@@ -130,8 +130,8 @@ const handleStepOutput: ApiHandler = (req, res, env) => {
     // раз в секунду на каждое раскрытое окно делает эту гонку рядовой, а
     // необработанное исключение в слушателе запроса роняет весь демон —
     // отвечать надо одному запросу, как это делает `handleFile`.
-    const message = isStepcastError(error) ? error.message : 'Step output cannot be read';
-    sendJson(res, isStepcastError(error) ? 400 : 404, { error: message });
+    const message = isBurnexError(error) ? error.message : 'Step output cannot be read';
+    sendJson(res, isBurnexError(error) ? 400 : 404, { error: message });
   }
 };
 
@@ -198,7 +198,7 @@ const handleResume: ApiHandler = async (req, res, env) => {
       from: parsed.data.from,
     });
   } catch (error) {
-    sendJson(res, 400, { error: isStepcastError(error) ? error.message : 'The run cannot be resumed from this job' });
+    sendJson(res, 400, { error: isBurnexError(error) ? error.message : 'The run cannot be resumed from this job' });
     return;
   }
 

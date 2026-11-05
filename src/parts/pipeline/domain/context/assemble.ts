@@ -1,7 +1,7 @@
 import { globSync, readFileSync, statSync } from 'node:fs';
 import { isAbsolute, relative, resolve as resolvePath } from 'node:path';
 
-import { StepcastError } from '../../../../kernel/errors.js';
+import { BurnexError } from '../../../../kernel/errors.js';
 import { formatTokens } from '../../../../kernel/units.js';
 import type { ContextEntry, ContextMode, ContextUpstream } from '../../document/model.js';
 import type { KnowledgeEntry, KnowledgeSelector } from '../knowledge/types.js';
@@ -268,7 +268,7 @@ function resolveEntry(
   // осознанное решение автора, о котором движок и так сообщает событием, а
   // здесь речь о другом — о записи, не нашедшей вообще ничего.
   if (entry.required === true && paths.length === 0) {
-    throw new StepcastError(`Обязательная запись контекста не дала ни одного файла: ${entry.path}`, {
+    throw new BurnexError(`Обязательная запись контекста не дала ни одного файла: ${entry.path}`, {
       hint: 'Запись объявлена required: true — проверьте путь или снимите требование',
     });
   }
@@ -311,7 +311,7 @@ function includeFile(
   try {
     content = readFileSync(path, 'utf8');
   } catch (error) {
-    throw new StepcastError(`Не удалось прочитать файл контекста: ${relativePath}`, {
+    throw new BurnexError(`Не удалось прочитать файл контекста: ${relativePath}`, {
       file: path,
       cause: error,
     });
@@ -349,21 +349,21 @@ export function itemRefPaths(recordPath: string, workspace: string): readonly st
   try {
     value = JSON.parse(readFileSync(file, 'utf8'));
   } catch (error) {
-    throw new StepcastError(`Запись item_refs не прочитана или не разобрана: ${recordPath}`, {
+    throw new BurnexError(`Запись item_refs не прочитана или не разобрана: ${recordPath}`, {
       file,
       cause: error,
     });
   }
   if (typeof value !== 'object' || value === null || Array.isArray(value)) {
-    throw new StepcastError(`Запись item_refs не является JSON-объектом: ${recordPath}`, { file });
+    throw new BurnexError(`Запись item_refs не является JSON-объектом: ${recordPath}`, { file });
   }
   const { goal, details } = value as { goal?: unknown; details?: unknown };
 
   if (goal !== undefined && typeof goal !== 'string') {
-    throw new StepcastError(`Запись item_refs ${recordPath}: goal должен быть строкой`, { file });
+    throw new BurnexError(`Запись item_refs ${recordPath}: goal должен быть строкой`, { file });
   }
   if (details !== undefined && (!Array.isArray(details) || details.some((item) => typeof item !== 'string'))) {
-    throw new StepcastError(`Запись item_refs ${recordPath}: details должен быть перечнем строк`, { file });
+    throw new BurnexError(`Запись item_refs ${recordPath}: details должен быть перечнем строк`, { file });
   }
 
   const named = [...(goal === undefined || goal === '' ? [] : [goal]), ...((details as string[] | undefined) ?? [])];
@@ -371,7 +371,7 @@ export function itemRefPaths(recordPath: string, workspace: string): readonly st
     .filter((path) => path !== '')
     .map((path) => {
       if (isAbsolute(path) || path.split('/').includes('..')) {
-        throw new StepcastError(
+        throw new BurnexError(
           `Запись item_refs ${recordPath}: путь «${path}» абсолютный или выходит за корень сегментом ..`,
           { file },
         );
@@ -382,7 +382,7 @@ export function itemRefPaths(recordPath: string, workspace: string): readonly st
       } catch {
         // отсутствие и каталог — один отказ ниже
       }
-      throw new StepcastError(`Файл, названный записью item_refs, не найден: ${path}`, {
+      throw new BurnexError(`Файл, названный записью item_refs, не найден: ${path}`, {
         file: absolute,
         hint: `Запись ${recordPath}; пути отсчитываются от рабочей директории шага`,
       });
@@ -409,7 +409,7 @@ function resolveKnowledge(
   denied: Set<string>,
 ): void {
   if (options.knowledge === undefined) {
-    throw new StepcastError('Запись контекста knowledge объявлена без источника знания', {
+    throw new BurnexError('Запись контекста knowledge объявлена без источника знания', {
       hint: 'Объявите project.knowledge в .burnex/config.yml',
     });
   }
@@ -467,7 +467,7 @@ function resolveKnowledge(
     try {
       content = readFileSync(absolute, 'utf8');
     } catch (error) {
-      throw new StepcastError(`Источник знания назвал нечитаемый файл: ${relativePath}`, {
+      throw new BurnexError(`Источник знания назвал нечитаемый файл: ${relativePath}`, {
         file: absolute,
         cause: error,
       });
@@ -533,7 +533,7 @@ function applyBudget(resolved: Resolved[], options: AssembleOptions): void {
   // допускает. Ловим это раньше, чем реальный размер — иначе отказ выглядел
   // бы как случайное превышение, а не как ошибка настройки.
   if (options.noteMaxTokens !== undefined && options.maxTokens < options.noteMaxTokens) {
-    throw new StepcastError(
+    throw new BurnexError(
       `Предел контекста шага меньше предела выдержки: ${formatTokens(options.maxTokens)} против ${formatTokens(options.noteMaxTokens)}`,
       {
         hint: 'Поднимите context_max_tokens или снизьте context.note_max_tokens',
@@ -564,7 +564,7 @@ function applyBudget(resolved: Resolved[], options: AssembleOptions): void {
     .slice(0, 3)
     .map((item) => `${item.path ?? 'текст'} (${formatTokens(item.tokens)})`);
 
-  throw new StepcastError(
+  throw new BurnexError(
     `Контекст шага превышает предел: ${formatTokens(total())} против ${formatTokens(options.maxTokens)}`,
     {
       hint: `Крупнейшие записи: ${biggest.join(', ')}. Поднимите context_max_tokens или сузьте контекст`,

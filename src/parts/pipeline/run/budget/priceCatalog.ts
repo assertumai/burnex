@@ -3,7 +3,7 @@ import { join } from 'node:path';
 
 import { z } from 'zod';
 
-import { StepcastError } from '../../../../kernel/errors.js';
+import { BurnexError } from '../../../../kernel/errors.js';
 import type { BackendAdapter } from '../../backend/types.js';
 import { enginePackageRoot } from '../../document/packagePaths.js';
 import type { Usage } from '../journal/schema.js';
@@ -53,7 +53,7 @@ export interface PriceCatalog {
 }
 
 /** Ошибка старта: каталог поставлен пакетом, его порча — дефект поставки. */
-export class PriceCatalogError extends StepcastError {}
+export class PriceCatalogError extends BurnexError {}
 
 export function priceCatalogPath(): string {
   return join(enginePackageRoot(), 'src', 'builtin', 'prices', 'model-prices.json');

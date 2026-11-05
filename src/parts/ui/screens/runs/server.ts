@@ -14,7 +14,7 @@ import {
   type SelectTraits,
   type StatsDisposition,
 } from '../../../pipeline/run/cleanup.js';
-import { isStepcastError } from '../../../../kernel/errors.js';
+import { isBurnexError } from '../../../../kernel/errors.js';
 import { parseDuration } from '../../../../kernel/units.js';
 import { INVALID, readBody, sendJson } from '../../daemon/http.js';
 import { parseRunAddress } from '../../runAddress.js';
@@ -129,7 +129,7 @@ const handleSelectRuns: ApiHandler = (req, res, env) => {
     try {
       traits.olderThanMs = parseDuration(olderThan, 'older-than');
     } catch (error) {
-      const message = isStepcastError(error) ? error.message : 'Could not parse the age';
+      const message = isBurnexError(error) ? error.message : 'Could not parse the age';
       sendJson(res, 400, { error: message });
       return;
     }

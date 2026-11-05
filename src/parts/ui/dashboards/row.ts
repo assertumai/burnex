@@ -1,7 +1,7 @@
 import { homedir } from 'node:os';
 import { z } from 'zod';
 
-import { isStepcastError } from '../../../kernel/errors.js';
+import { isBurnexError } from '../../../kernel/errors.js';
 import { readBody, sendJson } from '../daemon/http.js';
 import { DashboardDocumentSchema, writeDashboard } from '../dashboardsFile.js';
 import { screenRow, type ApiHandler } from '../screens/registry.js';
@@ -74,8 +74,8 @@ const handlePost: ApiHandler = async (req, res, env) => {
     env.watcher.poll();
     sendJson(res, 200, { ok: true });
   } catch (error) {
-    const message = isStepcastError(error) ? error.message : (error as Error).message;
-    sendJson(res, isStepcastError(error) ? 400 : 500, { error: message });
+    const message = isBurnexError(error) ? error.message : (error as Error).message;
+    sendJson(res, isBurnexError(error) ? 400 : 500, { error: message });
   }
 };
 

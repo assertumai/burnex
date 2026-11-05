@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { Document, parse as parseYaml, parseDocument } from 'yaml';
 import { z } from 'zod';
 
-import { isStepcastError, StepcastError } from '../../kernel/errors.js';
+import { isBurnexError, BurnexError } from '../../kernel/errors.js';
 import { findPackageRoot } from '../pipeline/domain/package-schema.js';
 import { describeSchemaFailure } from '../../kernel/schema-failure.js';
 import { buildPackageIndex, resourceLayers, type PackageResourcePath } from '../packages/index.js';
@@ -88,7 +88,7 @@ function readRoutesDocument(path: string): readonly RouteRowDocument[] {
   try {
     text = readFileSync(path, 'utf8');
   } catch (error) {
-    throw new StepcastError(`Routes file cannot be read: ${path}`, {
+    throw new BurnexError(`Routes file cannot be read: ${path}`, {
       file: path,
       hint: (error as NodeJS.ErrnoException).message,
       cause: error,
@@ -99,13 +99,13 @@ function readRoutesDocument(path: string): readonly RouteRowDocument[] {
   try {
     raw = parseYaml(text);
   } catch (error) {
-    throw new StepcastError(`Routes file is not valid YAML: ${path}`, { file: path, cause: error });
+    throw new BurnexError(`Routes file is not valid YAML: ${path}`, { file: path, cause: error });
   }
 
   const parsed = RouteDocumentSchema.safeParse(raw);
   if (!parsed.success) {
     const failure = describeSchemaFailure(parsed.error);
-    throw new StepcastError(`Routes file ${path} does not match the format: ${failure.message}`, {
+    throw new BurnexError(`Routes file ${path} does not match the format: ${failure.message}`, {
       file: path,
       ...(failure.at === undefined ? {} : { at: failure.at }),
       hint: 'The format is described in docs/routes.md; schema: schema/routes.schema.json',
@@ -307,7 +307,7 @@ function validateParamPlaceholders(id: string, path: string, params: FieldSlot<R
   for (const [key, value] of Object.entries(params.value)) {
     for (const name of paramPlaceholderNames(value)) {
       if (names.has(name)) continue;
-      throw new StepcastError(
+      throw new BurnexError(
         `Route ${id}: target parameter ${key} references \${params.${name}}, which is absent from path ${path}`,
         {
           file: params.source.file,
@@ -341,7 +341,7 @@ function readPackageLayers(
       const file = readLayer(layer, entry.path, false, entry.package);
       if (file !== undefined) files.push(file);
     } catch (error) {
-      if (!isStepcastError(error)) throw error;
+      if (!isBurnexError(error)) throw error;
       failures.push({ layer, packages: [entry.package], file: entry.path, message: error.message });
     }
   }
@@ -373,7 +373,7 @@ function readPackageLayers(
 
 /**
  * Собрать действующую таблицу маршрутов пяти слоёв. Отказ — исключение
- * `StepcastError`: вызывающий (`src/parts/ui/daemon/kernel.ts`) обязан оставить в силе
+ * `BurnexError`: вызывающий (`src/parts/ui/daemon/kernel.ts`) обязан оставить в силе
  * последнюю успешно собранную таблицу, а не гасить витрину (`ui-routes`,
  * «Отказ таблицы не гасит витрину»).
  */
@@ -386,14 +386,14 @@ export function buildRouteTable(options: RouteBuildOptions): RouteBuildResult {
   // проект (`packages-directory-layer`, Решение 7); верхний слой перекрывает
   // нижний по листьям. Пакетные слои отдаёт указатель в порядке поиска, поэтому
   // здесь они берутся по источнику, а не по позиции.
-  const homeStepcastDir = homeRoot(options.home);
+  const homeBurnexDir = homeRoot(options.home);
   const index = buildPackageIndex({
     ...(options.projectRoot === undefined ? {} : { projectRoot: options.projectRoot }),
-    globalPath: join(homeStepcastDir, 'config.yml'),
+    globalPath: join(homeBurnexDir, 'config.yml'),
   });
   const searchLayers = resourceLayers(index, 'routes', {
     ...(options.projectRoot === undefined ? {} : { projectRoot: options.projectRoot }),
-    homeStepcastDir,
+    homeBurnexDir,
   });
   const packagesOf = (source: 'home-packages' | 'project-packages'): readonly PackageResourcePath[] => {
     const found = searchLayers.find((layer) => layer.source === source);
@@ -432,7 +432,7 @@ export function buildRouteTable(options: RouteBuildOptions): RouteBuildResult {
     }
 
     if (row.fields.path === undefined || row.fields.target === undefined) {
-      throw new StepcastError(`Route ${row.id} declares neither path nor target in any layer`, {
+      throw new BurnexError(`Route ${row.id} declares neither path nor target in any layer`, {
         file: row.touchedFiles[row.touchedFiles.length - 1] as string,
         at: row.id,
         hint: 'A route that adds a new id must declare path and target: there is nothing to merge them from',
@@ -441,7 +441,7 @@ export function buildRouteTable(options: RouteBuildOptions): RouteBuildResult {
 
     const path = row.fields.path.value;
     if (isReservedPath(path)) {
-      throw new StepcastError(`Route ${row.id} declares a reserved path ${path}`, {
+      throw new BurnexError(`Route ${row.id} declares a reserved path ${path}`, {
         file: row.fields.path.source.file,
         at: row.id,
         hint: 'Paths /api, /widgets/, /plugins/ and /shared/ are handled by the daemon: no page opens at them',
@@ -484,7 +484,7 @@ export function buildRouteTable(options: RouteBuildOptions): RouteBuildResult {
     const key = normalizedTemplate(entry.definition.path);
     const existing = byNormalized.get(key);
     if (existing !== undefined) {
-      throw new StepcastError(
+      throw new BurnexError(
         `Path ${entry.definition.path} is taken by routes ${existing.id} (${existing.sources.path.file}) and ${entry.id} (${entry.sources.path.file})`,
         {
           at: entry.id,
@@ -504,7 +504,7 @@ export type WritableRouteLayer = 'home' | 'project';
 export function writableLayerPath(layer: WritableRouteLayer, options: RouteBuildOptions): string {
   if (layer === 'home') return homeRoutesPath(options.home);
   if (options.projectRoot === undefined) {
-    throw new StepcastError('The daemon does not know the project root: there is nowhere to write the project routes layer', {
+    throw new BurnexError('The daemon does not know the project root: there is nowhere to write the project routes layer', {
       hint: 'Start the dashboard in the project directory (burnex up) or save the route to the home layer',
     });
   }
@@ -526,7 +526,7 @@ export function writeRouteRow(layer: WritableRouteLayer, row: RouteRowDocument, 
     try {
       text = readFileSync(path, 'utf8');
     } catch (error) {
-      throw new StepcastError(`Routes file cannot be read: ${path}`, {
+      throw new BurnexError(`Routes file cannot be read: ${path}`, {
         file: path,
         hint: (error as NodeJS.ErrnoException).message,
         cause: error,
@@ -541,7 +541,7 @@ export function writeRouteRow(layer: WritableRouteLayer, row: RouteRowDocument, 
     const parseFailure = doc.errors[0];
     if (parseFailure !== undefined) {
       const pos = parseFailure.linePos?.[0];
-      throw new StepcastError(
+      throw new BurnexError(
         `Routes file ${path} is not valid YAML, write cancelled: ${parseFailure.message}`,
         {
           file: path,
@@ -553,7 +553,7 @@ export function writeRouteRow(layer: WritableRouteLayer, row: RouteRowDocument, 
     const existing = RouteDocumentSchema.safeParse(doc.toJS());
     if (!existing.success) {
       const failure = describeSchemaFailure(existing.error);
-      throw new StepcastError(`Routes file ${path} does not match the format, write cancelled: ${failure.message}`, {
+      throw new BurnexError(`Routes file ${path} does not match the format, write cancelled: ${failure.message}`, {
         file: path,
         ...(failure.at === undefined ? {} : { at: failure.at }),
         hint: 'Fix the file by hand before saving a route from the dashboard',

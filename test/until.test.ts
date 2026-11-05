@@ -9,7 +9,7 @@ import { findStepDir, readEvents, readStatus } from '../src/parts/pipeline/run/j
 import { lintPipeline } from '../src/parts/pipeline/domain/lint.js';
 import { runPipeline, type RunResult } from '../src/parts/pipeline/run/runner.js';
 import { HaltCause } from '../src/parts/pipeline/run/halt.js';
-import { StepcastError } from '../src/kernel/errors.js';
+import { BurnexError } from '../src/kernel/errors.js';
 import { makeProject, type Project } from './helpers.js';
 import { tempDir } from './tmp.js';
 
@@ -256,7 +256,7 @@ jobs:
     assert.throws(
       () => expandPipeline({ pipelinePath: project.path('burnex.yml'), config: project.config }),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.match(error.message, /без max_iterations/);
         return true;
       },
@@ -285,7 +285,7 @@ jobs:
     assert.throws(
       () => expandPipeline({ pipelinePath: project.path('burnex.yml'), config: project.config }),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.match(error.message, /пустым check/);
         return true;
       },

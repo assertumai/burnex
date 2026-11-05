@@ -27,7 +27,7 @@ import { applyDeclarativePlugin } from '../src/kernel/load.js';
 import { DECLARATIVE_CONTRIBUTION_FIELDS } from '../src/parts/pipeline/contract.js';
 import { registryFromKernel } from '../src/kernel/registry.js';
 import { readEvents, readStatus } from '../src/parts/pipeline/run/journal/reader.js';
-import { StepcastError } from '../src/kernel/errors.js';
+import { BurnexError } from '../src/kernel/errors.js';
 import { makeProject } from './helpers.js';
 import { resolveConfig } from '../src/parts/pipeline/config/resolve.js';
 import type { BackendConfig, Config } from '../src/parts/pipeline/config/resolve.js';
@@ -632,7 +632,7 @@ jobs:
         cwd: project.root,
       }),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.match(error.message, /Адаптер бэкенда codex не предоставлен/);
         assert.match(error.hint ?? '', /Доступны: claude/);
         return true;
@@ -644,7 +644,7 @@ jobs:
     const project = makeProject({});
     assert.throws(
       () => resolveAdapter('gemini', project.config, builtinRegistry()),
-      (error: unknown) => error instanceof StepcastError && /Неизвестный бэкенд gemini/.test(error.message),
+      (error: unknown) => error instanceof BurnexError && /Неизвестный бэкенд gemini/.test(error.message),
     );
   });
 
@@ -672,7 +672,7 @@ jobs:
     assert.throws(
       () => resolveAdapter('codex', withCodex(project.config), registry),
       (error: unknown) =>
-        error instanceof StepcastError &&
+        error instanceof BurnexError &&
         /Адаптер бэкенда codex не объявил направление идентификатора сессии/.test(error.message),
     );
   });
@@ -801,13 +801,13 @@ describe('agent-backend: сборка запуска', () => {
     // Право на публикацию данных работы добавляется неявно: см. ниже.
     assert.equal(
       spec.command[spec.command.indexOf('--allowedTools') + 1],
-      'Read Bash(burnex data *) Bash(stepcast data *)',
+      'Read Bash(burnex data *)',
     );
   });
 
   // Без этого `enforce: strict` означал бы, что подпись узла в витрине
   // доступна кому угодно, кроме агента, который её и должен публиковать.
-  it('strict неявно разрешает burnex data под обоими именами бинарника и ничего сверх них', () => {
+  it('strict неявно разрешает burnex data и ничего сверх него', () => {
     const spec = createClaudeAdapter(BACKEND).launch({
       prompt: 'p',
       cwd: '/tmp',
@@ -816,8 +816,8 @@ describe('agent-backend: сборка запуска', () => {
     });
 
     const allowed = spec.command[spec.command.indexOf('--allowedTools') + 1] ?? '';
-    assert.equal(allowed, 'Read Bash(burnex data *) Bash(stepcast data *)');
-    assert.ok(!allowed.includes('Bash(stepcast *)'), 'run, apply и gc остаются запрещёнными');
+    assert.equal(allowed, 'Read Bash(burnex data *)');
+    assert.ok(!allowed.includes('Bash(burnex *)'), 'run, apply и gc остаются запрещёнными');
   });
 
   it('без strict неявного права на burnex data нет', () => {
@@ -839,7 +839,7 @@ describe('agent-backend: сборка запуска', () => {
       permissions: { allow: ['Bash(burnex data *)'], enforce: 'strict' },
     });
 
-    assert.equal(spec.command[spec.command.indexOf('--allowedTools') + 1], 'Bash(burnex data *) Bash(stepcast data *)');
+    assert.equal(spec.command[spec.command.indexOf('--allowedTools') + 1], 'Bash(burnex data *)');
   });
 
   it('явный inherit на шаге ослабляет базовый strict бэкенда', () => {

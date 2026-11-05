@@ -1,7 +1,7 @@
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { StepcastError } from '../../../../kernel/errors.js';
+import { BurnexError } from '../../../../kernel/errors.js';
 
 /**
  * Чтение `item-<дорожка>.json` каталога прогона — файла, который пишет
@@ -42,7 +42,7 @@ export function readLaneItem(runDir: string, lane: string): LaneItem {
   try {
     raw = JSON.parse(readFileSync(path, 'utf8'));
   } catch (error) {
-    throw new StepcastError(`Не удалось прочитать файл пункта дорожки ${lane}: ${(error as Error).message}`, {
+    throw new BurnexError(`Не удалось прочитать файл пункта дорожки ${lane}: ${(error as Error).message}`, {
       file: path,
       cause: error,
     });
@@ -50,7 +50,7 @@ export function readLaneItem(runDir: string, lane: string): LaneItem {
 
   const slug = (raw as { slug?: unknown } | null)?.slug;
   if (typeof slug !== 'string' || slug === '') {
-    throw new StepcastError(`Файл пункта дорожки ${lane} не содержит слага`, { file: path });
+    throw new BurnexError(`Файл пункта дорожки ${lane} не содержит слага`, { file: path });
   }
 
   const title = (raw as { title?: unknown }).title;

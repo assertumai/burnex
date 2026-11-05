@@ -11,7 +11,7 @@ import {
   type BacklogStatus,
 } from '../pipeline/domain/backlog/index.js';
 import { isAbandoned, readOwner } from '../pipeline/domain/lockfile.js';
-import { isStepcastError } from '../../kernel/errors.js';
+import { isBurnexError } from '../../kernel/errors.js';
 import { BOARD_FILE, readBoardColumns } from './boardFile.js';
 import type { Overview } from './overview.js';
 import { DEFAULT_BOARD_COLUMNS, type BoardColumnSpec } from './scrumView.js';
@@ -134,13 +134,13 @@ export interface BacklogOverview {
 
 /** Отсутствие файла — не беда: `readBacklogFile` кладёт код ошибки чтения в `cause`, текст сообщения не смотрим. */
 function isMissingFile(error: unknown): boolean {
-  if (!isStepcastError(error)) return false;
+  if (!isBurnexError(error)) return false;
   return (error.cause as NodeJS.ErrnoException | undefined)?.code === 'ENOENT';
 }
 
 /** Место внутри документа — половина объяснения; файл называет вызывающий по своему `sourceFile`. */
 function toFailure(error: unknown, sourceFile: BacklogFailure['sourceFile']): BacklogFailure {
-  if (!isStepcastError(error)) return { sourceFile, error: (error as Error).message };
+  if (!isBurnexError(error)) return { sourceFile, error: (error as Error).message };
   return { sourceFile, error: error.message, ...(error.at === undefined ? {} : { errorAt: error.at }) };
 }
 

@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { join } from 'node:path';
 
-import { StepcastError } from '../../../../kernel/errors.js';
+import { BurnexError } from '../../../../kernel/errors.js';
 import { createGitAnchorer, diffWithPrefix, isOwnWorktreeRoot } from './git.js';
 import type { Anchor, AnchorComparison, TreeAnchorer } from './types.js';
 
@@ -153,10 +153,10 @@ export function createCompositeAnchorer(options: CompositeAnchorerOptions): Tree
 
     restore(anchor: Anchor): void {
       if (anchor.kind !== 'composite') {
-        throw new StepcastError('Состояние снято не составным способом и восстановлению этим способом не подлежит');
+        throw new BurnexError('Состояние снято не составным способом и восстановлению этим способом не подлежит');
       }
       const check = parseOwn(anchor.id);
-      if (!check.ok) throw new StepcastError(check.reason);
+      if (!check.ok) throw new BurnexError(check.reason);
       const parsed = check.parsed;
 
       // Объекты каждой части лежат в базе её собственного репозитория — у
@@ -166,7 +166,7 @@ export function createCompositeAnchorer(options: CompositeAnchorerOptions): Tree
       // остаётся, если откажет часть, а не первая по порядку.
       for (const relDir of nested) {
         if (isOwnWorktreeRoot(join(dir, relDir))) continue;
-        throw new StepcastError(
+        throw new BurnexError(
           `Состояние ${anchor.id} снято составным способом, а часть ${relDir} в этом каталоге не является рабочим деревом своего репозитория`,
           {
             hint: 'Объекты частей лежат в их собственных базах, которых у свежего каталога нет — восстановите отдельные пути через restorePaths на дереве, где части заведены',
@@ -187,10 +187,10 @@ export function createCompositeAnchorer(options: CompositeAnchorerOptions): Tree
     restorePaths(anchor: Anchor, paths: readonly string[]): void {
       if (paths.length === 0) return;
       if (anchor.kind !== 'composite') {
-        throw new StepcastError('Состояние снято не составным способом и восстановлению этим способом не подлежит');
+        throw new BurnexError('Состояние снято не составным способом и восстановлению этим способом не подлежит');
       }
       const check = parseOwn(anchor.id);
-      if (!check.ok) throw new StepcastError(check.reason);
+      if (!check.ok) throw new BurnexError(check.reason);
       const parsed = check.parsed;
 
       const rootPaths: string[] = [];

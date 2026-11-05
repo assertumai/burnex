@@ -1,7 +1,7 @@
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { StepcastError } from '../../../../kernel/errors.js';
+import { BurnexError } from '../../../../kernel/errors.js';
 import { atomicWrite } from '../../run/journal/writer.js';
 
 /**
@@ -94,7 +94,7 @@ export function readLaneMerge(runDir: string, lane: string): LaneMergeRecord | u
   try {
     raw = JSON.parse(readFileSync(path, 'utf8'));
   } catch (error) {
-    throw new StepcastError(
+    throw new BurnexError(
       `Не удалось прочитать запись сведения дорожки ${lane}: ${(error as Error).message}`,
       { file: path, cause: error },
     );
@@ -103,7 +103,7 @@ export function readLaneMerge(runDir: string, lane: string): LaneMergeRecord | u
   const record = (raw ?? {}) as Record<string, unknown>;
   const kind = record.kind;
   if (typeof kind !== 'string' || !MERGE_KINDS.has(kind)) {
-    throw new StepcastError(
+    throw new BurnexError(
       `Запись сведения дорожки ${lane} не называет знакомого исхода: ${
         kind === undefined ? 'поле kind отсутствует' : `kind = ${JSON.stringify(kind)}`
       }`,
@@ -112,7 +112,7 @@ export function readLaneMerge(runDir: string, lane: string): LaneMergeRecord | u
   }
   const at = record.at;
   if (typeof at !== 'string' || at === '') {
-    throw new StepcastError(`Запись сведения дорожки ${lane} не называет момента`, { file: path });
+    throw new BurnexError(`Запись сведения дорожки ${lane} не называет момента`, { file: path });
   }
 
   const repos = stringList(record.repos);

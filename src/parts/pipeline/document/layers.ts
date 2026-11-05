@@ -57,7 +57,7 @@ export function findInLayers(
   exists: (candidate: string) => boolean,
 ): LayerSearch {
   const index = packageIndexFor(roots);
-  const layers = resourceLayers(index, kind, { projectRoot: roots.project, homeStepcastDir: homeRoot(roots.home) });
+  const layers = resourceLayers(index, kind, { projectRoot: roots.project, homeBurnexDir: homeRoot(roots.home) });
   const searched: string[] = [];
   // Промах шага перечисляет каталоги кандидатов (`<слой>/steps/<имя>`), промах
   // скрипта — каталоги слоёв: так перечни выглядели до пакетов, и на них

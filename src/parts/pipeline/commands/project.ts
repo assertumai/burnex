@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { resolve as resolvePath } from 'node:path';
 
 import { resolveConfig } from '../config/resolve.js';
-import { ExitCode, StepcastError, type ExitCodeValue } from '../../../kernel/errors.js';
+import { ExitCode, BurnexError, type ExitCodeValue } from '../../../kernel/errors.js';
 import { findProjectRoot } from '../run/journal/paths.js';
 import { describeSchemaFailure } from '../document/load.js';
 import { BacklogSlotsResponseSchema, type BacklogSlotsResponse } from '../domain/backlog/schema.js';
@@ -40,7 +40,7 @@ async function readDocument(
     try {
       return readFileSync(path, 'utf8');
     } catch (error) {
-      throw new StepcastError(`Не удалось прочитать файл ${path}: ${(error as Error).message}`, {
+      throw new BurnexError(`Не удалось прочитать файл ${path}: ${(error as Error).message}`, {
         file: path,
         cause: error,
       });
@@ -59,14 +59,14 @@ async function readDocument(
  */
 function parseDocument(text: string): BacklogSlotsResponse {
   if (text.trim() === '') {
-    throw new StepcastError('Пуст стандартный ввод: ожидался документ дорожек backlog pick --lanes');
+    throw new BurnexError('Пуст стандартный ввод: ожидался документ дорожек backlog pick --lanes');
   }
 
   let json: unknown;
   try {
     json = JSON.parse(text);
   } catch (error) {
-    throw new StepcastError(`Документ дорожек не разбирается как JSON: ${(error as Error).message}`, {
+    throw new BurnexError(`Документ дорожек не разбирается как JSON: ${(error as Error).message}`, {
       cause: error,
     });
   }
@@ -74,7 +74,7 @@ function parseDocument(text: string): BacklogSlotsResponse {
   const parsed = BacklogSlotsResponseSchema.safeParse(json);
   if (!parsed.success) {
     const failure = describeSchemaFailure(parsed.error);
-    throw new StepcastError(
+    throw new BurnexError(
       `Документ дорожек не соответствует схеме burnex:backlog-slots: ${failure.message}`,
       failure.at === undefined ? {} : { at: failure.at },
     );
@@ -90,7 +90,7 @@ export async function runProjectCommand(
 ): Promise<ExitCodeValue> {
   const [action] = args.positional;
   if (action !== 'repos') {
-    throw new StepcastError(
+    throw new BurnexError(
       `неизвестное действие «${action ?? ''}» у команды project, ожидалось одно из ${ACTIONS.join(', ')}`,
     );
   }

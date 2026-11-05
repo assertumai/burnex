@@ -3,7 +3,7 @@ import { homedir } from 'node:os';
 import { z } from 'zod';
 
 import { resolveConfig } from '../../../pipeline/config/resolve.js';
-import { isStepcastError } from '../../../../kernel/errors.js';
+import { isBurnexError } from '../../../../kernel/errors.js';
 import { listProjects } from '../../../pipeline/run/journal/reader.js';
 import type { ProposalRecord } from '../../../pipeline/domain/proposals/entry.js';
 import { acceptProposal, rejectProposal, resolveProposalTarget } from '../../../pipeline/domain/proposals/store.js';
@@ -61,7 +61,7 @@ function deliveryMode(
   try {
     return { mode: resolveConfig({ cwd: projectPath, home }).config.project.proposals };
   } catch (error) {
-    const message = isStepcastError(error) ? error.message : (error as Error).message;
+    const message = isBurnexError(error) ? error.message : (error as Error).message;
     return {
       mode: 'queue',
       failure: {
@@ -148,8 +148,8 @@ const handlePost: ApiHandler = async (req, res, env) => {
     env.watcher.poll();
     sendJson(res, 200, { ok: true, record: decided });
   } catch (error) {
-    const message = isStepcastError(error) ? error.message : (error as Error).message;
-    sendJson(res, isStepcastError(error) ? 400 : 500, { error: message });
+    const message = isBurnexError(error) ? error.message : (error as Error).message;
+    sendJson(res, isBurnexError(error) ? 400 : 500, { error: message });
   }
 };
 

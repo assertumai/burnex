@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { basename, dirname, resolve as resolvePath } from 'node:path';
 
 import { resolveConfig } from '../config/resolve.js';
-import { ExitCode, isStepcastError, StepcastError, type ExitCodeValue } from '../../../kernel/errors.js';
+import { ExitCode, isBurnexError, BurnexError, type ExitCodeValue } from '../../../kernel/errors.js';
 import { readEngineEnv } from '../../../kernel/env-names.js';
 import { findProjectRoot, runPaths } from '../run/journal/paths.js';
 import { readManifest } from '../run/journal/reader.js';
@@ -41,7 +41,7 @@ async function resolveContent(
     try {
       return readFileSync(path, 'utf8');
     } catch (error) {
-      throw new StepcastError(`Файл содержимого не читается: ${path}: ${(error as Error).message}`, {
+      throw new BurnexError(`Файл содержимого не читается: ${path}: ${(error as Error).message}`, {
         file: path,
         cause: error,
       });
@@ -50,7 +50,7 @@ async function resolveContent(
 
   const text = (await readStdin?.()) ?? '';
   if (text === '') {
-    throw new StepcastError('Содержимого нет: назовите файл --from <файл> либо подайте его на стандартный ввод', {
+    throw new BurnexError('Содержимого нет: назовите файл --from <файл> либо подайте его на стандартный ввод', {
       hint: 'burnex propose <цель> --from <файл> — или конвейером на стандартный ввод',
     });
   }
@@ -97,7 +97,7 @@ export async function runProposeCommand(
   try {
     const target = args.positional[0];
     if (target === undefined) {
-      throw new StepcastError('Не названа цель: burnex propose <цель> --from <файл>');
+      throw new BurnexError('Не названа цель: burnex propose <цель> --from <файл>');
     }
 
     const content = await resolveContent(cwd, stringFlag(args.flags, 'from'), readStdin);
@@ -121,7 +121,7 @@ export async function runProposeCommand(
     write(`предложение поставлено в очередь: ${record.id} (${record.target})`);
     return ExitCode.ok;
   } catch (error) {
-    if (!isStepcastError(error)) throw error;
+    if (!isBurnexError(error)) throw error;
     for (const line of formatDiagnostic({
       severity: 'error',
       message: error.message,

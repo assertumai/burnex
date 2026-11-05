@@ -3,7 +3,7 @@ import { mkdirSync, openSync, readFileSync, rmSync, writeFileSync } from 'node:f
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 
-import { StepcastError } from '../../../kernel/errors.js';
+import { BurnexError } from '../../../kernel/errors.js';
 import { isProcessAlive } from '../../../kernel/process.js';
 import { homeRoot } from '../../../kernel/dirs.js';
 
@@ -110,7 +110,7 @@ export function startDetached(options: StartOptions): number {
   child.unref();
 
   if (child.pid === undefined) {
-    throw new StepcastError('Не удалось запустить демон витрины');
+    throw new BurnexError('Не удалось запустить демон витрины');
   }
   return child.pid;
 }
@@ -135,8 +135,8 @@ export function stopDaemon(paths: DaemonPaths): StopOutcome {
 }
 
 /** Внятный отказ на занятый порт: молча уезжать на соседний нельзя. */
-export function portBusyError(port: number, cause?: unknown): StepcastError {
-  return new StepcastError(`Порт ${port} занят другим процессом`, {
+export function portBusyError(port: number, cause?: unknown): BurnexError {
+  return new BurnexError(`Порт ${port} занят другим процессом`, {
     hint: `Освободите порт или укажите другой в настройке ui.port`,
     ...(cause === undefined ? {} : { cause }),
   });

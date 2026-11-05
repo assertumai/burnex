@@ -19,7 +19,7 @@ import {
 import type { Config, RunnerConfig } from '../config/resolve.js';
 import { Ajv2020 } from 'ajv/dist/2020.js';
 
-import { StepcastError } from '../../../kernel/errors.js';
+import { BurnexError } from '../../../kernel/errors.js';
 import { packagedAddressName } from '../../../kernel/package-name.js';
 import { assertDataKey } from '../run/journal/data.js';
 import { JOB_OUTPUT_KEY } from '../run/jobOutputs.js';
@@ -236,14 +236,14 @@ function resolveKnowledge(
   const dir = declared?.dir ?? base.dir;
 
   if (provider === 'cmd' && command === undefined) {
-    throw new StepcastError('Источник знания cmd объявлен без команды', {
+    throw new BurnexError('Источник знания cmd объявлен без команды', {
       file: pipelinePath,
       at: 'project.knowledge.command',
       hint: 'Назовите команду источника или объявите provider: fs',
     });
   }
   if (provider === 'fs' && dir === undefined) {
-    throw new StepcastError('Встроенный источник знания объявлен без каталога', {
+    throw new BurnexError('Встроенный источник знания объявлен без каталога', {
       file: pipelinePath,
       at: 'project.knowledge.dir',
       hint: 'Назовите каталог знания — например, dir: knowledge',
@@ -358,7 +358,7 @@ function toCount(
       DEFERRED_NAMESPACES.has(namespace),
     );
     if (deferred.length > 0) {
-      throw new StepcastError(
+      throw new BurnexError(
         `Числовое поле ссылается на отложенное пространство ${deferred.join(', ')}`,
         {
           at,
@@ -388,10 +388,10 @@ function toDataDeclaration(
     try {
       assertDataKey(name);
     } catch (error) {
-      throw new StepcastError(`Работа объявляет данные с недопустимым именем «${name}»`, {
+      throw new BurnexError(`Работа объявляет данные с недопустимым именем «${name}»`, {
         file: declaringFile,
         at: `${at}.data`,
-        ...(error instanceof StepcastError && error.hint !== undefined ? { hint: error.hint } : {}),
+        ...(error instanceof BurnexError && error.hint !== undefined ? { hint: error.hint } : {}),
         cause: error,
       });
     }
@@ -412,7 +412,7 @@ function toOutputsDeclaration(
   const names = raw ?? [];
   for (const name of names) {
     if (JOB_OUTPUT_KEY.test(name)) continue;
-    throw new StepcastError(`Работа ${jobId} объявляет выход с недопустимым именем «${name}»`, {
+    throw new BurnexError(`Работа ${jobId} объявляет выход с недопустимым именем «${name}»`, {
       file: declaringFile,
       at: `${at}.outputs`,
       hint: `Имя выхода подходит под ${JOB_OUTPUT_KEY.source}: оно становится частью переменной NEEDS_<РАБОТА>_<КЛЮЧ>`,
@@ -429,7 +429,7 @@ function toLoops(
   return Object.entries(raw ?? {}).map(([id, loop]) => {
     const at = `loops.${id}`;
     if (loop.max_iterations === undefined) {
-      throw new StepcastError('Цикл loops объявлен без max_iterations', {
+      throw new BurnexError('Цикл loops объявлен без max_iterations', {
         at: `${at}.max_iterations`,
         hint: 'Цикл без предела проходов неограничен по расходу — укажите число проходов',
       });
@@ -442,7 +442,7 @@ function toLoops(
       `${at}.max_iterations`,
     );
     if (maxIterations > limits.iterations) {
-      throw new StepcastError(
+      throw new BurnexError(
         `max_iterations = ${maxIterations} превышает потолок limits.iterations = ${limits.iterations}`,
         { at: `${at}.max_iterations`, hint: 'Поднимите потолок в конфигурации или уменьшите число проходов' },
       );
@@ -523,7 +523,7 @@ function toKnowledgeSelector(raw: RawContextEntry & object, at: string): Context
   const hasId = body.id !== undefined;
 
   if (hasScope === hasId) {
-    throw new StepcastError(
+    throw new BurnexError(
       hasScope
         ? 'Запись контекста knowledge объявляет и scope, и id'
         : 'Запись контекста knowledge не объявляет ни scope, ни id',
@@ -679,7 +679,7 @@ function parseKnowledgeValidPredicate(
   // предиката нет отрицания, и молча читать его как «не проверять» значило
   // бы отличать выключенную проверку от отсутствующей ничем.
   if (raw.knowledge_valid !== true) {
-    throw new StepcastError('Предикат knowledge_valid принимает только true', {
+    throw new BurnexError('Предикат knowledge_valid принимает только true', {
       at: `${ctx.at}.knowledge_valid`,
       hint: 'Уберите предикат, если проверять память не нужно',
     });
@@ -810,7 +810,7 @@ function toPluginPredicate(raw: RawPredicate, at: string, registry: Registry): P
   const contribution = name === undefined ? undefined : registry.predicates.get(name);
 
   if (name === undefined || contribution === undefined || !hasPredicateEvaluator(contribution)) {
-    throw new StepcastError(`Неизвестный предикат ${name ?? '(без ключа)'}`, {
+    throw new BurnexError(`Неизвестный предикат ${name ?? '(без ключа)'}`, {
       at,
       hint: `Доступны: ${predicateNames(registry).join(', ')}`,
     });
@@ -822,7 +822,7 @@ function toPluginPredicate(raw: RawPredicate, at: string, registry: Registry): P
     const detail = (validate.errors ?? [])
       .map((error) => `${error.instancePath === '' ? 'значение' : error.instancePath} ${error.message ?? ''}`.trim())
       .join('; ');
-    throw new StepcastError(`Значение предиката ${name} не соответствует его схеме: ${detail}`, {
+    throw new BurnexError(`Значение предиката ${name} не соответствует его схеме: ${detail}`, {
       at: `${at}.${name}`,
       hint: `Схему объявляет плагин, внёсший предикат ${name}`,
     });
@@ -867,7 +867,7 @@ function toJobAttempts(
   const path = `${at}.attempts.max`;
   const max = toCount(raw.max, path, substitutions, parseCount, path);
   if (max > limits.attempts) {
-    throw new StepcastError(
+    throw new BurnexError(
       `attempts.max = ${max} превышает потолок limits.attempts = ${limits.attempts}`,
       { at: path, hint: 'Поднимите потолок в конфигурации или уменьшите число попыток' },
     );
@@ -886,7 +886,7 @@ function toAttempts(
       ? 1
       : toCount(raw.max, `${at}.attempts.max`, substitutions, parseCount, `${at}.attempts.max`);
   if (max > limits.attempts) {
-    throw new StepcastError(
+    throw new BurnexError(
       `attempts.max = ${max} превышает потолок limits.attempts = ${limits.attempts}`,
       { at: `${at}.attempts.max`, hint: 'Поднимите потолок в конфигурации или уменьшите число попыток' },
     );
@@ -913,7 +913,7 @@ function toSkipExitCode(
 ): number {
   const code = toCount(raw, at, substitutions, parseExitCode, at);
   if (code < 1 || code > 255) {
-    throw new StepcastError(`skip_exit_code = ${code} вне диапазона 1..255`, {
+    throw new BurnexError(`skip_exit_code = ${code} вне диапазона 1..255`, {
       at,
       hint: '0 — код успеха, а процесс не вернёт больше 255. Годится редкий код, например 78',
     });
@@ -964,7 +964,7 @@ function readPrompt(
   try {
     raw = readFileSync(path, 'utf8');
   } catch (error) {
-    throw new StepcastError(`Не удалось прочитать файл промпта: ${(error as Error).message}`, {
+    throw new BurnexError(`Не удалось прочитать файл промпта: ${(error as Error).message}`, {
       file: declaringFile,
       at,
       cause: error,
@@ -1039,7 +1039,7 @@ function parseModelTier(value: unknown, file: string, at: string): ModelTier | u
   if (value === undefined) return undefined;
   const parsed = ModelTierSchema.safeParse(value);
   if (!parsed.success) {
-    throw new StepcastError(`Недопустимый model_tier: ${String(value)}`, {
+    throw new BurnexError(`Недопустимый model_tier: ${String(value)}`, {
       file, at, hint: 'Ожидается имя tier: строчные буквы, цифры, `_` или `-`',
     });
   }
@@ -1051,7 +1051,7 @@ function parseEffort(value: unknown, file: string, at: string): string | undefin
   if (value === undefined) return undefined;
   const parsed = EffortSchema.safeParse(value);
   if (!parsed.success) {
-    throw new StepcastError(`Недопустимый effort: ${String(value)}`, {
+    throw new BurnexError(`Недопустимый effort: ${String(value)}`, {
       file, at, hint: 'Ожидается непустая строка',
     });
   }
@@ -1192,12 +1192,12 @@ export function resolveWrapper(runner: RunnerConfig, roots: ScriptRoots): string
 
   const located = resolveScriptFile(value, declaringFile, roots);
   if ('conflict' in located) {
-    throw new StepcastError(`Обёртка ${value} есть в двух пакетах одного слоя — ${located.conflict.join(' и ')}`, {
+    throw new BurnexError(`Обёртка ${value} есть в двух пакетах одного слоя — ${located.conflict.join(' и ')}`, {
       hint: 'Переименуйте один из файлов или уберите один из пакетов',
     });
   }
   if ('searched' in located) {
-    throw new StepcastError(`Обёртка ${value} не найдена`, {
+    throw new BurnexError(`Обёртка ${value} не найдена`, {
       hint: `Искали: ${located.searched.join(', ')}`,
     });
   }
@@ -1221,7 +1221,7 @@ function resolveScript(
 ): { readonly resolved: ResolvedScript } | { readonly unresolved: ScriptUnresolved } {
   const deferred = placeholderNamespaces(path).filter((namespace) => DEFERRED_NAMESPACES.has(namespace));
   if (deferred.length > 0) {
-    throw new StepcastError(`Значение script ссылается на отложенное пространство ${deferred.join(', ')}`, {
+    throw new BurnexError(`Значение script ссылается на отложенное пространство ${deferred.join(', ')}`, {
       file: declaringFile,
       at,
       hint: 'Пространства jobs, run и env известны только в прогоне — путь скрипта разрешается при раскрытии пайплайна',
@@ -1711,7 +1711,7 @@ export function validateStepKindFields(kind: StepKindContribution, value: unknow
       .map((error) => `${error.instancePath === '' ? 'значение' : error.instancePath} ${error.message ?? ''}`.trim())
       .join('; ');
     const owner = contributionOwner(registry, 'steps', kind.name) ?? 'неизвестный';
-    throw new StepcastError(`Поля вида шага ${kind.name} не соответствуют его схеме: ${detail}`, {
+    throw new BurnexError(`Поля вида шага ${kind.name} не соответствуют его схеме: ${detail}`, {
       at,
       hint: `Схему объявляет плагин ${owner}, внёсший вид шага ${kind.name}`,
     });
@@ -1774,7 +1774,7 @@ function validateStepKindDocument(
       .map((error) => `${error.instancePath === '' ? 'значение' : error.instancePath} ${error.message ?? ''}`.trim())
       .join('; ');
     const owner = contributionOwner(registry, 'steps', kind.name) ?? 'неизвестный';
-    throw new StepcastError(`Шаг вида ${kind.name} не соответствует его форме: ${detail}`, {
+    throw new BurnexError(`Шаг вида ${kind.name} не соответствует его форме: ${detail}`, {
       at,
       hint: `Форму объявляет плагин ${owner}, внёсший вид шага ${kind.name}`,
     });
@@ -1828,7 +1828,7 @@ function toPluginStep(
     fields = form.parse(values);
   } catch (error) {
     const owner = contributionOwner(ctx.registry, 'steps', kind.name) ?? 'неизвестный';
-    throw new StepcastError(
+    throw new BurnexError(
       `Разбор шага вида ${kind.name} отказал: ${error instanceof Error ? error.message : String(error)}`,
       { at, hint: `Разбор объявляет плагин ${owner}, внёсший вид шага ${kind.name}`, cause: error },
     );
@@ -1911,7 +1911,7 @@ function checkRawSteps(rawSteps: unknown, file: string, at: string, registry: Re
     for (const key of candidates) {
       const former = formerStepKindOwner(registry, key);
       if (former === undefined) continue;
-      throw new StepcastError(`Вид шага ${key} снят вместе с плагином ${former}`, site);
+      throw new BurnexError(`Вид шага ${key} снят вместе с плагином ${former}`, site);
     }
 
     // Третья причина, между «снят вместе с плагином» и «неизвестен вовсе»
@@ -1932,13 +1932,13 @@ function checkRawSteps(rawSteps: unknown, file: string, at: string, registry: Re
     for (const kind of BUILTIN_STEP_KINDS_IN_ROW_ORDER) {
       if (registry.steps.has(kind.name)) continue;
       if (!kind.native.test(record)) continue;
-      throw new StepcastError(`Вид шага ${kind.name} отключён составом: строки, вносящей его, в дереве нет`, {
+      throw new BurnexError(`Вид шага ${kind.name} отключён составом: строки, вносящей его, в дереве нет`, {
         ...site,
         hint: 'Вид шага приносит строка дерева; действующий состав показывает burnex plugins',
       });
     }
 
-    throw new StepcastError(
+    throw new BurnexError(
       candidates.length === 0
         ? 'Шаг не называет ни один известный вид шага'
         : `Вид шага ${candidates.join(', ')} неизвестен: такого вклада в реестре нет`,
@@ -2002,7 +2002,7 @@ function checkPredicateList(rawList: unknown, file: string, at: string, registry
     for (const form of BUILTIN_PREDICATES_IN_ROW_ORDER) {
       if (registry.predicates.has(form.name)) continue;
       if (!form.native.test(record)) continue;
-      throw new StepcastError(`Предикат ${form.name} отключён составом: строки, вносящей его, в дереве нет`, {
+      throw new BurnexError(`Предикат ${form.name} отключён составом: строки, вносящей его, в дереве нет`, {
         file,
         at: `${at}.${index}`,
         hint: 'Предикат приносит строка дерева; действующий состав показывает burnex plugins',
@@ -2057,7 +2057,7 @@ function toStep(
   // бы ключ, которого не знает ни один вид (та же гарантия, что и у
   // плагинного предиката, `toPluginPredicate`). Оставлено как страховка на
   // случай, если схема и реестр разошлись между двумя вызовами.
-  throw new StepcastError('Шаг не называет ни один известный вид', {
+  throw new BurnexError('Шаг не называет ни один известный вид', {
     at,
     hint: `Доступны: ${stepKindNames(registry).join(', ')}`,
   });
@@ -2221,7 +2221,7 @@ export function expandPipeline(options: ExpandOptions): ExpandedPipeline {
   const liveFiles = (doc.workspace?.live_files ?? []).map((entry) => {
     const normalized = posix.normalize(entry.path.replaceAll('\\', '/'));
     if (isAbsolute(entry.path) || normalized === '..' || normalized.startsWith('../')) {
-      throw new StepcastError(`Путь живого файла выходит за корень проекта: ${entry.path}`, {
+      throw new BurnexError(`Путь живого файла выходит за корень проекта: ${entry.path}`, {
         file: pipelinePath,
         at: 'workspace.live_files',
       });
@@ -2236,7 +2236,7 @@ export function expandPipeline(options: ExpandOptions): ExpandedPipeline {
     (entry, index) => liveFiles.findIndex((candidate) => candidate.path === entry.path) !== index,
   );
   if (duplicateLivePath !== undefined) {
-    throw new StepcastError(`Живой файл объявлен дважды: ${duplicateLivePath.path}`, {
+    throw new BurnexError(`Живой файл объявлен дважды: ${duplicateLivePath.path}`, {
       file: pipelinePath,
       at: 'workspace.live_files',
     });
@@ -2475,14 +2475,14 @@ export function expandPipeline(options: ExpandOptions): ExpandedPipeline {
       | { max_iterations?: string | number; check: RawPredicate[] }
       | undefined;
     if (until !== undefined && until.max_iterations === undefined) {
-      throw new StepcastError('Цикл until объявлен без max_iterations', {
+      throw new BurnexError('Цикл until объявлен без max_iterations', {
         file: declaringFile,
         at: `${at}.until.max_iterations`,
         hint: 'Без предела итераций худший случай работы неограничен',
       });
     }
     if (until !== undefined && until.check.length === 0) {
-      throw new StepcastError('Цикл until объявлен с пустым check', {
+      throw new BurnexError('Цикл until объявлен с пустым check', {
         file: declaringFile,
         at: `${at}.until.check`,
         hint: 'Условие выхода из цикла должно быть хотя бы одно',
@@ -2528,7 +2528,7 @@ export function expandPipeline(options: ExpandOptions): ExpandedPipeline {
       };
       const lastCapable = [...rawSteps].reverse().find(capable);
       if (lastCapable === undefined) {
-        throw new StepcastError('Работа объявляет output без from и не содержит шагов, способных дать выход', {
+        throw new BurnexError('Работа объявляет output без from и не содержит шагов, способных дать выход', {
           file: declaringFile,
           at: `${at}.output`,
           hint: 'Укажите output.from или добавьте агентский шаг, script либо run с output_schema',
@@ -2654,14 +2654,14 @@ export function expandPipeline(options: ExpandOptions): ExpandedPipeline {
 
   if (publication !== undefined) {
     if (pipelineWorkspace.mode !== 'worktree') {
-      throw new StepcastError('Политика source: commit требует workspace.mode: worktree', {
+      throw new BurnexError('Политика source: commit требует workspace.mode: worktree', {
         file: pipelinePath,
         at: 'workspace.mode',
       });
     }
     const nonIsolated = jobs.find((job) => job.workspace.mode !== 'worktree');
     if (nonIsolated !== undefined) {
-      throw new StepcastError(
+      throw new BurnexError(
         `Работа ${nonIsolated.id} меняет commit-backed workspace на ${nonIsolated.workspace.mode}`,
         {
           file: nonIsolated.source,
@@ -2671,7 +2671,7 @@ export function expandPipeline(options: ExpandOptions): ExpandedPipeline {
       );
     }
     if (publication.liveFiles.length > 0 && !publication.preserveLocalChanges) {
-      throw new StepcastError('Живые файлы требуют preserve_local_changes: true', {
+      throw new BurnexError('Живые файлы требуют preserve_local_changes: true', {
         file: pipelinePath,
         at: 'workspace.preserve_local_changes',
       });
@@ -2686,7 +2686,7 @@ export function expandPipeline(options: ExpandOptions): ExpandedPipeline {
     for (const [index, step] of job.steps.entries()) {
       const undeclared = (step.secrets ?? []).find((name) => !declaredSecrets.has(name));
       if (undeclared === undefined) continue;
-      throw new StepcastError(`Шаг ${step.id} называет секрет ${undeclared}, которого пайплайн не объявляет`, {
+      throw new BurnexError(`Шаг ${step.id} называет секрет ${undeclared}, которого пайплайн не объявляет`, {
         file: job.source,
         at: `jobs.${job.id}.steps.${index}.secrets`,
         hint:
@@ -2766,7 +2766,7 @@ function rejectUnknownEntryAgents(
   const known = (agent: string): boolean => Object.hasOwn(config.backends, agent) || registry.backends.has(agent);
   const check = (entry: AgentSelectionConfig | undefined, at: string): void => {
     if (entry?.agent === undefined || known(entry.agent.value)) return;
-    throw new StepcastError(`Запись выбора называет агента ${entry.agent.value}, которого нет среди бэкендов`, {
+    throw new BurnexError(`Запись выбора называет агента ${entry.agent.value}, которого нет среди бэкендов`, {
       file: entry.agent.file,
       at: `${at}.agent`,
       hint: `Доступны: ${[...new Set([...Object.keys(config.backends), ...registry.backends.keys()])].sort().join(', ')}`,

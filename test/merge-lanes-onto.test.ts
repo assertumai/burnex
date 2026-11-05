@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { describe, it } from 'node:test';
 
 import { run as runCli, type CliIo } from '../src/parts/cli/main.js';
-import { ExitCode, StepcastError, type ExitCodeValue } from '../src/kernel/errors.js';
+import { ExitCode, BurnexError, type ExitCodeValue } from '../src/kernel/errors.js';
 import { expandPipeline } from '../src/parts/pipeline/document/expand.js';
 import { mergeLanes, type LaneMergeResult } from '../src/parts/pipeline/domain/lanes/merge.js';
 import { mergeLockPath, mergeRecoveryPath } from '../src/parts/pipeline/domain/lanes/mergeLock.js';
@@ -421,7 +421,7 @@ describe('mergeLanes --onto: отказы кодом 2 до первой пра�
   ): Promise<void> {
     const before = setup.snapshot();
     await assert.rejects(mergeOnto(setup.project, setup.run, ['a'], extra).results, (error: unknown) => {
-      assert.ok(error instanceof StepcastError);
+      assert.ok(error instanceof BurnexError);
       assert.equal(error.exitCode, ExitCode.configError);
       assert.match(error.message, pattern);
       return true;

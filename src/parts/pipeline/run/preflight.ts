@@ -1,7 +1,7 @@
 import { realpathSync } from 'node:fs';
 import { dirname, join, resolve, sep } from 'node:path';
 
-import { StepcastError } from '../../../kernel/errors.js';
+import { BurnexError } from '../../../kernel/errors.js';
 import type { ExpandedPipeline } from '../document/model.js';
 import { checkWorkspaceAvailability } from './workspace.js';
 
@@ -79,7 +79,7 @@ export const checkRunsRootOutsideTree: PreflightCheck = ({ expanded, cwd, runsRo
   const runs = realOrLiteral(runsRoot);
   if (runs !== tree && !runs.startsWith(`${tree}${sep}`)) return;
 
-  throw new StepcastError(`Каталог прогонов лежит внутри рабочего дерева: ${runs}`, {
+  throw new BurnexError(`Каталог прогонов лежит внутри рабочего дерева: ${runs}`, {
     file: expanded.pipeline.file,
     at: 'runs.root',
     hint: 'Журнал прогона попал бы в состояние дерева и обесценил бы каждый шаг. Вынесите runs.root за пределы проекта',

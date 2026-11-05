@@ -1,7 +1,7 @@
 import { resolveConfig, type Config } from '../config/resolve.js';
 import { resolveConfigWithAgent } from '../config/agentOverride.js';
 import type { Registry } from '../../../kernel/registry.js';
-import { ExitCode, isStepcastError, type ExitCodeValue } from '../../../kernel/errors.js';
+import { ExitCode, isBurnexError, type ExitCodeValue } from '../../../kernel/errors.js';
 import { findProjectRoot, shortRunId, type RunPaths } from '../run/journal/paths.js';
 import type { PipelineCommandEnv } from '../contract.js';
 import { resolveRun } from '../run/journal/reader.js';
@@ -163,7 +163,7 @@ export async function runResumeCommand(
       process.removeListener('SIGTERM', onSignal);
     }
   } catch (error) {
-    if (!isStepcastError(error)) throw error;
+    if (!isBurnexError(error)) throw error;
     for (const line of formatDiagnostic({
       severity: 'error',
       message: error.message,

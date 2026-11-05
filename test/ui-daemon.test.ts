@@ -16,7 +16,7 @@ import {
   writeRecord,
 } from '../src/parts/ui/daemon/daemon.js';
 import { currentDaemonKernel } from '../src/parts/ui/daemon/kernel.js';
-import { StepcastError } from '../src/kernel/errors.js';
+import { BurnexError } from '../src/kernel/errors.js';
 import { tempDir } from './tmp.js';
 
 function bed(): ReturnType<typeof daemonPaths> {
@@ -144,7 +144,7 @@ describe('ui-daemon: жизненный цикл', () => {
     assert.equal(isAddressInUse(new Error('другое')), false);
 
     const error = portBusyError(7717);
-    assert.ok(error instanceof StepcastError);
+    assert.ok(error instanceof BurnexError);
     assert.match(error.message, /7717/);
     assert.match(error.hint ?? '', /ui\.port/);
   });

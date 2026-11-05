@@ -36,7 +36,7 @@ import { mergeJobData } from '../run/journal/data.js';
 import { atomicWrite } from '../run/journal/writer.js';
 import { findProjectRoot, shortRunId } from '../run/journal/paths.js';
 import { finishOwnerOfRun, runOwnerJudge } from '../run/journal/owner.js';
-import { ExitCode, StepcastError, type ExitCodeValue } from '../../../kernel/errors.js';
+import { ExitCode, BurnexError, type ExitCodeValue } from '../../../kernel/errors.js';
 import { readEngineEnv } from '../../../kernel/env-names.js';
 import { readLaneItem, takenLanes } from '../domain/lanes/item.js';
 import { commitPath, nestedRepoOf } from '../domain/lanes/tree.js';
@@ -72,7 +72,7 @@ function stringFlag(flags: ParsedArgs['flags'], name: string): string | undefine
 function ownerFlag(flags: ParsedArgs['flags']): string | undefined {
   const owner = stringFlag(flags, 'owner');
   if (owner !== undefined && !isRunOwner(owner)) {
-    throw new StepcastError(`ключ --owner требует владельца вида run:<id прогона>, получено «${owner}»`, {
+    throw new BurnexError(`ключ --owner требует владельца вида run:<id прогона>, получено «${owner}»`, {
       hint: 'идентификатор прогона — непустой, без пробелов и /',
     });
   }
@@ -119,7 +119,7 @@ function prepareRunDir(path: string): void {
   try {
     mkdirSync(path, { recursive: true });
   } catch (error) {
-    throw new StepcastError(
+    throw new BurnexError(
       `Не удалось подготовить каталог дорожек ${path}: ${(error as Error).message}`,
       { file: path, cause: error },
     );
@@ -129,15 +129,15 @@ function prepareRunDir(path: string): void {
 function parseLanes(raw: string): readonly string[] {
   const lanes = raw.split(',').map((entry) => entry.trim());
   if (lanes.length === 0 || lanes.some((lane) => lane === '')) {
-    throw new StepcastError('ключ --lanes требует непустого перечня имён через запятую');
+    throw new BurnexError('ключ --lanes требует непустого перечня имён через запятую');
   }
   for (const lane of lanes) {
     if (!KEBAB_CASE.test(lane)) {
-      throw new StepcastError(`имя дорожки «${lane}» не является слагом в kebab-case`);
+      throw new BurnexError(`имя дорожки «${lane}» не является слагом в kebab-case`);
     }
   }
   if (new Set(lanes).size !== lanes.length) {
-    throw new StepcastError('имена дорожек должны быть попарно различны');
+    throw new BurnexError('имена дорожек должны быть попарно различны');
   }
   return lanes;
 }
@@ -165,7 +165,7 @@ export function runBacklogCommand(
     case 'show':
       return runShow(args, slug, file, cwd, write);
     default:
-      throw new StepcastError(
+      throw new BurnexError(
         `неизвестное действие «${action ?? ''}» у команды backlog, ожидалось одно из ${ACTIONS.join(', ')}`,
       );
   }
@@ -186,8 +186,8 @@ function checkedStatusOf(file: string, entries: readonly BacklogEntry[]): Status
   try {
     checkNeeds(entries, archived);
   } catch (error) {
-    if (!(error instanceof StepcastError)) throw error;
-    throw new StepcastError(error.message, { file, ...(error.at === undefined ? {} : { at: error.at }), cause: error });
+    if (!(error instanceof BurnexError)) throw error;
+    throw new BurnexError(error.message, { file, ...(error.at === undefined ? {} : { at: error.at }), cause: error });
   }
   return statusResolver(entries, archived);
 }
@@ -208,7 +208,7 @@ function runPick(
 ): ExitCodeValue {
   const staleHours = numberFlag(args.flags, 'stale-hours') ?? DEFAULT_STALE_HOURS;
   if (!Number.isFinite(staleHours) || staleHours <= 0) {
-    throw new StepcastError('ключ --stale-hours требует положительного числа');
+    throw new BurnexError('ключ --stale-hours требует положительного числа');
   }
   const staleMs = staleHours * 3600_000;
 
@@ -224,7 +224,7 @@ function runPick(
     // дорожек, и молча выбранная за вызывающего форма скрыла бы от него, что
     // одно из двух названных чисел не сработало.
     if (args.flags['slots'] !== undefined) {
-      throw new StepcastError('ключи --lanes и --slots взаимно исключают друг друга: форма выдачи одна');
+      throw new BurnexError('ключи --lanes и --slots взаимно исключают друг друга: форма выдачи одна');
     }
     runPickLanes(args, file, cwd, now, nowMs, staleMs, lanesOption, only, owner, write, writeErr);
     return ExitCode.ok;
@@ -232,7 +232,7 @@ function runPick(
 
   const slots = numberFlag(args.flags, 'slots') ?? 1;
   if (!Number.isInteger(slots) || slots <= 0) {
-    throw new StepcastError('ключ --slots требует целого положительного числа');
+    throw new BurnexError('ключ --slots требует целого положительного числа');
   }
 
   const chosen = claimItems(file, cwd, slots, only, owner, now, nowMs, staleMs, writeErr);
@@ -271,10 +271,10 @@ function claimItems(
     if (only !== undefined) {
       const named = entries.find((entry) => entry.slug === only);
       if (named === undefined) {
-        throw new StepcastError(`пункт «${only}» в очереди не найден`, { file, at: only });
+        throw new BurnexError(`пункт «${only}» в очереди не найден`, { file, at: only });
       }
       if (!isFree(named, nowMs, staleMs, ownerOf)) {
-        throw new StepcastError(
+        throw new BurnexError(
           `пункт «${only}» не свободен: status ${named.data.status}`,
           { file, at: only, hint: 'свободны todo, in_progress мёртвого владельца и зависший in_progress без владельца' },
         );
@@ -283,7 +283,7 @@ function claimItems(
         const unmet = unmetNeeds(named, statusOf)
           .map((need) => `${need.slug} (${need.status})`)
           .join(', ');
-        throw new StepcastError(`пункт «${only}» ждёт зависимостей: ${unmet}`, {
+        throw new BurnexError(`пункт «${only}» ждёт зависимостей: ${unmet}`, {
           file,
           at: only,
           hint: 'зависимость выполняет только статус done',
@@ -299,7 +299,7 @@ function claimItems(
       const named = entries.find((entry) => entry.slug === only);
       const missing = named === undefined ? [] : missingRefs(named, queueDir);
       if (missing.length > 0) {
-        throw new StepcastError(
+        throw new BurnexError(
           `пункт «${only}» назвал материалы, которых нет: ${missing.join(', ')}`,
           { file, at: only, hint: `пути отсчитываются от каталога очереди ${queueDir}` },
         );
@@ -343,7 +343,7 @@ function ownerJudgeFor(
     const { config } = resolveConfig({ cwd });
     return runOwnerJudge(config.runs.root, findProjectRoot(dirname(file)));
   } catch (error) {
-    if (!(error instanceof StepcastError)) throw error;
+    if (!(error instanceof BurnexError)) throw error;
     writeErr(
       `backlog pick: владельцы пунктов не проверены, действует порог давности: ${error.message}`,
     );
@@ -487,17 +487,17 @@ function runFinish(
   writeErr: (line: string) => void,
 ): ExitCodeValue {
   if (slug === undefined) {
-    throw new StepcastError('finish требует слаг пункта первым позиционным аргументом');
+    throw new BurnexError('finish требует слаг пункта первым позиционным аргументом');
   }
 
   const status = stringFlag(args.flags, 'status');
   if (status !== 'done' && status !== 'failed') {
-    throw new StepcastError('ключ --status требует значения done либо failed');
+    throw new BurnexError('ключ --status требует значения done либо failed');
   }
 
   const reason = stringFlag(args.flags, 'reason');
   if (status === 'failed' && (reason === undefined || reason.trim() === '')) {
-    throw new StepcastError('исход failed требует ключа --reason с причиной');
+    throw new BurnexError('исход failed требует ключа --reason с причиной');
   }
 
   const owner = ownerFlag(args.flags);
@@ -529,11 +529,11 @@ const ADD_STATUSES = ['todo', 'postponed'] as const;
 function addValue(flags: ParsedArgs['flags'], name: string, required: boolean): string | undefined {
   const raw = flags[name];
   if (raw === undefined) {
-    if (required) throw new StepcastError(`add требует ключа --${name}`);
+    if (required) throw new BurnexError(`add требует ключа --${name}`);
     return undefined;
   }
   if (typeof raw !== 'string' || raw.trim() === '') {
-    throw new StepcastError(`ключ --${name} требует непустого значения`);
+    throw new BurnexError(`ключ --${name} требует непустого значения`);
   }
   return raw.trim();
 }
@@ -546,16 +546,16 @@ function addValue(flags: ParsedArgs['flags'], name: string, required: boolean): 
  */
 function runAdd(args: ParsedArgs, slug: string | undefined, file: string): ExitCodeValue {
   if (slug === undefined) {
-    throw new StepcastError('add требует слаг пункта первым позиционным аргументом');
+    throw new BurnexError('add требует слаг пункта первым позиционным аргументом');
   }
   if (!KEBAB_CASE.test(slug)) {
-    throw new StepcastError(`слаг «${slug}» не является слагом в kebab-case`);
+    throw new BurnexError(`слаг «${slug}» не является слагом в kebab-case`);
   }
 
   const flags = args.flags;
   const status = stringFlag(flags, 'status') ?? 'todo';
   if (!(ADD_STATUSES as readonly string[]).includes(status)) {
-    throw new StepcastError(`ключ --status у add принимает ${ADD_STATUSES.join(' либо ')}, получено «${status}»`);
+    throw new BurnexError(`ключ --status у add принимает ${ADD_STATUSES.join(' либо ')}, получено «${status}»`);
   }
   const after = addValue(flags, 'after', false);
   const fields: Record<string, string> = { status };
@@ -577,26 +577,26 @@ function runAdd(args: ParsedArgs, slug: string | undefined, file: string): ExitC
     const text = readBacklogFile(file);
     const entries = parseBacklogFile(file, text);
     if (entries.some((entry) => entry.slug === slug)) {
-      throw new StepcastError(`пункт «${slug}» уже есть в очереди`, { file, at: slug });
+      throw new BurnexError(`пункт «${slug}» уже есть в очереди`, { file, at: slug });
     }
     const archived = readArchivedEntries(file);
     if (archived.some((entry) => entry.slug === slug)) {
-      throw new StepcastError(`пункт «${slug}» уже есть в архиве очереди`, { file: archivedPathFor(file), at: slug });
+      throw new BurnexError(`пункт «${slug}» уже есть в архиве очереди`, { file: archivedPathFor(file), at: slug });
     }
 
     let next: string;
     try {
       next = insertItem(text, slug, fields, after);
     } catch (error) {
-      if (!(error instanceof StepcastError)) throw error;
-      throw new StepcastError(error.message, { file, ...(error.at === undefined ? {} : { at: error.at }), cause: error });
+      if (!(error instanceof BurnexError)) throw error;
+      throw new BurnexError(error.message, { file, ...(error.at === undefined ? {} : { at: error.at }), cause: error });
     }
     const added = parseBacklogFile(file, next);
     checkNeeds(added, archived);
     const created = added.find((entry) => entry.slug === slug);
     const missing = created === undefined ? [] : missingRefs(created, dirname(file));
     if (missing.length > 0) {
-      throw new StepcastError(`пункт «${slug}» назвал материалы, которых нет: ${missing.join(', ')}`, {
+      throw new BurnexError(`пункт «${slug}» назвал материалы, которых нет: ${missing.join(', ')}`, {
         file,
         at: slug,
         hint: `пути отсчитываются от каталога очереди ${dirname(file)}`,
@@ -621,12 +621,12 @@ function runShow(
   write: (line: string) => void,
 ): ExitCodeValue {
   if (slug === undefined) {
-    throw new StepcastError('show требует слаг пункта первым позиционным аргументом');
+    throw new BurnexError('show требует слаг пункта первым позиционным аргументом');
   }
   const entries = parseBacklogFile(file, readBacklogFile(file));
   const found = entries.find((entry) => entry.slug === slug);
   if (found === undefined) {
-    throw new StepcastError(`пункт «${slug}» в очереди не найден`, { file, at: slug });
+    throw new BurnexError(`пункт «${slug}» в очереди не найден`, { file, at: slug });
   }
   const json = JSON.stringify(toRecord(found), null, 2);
 
@@ -655,11 +655,11 @@ function runSettle(
 ): ExitCodeValue {
   const runDirFlag = stringFlag(args.flags, 'run-dir');
   if (runDirFlag === undefined) {
-    throw new StepcastError('ключ --run-dir обязателен для settle');
+    throw new BurnexError('ключ --run-dir обязателен для settle');
   }
   const runDir = resolvePath(cwd, runDirFlag);
   if (!existsSync(runDir)) {
-    throw new StepcastError(`каталог прогона не найден: ${runDir}`, { file: runDir });
+    throw new BurnexError(`каталог прогона не найден: ${runDir}`, { file: runDir });
   }
 
   const lanes = takenLanes(runDir);

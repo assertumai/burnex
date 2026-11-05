@@ -1,4 +1,4 @@
-import { StepcastError } from '../../../kernel/errors.js';
+import { BurnexError } from '../../../kernel/errors.js';
 import type { AgentStep, Pipeline, RunStep, ScriptStep } from '../document/model.js';
 import type { RunJournal } from './journal/writer.js';
 
@@ -24,7 +24,7 @@ function stepAddress(jobId: string, stepId: string): string {
 export function assertShadowDeclarations(pipeline: Pick<Pipeline, 'jobs'>): void {
   const undeclared = stepsMissingExternal(pipeline);
   if (undeclared.length === 0) return;
-  throw new StepcastError(
+  throw new BurnexError(
     `Shadow-режим требует объявить external у каждого шага agent, run, script и uses; не объявлено: ${undeclared.join(', ')}`,
     {
       hint: 'Поставьте external: true шагу, который действует вовне рабочего дерева, и external: false — локальному',

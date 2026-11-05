@@ -5,7 +5,7 @@ import { describe, it } from 'node:test';
 
 import { resolveConfig } from '../src/parts/pipeline/config/resolve.js';
 import { resolveItemRepo } from '../src/parts/pipeline/domain/project/repos.js';
-import { StepcastError } from '../src/kernel/errors.js';
+import { BurnexError } from '../src/kernel/errors.js';
 import { tempDir } from './tmp.js';
 
 /**
@@ -74,7 +74,7 @@ describe('project/repos: resolveItemRepo', () => {
     assert.throws(
       () => resolveItemRepo(config(WITH_BACKEND), { slug: 'an-item', repos: ['no-such'] }),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.match(error.message, /an-item/);
         assert.match(error.message, /no-such/);
         assert.match(error.message, /backend/);
@@ -87,7 +87,7 @@ describe('project/repos: resolveItemRepo', () => {
     assert.throws(
       () => resolveItemRepo(config(ROOT_ONLY), { slug: 'an-item', repos: ['backend'] }),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.match(error.message, /an-item/);
         assert.match(error.message, /backend/);
         return true;
@@ -99,7 +99,7 @@ describe('project/repos: resolveItemRepo', () => {
     assert.throws(
       () => resolveItemRepo(config(WITH_BACKEND), { slug: 'an-item', repos: ['.', 'backend'] }),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.match(error.message, /an-item/);
         assert.match(error.message, /один репозиторий/);
         return true;
@@ -112,7 +112,7 @@ describe('project/repos: resolveItemRepo', () => {
     assert.throws(
       () => resolveItemRepo(config(noCheck), { slug: 'an-item', repos: [] }),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.match(error.message, /an-item/);
         assert.match(error.message, /корень/);
         assert.match(error.message, /check/);
@@ -127,7 +127,7 @@ describe('project/repos: resolveItemRepo', () => {
     assert.throws(
       () => resolveItemRepo(config(stringForm), { slug: 'an-item', repos: ['backend'] }),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.match(error.message, /an-item/);
         assert.match(error.message, /backend/);
         assert.match(error.message, /check/);
@@ -144,7 +144,7 @@ describe('project/repos: resolveItemRepo', () => {
     assert.throws(
       () => resolveItemRepo(config(incomplete), { slug: 'an-item', repos: ['backend'] }),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.match(error.message, /an-item/);
         assert.match(error.message, /backend/);
         assert.match(error.message, /spec\.tool/);
@@ -160,7 +160,7 @@ describe('project/repos: resolveItemRepo', () => {
     assert.throws(
       () => resolveItemRepo(config(incomplete), { slug: 'an-item', repos: ['backend'] }),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.match(error.message, /an-item/);
         assert.match(error.message, /backend/);
         assert.match(error.message, /spec\.check/);
@@ -193,7 +193,7 @@ describe('project/repos: resolveItemRepo', () => {
     assert.throws(
       () => resolveItemRepo(resolved, { slug: 'lane-b-item', repos: ['mobile'] }),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.match(error.message, /lane-b-item/);
         assert.doesNotMatch(error.message, /lane-a-item/);
         assert.equal(error.at, 'lane-b-item');

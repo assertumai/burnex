@@ -1,6 +1,6 @@
 import { Context, Service, type Fiber } from 'cordis';
 
-import { StepcastError } from './errors.js';
+import { BurnexError } from './errors.js';
 import type { Context as PluginContext, ContributionRegistrar } from './context.js';
 import type { CommandContribution, LoadedPlugin } from './contract.js';
 import { settle, topLevelFibers, unresolvedFibers, type UnresolvedFiber } from './fibers.js';
@@ -153,7 +153,7 @@ export class ContributionService<T> extends Service implements ContributionRegis
     if (existingOwner !== undefined) {
       // Тихая подмена `claude` или `exit_code` сделала бы лжецом и `stepcast
       // config`, и журнал прогона: и тот и другой называют имя, а не источник.
-      throw new StepcastError(
+      throw new BurnexError(
         `Имя ${this.word} ${name} занято: его объявляют ${describeOwner(existingOwner)} и ${describeOwner(owner)}`,
         {
           hint: 'Переопределение вклада не предусмотрено: снимите один из плагинов либо попросите автора переименовать вклад',
@@ -260,7 +260,7 @@ export function translateReservedNameConflict(error: unknown, ctx: Context): unk
   const message = isKernel
     ? `Имя сервиса ${name} занято: оно принадлежит ядру`
     : `Имя сервиса ${name} занято: его объявляет строка ${owner.fiber.name}`;
-  return new StepcastError(message, {
+  return new BurnexError(message, {
     hint: isKernel
       ? `Имя ${name} принадлежит ядру — заведите сервис под другим именем`
       : `Имя ${name} объявляет строка ${owner.fiber.name} — заведите сервис под другим именем либо отключите эту строку составом`,

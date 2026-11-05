@@ -2,12 +2,12 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
 import { applyDeclarativePlugin } from '../src/kernel/load.js';
-import { StepcastError } from '../src/kernel/errors.js';
+import { BurnexError } from '../src/kernel/errors.js';
 import { availableNames, contributionOwner, registryFromKernel } from '../src/kernel/registry.js';
 import { createBuiltinKernel } from '../src/parts/builtin.js';
 import {
   DECLARATIVE_CONTRIBUTION_FIELDS,
-  StepcastPluginSchema,
+  BurnexPluginSchema,
   type SecretProviderContribution,
 } from '../src/parts/pipeline/contract.js';
 import { ENV_FILE_PROVIDER } from '../src/parts/pipeline/secrets/envFile.js';
@@ -59,26 +59,26 @@ describe('secret-providers: реестр', () => {
           '/м.js',
           DECLARATIVE_CONTRIBUTION_FIELDS,
         ),
-      (error: unknown) => error instanceof StepcastError && /env-file/.test(error.message),
+      (error: unknown) => error instanceof BurnexError && /env-file/.test(error.message),
     );
   });
 
   it('вклад с битой формой отклоняется при загрузке, отказ называет поле', () => {
-    const noResolve = StepcastPluginSchema.safeParse({
+    const noResolve = BurnexPluginSchema.safeParse({
       name: 'p',
       secretProviders: [{ name: 'vault', schema: {} }],
     });
     assert.equal(noResolve.success, false);
     assert.match(JSON.stringify(noResolve.error?.issues), /resolve/);
 
-    const badName = StepcastPluginSchema.safeParse({
+    const badName = BurnexPluginSchema.safeParse({
       name: 'p',
       secretProviders: [{ name: 'Не Слаг', schema: {}, resolve: async () => 'x' }],
     });
     assert.equal(badName.success, false);
     assert.match(JSON.stringify(badName.error?.issues), /имя провайдера секретов/);
 
-    const ok = StepcastPluginSchema.safeParse({ name: 'p', secretProviders: [provider('vault')] });
+    const ok = BurnexPluginSchema.safeParse({ name: 'p', secretProviders: [provider('vault')] });
     assert.equal(ok.success, true);
   });
 });

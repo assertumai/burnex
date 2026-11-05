@@ -2,7 +2,7 @@ import { z } from 'zod';
 
 import { listProjects, readStatus } from '../../../pipeline/run/journal/reader.js';
 import { runPaths } from '../../../pipeline/run/journal/paths.js';
-import { isStepcastError } from '../../../../kernel/errors.js';
+import { isBurnexError } from '../../../../kernel/errors.js';
 import { selectAwaiting, validateDecision } from '../../../pipeline/run/decision.js';
 import { readBody, sendJson } from '../../daemon/http.js';
 import { parseRunAddress } from '../../runAddress.js';
@@ -89,7 +89,7 @@ const handlePost: ApiHandler = async (req, res, env) => {
       undefined,
     );
   } catch (error) {
-    sendJson(res, 400, { error: isStepcastError(error) ? error.message : 'The decision fails validation' });
+    sendJson(res, 400, { error: isBurnexError(error) ? error.message : 'The decision fails validation' });
     return;
   }
 

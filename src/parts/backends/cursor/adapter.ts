@@ -1,4 +1,4 @@
-import { StepcastError } from '../../../plugin/index.js';
+import { BurnexError } from '../../../plugin/index.js';
 import { effectivePermissions } from '../../pipeline/surface.js';
 import type {
   AgentInvocation,
@@ -134,19 +134,19 @@ function sandboxMode(permissions: AgentInvocation['permissions']): string | unde
   if (permissions === undefined) return undefined;
 
   if (permissions.enforce === 'strict') {
-    throw new StepcastError('Бэкенд cursor-agent не умеет применять enforce: strict', {
+    throw new BurnexError('Бэкенд cursor-agent не умеет применять enforce: strict', {
       hint: 'Снимите enforce: strict либо переведите шаг на бэкенд, объявляющий эту возможность',
     });
   }
   for (const key of ['allow', 'deny'] as const) {
     if ((permissions[key] ?? []).length === 0) continue;
-    throw new StepcastError(`Бэкенд cursor-agent не применяет permissions.${key}`, {
+    throw new BurnexError(`Бэкенд cursor-agent не применяет permissions.${key}`, {
       hint: `У cursor-agent есть только permissions.mode (${SANDBOX_MODES.join(', ')}); снимите ${key}`,
     });
   }
   if (permissions.mode === undefined) return undefined;
   if (!(SANDBOX_MODES as readonly string[]).includes(permissions.mode)) {
-    throw new StepcastError(`Бэкенд cursor-agent не знает режима доступа ${permissions.mode}`, {
+    throw new BurnexError(`Бэкенд cursor-agent не знает режима доступа ${permissions.mode}`, {
       hint: `Допустимые значения permissions.mode для cursor-agent: ${SANDBOX_MODES.join(', ')}`,
     });
   }

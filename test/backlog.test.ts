@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, it } from 'node:test';
 
-import { StepcastError } from '../src/kernel/errors.js';
+import { BurnexError } from '../src/kernel/errors.js';
 import {
   parse,
   effectiveGroup,
@@ -71,7 +71,7 @@ describe('backlog: разбор', () => {
     const line = text.split('\n').indexOf('просто текст без двоеточия') + 1;
 
     assert.throws(() => parse(text), (error: unknown) => {
-      assert.ok(error instanceof StepcastError);
+      assert.ok(error instanceof BurnexError);
       assert.match(error.message, /broken-item/);
       assert.match(error.message, /ключ: значение/);
       assert.match(error.message, new RegExp(`строка ${line}\\b`));
@@ -109,7 +109,7 @@ describe('backlog: разбор', () => {
     const text = backlogText(item('broken-item', { ...COMPLETE, status: 'постановлено' }));
 
     assert.throws(() => parse(text), (error: unknown) => {
-      assert.ok(error instanceof StepcastError);
+      assert.ok(error instanceof BurnexError);
       assert.match(error.message, /broken-item/);
       assert.match(error.message, /постановлено/);
       assert.match(error.message, /todo/);
@@ -121,7 +121,7 @@ describe('backlog: разбор', () => {
     const text = backlogText(item('broken-item', { status: 'todo', title: 'т', why: 'з' }));
 
     assert.throws(() => parse(text), (error: unknown) => {
-      assert.ok(error instanceof StepcastError);
+      assert.ok(error instanceof BurnexError);
       assert.match(error.message, /broken-item/);
       assert.match(error.message, /done_when/);
       return true;
@@ -132,7 +132,7 @@ describe('backlog: разбор', () => {
     const text = backlogText(item('Формат записи', COMPLETE));
 
     assert.throws(() => parse(text), (error: unknown) => {
-      assert.ok(error instanceof StepcastError);
+      assert.ok(error instanceof BurnexError);
       assert.match(error.message, /Формат записи/);
       assert.match(error.message, /kebab-case/);
       return true;
@@ -143,7 +143,7 @@ describe('backlog: разбор', () => {
     const text = backlogText(item('some-item', { ...COMPLETE, group: 'Не Слаг' }));
 
     assert.throws(() => parse(text), (error: unknown) => {
-      assert.ok(error instanceof StepcastError);
+      assert.ok(error instanceof BurnexError);
       assert.match(error.message, /some-item/);
       assert.match(error.message, /Не Слаг/);
       return true;
@@ -154,7 +154,7 @@ describe('backlog: разбор', () => {
     const text = backlogText(item('same-item', COMPLETE), item('same-item', COMPLETE));
 
     assert.throws(() => parse(text), (error: unknown) => {
-      assert.ok(error instanceof StepcastError);
+      assert.ok(error instanceof BurnexError);
       assert.match(error.message, /same-item/);
       assert.match(error.message, /дважды/);
       return true;
@@ -213,7 +213,7 @@ describe('backlog: поля goal и details', () => {
       it(`${field} отказывает: ${name}, называя пункт и поле`, () => {
         const text = backlogText(item('broken-item', { ...COMPLETE, [field]: value }));
         assert.throws(() => parse(text), (error: unknown) => {
-          assert.ok(error instanceof StepcastError);
+          assert.ok(error instanceof BurnexError);
           assert.match(error.message, /broken-item/);
           assert.match(error.message, new RegExp(field));
           assert.match(error.message, fragment);
@@ -226,7 +226,7 @@ describe('backlog: поля goal и details', () => {
   it('goal отказывает: пустое значение, называя пункт и поле', () => {
     const text = backlogText(item('broken-item', { ...COMPLETE, goal: '' }));
     assert.throws(() => parse(text), (error: unknown) => {
-      assert.ok(error instanceof StepcastError);
+      assert.ok(error instanceof BurnexError);
       assert.match(error.message, /broken-item/);
       assert.match(error.message, /goal/);
       assert.match(error.message, /пустое значение/);
@@ -242,7 +242,7 @@ describe('backlog: поля goal и details', () => {
     it(`details отказывает: ${name}`, () => {
       const text = backlogText(item('broken-item', { ...COMPLETE, details: value }));
       assert.throws(() => parse(text), (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.match(error.message, /broken-item/);
         assert.match(error.message, /details/);
         assert.match(error.message, fragment);
@@ -272,7 +272,7 @@ describe('backlog: поле needs', () => {
     it(`отказывает: ${name}, называя пункт и поле`, () => {
       const text = backlogText(item('broken-item', { ...COMPLETE, needs: value }));
       assert.throws(() => parse(text), (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.match(error.message, /broken-item/);
         assert.match(error.message, /needs/);
         assert.match(error.message, fragment);
@@ -313,7 +313,7 @@ describe('backlog: поле track', () => {
     assert.throws(
       () => parse(backlogText(item('an-item', { ...COMPLETE, track: 'Express Lane' }))),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.match(error.message, /an-item/);
         assert.match(error.message, /Express Lane/);
         assert.match(error.message, /kebab-case/);
@@ -342,7 +342,7 @@ describe('backlog: поле repos', () => {
   it('отказывает на абсолютном имени, называя пункт и имя', () => {
     const text = backlogText(item('broken-item', { ...COMPLETE, repos: '/srv/site' }));
     assert.throws(() => parse(text), (error: unknown) => {
-      assert.ok(error instanceof StepcastError);
+      assert.ok(error instanceof BurnexError);
       assert.match(error.message, /broken-item/);
       assert.match(error.message, /\/srv\/site/);
       return true;
@@ -352,7 +352,7 @@ describe('backlog: поле repos', () => {
   it('отказывает на имени с сегментом .., называя пункт и имя', () => {
     const text = backlogText(item('broken-item', { ...COMPLETE, repos: '../site' }));
     assert.throws(() => parse(text), (error: unknown) => {
-      assert.ok(error instanceof StepcastError);
+      assert.ok(error instanceof BurnexError);
       assert.match(error.message, /broken-item/);
       assert.match(error.message, /\.\.\/site/);
       return true;
@@ -362,7 +362,7 @@ describe('backlog: поле repos', () => {
   it('отказывает на символе шаблона глоба, называя пункт и имя', () => {
     const text = backlogText(item('broken-item', { ...COMPLETE, repos: 'site/*' }));
     assert.throws(() => parse(text), (error: unknown) => {
-      assert.ok(error instanceof StepcastError);
+      assert.ok(error instanceof BurnexError);
       assert.match(error.message, /broken-item/);
       assert.match(error.message, /site\/\*/);
       return true;
@@ -372,7 +372,7 @@ describe('backlog: поле repos', () => {
   it('отказывает на пустом значении поля, называя пункт', () => {
     const text = backlogText(item('broken-item', { ...COMPLETE, repos: '' }));
     assert.throws(() => parse(text), (error: unknown) => {
-      assert.ok(error instanceof StepcastError);
+      assert.ok(error instanceof BurnexError);
       assert.match(error.message, /broken-item/);
       return true;
     });
@@ -381,7 +381,7 @@ describe('backlog: поле repos', () => {
   it('отказывает на пустом элементе перечня, называя пункт', () => {
     const text = backlogText(item('broken-item', { ...COMPLETE, repos: 'backend,' }));
     assert.throws(() => parse(text), (error: unknown) => {
-      assert.ok(error instanceof StepcastError);
+      assert.ok(error instanceof BurnexError);
       assert.match(error.message, /broken-item/);
       return true;
     });
@@ -390,7 +390,7 @@ describe('backlog: поле repos', () => {
   it('отказывает на повторе имени, называя пункт и имя', () => {
     const text = backlogText(item('broken-item', { ...COMPLETE, repos: 'backend, backend' }));
     assert.throws(() => parse(text), (error: unknown) => {
-      assert.ok(error instanceof StepcastError);
+      assert.ok(error instanceof BurnexError);
       assert.match(error.message, /broken-item/);
       assert.match(error.message, /backend/);
       return true;
@@ -786,7 +786,7 @@ describe('backlog: правка полей', () => {
 
     for (const value of ['первая\nвторая', 'первая\r\nвторая']) {
       assert.throws(() => withFields(before, 'some-item', { reason: value }), (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.match(error.message, /reason/);
         assert.match(error.message, /одну строку/);
         return true;
@@ -797,7 +797,7 @@ describe('backlog: правка полей', () => {
   it('отказывает на отсутствующем слаге', () => {
     const before = backlogText(item('some-item', COMPLETE));
     assert.throws(() => withFields(before, 'missing-item', { status: 'done' }), (error: unknown) => {
-      assert.ok(error instanceof StepcastError);
+      assert.ok(error instanceof BurnexError);
       assert.match(error.message, /missing-item/);
       return true;
     });

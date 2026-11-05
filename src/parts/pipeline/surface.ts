@@ -1,4 +1,4 @@
-import { StepcastError } from '../../kernel/errors.js';
+import { BurnexError } from '../../kernel/errors.js';
 import type { Context } from '../../kernel/context.js';
 import type { PipelineContext } from './contract.js';
 
@@ -12,7 +12,7 @@ import type { PipelineContext } from './contract.js';
  * строку своей, пользователь заменяет и то, и другое, а не наследует чужую
  * поверхность.
  *
- * Ядерных имён здесь нет ни одного (`StepcastError`, `parseDuration`,
+ * Ядерных имён здесь нет ни одного (`BurnexError`, `parseDuration`,
  * `runProcess` и подобные — подпуть `burnex/plugin`): домен не публикует
  * ядро, иначе вопрос «откуда это имя» перестал бы иметь однозначный ответ
  * (design.md, Решение 9).
@@ -30,7 +30,7 @@ export type {
    * Публикуется наравне с хелпером `definePipelinePlugin`, потому что хелпер
    * необязателен (docs/plugins.md, «Хелперы объявления»): автор, пишущий
    * декларативный доменный плагин объектным литералом с аннотацией, аннотирует
-   * его этим именем — ядерный `StepcastPlugin` доменные ключи отвергает.
+   * его этим именем — ядерный `BurnexPlugin` доменные ключи отвергает.
    */
   PipelinePlugin,
   PredicateContribution,
@@ -130,7 +130,7 @@ export function pipelineContext(
 ): PipelineContext {
   const missing = needed.filter((name) => ctx.get(name) === undefined);
   if (missing.length > 0) {
-    throw new StepcastError(
+    throw new BurnexError(
       `Контекст не несёт сервис${missing.length > 1 ? 'ы' : ''} пайплайна: ${missing.join(', ')}`,
       {
         // Два разных случая, и подсказка обязана различать их: зависимость,

@@ -1,4 +1,4 @@
-import { StepcastError } from '../../../../kernel/errors.js';
+import { BurnexError } from '../../../../kernel/errors.js';
 import type { Config } from '../../config/resolve.js';
 
 /**
@@ -111,7 +111,7 @@ function requireComplete(
               : undefined;
 
   if (missing !== undefined) {
-    throw new StepcastError(
+    throw new BurnexError(
       `пункт «${itemSlug}»: репозиторий «${label}» не объявляет ${missing}`,
       { at: itemSlug, hint: 'Объявите его в .burnex/config.yml' },
     );
@@ -135,7 +135,7 @@ function requireComplete(
  */
 export function resolveItemRepo(config: Config, item: RepoOwner): ResolvedRepo {
   if (item.repos.length > 1) {
-    throw new StepcastError(
+    throw new BurnexError(
       `пункт «${item.slug}» называет несколько репозиториев (${item.repos.join(', ')}): дорожка ведёт один репозиторий`,
       { at: item.slug },
     );
@@ -156,7 +156,7 @@ export function resolveItemRepo(config: Config, item: RepoOwner): ResolvedRepo {
 
   const declaredDirs = config.project.nestedRepos ?? [];
   if (!declaredDirs.includes(name)) {
-    throw new StepcastError(
+    throw new BurnexError(
       `пункт «${item.slug}» называет репозиторий «${name}», не объявленный составом: объявлены ${
         declaredDirs.length === 0 ? '(нет)' : declaredDirs.join(', ')
       }`,

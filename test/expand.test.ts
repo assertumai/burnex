@@ -11,7 +11,7 @@ import { resolveConfig } from '../src/parts/pipeline/config/resolve.js';
 import { interpolate, interpolateTree, type Scope } from '../src/parts/pipeline/document/interpolate.js';
 import { jobLockHash, serializeLock } from '../src/parts/pipeline/document/lock.js';
 import { computeStepKey } from '../src/parts/pipeline/run/stepKey.js';
-import { StepcastError } from '../src/kernel/errors.js';
+import { BurnexError } from '../src/kernel/errors.js';
 import type { BackendConfig, Config } from '../src/parts/pipeline/config/resolve.js';
 import { asAgent, asRun, asScript, makeProject, MINIMAL_PIPELINE, type Project } from './helpers.js';
 import { tempDir } from './tmp.js';
@@ -142,11 +142,11 @@ function writeOutsideProject(dir: string, name: string, content: string): void {
 }
 
 /** Отказ, пойманный ради самого сообщения: `assert.throws` его не возвращает. */
-function thrown(fn: () => unknown): StepcastError {
+function thrown(fn: () => unknown): BurnexError {
   try {
     fn();
   } catch (error) {
-    assert.ok(error instanceof StepcastError);
+    assert.ok(error instanceof BurnexError);
     return error;
   }
   assert.fail('ожидался отказ разбора');
@@ -199,7 +199,7 @@ jobs:
 `,
       'jobs/build.yml': 'kind: pipeline\njobs: {}\n',
     });
-    assert.throws(() => expand(project), StepcastError);
+    assert.throws(() => expand(project), BurnexError);
   });
 
   // Сценарий: «Обязательный параметр не передан»
@@ -224,7 +224,7 @@ steps:
     assert.throws(
       () => expand(project),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.match(error.message, /target/);
         return true;
       },
@@ -243,7 +243,7 @@ jobs:
 `,
       'jobs/build.yml': 'kind: job\nsteps:\n  - id: c\n    run: [echo, ok]\n',
     });
-    assert.throws(() => expand(project), StepcastError);
+    assert.throws(() => expand(project), BurnexError);
   });
 
   // Сценарий: «Умолчание параметра»
@@ -310,7 +310,7 @@ steps:
     assert.throws(
       () => expand(project),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.match(error.message, /needs недопустим внутри файла работы/);
         assert.equal(error.file, project.path('jobs/build.yml'));
         return true;
@@ -349,7 +349,7 @@ jobs:
         run: [echo, "\${inputs.missing}"]
 `,
     });
-    assert.throws(() => expand(project), StepcastError);
+    assert.throws(() => expand(project), BurnexError);
   });
 
   it('работе недоступны inputs пайплайна', () => {
@@ -373,7 +373,7 @@ steps:
     assert.throws(
       () => expand(project),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.match(error.hint ?? '', /Работе недоступны inputs/);
         return true;
       },
@@ -963,7 +963,7 @@ jobs:
     assert.throws(
       () => expand(project),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.match(error.at ?? '', /budget\.cost/);
         return true;
       },
@@ -983,7 +983,7 @@ jobs:
 `,
     });
 
-    assert.throws(() => expand(project), StepcastError);
+    assert.throws(() => expand(project), BurnexError);
   });
 
   it('отклоняет output без from у работы без агентских шагов', () => {
@@ -998,7 +998,7 @@ jobs:
         run: [echo, ok]
 `,
     });
-    assert.throws(() => expand(project), StepcastError);
+    assert.throws(() => expand(project), BurnexError);
   });
 
   it('отклоняет превышение limits.attempts', () => {
@@ -1016,7 +1016,7 @@ jobs:
     assert.throws(
       () => expand(project),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.match(error.message, /limits\.attempts/);
         return true;
       },
@@ -1077,7 +1077,7 @@ steps:
 `,
     });
 
-    assert.throws(() => expand(project), StepcastError);
+    assert.throws(() => expand(project), BurnexError);
   });
 
   // Сценарий: «Освобождение от потолка прогона объявлено на месте подключения»
@@ -1116,7 +1116,7 @@ steps:
 `,
     });
 
-    assert.throws(() => expand(project), StepcastError);
+    assert.throws(() => expand(project), BurnexError);
   });
 
   it('не меняет порядок исполнения графа при объявленной lane', () => {
@@ -1247,7 +1247,7 @@ jobs:
 `,
     });
 
-    assert.throws(() => expand(project), StepcastError);
+    assert.throws(() => expand(project), BurnexError);
   });
 
   it('lane внутри документа kind: job по-прежнему отклоняется rejectWiringKeys, даже когда работа читает job.lane', () => {
@@ -1266,7 +1266,7 @@ steps: [{ id: c, run: [echo, "\${job.lane}"] }]
 `,
     });
 
-    assert.throws(() => expand(project), StepcastError);
+    assert.throws(() => expand(project), BurnexError);
   });
 });
 
@@ -1306,7 +1306,7 @@ jobs:
           enforce: yolo
 `,
     });
-    assert.throws(() => expand(project), StepcastError);
+    assert.throws(() => expand(project), BurnexError);
   });
 
   // Сценарий: «Шаг сужает режим работы»
@@ -1482,7 +1482,7 @@ jobs:
     assert.throws(
       () => expand(project, 'burnex.yml', { n: 'много' }),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.match(error.at ?? '', /until\.max_iterations/);
         assert.match(error.message, /много/);
         assert.match(error.hint ?? '', /\$\{inputs\.n\}/);
@@ -1511,7 +1511,7 @@ jobs:
     assert.throws(
       () => expand(project),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.match(error.message, /jobs/);
         assert.match(error.hint ?? '', /разбор(е|а) пайплайна/);
         return true;
@@ -1531,7 +1531,7 @@ jobs:
     assert.throws(
       () => expand(runProject),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.match(error.message, /run/);
         return true;
       },
@@ -1548,7 +1548,7 @@ jobs:
     assert.throws(
       () => expand(envProject),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.match(error.message, /env/);
         return true;
       },
@@ -1584,7 +1584,7 @@ steps:
     assert.throws(
       () => expand(project),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.match(error.message, /отложенное пространство jobs/);
         assert.match(error.hint ?? '', /\$\{params\.n\}/);
         return true;
@@ -1608,7 +1608,7 @@ jobs:
     assert.throws(
       () => expand(project),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.match(error.message, /Не удалось разобрать счётчик/);
         assert.doesNotMatch(error.message, /отложенное пространство/);
         return true;
@@ -1640,7 +1640,7 @@ steps:
     assert.throws(
       () => expand(project),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.match(error.message, /limits\.attempts/);
         return true;
       },
@@ -1687,7 +1687,7 @@ steps:
     assert.throws(
       () => expand(body('attempts: { max: 9 }')),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.match(error.message, /attempts\.max = 9/);
         assert.match(error.message, /limits\.attempts = \d+/);
         assert.match(error.at ?? '', /jobs\.build\.attempts\.max/);
@@ -1699,7 +1699,7 @@ steps:
   it('схема отклоняет escalation у работы', () => {
     assert.throws(
       () => expand(body('attempts: { max: 2, escalation: [{ include_failure: true }] }')),
-      StepcastError,
+      BurnexError,
     );
   });
 
@@ -1855,7 +1855,7 @@ jobs:
 `,
     });
 
-    assert.throws(() => expand(project), StepcastError);
+    assert.throws(() => expand(project), BurnexError);
   });
 
   for (const mode of ['cwd', 'copy']) {
@@ -1901,7 +1901,7 @@ jobs:
 `,
       });
 
-      assert.throws(() => expand(project), StepcastError);
+      assert.throws(() => expand(project), BurnexError);
     });
   }
 
@@ -1920,7 +1920,7 @@ jobs:
 `,
     });
 
-    assert.throws(() => expand(project), StepcastError);
+    assert.throws(() => expand(project), BurnexError);
   });
 
   // Сценарий: «Работа объявляет источник наследования»
@@ -2074,7 +2074,7 @@ steps:
 `,
     });
 
-    assert.throws(() => expand(project), StepcastError);
+    assert.throws(() => expand(project), BurnexError);
   });
 
   // Сценарий: «Незнакомый вид триггера»
@@ -2091,7 +2091,7 @@ jobs:
     });
 
     assert.throws(() => expand(project), (error: unknown) => {
-      assert.ok(error instanceof StepcastError);
+      assert.ok(error instanceof BurnexError);
       assert.match(error.message, /github/);
       return true;
     });
@@ -2514,7 +2514,7 @@ jobs:
     assert.throws(
       () => expand(project),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.match(error.at ?? error.message, /project\.check/);
         return true;
       },
@@ -2532,7 +2532,7 @@ jobs:
     steps: [{ id: c, run: [echo, ok] }]
 `,
     });
-    assert.throws(() => expand(project), StepcastError);
+    assert.throws(() => expand(project), BurnexError);
   });
 
   // ui-proposals / stepcast-configuration, сценарий «Ключ в пайплайне»
@@ -2550,7 +2550,7 @@ jobs:
     assert.throws(
       () => expand(project),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.match(error.message, /режим доставки/i);
         assert.match(error.message, /конфигурация репозитория/);
         assert.equal(error.at, 'project.proposals');
@@ -2603,7 +2603,7 @@ jobs:
     steps: [{ id: c, run: [echo, ok] }]
 `,
     });
-    assert.throws(() => expand(project), StepcastError);
+    assert.throws(() => expand(project), BurnexError);
   });
 
   it('отклоняет абсолютный путь внутри группы spec', () => {
@@ -2618,7 +2618,7 @@ jobs:
     steps: [{ id: c, run: [echo, ok] }]
 `,
     });
-    assert.throws(() => expand(project), StepcastError);
+    assert.throws(() => expand(project), BurnexError);
   });
 
   it('отклоняет неизвестный ключ внутри группы spec', () => {
@@ -2633,7 +2633,7 @@ jobs:
     steps: [{ id: c, run: [echo, ok] }]
 `,
     });
-    assert.throws(() => expand(project), StepcastError);
+    assert.throws(() => expand(project), BurnexError);
   });
 });
 
@@ -2805,7 +2805,7 @@ jobs:
     assert.throws(
       () => expand(project),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.match(error.hint ?? '', /project\.spec\.dir/);
         assert.match(error.hint ?? '', new RegExp(project.path('burnex.yml').replace(/[/\\]/g, '\\$&')));
         assert.match(error.hint ?? '', /\.burnex\/config\.yml/);
@@ -2827,7 +2827,7 @@ jobs:
     assert.throws(
       () => expand(project),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.match(error.hint ?? '', /spec\.dir/);
         assert.match(error.hint ?? '', /spec\.rules/);
         assert.match(error.hint ?? '', /spec\.tool/);
@@ -2851,7 +2851,7 @@ jobs:
     assert.throws(
       () => expand(project),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.match(error.hint ?? '', /содержит только/);
         assert.match(error.hint ?? '', /spec\.check/);
         return true;
@@ -2873,7 +2873,7 @@ jobs:
     assert.throws(
       () => expand(project),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.match(error.hint ?? '', /project\.spec\.check/);
         assert.match(error.hint ?? '', new RegExp(project.path('burnex.yml').replace(/[/\\]/g, '\\$&')));
         assert.match(error.hint ?? '', /\.burnex\/config\.yml/);
@@ -3001,7 +3001,7 @@ jobs:
     assert.throws(
       () => expand(project),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.match(error.message, /nested_repos/);
         assert.equal(error.file, project.path('burnex.yml'));
         return true;
@@ -3206,7 +3206,7 @@ jobs:
     assert.throws(
       () => expandWith(project, config),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.match(error.hint ?? '', /project\.check/);
         assert.match(error.hint ?? '', new RegExp(project.path('burnex.yml').replace(/[/\\]/g, '\\$&')));
         assert.match(error.hint ?? '', /\.burnex\/config\.yml/);
@@ -3229,7 +3229,7 @@ jobs:
     assert.throws(
       () => expandWith(project, config),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         // Сообщение о составе, а не о том, где объявить: имя `name`
         // пространству не принадлежит вовсе, и объявлять его негде. Обе ветки
         // содержат слово «check», поэтому различает их не оно.
@@ -3311,7 +3311,7 @@ steps:
     assert.throws(
       () => expandWith(project, withProjectCheck(project, undefined)),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         // Диагностика называет файл работы — там объявлено поле, — а подсказка
         // оба места, где команду можно объявить.
         assert.equal(error.file, project.path('.burnex/jobs/loop.yml'));
@@ -3339,7 +3339,7 @@ steps: [{ id: c, run: "\${project.name}" }]
     assert.throws(
       () => expandWith(project, withProjectCheck(project, 'npm run check')),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.match(error.hint ?? '', /содержит только check/);
         return true;
       },
@@ -3400,7 +3400,7 @@ jobs:
     assert.throws(
       () => expandWith(project, config),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.match(error.hint ?? '', /project\.tools/);
         assert.match(error.hint ?? '', new RegExp(project.path('burnex.yml').replace(/[/\\]/g, '\\$&')));
         assert.match(error.hint ?? '', /\.burnex\/config\.yml/);
@@ -3423,7 +3423,7 @@ jobs:
     assert.throws(
       () => expandWith(project, config),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.match(error.hint ?? '', /содержит только/);
         assert.match(error.hint ?? '', /\btools\b/);
         return true;
@@ -3546,7 +3546,7 @@ jobs:
     assert.throws(
       () => expandWith(project, config),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.match(error.hint ?? '', /project\.edit_paths/);
         assert.match(error.hint ?? '', new RegExp(project.path('burnex.yml').replace(/[/\\]/g, '\\$&')));
         assert.match(error.hint ?? '', /\.burnex\/config\.yml/);
@@ -3569,7 +3569,7 @@ jobs:
     assert.throws(
       () => expandWith(project, config),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.match(error.hint ?? '', /содержит только/);
         assert.match(error.hint ?? '', /\bedit_paths\b/);
         return true;
@@ -3615,7 +3615,7 @@ jobs:
     assert.throws(
       () => expand(project),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.match(error.message, /непредставимо/);
         assert.match(error.hint ?? '', /раскрывается только в элементе списка/);
         return true;
@@ -3755,7 +3755,7 @@ describe('pipeline-definition: раскрытие списочного знач�
     assert.throws(
       () => interpolateTree({ allow: ['${project.tools}-${project.tools}'] }, scope, ''),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.equal(error.at, 'allow.0');
         assert.match(error.message, /project\.tools/);
         return true;
@@ -3767,7 +3767,7 @@ describe('pipeline-definition: раскрытие списочного знач�
     assert.throws(
       () => interpolateTree({ check: '${project.tools}' }, scope, ''),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.equal(error.at, 'check');
         assert.match(error.hint ?? '', /раскрывается только в элементе списка/);
         return true;
@@ -3786,7 +3786,7 @@ describe('pipeline-definition: раскрытие списочного знач�
     assert.throws(
       () => interpolateTree({ allow: ['Read', 'Bash(${project.tools} *)'] }, empty, ''),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.equal(error.at, 'allow.1');
         assert.match(error.message, /пустой список/);
         return true;
@@ -3805,7 +3805,7 @@ describe('pipeline-definition: раскрытие списочного знач�
     assert.throws(
       () => interpolateTree({ allow: ['Bash(${project.tools} *)'] }, mixed, ''),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.equal(error.at, 'allow.0');
         assert.match(error.hint ?? '', /допустимы строки, числа и логические значения/);
         return true;
@@ -3853,7 +3853,7 @@ jobs:
 `,
     });
 
-    assert.throws(() => expand(project), StepcastError);
+    assert.throws(() => expand(project), BurnexError);
   });
 });
 
@@ -3963,7 +3963,7 @@ jobs:
         run: [echo, hi]
 `,
     });
-    assert.throws(() => expandScript(project, isolatedScriptRoots(project)), StepcastError);
+    assert.throws(() => expandScript(project, isolatedScriptRoots(project)), BurnexError);
   });
 
   it('отклоняет шаг, объявивший script вместе с prompt', () => {
@@ -3978,7 +3978,7 @@ jobs:
         prompt: привет
 `,
     });
-    assert.throws(() => expandScript(project, isolatedScriptRoots(project)), StepcastError);
+    assert.throws(() => expandScript(project, isolatedScriptRoots(project)), BurnexError);
   });
 
   // Сценарий: «Аргументы только списком»
@@ -3994,7 +3994,7 @@ jobs:
         args: "--dry-run --verbose"
 `,
     });
-    assert.throws(() => expandScript(project, isolatedScriptRoots(project)), StepcastError);
+    assert.throws(() => expandScript(project, isolatedScriptRoots(project)), BurnexError);
   });
 
   // Сценарий: «Схема выхода принимается»
@@ -4047,7 +4047,7 @@ jobs:
         input: [a, b]
 `,
     });
-    assert.throws(() => expandScript(list, isolatedScriptRoots(list)), StepcastError);
+    assert.throws(() => expandScript(list, isolatedScriptRoots(list)), BurnexError);
 
     const str = makeProject({
       'burnex.yml': `
@@ -4060,7 +4060,7 @@ jobs:
         input: slug
 `,
     });
-    assert.throws(() => expandScript(str, isolatedScriptRoots(str)), StepcastError);
+    assert.throws(() => expandScript(str, isolatedScriptRoots(str)), BurnexError);
   });
 
   // Сценарий: «Вход у чужого вида шага»
@@ -4076,7 +4076,7 @@ jobs:
         input: { a: 1 }
 `,
     });
-    assert.throws(() => expandScript(runProject, isolatedScriptRoots(runProject)), StepcastError);
+    assert.throws(() => expandScript(runProject, isolatedScriptRoots(runProject)), BurnexError);
 
     const agentProject = makeProject({
       'burnex.yml': `
@@ -4089,7 +4089,7 @@ jobs:
         input: { a: 1 }
 `,
     });
-    assert.throws(() => expandScript(agentProject, isolatedScriptRoots(agentProject)), StepcastError);
+    assert.throws(() => expandScript(agentProject, isolatedScriptRoots(agentProject)), BurnexError);
   });
 
   it('отклоняет отложенную подстановку в значении script', () => {
@@ -4276,7 +4276,7 @@ jobs:
         script: ${value}
 `,
         });
-        assert.throws(() => expandScript(project, isolatedScriptRoots(project)), StepcastError, value);
+        assert.throws(() => expandScript(project, isolatedScriptRoots(project)), BurnexError, value);
       }
     });
   });
@@ -4743,7 +4743,7 @@ jobs:
         expect: [{ script: "" }]
 `,
     });
-    assert.throws(() => expandScript(project, isolatedScriptRoots(project)), StepcastError);
+    assert.throws(() => expandScript(project, isolatedScriptRoots(project)), BurnexError);
   });
 
   it('предикат script голым именем ищется тем же слоем, что и шаг script с тем же именем', () => {
@@ -4855,7 +4855,7 @@ jobs:
         expect: [{ script: "\${jobs.a.output.path}" }]
 `,
     });
-    assert.throws(() => expandScript(project, isolatedScriptRoots(project)), StepcastError);
+    assert.throws(() => expandScript(project, isolatedScriptRoots(project)), BurnexError);
   });
 });
 
@@ -4890,7 +4890,7 @@ jobs:
         run: [echo, hi]
 `,
     });
-    assert.throws(() => expandScript(project, isolatedScriptRoots(project)), StepcastError);
+    assert.throws(() => expandScript(project, isolatedScriptRoots(project)), BurnexError);
   });
 
   it('run с объявленным output_schema делает работу способной дать выход по умолчанию', () => {
@@ -5815,7 +5815,7 @@ jobs:
       assert.throws(
         () => run({ config: 'pipeline_agents:\n  p: { agent: nosuch }\n' }),
         (error: unknown) => {
-          assert.ok(error instanceof StepcastError);
+          assert.ok(error instanceof BurnexError);
           assert.equal(error.at, 'pipeline_agents.p.agent');
           assert.match(error.file ?? '', /\.burnex[/\\]config\.yml$/);
           return true;
@@ -5823,7 +5823,7 @@ jobs:
       );
       assert.throws(
         () => run({ config: 'step_agents:\n  p:\n    implement:\n      code: { agent: nosuch }\n' }),
-        (error: unknown) => error instanceof StepcastError && error.at === 'step_agents.p.implement.code.agent',
+        (error: unknown) => error instanceof BurnexError && error.at === 'step_agents.p.implement.code.agent',
       );
     });
 
@@ -6256,7 +6256,7 @@ ${JOBS}`;
       const project = makeProject({
         'burnex.yml': pipelineWith(`    jobs: [check, fix]\n    max_iterations: 2\n    ${key}`),
       });
-      assert.throws(() => expand(project), StepcastError, key);
+      assert.throws(() => expand(project), BurnexError, key);
     }
     const parsed = PipelineDocumentSchema.safeParse({
       jobs: {},

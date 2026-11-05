@@ -1,6 +1,6 @@
 import { resolveConfig, type Config } from '../config/resolve.js';
 import type { Registry } from '../../../kernel/registry.js';
-import { ExitCode, isStepcastError, StepcastError, type ExitCodeValue } from '../../../kernel/errors.js';
+import { ExitCode, isBurnexError, BurnexError, type ExitCodeValue } from '../../../kernel/errors.js';
 import { findProjectRoot, shortRunId } from '../run/journal/paths.js';
 import { isRunAlive, readManifest, readStatus, resolveRun } from '../run/journal/reader.js';
 import { writeDecisionRecord } from '../run/journal/writer.js';
@@ -36,7 +36,7 @@ export async function runDecideCommand(
     const status = readStatus(paths);
     const outcome = args.positional[1];
     if (outcome === undefined) {
-      throw new StepcastError('Не назван исход: burnex decide <run> <исход>');
+      throw new BurnexError('Не назван исход: burnex decide <run> <исход>');
     }
 
     const step = typeof args.flags.step === 'string' ? args.flags.step : undefined;
@@ -77,7 +77,7 @@ export async function runDecideCommand(
 
     return ExitCode.ok;
   } catch (error) {
-    if (!isStepcastError(error)) throw error;
+    if (!isBurnexError(error)) throw error;
     for (const line of formatDiagnostic({
       severity: 'error',
       message: error.message,

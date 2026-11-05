@@ -1,6 +1,6 @@
 import { resolveConfig, type Config } from '../config/resolve.js';
 import type { Registry } from '../../../kernel/registry.js';
-import { ExitCode, isStepcastError, StepcastError, type ExitCodeValue } from '../../../kernel/errors.js';
+import { ExitCode, isBurnexError, BurnexError, type ExitCodeValue } from '../../../kernel/errors.js';
 import { defaultPipelineName } from '../../../kernel/dirs.js';
 import { findProjectRoot, projectKey, runPaths, shortRunId } from '../run/journal/paths.js';
 import { readStatus } from '../run/journal/reader.js';
@@ -54,7 +54,7 @@ export async function runRunCommand(
     try {
       config = resolveConfigWithAgent({ cwd, agent: agentOverride, ...(registry === undefined ? {} : { registry }) });
     } catch (error) {
-      if (!isStepcastError(error)) throw error;
+      if (!isBurnexError(error)) throw error;
       for (const line of formatDiagnostic({
         severity: 'error',
         message: error.message,
@@ -89,7 +89,7 @@ export async function runRunCommand(
     if (shadow) assertShadowDeclarations(expanded.pipeline);
     trigger = resolveScheduledTrigger(args, expanded.pipeline);
   } catch (error) {
-    if (!isStepcastError(error)) throw error;
+    if (!isBurnexError(error)) throw error;
     for (const line of formatDiagnostic({
       severity: 'error',
       message: error.message,
@@ -177,7 +177,7 @@ export async function runRunCommand(
     }
     return result.exitCode;
   } catch (error) {
-    if (!isStepcastError(error)) throw error;
+    if (!isBurnexError(error)) throw error;
     for (const line of formatDiagnostic({
       severity: 'error',
       message: error.message,
@@ -258,15 +258,15 @@ function resolveScheduledTrigger(args: ParsedArgs, pipeline: ExpandedPipeline['p
   const catchup = args.flags.catchup === true;
 
   if (moment === undefined && entryFlag === undefined) {
-    if (catchup) throw new StepcastError('Флаг --catchup допустим только вместе с --scheduled и --schedule-entry');
+    if (catchup) throw new BurnexError('Флаг --catchup допустим только вместе с --scheduled и --schedule-entry');
     return undefined;
   }
-  if (moment === undefined) throw new StepcastError('Флаг --schedule-entry требует пары --scheduled <момент>');
-  if (entryFlag === undefined) throw new StepcastError('Флаг --scheduled требует пары --schedule-entry <номер>');
+  if (moment === undefined) throw new BurnexError('Флаг --schedule-entry требует пары --scheduled <момент>');
+  if (entryFlag === undefined) throw new BurnexError('Флаг --scheduled требует пары --schedule-entry <номер>');
 
   const momentText = String(moment);
   if (!isCalendarMoment(momentText)) {
-    throw new StepcastError(
+    throw new BurnexError(
       `Флаг --scheduled требует момент ISO 8601 с поясом (например 2026-11-01T03:00:00Z), получено ${momentText}`,
     );
   }
@@ -275,14 +275,14 @@ function resolveScheduledTrigger(args: ParsedArgs, pipeline: ExpandedPipeline['p
   const entry = /^\d+$/.test(entryText) ? Number(entryText) : -1;
   const schedule = pipeline.triggers?.schedule ?? [];
   if (entry < 0 || entry >= schedule.length) {
-    throw new StepcastError(
+    throw new BurnexError(
       `Запись расписания ${entryText} не существует: в triggers.schedule пайплайна записей ${schedule.length}`,
     );
   }
 
   const declared = schedule[entry]!;
   const checked = checkScheduleEntry(declared, entry);
-  if (!checked.ok) throw new StepcastError(checked.reason);
+  if (!checked.ok) throw new BurnexError(checked.reason);
 
   return {
     kind: 'schedule',

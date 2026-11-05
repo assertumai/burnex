@@ -3,7 +3,7 @@ import { accessSync, constants, existsSync, readFileSync, readlinkSync, statSync
 import { homedir } from 'node:os';
 import { basename, delimiter, isAbsolute, join, resolve } from 'node:path';
 
-import { StepcastError } from '../../kernel/errors.js';
+import { BurnexError } from '../../kernel/errors.js';
 import { heldModelDiscovery, type ModelDiscoveryResult } from '../pipeline/backend/models.js';
 import { resolveAdapter } from '../pipeline/backend/registry.js';
 import { enginePackageRoot } from '../pipeline/document/packagePaths.js';
@@ -13,7 +13,7 @@ import { EventSchema } from '../pipeline/run/journal/schema.js';
 import { listProjects, listRunsByKey, readUsageSoft } from '../pipeline/run/journal/reader.js';
 import { runPaths } from '../pipeline/run/journal/paths.js';
 import { resolveInstallMethod, type InferProbes } from '../install/infer.js';
-import { installManifestPath, stepcastHome, type InstallManifest } from '../install/manifest.js';
+import { installManifestPath, burnexHome, type InstallManifest } from '../install/manifest.js';
 import { CHECK_TIMEOUT_MS, checkUpdate, type UpdateCheck, type UpdateProbeHost, type UpdateStep } from '../install/plan.js';
 import { currentDaemonKernel } from './daemon/kernel.js';
 import { agentState, systemHost, type AgentState, type LaunchdHost } from './daemon/launchd.js';
@@ -120,7 +120,7 @@ export function systemSystemHost(): SystemHost {
     manifestPath,
     readManifest: () => (existsSync(manifestPath) ? readFileSync(manifestPath, 'utf8') : undefined),
     installProbes: {
-      releasesDir: join(stepcastHome(process.env, home), 'releases'),
+      releasesDir: join(burnexHome(process.env, home), 'releases'),
       isGitTree: (dir) => captureLocal({ cmd: 'git', args: ['rev-parse', '--is-inside-work-tree'], cwd: dir })?.trim() === 'true',
       readPackageName: (dir) => {
         try {
@@ -254,7 +254,7 @@ export function describeInstall(host: SystemHost): { manifest?: InstallManifest;
     const { manifest, source } = resolveInstallMethod(host.readManifest(), host.engineRoot, host.installProbes, host.manifestPath);
     return { manifest, source };
   } catch (error) {
-    if (!(error instanceof StepcastError)) throw error;
+    if (!(error instanceof BurnexError)) throw error;
     return { error: error.hint === undefined ? error.message : `${error.message}. ${error.hint}` };
   }
 }

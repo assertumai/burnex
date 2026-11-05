@@ -1,6 +1,6 @@
 import { createAnchorer, detectAnchorKind, manifestStore } from '../domain/anchor/index.js';
 import { resolveConfig } from '../config/resolve.js';
-import { ExitCode, StepcastError, type ExitCodeValue } from '../../../kernel/errors.js';
+import { ExitCode, BurnexError, type ExitCodeValue } from '../../../kernel/errors.js';
 import { withTempDir } from '../../../kernel/fs/tempDir.js';
 import { findProjectRoot } from '../run/journal/paths.js';
 import type { PipelineCommandEnv } from '../contract.js';
@@ -17,7 +17,7 @@ export function runDiffCommand(
 ): ExitCodeValue {
   const [first, second] = args.positional;
   if (first === undefined || second === undefined) {
-    throw new StepcastError('Нужно указать два прогона', { hint: 'burnex diff <run-a> <run-b>' });
+    throw new BurnexError('Нужно указать два прогона', { hint: 'burnex diff <run-a> <run-b>' });
   }
 
   const { config } = resolveConfig({ cwd });

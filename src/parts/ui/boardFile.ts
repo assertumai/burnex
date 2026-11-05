@@ -3,7 +3,7 @@ import { dirname, join } from 'node:path';
 import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
 import { z } from 'zod';
 
-import { StepcastError } from '../../kernel/errors.js';
+import { BurnexError } from '../../kernel/errors.js';
 import { describeSchemaFailure } from '../../kernel/schema-failure.js';
 import { DEFAULT_BOARD_COLUMNS, columnsProblem, type BoardColumnSpec } from './scrumView.js';
 
@@ -58,7 +58,7 @@ export function readBoardColumns(projectRoot: string): readonly BoardColumnSpec[
   try {
     raw = parseYaml(readFileSync(path, 'utf8'));
   } catch (error) {
-    throw new StepcastError(`Board columns file is not valid YAML: ${(error as Error).message}`, {
+    throw new BurnexError(`Board columns file is not valid YAML: ${(error as Error).message}`, {
       file: path,
       cause: error,
     });
@@ -67,7 +67,7 @@ export function readBoardColumns(projectRoot: string): readonly BoardColumnSpec[
   const parsed = BoardDocumentSchema.safeParse(raw);
   if (!parsed.success) {
     const failure = describeSchemaFailure(parsed.error);
-    throw new StepcastError(`Board columns file does not match the format: ${failure.message}`, {
+    throw new BurnexError(`Board columns file does not match the format: ${failure.message}`, {
       file: path,
       ...(failure.at === undefined ? {} : { at: failure.at }),
     });
@@ -78,14 +78,14 @@ export function readBoardColumns(projectRoot: string): readonly BoardColumnSpec[
   );
   const problem = columnsProblem(columns);
   if (problem !== undefined) {
-    throw new StepcastError(`Board columns file: ${problem}`, { file: path });
+    throw new BurnexError(`Board columns file: ${problem}`, { file: path });
   }
   return columns;
 }
 
 export function writeBoardColumns(projectRoot: string, columns: readonly BoardColumnSpec[]): void {
   const problem = columnsProblem(columns);
-  if (problem !== undefined) throw new StepcastError(`Column layout not written: ${problem}`);
+  if (problem !== undefined) throw new BurnexError(`Column layout not written: ${problem}`);
 
   const path = boardFilePath(projectRoot);
   mkdirSync(dirname(path), { recursive: true });

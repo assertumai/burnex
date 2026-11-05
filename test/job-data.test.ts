@@ -10,7 +10,7 @@ import type { CommandSpec } from '../src/kernel/cli/types.js';
 
 /** Описание аргументов команды `data` — из её собственного модуля (`cli-commands-as-rows`), не из общего литерала. */
 const DATA_COMMANDS: Record<string, CommandSpec> = { data: dataRow.command.spec };
-import { StepcastError } from '../src/kernel/errors.js';
+import { BurnexError } from '../src/kernel/errors.js';
 import { readJobData, writeJobDataUnchecked, jobDataPath } from '../src/parts/pipeline/run/journal/data.js';
 import { readStatus } from '../src/parts/pipeline/run/journal/reader.js';
 import { jobDir as runJobDir, projectKey } from '../src/parts/pipeline/run/journal/paths.js';
@@ -120,7 +120,7 @@ jobs:
     assert.throws(
       () => expandPipeline({ pipelinePath: project.path('burnex.yml'), config: project.config }),
       (error: unknown) =>
-        error instanceof StepcastError &&
+        error instanceof BurnexError &&
         /недопустимым именем/.test(error.message) &&
         error.at === 'jobs.slots.data',
     );
@@ -215,7 +215,7 @@ describe('job-display-data: команда burnex data', () => {
     assert.throws(
       () => data(undefined, ['set', 'title', 'что-нибудь']),
       (error: unknown) =>
-        error instanceof StepcastError && /только внутри шага прогона/.test(error.message),
+        error instanceof BurnexError && /только внутри шага прогона/.test(error.message),
     );
   });
 
@@ -227,7 +227,7 @@ describe('job-display-data: команда burnex data', () => {
     const dir = jobDir();
     assert.throws(
       () => data(dir, ['set', 'a.b', 'значение']),
-      (error: unknown) => error instanceof StepcastError && /Недопустимый ключ/.test(error.message),
+      (error: unknown) => error instanceof BurnexError && /Недопустимый ключ/.test(error.message),
     );
     assert.deepEqual(readJobData(dir), {});
   });
@@ -237,7 +237,7 @@ describe('job-display-data: команда burnex data', () => {
     assert.throws(
       () => data(dir, ['merge', '--json', '{"a":{"b":1}}']),
       (error: unknown) =>
-        error instanceof StepcastError && /непредставимо строкой/.test(error.message),
+        error instanceof BurnexError && /непредставимо строкой/.test(error.message),
     );
   });
 
@@ -247,7 +247,7 @@ describe('job-display-data: команда burnex data', () => {
     assert.throws(
       () => data(dir, ['set', 'slug', 'значение']),
       (error: unknown) =>
-        error instanceof StepcastError &&
+        error instanceof BurnexError &&
         /не объявляла ключ данных «slug»/.test(error.message) &&
         /title/.test(error.hint ?? ''),
     );
@@ -258,7 +258,7 @@ describe('job-display-data: команда burnex data', () => {
     const dir = jobDir(['title']);
     assert.throws(
       () => data(dir, ['merge', '--json', '{"title":"ок","slug":"нет"}']),
-      (error: unknown) => error instanceof StepcastError && /«slug»/.test(error.message),
+      (error: unknown) => error instanceof BurnexError && /«slug»/.test(error.message),
     );
     assert.deepEqual(readJobData(dir), {});
   });
@@ -269,7 +269,7 @@ describe('job-display-data: команда burnex data', () => {
     assert.throws(
       () => data(dir, ['set', 'title', 'значение']),
       (error: unknown) =>
-        error instanceof StepcastError &&
+        error instanceof BurnexError &&
         /Работа не объявляет ни одного ключа данных/.test(error.hint ?? ''),
     );
     assert.deepEqual(readJobData(dir), {});
@@ -281,7 +281,7 @@ describe('job-display-data: команда burnex data', () => {
     assert.throws(
       () => data(dir, ['set', 'title', 'значение']),
       (error: unknown) =>
-        error instanceof StepcastError && /Раскрытого определения работы нет/.test(error.message),
+        error instanceof BurnexError && /Раскрытого определения работы нет/.test(error.message),
     );
     assert.deepEqual(readJobData(dir), {});
   });
@@ -296,7 +296,7 @@ describe('job-display-data: команда burnex data', () => {
     assert.throws(
       () => data(missing, ['set', 'title', 'значение']),
       (error: unknown) =>
-        error instanceof StepcastError &&
+        error instanceof BurnexError &&
         error.hint !== undefined &&
         error.hint.includes(join(missing, 'resolved.json')) &&
         !/добавьте data/.test(error.hint),
@@ -304,7 +304,7 @@ describe('job-display-data: команда burnex data', () => {
     assert.throws(
       () => data(empty, ['set', 'title', 'значение']),
       (error: unknown) =>
-        error instanceof StepcastError && /добавьте data/.test(error.hint ?? ''),
+        error instanceof BurnexError && /добавьте data/.test(error.hint ?? ''),
     );
   });
 
@@ -450,7 +450,7 @@ jobs:
           },
         ),
       (error: unknown) =>
-        error instanceof StepcastError && /опубликовала данные slug/.test(error.hint ?? ''),
+        error instanceof BurnexError && /опубликовала данные slug/.test(error.hint ?? ''),
     );
   });
 
@@ -884,7 +884,7 @@ jobs:
 
     assert.throws(
       () => expandPipeline({ pipelinePath: project.path('burnex.yml'), config: project.config }),
-      (error: unknown) => error instanceof StepcastError && /display/.test(error.message),
+      (error: unknown) => error instanceof BurnexError && /display/.test(error.message),
     );
   });
 });

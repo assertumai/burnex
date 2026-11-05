@@ -35,7 +35,7 @@ import { inline } from '../domain/text.js';
 import { formatDuration } from '../../../kernel/units.js';
 import { assembleContext, type UpstreamOutput } from '../domain/context/assemble.js';
 import { resolveLate, type JobScopeEntry, type LateWithheld } from '../document/late.js';
-import { ExitCode, StepcastError, isStepcastError, type ExitCodeValue } from '../../../kernel/errors.js';
+import { ExitCode, BurnexError, isBurnexError, type ExitCodeValue } from '../../../kernel/errors.js';
 import { createSessionRegistry, executeAgentStep } from './exec/agentStep.js';
 import { buildStepEnv, injectedVariables, type EnvLayers } from './exec/env.js';
 import { validateEnvOverrides } from './envOverrides.js';
@@ -1227,7 +1227,7 @@ function requireStrictPermissionsSupport(context: RunContext): void {
       // переносимые pipeline могли выбирать его через конфигурацию.
       if (step.agent === 'codex') continue;
       if (adapterOf(step.agent, context).capabilities.strictPermissions) continue;
-      throw new StepcastError(
+      throw new BurnexError(
         `Бэкенд ${step.agent} не умеет применять enforce: strict, объявленный у шага ${job.id}/${step.id}`,
         {
           file: job.source,
@@ -1252,7 +1252,7 @@ function requireMcpSupport(context: RunContext): void {
       // не за что.
       if (step.kind !== 'agent' || step.mcp === undefined || Object.keys(step.mcp).length === 0) continue;
       if (adapterOf(step.agent, context).capabilities.mcp) continue;
-      throw new StepcastError(
+      throw new BurnexError(
         `Бэкенд ${step.agent} не объявляет возможность работать с MCP-серверами, объявленными у шага ${job.id}/${step.id}`,
         {
           file: job.source,
@@ -1274,7 +1274,7 @@ function requireStructuredOutputSupport(context: RunContext): void {
     for (const step of job.steps) {
       if (step.kind !== 'agent' || step.outputSchemaPath === undefined) continue;
       if (adapterOf(step.agent, context).capabilities.structuredOutput) continue;
-      throw new StepcastError(
+      throw new BurnexError(
         `Бэкенд ${step.agent} не поддерживает структурированный вывод, нужный для output_schema шага ${job.id}/${step.id}`,
         {
           file: job.source,
@@ -1293,7 +1293,7 @@ function requireStructuredOutputSupport(context: RunContext): void {
         if (predicate.kind !== 'judge') continue;
         const backend = predicate.agent ?? context.config.defaults.agent;
         if (adapterOf(backend, context).capabilities.structuredOutput) continue;
-        throw new StepcastError(
+        throw new BurnexError(
           `Бэкенд судьи ${backend} не поддерживает структурированный вывод, нужный для вердикта у шага ${job.id}/${step.id}`,
           {
             file: job.source,
@@ -1330,7 +1330,7 @@ function requireEffortSupport(context: RunContext): void {
         });
         continue;
       }
-      throw new StepcastError(
+      throw new BurnexError(
         `Бэкенд ${step.agent} не умеет применять effort, объявленный у шага ${job.id}/${step.id}`,
         {
           file: job.source,
@@ -1557,7 +1557,7 @@ async function runJob(
     // Подсказка входит в причину: именно в ней отказ секретной подстановки
     // называет секрет и говорит, что делать.
     const detail =
-      error instanceof StepcastError && error.hint !== undefined
+      error instanceof BurnexError && error.hint !== undefined
         ? `${error.message} (${error.hint})`
         : error instanceof Error
           ? error.message
@@ -4748,4 +4748,4 @@ function takeFailureNote(
   return [{ kind: 'text', text: note }, ...own];
 }
 
-export { isStepcastError };
+export { isBurnexError };

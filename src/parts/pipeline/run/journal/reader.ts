@@ -2,7 +2,7 @@ import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { open } from 'node:fs/promises';
 import { join } from 'node:path';
 
-import { StepcastError } from '../../../../kernel/errors.js';
+import { BurnexError } from '../../../../kernel/errors.js';
 import { isProcessAlive } from '../../../../kernel/process.js';
 import { describeSchemaFailure } from '../../../../kernel/schema-failure.js';
 import { JOURNAL_FORMAT, probeJournalFormat } from './format.js';
@@ -290,7 +290,7 @@ export function resolveRun(runsRoot: string, projectRoot: string, runId?: string
   if (runId === undefined || runId === 'latest') {
     const latest = runs[0];
     if (latest === undefined) {
-      throw new StepcastError('Прогонов ещё не было', {
+      throw new BurnexError('Прогонов ещё не было', {
         hint: 'Запустите пайплайн командой burnex run',
       });
     }
@@ -299,7 +299,7 @@ export function resolveRun(runsRoot: string, projectRoot: string, runId?: string
 
   const exact = runs.find((name) => name === runId || name.endsWith(`-${runId}`));
   if (exact === undefined) {
-    throw new StepcastError(`Прогон ${runId} не найден`, {
+    throw new BurnexError(`Прогон ${runId} не найден`, {
       hint:
         runs.length === 0
           ? 'Прогонов ещё не было'
@@ -343,7 +343,7 @@ export function readStatusSoft(paths: RunPaths): StatusSoftResult {
 export function readStatus(paths: RunPaths): RunStatus {
   const { status, problem } = readStatusSoft(paths);
   if (status !== undefined) return status;
-  throw new StepcastError(problemMessage(STATUS_SUBJECT, problem as JournalProblem), {
+  throw new BurnexError(problemMessage(STATUS_SUBJECT, problem as JournalProblem), {
     file: paths.status,
     ...(problem?.at === undefined ? {} : { at: problem.at }),
   });
@@ -353,7 +353,7 @@ export function readStatus(paths: RunPaths): RunStatus {
 export function readManifest(paths: RunPaths): RunManifest {
   const { manifest, problem } = readManifestSoft(paths);
   if (manifest !== undefined) return manifest;
-  throw new StepcastError(problemMessage(MANIFEST_SUBJECT, problem as JournalProblem), {
+  throw new BurnexError(problemMessage(MANIFEST_SUBJECT, problem as JournalProblem), {
     file: paths.manifest,
     ...(problem?.at === undefined ? {} : { at: problem.at }),
   });
@@ -362,7 +362,7 @@ export function readManifest(paths: RunPaths): RunManifest {
 export function readUsage(paths: RunPaths): UsageReport {
   const parsed = UsageReportSchema.safeParse(readJson(paths.usage));
   if (!parsed.success) {
-    throw new StepcastError('Сводка расхода повреждена', { file: paths.usage });
+    throw new BurnexError('Сводка расхода повреждена', { file: paths.usage });
   }
   return parsed.data;
 }
@@ -717,7 +717,7 @@ function readJson(path: string): unknown {
   try {
     return JSON.parse(readFileSync(path, 'utf8'));
   } catch (error) {
-    throw new StepcastError(`Не удалось прочитать ${path}: ${(error as Error).message}`, {
+    throw new BurnexError(`Не удалось прочитать ${path}: ${(error as Error).message}`, {
       file: path,
       cause: error,
     });

@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { describe, it } from 'node:test';
 
 import { isEditableEngine, locateEngine, pinEngine, type EngineLocation } from '../src/parts/pipeline/run/engine.js';
-import { StepcastError } from '../src/kernel/errors.js';
+import { BurnexError } from '../src/kernel/errors.js';
 import { expandPipeline } from '../src/parts/pipeline/document/expand.js';
 import { runPipeline, type RunResult } from '../src/parts/pipeline/run/runner.js';
 import { planResume, readSourceRun } from '../src/parts/pipeline/run/resumePlan.js';
@@ -168,7 +168,7 @@ describe('run-engine-snapshot: pinEngine — снятие снимка', () => {
     assert.throws(
       () => pinEngine({ engine: { root, entry: join(root, 'dist', 'bin.js') }, snapshotDir }),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.match(error.message, /package\.json/);
         return true;
       },
@@ -188,7 +188,7 @@ describe('run-engine-snapshot: pinEngine — снятие снимка', () => {
     assert.throws(
       () => pinEngine({ engine: { root, entry }, snapshotDir: join(tempDir('stepcast-run-'), 'engine') }),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.match(error.message, /Точка входа движка не попала в снимок/);
         return true;
       },
@@ -203,7 +203,7 @@ describe('run-engine-snapshot: pinEngine — снятие снимка', () => {
     assert.throws(
       () => pinEngine({ engine: { root, entry: join(tempDir('stepcast-elsewhere-'), 'bin.js') }, snapshotDir }),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.match(error.message, /лежит вне его пакета/);
         return true;
       },
@@ -317,7 +317,7 @@ describe('run-engine-snapshot: pinEngine — разрешимость завис
     assert.throws(
       () => pinEngine({ engine, snapshotDir: join(tempDir('stepcast-run-'), 'engine') }),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.match(error.message, /Зависимости движка не разрешаются из снимка/);
         assert.match(error.message, /zod/);
         return true;
@@ -331,7 +331,7 @@ describe('run-engine-snapshot: pinEngine — разрешимость завис
     assert.throws(
       () => pinEngine({ engine, snapshotDir: join(tempDir('stepcast-run-'), 'engine') }),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.match(error.message, /execa/);
         assert.doesNotMatch(error.message, /zod/);
         return true;
@@ -439,7 +439,7 @@ jobs:
       run(project, () => ({ root: engineRoot, entry: join(engineRoot, 'dist', 'src', 'bin.js') }), (event) =>
         events.push(event.kind),
       ),
-      StepcastError,
+      BurnexError,
     );
 
     assert.ok(events.includes('run.started'), 'run.started обязано быть записано до отказа снимка');

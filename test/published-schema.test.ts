@@ -24,7 +24,7 @@ import {
   DEFAULT_NATIVE_STEP_KINDS,
   isDefaultNativePredicates,
 } from '../src/parts/pipeline/document/schema.js';
-import { StepcastError } from '../src/kernel/errors.js';
+import { BurnexError } from '../src/kernel/errors.js';
 
 const ROOT = fileURLToPath(new URL('../../', import.meta.url));
 
@@ -169,7 +169,7 @@ describe('published-schema: печать встроенного дерева', (
   it('имя без ветви отказывает сборке, называя предикат', () => {
     assert.throws(
       () => buildPublishedSchemas([], [], DEFAULT_NATIVE_STEP_KINDS, ['exit_code', 'exit_cod']),
-      (error: unknown) => error instanceof StepcastError && /exit_cod /.test(error.message),
+      (error: unknown) => error instanceof BurnexError && /exit_cod /.test(error.message),
     );
   });
 

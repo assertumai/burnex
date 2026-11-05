@@ -6,7 +6,7 @@ import { dirname, join, resolve as resolvePath, sep } from 'node:path';
 import { describe, it } from 'node:test';
 
 import { resolveConfig, type ResolvedConfig } from '../src/parts/pipeline/config/resolve.js';
-import { StepcastError } from '../src/kernel/errors.js';
+import { BurnexError } from '../src/kernel/errors.js';
 import { loadPlugins } from '../src/parts/load.js';
 import { availableNames, predicateNames } from '../src/kernel/registry.js';
 import { resolveWithPlugins, type ResolvedWithPlugins } from '../src/parts/resolve.js';
@@ -135,7 +135,7 @@ describe('plugin-contributions: загрузка плагинов', () => {
     await assert.rejects(
       () => loadPlugins(config, { projectRoot: place.root }),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.match(error.message, /не загружается/);
         assert.match(error.message, /\.\/plugins\/нет\.mjs/);
         assert.equal(error.file, place.projectPath);
@@ -151,7 +151,7 @@ describe('plugin-contributions: загрузка плагинов', () => {
     await assert.rejects(
       () => loadPlugins(config, { projectRoot: place.root }),
       (error: unknown) =>
-        error instanceof StepcastError &&
+        error instanceof BurnexError &&
         /не найден/.test(error.message) &&
         (error.hint ?? '').includes(place.root),
     );
@@ -165,7 +165,7 @@ describe('plugin-contributions: загрузка плагинов', () => {
     await assert.rejects(
       () => loadPlugins(config, { projectRoot: place.root }),
       (error: unknown) =>
-        error instanceof StepcastError && /не экспортирует объект по умолчанию/.test(error.message),
+        error instanceof BurnexError && /не экспортирует объект по умолчанию/.test(error.message),
     );
   });
 
@@ -177,7 +177,7 @@ describe('plugin-contributions: загрузка плагинов', () => {
     await assert.rejects(
       () => loadPlugins(config, { projectRoot: place.root }),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.match(error.message, /не соответствует контракту/);
         assert.match(error.message, /name/);
         return true;
@@ -195,7 +195,7 @@ describe('plugin-contributions: загрузка плагинов', () => {
 
     await assert.rejects(
       () => loadPlugins(config, { projectRoot: place.root }),
-      (error: unknown) => error instanceof StepcastError && /predicates\.0\.evaluate/.test(error.message),
+      (error: unknown) => error instanceof BurnexError && /predicates\.0\.evaluate/.test(error.message),
     );
   });
 
@@ -214,7 +214,7 @@ describe('plugin-contributions: загрузка плагинов', () => {
     await assert.rejects(
       () => loadPlugins(config, { projectRoot: place.root }),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.match(error.message, /predicates\.0\.native/);
         assert.match(error.message, /внутренней форме встроенного предиката/);
         return true;
@@ -233,7 +233,7 @@ describe('plugin-contributions: загрузка плагинов', () => {
     await assert.rejects(
       () => loadPlugins(config, { projectRoot: place.root }),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.match(error.message, /без-исполнителя\.mjs/);
         assert.match(error.message, /steps\.0\.execute/);
         return true;
@@ -252,7 +252,7 @@ describe('plugin-contributions: загрузка плагинов', () => {
     await assert.rejects(
       () => loadPlugins(config, { projectRoot: place.root }),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.match(error.message, /steps\.0\.fields/);
         return true;
       },
@@ -274,7 +274,7 @@ describe('plugin-contributions: загрузка плагинов', () => {
     await assert.rejects(
       () => loadPlugins(config, { projectRoot: place.root }),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.match(error.message, /steps\.0\.native/);
         return true;
       },
@@ -308,7 +308,7 @@ describe('plugin-contributions: загрузка плагинов', () => {
       await assert.rejects(
         () => loadPlugins(config, { projectRoot: place.root }),
         (error: unknown) => {
-          assert.ok(error instanceof StepcastError, name);
+          assert.ok(error instanceof BurnexError, name);
           assert.match(error.message, expected, name);
           // Отказ называет и плагин — модулем, которым он объявлен.
           assert.match(error.message, new RegExp(`Плагин \\./plugins/${name}\\.mjs`), name);
@@ -334,7 +334,7 @@ describe('plugin-contributions: загрузка плагинов', () => {
     await assert.rejects(
       () => loadPlugins(config, { projectRoot: place.root }),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.match(error.message, /steps\.0\.waits/);
         assert.match(error.message, /waits: true/);
         return true;
@@ -348,7 +348,7 @@ describe('plugin-contributions: загрузка плагинов', () => {
     assert.throws(
       () => resolved(place, { project: 'plugins: []\n' }),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.equal(error.at, 'plugins');
         assert.equal(error.file, place.projectPath);
         return true;
@@ -532,7 +532,7 @@ describe('plugin-contributions: подпуть burnex/plugin', () => {
       pathToFileURL(fileURLToPath(new URL('../src/plugin/index.js', import.meta.url))).href
     )) as Record<string, unknown>;
 
-    for (const name of ['runProcess', 'StepcastError', 'parseDuration', 'definePlugin']) {
+    for (const name of ['runProcess', 'BurnexError', 'parseDuration', 'definePlugin']) {
       assert.equal(typeof plugin[name], 'function', `${name} доступен автору плагина`);
     }
     // Внутренние пути ядра подпуть не публикует: что экспортировано, то и обещано.
@@ -608,7 +608,7 @@ describe('plugin-contributions: подпуть burnex/pipeline', () => {
     assert.equal(typeof pipeline.pipelineContext, 'function');
     // Ядерные имена — не обещание доменного подпутя (design.md, Решение 9):
     // домен не публикует ядро.
-    for (const name of ['StepcastError', 'parseDuration', 'runProcess', 'definePlugin']) {
+    for (const name of ['BurnexError', 'parseDuration', 'runProcess', 'definePlugin']) {
       assert.equal(pipeline[name], undefined, `${name} ядерный — доменный подпуть его не отдаёт`);
     }
   });
@@ -660,7 +660,7 @@ export default {
     await assert.rejects(
       () => loadPlugins(config, { projectRoot: place.root }),
       (error: unknown) =>
-        error instanceof StepcastError &&
+        error instanceof BurnexError &&
         /backends\.codex\.models\.probe/.test(error.message) &&
         /должна быть функцией/.test(error.message),
     );
@@ -712,7 +712,7 @@ describe('codex-backend: загрузка плагина пакета', () => {
     const config = resolved(place, { global: 'backends:\n  codex:\n    command: codex\n' });
     assert.throws(
       () => resolveAdapter('codex', config.config, builtinRegistry()),
-      (error: unknown) => error instanceof StepcastError && /не предоставлен ни встроенно, ни плагином/.test(error.message),
+      (error: unknown) => error instanceof BurnexError && /не предоставлен ни встроенно, ни плагином/.test(error.message),
     );
   });
 });
@@ -776,7 +776,7 @@ describe('cursor-backend: загрузка плагина пакета', () => {
     const config = resolved(place, { global: 'backends:\n  cursor-agent:\n    command: cursor-agent\n' });
     assert.throws(
       () => resolveAdapter('cursor-agent', config.config, builtinRegistry()),
-      (error: unknown) => error instanceof StepcastError && /не предоставлен ни встроенно, ни плагином/.test(error.message),
+      (error: unknown) => error instanceof BurnexError && /не предоставлен ни встроенно, ни плагином/.test(error.message),
     );
   });
 
@@ -850,7 +850,7 @@ describe('copilot-backend: загрузка плагина пакета', () => 
     const config = resolved(place, { global: 'backends:\n  copilot:\n    command: copilot\n' });
     assert.throws(
       () => resolveAdapter('copilot', config.config, builtinRegistry()),
-      (error: unknown) => error instanceof StepcastError && /не предоставлен ни встроенно, ни плагином/.test(error.message),
+      (error: unknown) => error instanceof BurnexError && /не предоставлен ни встроенно, ни плагином/.test(error.message),
     );
   });
 

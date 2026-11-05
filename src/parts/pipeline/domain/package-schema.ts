@@ -3,7 +3,7 @@ import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { StepcastError } from '../../../kernel/errors.js';
+import { BurnexError } from '../../../kernel/errors.js';
 import { findPackageRoot } from '../../../kernel/packageRoot.js';
 import { PACKAGE_ADDRESS_PREFIX, packagedAddressName } from '../../../kernel/package-name.js';
 import { buildPackageIndex, findPackage, listPackagePipelineNames, packagePipelineFile } from '../../packages/index.js';
@@ -50,7 +50,7 @@ export function packagedSchemaPath(name: string, reference?: SchemaReference): s
   const at = reference === undefined ? {} : { file: reference.file, at: reference.declaredAt };
 
   if (!KEBAB_CASE.test(name)) {
-    throw new StepcastError(`Имя схемы burnex:${name} не является слагом в kebab-case`, {
+    throw new BurnexError(`Имя схемы burnex:${name} не является слагом в kebab-case`, {
       ...at,
       hint: 'Слаг — латиница в нижнем регистре, цифры и дефис; путь, точка и .. в имени недопустимы',
     });
@@ -61,7 +61,7 @@ export function packagedSchemaPath(name: string, reference?: SchemaReference): s
   if (existsSync(path)) return path;
 
   const known = packagedSchemaNames(schemaDir);
-  throw new StepcastError(`Схема burnex:${name} не поставляется пакетом burnex`, {
+  throw new BurnexError(`Схема burnex:${name} не поставляется пакетом burnex`, {
     ...at,
     hint:
       known.length > 0
@@ -129,7 +129,7 @@ export function packagedPipelinePath(name: string, reference?: SchemaReference):
   const at = reference === undefined ? {} : { file: reference.file, at: reference.declaredAt };
 
   if (!KEBAB_CASE.test(name)) {
-    throw new StepcastError(`Имя пайплайна поставки burnex:${name} не является слагом в kebab-case`, {
+    throw new BurnexError(`Имя пайплайна поставки burnex:${name} не является слагом в kebab-case`, {
       ...at,
       hint: 'Слаг — латиница в нижнем регистре, цифры и дефис; путь, точка и .. в имени недопустимы',
     });
@@ -140,7 +140,7 @@ export function packagedPipelinePath(name: string, reference?: SchemaReference):
   if (existsSync(path)) return path;
 
   const known = packagedPipelineNames();
-  throw new StepcastError(`Пайплайн burnex:${name} не поставляется пакетом burnex`, {
+  throw new BurnexError(`Пайплайн burnex:${name} не поставляется пакетом burnex`, {
     ...at,
     hint:
       known.length > 0
@@ -186,12 +186,12 @@ function resolvePackagePipeline(cwd: string, packageName: string, pipelineName: 
   const found = findPackage(index, packageName);
   if (found === undefined) {
     const known = index.packages.filter((entry) => entry.shadowedBy === undefined).map((entry) => entry.name);
-    throw new StepcastError(`Пакет ${packageName} не найден (цель ${address})`, {
+    throw new BurnexError(`Пакет ${packageName} не найден (цель ${address})`, {
       hint: known.length > 0 ? `Известные пакеты: ${known.join(', ')}` : 'Пакетов нет ни в проекте (.burnex/packages), ни в домашнем слое',
     });
   }
   if ('broken' in found) {
-    throw new StepcastError(`Пакет ${packageName} сломан: ${describePackageFailure(found.broken.failure!)}`, {
+    throw new BurnexError(`Пакет ${packageName} сломан: ${describePackageFailure(found.broken.failure!)}`, {
       file: found.broken.failure!.file,
       hint: 'Исправьте package.yml пакета — burnex package list покажет все пакеты и их состояние',
     });
@@ -200,7 +200,7 @@ function resolvePackagePipeline(cwd: string, packageName: string, pipelineName: 
   const file = packagePipelineFile(found.entry.dir, pipelineName);
   if (file === undefined) {
     const names = listPackagePipelineNames(found.entry.dir);
-    throw new StepcastError(`В пакете ${packageName} нет пайплайна ${pipelineName}`, {
+    throw new BurnexError(`В пакете ${packageName} нет пайплайна ${pipelineName}`, {
       hint: names.length > 0 ? `Пайплайны пакета: ${names.join(', ')}` : `В пакете нет каталога pipelines/ с пайплайнами (${found.entry.dir})`,
     });
   }
@@ -267,14 +267,14 @@ export function packagedWrapperPath(name: string, reference?: SchemaReference): 
   const at = reference === undefined ? {} : { file: reference.file, at: reference.declaredAt };
   const relative = PACKAGED_WRAPPERS[name];
   if (relative === undefined) {
-    throw new StepcastError(`Обёртка burnex:${name} не поставляется пакетом burnex`, {
+    throw new BurnexError(`Обёртка burnex:${name} не поставляется пакетом burnex`, {
       ...at,
       hint: `Пакет поставляет: ${packagedWrapperNames().join(', ')}`,
     });
   }
   const path = join(findPackageRoot(HERE), relative);
   if (!existsSync(path)) {
-    throw new StepcastError(`Обёртка burnex:${name} не найдена по пути ${path}`, {
+    throw new BurnexError(`Обёртка burnex:${name} не найдена по пути ${path}`, {
       ...at,
       hint: 'Установка пакета burnex неполна — соберите его (npm run build) либо переустановите',
     });

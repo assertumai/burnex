@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
-import { StepcastError } from '../src/kernel/errors.js';
+import { BurnexError } from '../src/kernel/errors.js';
 import { readEvents } from '../src/parts/pipeline/run/journal/reader.js';
 import { RunJournal } from '../src/parts/pipeline/run/journal/writer.js';
 import { createScope } from '../src/parts/pipeline/run/scope.js';
@@ -116,7 +116,7 @@ describe('область ресурсов', () => {
         scope.defer('поздняя', () => {
           throw new Error('не должна исполниться');
         }),
-      (error: unknown) => error instanceof StepcastError && /уже снятой области/.test((error as Error).message),
+      (error: unknown) => error instanceof BurnexError && /уже снятой области/.test((error as Error).message),
     );
   });
 

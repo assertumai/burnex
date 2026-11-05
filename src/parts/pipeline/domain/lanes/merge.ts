@@ -4,7 +4,7 @@ import { existsSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'n
 import { join, posix, relative } from 'node:path';
 
 import { checkCompositeComposition, type AnchorKind } from '../anchor/index.js';
-import { StepcastError, isStepcastError } from '../../../../kernel/errors.js';
+import { BurnexError, isBurnexError } from '../../../../kernel/errors.js';
 import {
   REASON_LIMIT,
   finishItem,
@@ -222,9 +222,9 @@ export function affectedRepos(
   if (kind !== 'composite') return ['.'];
 
   const fromCheck = checkCompositeComposition(from, nestedRepos);
-  if (!fromCheck.ok) throw new StepcastError(fromCheck.reason);
+  if (!fromCheck.ok) throw new BurnexError(fromCheck.reason);
   const toCheck = checkCompositeComposition(to, nestedRepos);
-  if (!toCheck.ok) throw new StepcastError(toCheck.reason);
+  if (!toCheck.ok) throw new BurnexError(toCheck.reason);
 
   const canonical = [...nestedRepos].sort();
   const repos: string[] = [];
@@ -290,7 +290,7 @@ function assertRepoChecksDeclared(
     const repos = affectedRepos(kind, nestedRepos, range);
     for (const repo of repos) {
       if (checkCommandFor(repo, check, repoChecks) === undefined) {
-        throw new StepcastError(
+        throw new BurnexError(
           `дорожка «${lane}» затрагивает репозиторий «${repo}», для которого не объявлена команда проверки`,
           { at: lane, hint: 'Объявите check в project.nested_repos для этого каталога' },
         );
@@ -338,7 +338,7 @@ function assertNoBrokenMerge(
     if (withCommit.length === 0) continue;
 
     const withoutCommit = dueRepos(lane).filter((repo) => !withCommit.includes(repo));
-    throw new StepcastError(
+    throw new BurnexError(
       `сведение дорожки «${lane}» оборвалось между коммитами: пункт «${item.slug}» закоммичен в ${withCommit.join(
         ', ',
       )}, но не в ${withoutCommit.length === 0 ? '(нет)' : withoutCommit.join(', ')}, а очередь не отмечает исход`,
@@ -362,7 +362,7 @@ function assertNoBrokenMerge(
 function resolveLanes(requested: MergeLanesOptions['lanes'], known: readonly string[]): readonly string[] {
   if (requested === 'all') {
     if (known.length === 0) {
-      throw new StepcastError('в прогоне нет ни одной работы с меткой lane', {
+      throw new BurnexError('в прогоне нет ни одной работы с меткой lane', {
         hint: '--lanes all требует хотя бы одной объявленной дорожки',
       });
     }
@@ -371,14 +371,14 @@ function resolveLanes(requested: MergeLanesOptions['lanes'], known: readonly str
 
   const unknown = requested.filter((lane) => !known.includes(lane));
   if (unknown.length > 0) {
-    throw new StepcastError(`дорожка «${unknown.join(', ')}» неизвестна прогону`, {
+    throw new BurnexError(`дорожка «${unknown.join(', ')}» неизвестна прогону`, {
       hint: known.length === 0 ? 'В прогоне нет ни одной работы с меткой lane' : `Известны: ${known.join(', ')}`,
     });
   }
 
   const missing = known.filter((lane) => !requested.includes(lane));
   if (missing.length > 0) {
-    throw new StepcastError(
+    throw new BurnexError(
       `перечень --lanes не называет дорожку «${missing.join(', ')}», известную прогону`,
       {
         hint: `Сведите её явно — --lanes all, — либо снимите метку lane с работ этой цепочки, если сводить её не надо`,
@@ -630,7 +630,7 @@ async function mergeLanesLegacy(options: MergeLanesOptions): Promise<readonly La
     try {
       applied = applyRun({ paths, cwd, lane, nestedRepos });
     } catch (error) {
-      if (!isStepcastError(error)) throw error;
+      if (!isBurnexError(error)) throw error;
       const workspace = workspaceOf(status, lane);
       const prefix = `наложение дорожки не сошлось с текущим деревом (рабочее дерево: ${workspace ?? 'неизвестно'}): `;
       const reason = reasonWithOutput(prefix, error.message);
@@ -686,7 +686,7 @@ async function mergeLanesLegacy(options: MergeLanesOptions): Promise<readonly La
       try {
         assertRunTreeClean();
       } catch (error) {
-        if (!isStepcastError(error)) throw error;
+        if (!isBurnexError(error)) throw error;
         unconfirmed = { prefix: `откат дорожки «${lane}» не подтверждён: `, output: error.message };
       }
 
@@ -722,7 +722,7 @@ async function mergeLanesLegacy(options: MergeLanesOptions): Promise<readonly La
       try {
         assertRunTreeClean();
       } catch (error) {
-        if (!isStepcastError(error)) throw error;
+        if (!isBurnexError(error)) throw error;
         stoppedAt = {
           lane,
           basis: 'unconfirmed_rollback',
@@ -855,7 +855,7 @@ function applyLaneToTree(
     beforeApply();
     applied = applyRun({ paths: context.paths, cwd: root, lane, nestedRepos });
   } catch (error) {
-    if (!isStepcastError(error)) throw error;
+    if (!isBurnexError(error)) throw error;
     const workspace = workspaceOf(context.status, lane);
     const reason = reasonWithOutput(
       `наложение дорожки не сошлось с ${treeLabel} (рабочее дерево: ${workspace ?? 'неизвестно'}): `,
@@ -904,7 +904,7 @@ function publicationRecoveryPath(runDir: string): string {
 function assertNoPendingPublication(runDir: string): void {
   const recovery = publicationRecoveryPath(runDir);
   if (!existsSync(recovery)) return;
-  throw new StepcastError('Предыдущая публикация прервалась и требует восстановления', {
+  throw new BurnexError('Предыдущая публикация прервалась и требует восстановления', {
     file: recovery,
     hint: 'Файл называет исходные и целевые коммиты каждого репозитория; завершите либо обратите только эти обновления перед повторным merge-lanes',
   });
@@ -948,13 +948,13 @@ async function mergeLanesIsolated(
   const queuePath = projectRelative(cwd, file);
   const declaredQueue = policy.liveFiles.find((live) => live.path === queuePath);
   if (declaredQueue === undefined) {
-    throw new StepcastError(`Файл очереди не объявлен живым файлом pipeline: ${queuePath}`, {
+    throw new BurnexError(`Файл очереди не объявлен живым файлом pipeline: ${queuePath}`, {
       file: paths.lock,
       at: 'workspace.live_files',
     });
   }
   if (!declaredQueue.commitOnSuccess) {
-    throw new StepcastError(`Файл очереди ${queuePath} должен коммититься при успехе`, {
+    throw new BurnexError(`Файл очереди ${queuePath} должен коммититься при успехе`, {
       file: paths.lock,
       at: 'workspace.live_files',
     });
@@ -970,7 +970,7 @@ async function mergeLanesIsolated(
   const integrationRoot = join(integrationDir, 'tree');
   const rootBase = sourceBases.get('.');
   if (rootBase === undefined) {
-    throw new StepcastError('Манифест прогона не содержит исходный коммит корня', {
+    throw new BurnexError('Манифест прогона не содержит исходный коммит корня', {
       file: paths.manifest,
       hint: 'Повторите прогон новой версией Burnex',
     });
@@ -982,7 +982,7 @@ async function mergeLanesIsolated(
     for (const repo of [...nestedRepos].sort()) {
       const base = sourceBases.get(repo);
       if (base === undefined) {
-        throw new StepcastError(`Манифест прогона не содержит исходный коммит репозитория ${repo}`, {
+        throw new BurnexError(`Манифест прогона не содержит исходный коммит репозитория ${repo}`, {
           file: paths.manifest,
           hint: 'Повторите прогон новой версией Burnex',
         });
@@ -1080,7 +1080,7 @@ async function mergeLanesIsolated(
         try {
           integrationTreeClean();
         } catch (error) {
-          if (!isStepcastError(error)) throw error;
+          if (!isBurnexError(error)) throw error;
           stoppedAt = { lane, reason: `откат интеграционного дерева не подтверждён: ${error.message}` };
           retainIntegration = true;
         }
@@ -1102,7 +1102,7 @@ async function mergeLanesIsolated(
         });
         restoreWritebackOnly();
       } catch (error) {
-        if (!isStepcastError(error)) throw error;
+        if (!isBurnexError(error)) throw error;
         const reason = reasonWithOutput(
           'результат сохранён в интеграционном дереве, но живой файл изменился параллельно: ',
           error.message,
@@ -1124,7 +1124,7 @@ async function mergeLanesIsolated(
         try {
           integrationTreeClean();
         } catch (error) {
-          if (!isStepcastError(error)) throw error;
+          if (!isBurnexError(error)) throw error;
           stoppedAt = { lane, reason: `откат интеграционного дерева не подтверждён: ${error.message}` };
           retainIntegration = true;
         }
@@ -1181,7 +1181,7 @@ async function mergeLanesIsolated(
         assertLiveFilesUnchanged(cwd, policy.liveFiles, liveSnapshot);
         for (const repo of committed) {
           const base = sourceBases.get(repo);
-          if (base === undefined) throw new StepcastError(`Не записан исходный коммит репозитория ${repo}`);
+          if (base === undefined) throw new BurnexError(`Не записан исходный коммит репозитория ${repo}`);
           const stateDir = join(integrationDir, 'publication', lane, repo === '.' ? 'root' : repo.replaceAll('/', '__'));
           prepared.set(
             repo,
@@ -1224,7 +1224,7 @@ async function mergeLanesIsolated(
         });
         rmSync(recoveryPath, { force: true });
       } catch (error) {
-        if (!isStepcastError(error)) throw error;
+        if (!isBurnexError(error)) throw error;
         let reason = reasonWithOutput(
           `результат сохранён в интеграционном дереве, но конфликтует с локальными изменениями: `,
           error.message,
@@ -1294,7 +1294,7 @@ export function assertOntoApplicable(options: MergeLanesOptions): void {
   const { onto, paths, cwd, file } = options;
   if (onto === undefined) {
     if (options.keepClaim === true) {
-      throw new StepcastError('ключ --keep-claim применим только вместе с --onto', {
+      throw new BurnexError('ключ --keep-claim применим только вместе с --onto', {
         hint: 'Без --onto повторное сведение дорожки не предусмотрено, и оставленный за прогоном пункт был бы потерян',
       });
     }
@@ -1302,20 +1302,20 @@ export function assertOntoApplicable(options: MergeLanesOptions): void {
   }
 
   if ((options.nestedRepos ?? []).length > 0) {
-    throw new StepcastError('--onto не поддерживает составной прогон: в конфигурации объявлены project.nested_repos', {
+    throw new BurnexError('--onto не поддерживает составной прогон: в конфигурации объявлены project.nested_repos', {
       hint: 'Публикация проверяет старое значение одного ref’а; по нескольким репозиториям так атомарно не сделать',
     });
   }
   const anchorKind = readManifest(paths).anchor_kind ?? 'git';
   if (anchorKind !== 'git') {
-    throw new StepcastError(`--onto требует прогона со снятием состояния git-якорем, а этот снят якорем «${anchorKind}»`);
+    throw new BurnexError(`--onto требует прогона со снятием состояния git-якорем, а этот снят якорем «${anchorKind}»`);
   }
   try {
     execFileSync('git', ['-C', cwd, 'rev-parse', '--verify', '--quiet', `refs/heads/${onto}^{commit}`], {
       stdio: 'ignore',
     });
   } catch {
-    throw new StepcastError(`ветки «${onto}» нет: --onto называет существующую локальную ветку (refs/heads/${onto})`, {
+    throw new BurnexError(`ветки «${onto}» нет: --onto называет существующую локальную ветку (refs/heads/${onto})`, {
       file: cwd,
     });
   }
@@ -1326,7 +1326,7 @@ export function assertOntoApplicable(options: MergeLanesOptions): void {
   if (copy !== undefined) {
     const own = gitText(cwd, ['rev-parse', '--show-toplevel']).trim();
     if (realpathSync(copy) !== realpathSync(own)) {
-      throw new StepcastError(`ветка «${onto}» выложена в другой рабочей копии: ${copy}`, {
+      throw new BurnexError(`ветка «${onto}» выложена в другой рабочей копии: ${copy}`, {
         file: own,
         hint: 'Живой файл очереди берётся из каталога запуска, поэтому --onto сводит только на ветку этой же копии либо на ветку, не выложенную ни в одну копию',
       });
@@ -1335,7 +1335,7 @@ export function assertOntoApplicable(options: MergeLanesOptions): void {
   const queuePath = projectRelative(cwd, file);
   const extra = (readLock(paths.lock).workspace?.liveFiles ?? []).filter((live) => live.path !== queuePath);
   if (extra.length > 0) {
-    throw new StepcastError(
+    throw new BurnexError(
       `--onto не поддерживает живые файлы помимо файла очереди: ${extra.map((live) => live.path).join(', ')}`,
       { file: paths.lock, at: 'workspace.live_files', hint: 'writeback и commit_on_success этих файлов в режиме --onto не определены' },
     );
@@ -1391,7 +1391,7 @@ async function mergeLanesOnto(options: MergeLanesOptions, branch: string): Promi
       assertNoPendingPublication(runDir);
       const recoveryPath = mergeRecoveryPath(cwd);
       if (existsSync(recoveryPath)) {
-        throw new StepcastError('Публикация --onto одного из прогонов прервалась и требует восстановления', {
+        throw new BurnexError('Публикация --onto одного из прогонов прервалась и требует восстановления', {
           file: recoveryPath,
           hint: 'Файл называет прогон, ref, ожидаемую вершину, коммит дорожки и копию; завершите выкладку копии либо верните ref и сотрите файл перед повторным merge-lanes --onto',
         });
@@ -1466,7 +1466,7 @@ async function mergeLanesOnto(options: MergeLanesOptions, branch: string): Promi
             try {
               assertCleanTree(integrationRoot);
             } catch (error) {
-              if (!isStepcastError(error)) throw error;
+              if (!isBurnexError(error)) throw error;
               stopAt(lane, `откат интеграционного дерева не подтверждён: ${error.message}`);
             }
           };

@@ -3,7 +3,7 @@ import { homedir } from 'node:os';
 import { dirname, isAbsolute, join, resolve as resolvePath } from 'node:path';
 import { parse as parseYaml } from 'yaml';
 
-import { StepcastError } from '../../../kernel/errors.js';
+import { BurnexError } from '../../../kernel/errors.js';
 import { packagedWrapperNames } from '../domain/package-schema.js';
 import { describeSchemaFailure } from '../document/load.js';
 import { BUILTIN_ROW_IDS } from '../../rows.js';
@@ -354,7 +354,7 @@ function readConfigFile(path: string): RawConfig | undefined {
   } catch (error) {
     const code = (error as NodeJS.ErrnoException).code;
     if (code === 'ENOENT') return undefined;
-    throw new StepcastError(`Не удалось прочитать конфигурацию: ${(error as Error).message}`, {
+    throw new BurnexError(`Не удалось прочитать конфигурацию: ${(error as Error).message}`, {
       file: path,
       cause: error,
     });
@@ -364,7 +364,7 @@ function readConfigFile(path: string): RawConfig | undefined {
   try {
     document = parseYaml(text);
   } catch (error) {
-    throw new StepcastError(`Конфигурация не разбирается как YAML: ${(error as Error).message}`, {
+    throw new BurnexError(`Конфигурация не разбирается как YAML: ${(error as Error).message}`, {
       file: path,
       cause: error,
     });
@@ -378,7 +378,7 @@ function readConfigFile(path: string): RawConfig | undefined {
     // «называй лишний ключ и спускайся в подходящий вариант объединения» не
     // зависит от того, какая схема отказала, а две его копии разошлись бы.
     const failure = describeSchemaFailure(parsed.error);
-    throw new StepcastError(`Конфигурация не соответствует схеме: ${failure.message}`, {
+    throw new BurnexError(`Конфигурация не соответствует схеме: ${failure.message}`, {
       file: path,
       ...(failure.at === undefined ? {} : { at: failure.at }),
       hint: 'Неизвестный ключ почти всегда опечатка — сверьтесь с docs/config.md',
@@ -403,7 +403,7 @@ function readPluginsPatchFile(path: string): PluginsPatchDocument | undefined {
   } catch (error) {
     const code = (error as NodeJS.ErrnoException).code;
     if (code === 'ENOENT') return undefined;
-    throw new StepcastError(`Не удалось прочитать патч плагинов: ${(error as Error).message}`, {
+    throw new BurnexError(`Не удалось прочитать патч плагинов: ${(error as Error).message}`, {
       file: path,
       cause: error,
     });
@@ -413,7 +413,7 @@ function readPluginsPatchFile(path: string): PluginsPatchDocument | undefined {
   try {
     document = parseYaml(text);
   } catch (error) {
-    throw new StepcastError(`Патч плагинов не разбирается как YAML: ${(error as Error).message}`, {
+    throw new BurnexError(`Патч плагинов не разбирается как YAML: ${(error as Error).message}`, {
       file: path,
       cause: error,
     });
@@ -422,7 +422,7 @@ function readPluginsPatchFile(path: string): PluginsPatchDocument | undefined {
   const parsed = PluginsPatchDocumentSchema.safeParse(document ?? {});
   if (!parsed.success) {
     const failure = describeSchemaFailure(parsed.error);
-    throw new StepcastError(`Патч плагинов не соответствует схеме: ${failure.message}`, {
+    throw new BurnexError(`Патч плагинов не соответствует схеме: ${failure.message}`, {
       file: path,
       ...(failure.at === undefined ? {} : { at: failure.at }),
       hint: 'Формат описан в docs/plugins.md: version: 1, kind: plugins-patch, список plugins',
@@ -437,7 +437,7 @@ function rejectGlobalOnlyKeys(config: RawConfig, path: string): void {
   for (const [keyPath] of flatten(config as Record<string, unknown>)) {
     for (const pattern of GLOBAL_ONLY_KEYS) {
       if (matchesKeyPattern(keyPath, pattern)) {
-        throw new StepcastError(`Ключ ${keyPath} допустим только в глобальной конфигурации`, {
+        throw new BurnexError(`Ключ ${keyPath} допустим только в глобальной конфигурации`, {
           file: path,
           at: keyPath,
           hint: 'Проектный конфиг попадает в репозиторий — перенесите значение в ~/.burnex/config.yml',
@@ -457,7 +457,7 @@ const PLUGIN_FORBIDDEN_KEY = 'backends.*.credentials.**';
 function rejectGlobalOnlyPluginKeys(values: Record<string, unknown>, plugin: string, file: string | undefined): void {
   for (const [keyPath] of flatten(values)) {
     if (matchesKeyPattern(keyPath, PLUGIN_FORBIDDEN_KEY)) {
-      throw new StepcastError(`Умолчания плагина ${plugin} объявляют ключ ${keyPath}, допустимый только в глобальной конфигурации`, {
+      throw new BurnexError(`Умолчания плагина ${plugin} объявляют ключ ${keyPath}, допустимый только в глобальной конфигурации`, {
         ...(file === undefined ? {} : { file }),
         at: keyPath,
         hint: 'Плагин описывает возможности адаптера; источник учётных данных задаёт ~/.burnex/config.yml',
@@ -471,7 +471,7 @@ function rejectProjectOnlyKeys(config: RawConfig, path: string): void {
   for (const [keyPath] of flatten(config as Record<string, unknown>)) {
     for (const pattern of PROJECT_ONLY_KEYS) {
       if (matchesKeyPattern(keyPath, pattern)) {
-        throw new StepcastError(`Ключ ${keyPath} допустим только в проектной конфигурации`, {
+        throw new BurnexError(`Ключ ${keyPath} допустим только в проектной конфигурации`, {
           file: path,
           at: keyPath,
           hint: 'Перенесите значение в .burnex/config.yml',
@@ -537,7 +537,7 @@ function canonicalizeNestedRepos(value: unknown): CanonicalNestedRepos | undefin
 
     const dir = rawDir.replace(/\/+$/, '');
     if (dirs.includes(dir)) {
-      throw new StepcastError(`Каталог ${dir} назван в project.nested_repos дважды`, {
+      throw new BurnexError(`Каталог ${dir} назван в project.nested_repos дважды`, {
         at: 'project.nested_repos',
       });
     }
@@ -593,7 +593,7 @@ function protectIndependentRows(tree: readonly TreeRow[], protectedIds: readonly
 function requireNumber(values: ReadonlyMap<string, unknown>, path: string): number {
   const value = values.get(path);
   if (typeof value !== 'number') {
-    throw new StepcastError(`Внутренняя ошибка: значение ${path} не разрешилось в число`);
+    throw new BurnexError(`Внутренняя ошибка: значение ${path} не разрешилось в число`);
   }
   return value;
 }
@@ -601,7 +601,7 @@ function requireNumber(values: ReadonlyMap<string, unknown>, path: string): numb
 function requireString(values: ReadonlyMap<string, unknown>, path: string): string {
   const value = values.get(path);
   if (typeof value !== 'string') {
-    throw new StepcastError(`Внутренняя ошибка: значение ${path} не разрешилось в строку`);
+    throw new BurnexError(`Внутренняя ошибка: значение ${path} не разрешилось в строку`);
   }
   return value;
 }
@@ -650,7 +650,7 @@ function buildCredentials(
   const out: Record<string, BackendCredential> = {};
   for (const [variable, entry] of Object.entries((raw ?? {}) as Record<string, Record<string, unknown>>)) {
     if (Object.hasOwn(env, variable)) {
-      throw new StepcastError(`Переменная ${variable} объявлена и в backends.${backend}.env, и в backends.${backend}.credentials`, {
+      throw new BurnexError(`Переменная ${variable} объявлена и в backends.${backend}.env, и в backends.${backend}.credentials`, {
         at: `backends.${backend}.credentials.${variable}`,
         hint: 'Оставьте одно объявление: значение из провайдера (credentials) или литерал (env)',
       });
@@ -693,7 +693,7 @@ function resolveDeclaredWrapper(name: string, value: string): string | undefined
   const wrapperName = packagedAddressName(value);
   if (wrapperName !== undefined) {
     if (!packagedWrapperNames().includes(wrapperName)) {
-      throw new StepcastError(`Обёртка burnex:${wrapperName} не поставляется пакетом burnex`, {
+      throw new BurnexError(`Обёртка burnex:${wrapperName} не поставляется пакетом burnex`, {
         at: `runners.${name}.wrapper`,
         hint: `Пакет поставляет: ${packagedWrapperNames().join(', ')}`,
       });
@@ -717,7 +717,7 @@ function buildRunners(
 
   for (const [name, raw] of Object.entries(rawRunners)) {
     if (raw.command === undefined || raw.command.length === 0) {
-      throw new StepcastError(`Раннер ${name} объявлен без команды`, {
+      throw new BurnexError(`Раннер ${name} объявлен без команды`, {
         at: `runners.${name}.command`,
         hint: 'Назовите command списком argv — например, command: [uv, run, --script]',
       });
@@ -774,7 +774,7 @@ function buildRunnersByExtension(
     const nearest = contenders.filter((item) => item.rank === nearestRank);
     if (nearest.length > 1) {
       const names = [...new Set(nearest.map((item) => item.runner))].sort();
-      throw new StepcastError(
+      throw new BurnexError(
         `Расширение ${extension} закреплено за несколькими раннерами одного слоя конфигурации: ${names.join(', ')}`,
         {
           at: 'runners',
@@ -932,13 +932,13 @@ export function resolveConfig(options: ResolveOptions): ResolvedConfig {
   // «источника нет»: репозиторий, назвавший провайдера, память включить
   // намеревался, и тихий отказ выглядел бы как пустая память.
   if (knowledgeProvider === 'cmd' && typeof knowledgeCommand !== 'string') {
-    throw new StepcastError('Источник знания cmd объявлен без команды', {
+    throw new BurnexError('Источник знания cmd объявлен без команды', {
       at: 'project.knowledge.command',
       hint: 'Назовите команду источника или объявите provider: fs',
     });
   }
   if (knowledgeProvider === 'fs' && typeof knowledgeDir !== 'string') {
-    throw new StepcastError('Встроенный источник знания объявлен без каталога', {
+    throw new BurnexError('Встроенный источник знания объявлен без каталога', {
       at: 'project.knowledge.dir',
       hint: 'Назовите каталог знания — например, dir: knowledge',
     });

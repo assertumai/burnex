@@ -109,7 +109,7 @@ const BIN_IMPORT_DEEP = "import '../../bin.js';\n";
 // отступление): контракт декларативного плагина, переехавший в
 // `parts/pipeline/contract.ts`. Оба файла — `load.ts` и `registry.ts` — лежат
 // прямо в `src/kernel/`, и специфик у обоих один.
-const CONTRACT_IMPORT = "import { StepcastPluginSchema } from '../parts/pipeline/contract.js';\n";
+const CONTRACT_IMPORT = "import { BurnexPluginSchema } from '../parts/pipeline/contract.js';\n";
 
 describe('eslint: запреты импорта действуют одновременно', () => {
   // test-sandbox, «Код движка мимо помощника»: запрет прямого создания

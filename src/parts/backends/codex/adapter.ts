@@ -1,4 +1,4 @@
-import { StepcastError } from '../../../plugin/index.js';
+import { BurnexError } from '../../../plugin/index.js';
 import { effectivePermissions } from '../../pipeline/surface.js';
 import type {
   AgentInvocation,
@@ -82,7 +82,7 @@ export function createCodexAdapter(config: BackendConfig): BackendAdapter {
         // их. Полная реализация отложена как codex-strict-permissions.
         if (permissions.mode !== undefined) {
           if (!(SANDBOX_MODES as readonly string[]).includes(permissions.mode)) {
-            throw new StepcastError(`Бэкенд codex не знает режима доступа ${permissions.mode}`, {
+            throw new BurnexError(`Бэкенд codex не знает режима доступа ${permissions.mode}`, {
               hint: `Допустимые значения permissions.mode для codex: ${SANDBOX_MODES.join(', ')}`,
             });
           }

@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
-import { installManifestPath, parseInstallManifest, stepcastHome } from '../src/parts/install/manifest.js';
-import { StepcastError } from '../src/kernel/errors.js';
+import { installManifestPath, parseInstallManifest, burnexHome } from '../src/parts/install/manifest.js';
+import { BurnexError } from '../src/kernel/errors.js';
 
 const MANAGED = {
   method: 'managed',
@@ -17,7 +17,7 @@ function reason(text: string): string {
   try {
     parseInstallManifest(text);
   } catch (error) {
-    assert.ok(error instanceof StepcastError);
+    assert.ok(error instanceof BurnexError);
     return error.message;
   }
   return assert.fail('разбор должен был отказать');
@@ -73,13 +73,13 @@ describe('install-manifest: путь паспорта', () => {
   });
 
   it('пустой BURNEX_HOME — умолчание и для домашнего каталога: каталог релизов не становится относительным', () => {
-    assert.equal(stepcastHome({ BURNEX_HOME: '' }, '/home/u'), '/home/u/.burnex');
-    assert.equal(stepcastHome({ BURNEX_HOME: '/opt/sc' }, '/home/u'), '/opt/sc');
+    assert.equal(burnexHome({ BURNEX_HOME: '' }, '/home/u'), '/home/u/.burnex');
+    assert.equal(burnexHome({ BURNEX_HOME: '/opt/sc' }, '/home/u'), '/opt/sc');
   });
 
   it('прежнее имя STEPCAST_HOME читается, пока нет нового; новое побеждает', () => {
-    assert.equal(stepcastHome({ STEPCAST_HOME: '/old' }, '/home/u'), '/old');
-    assert.equal(stepcastHome({ BURNEX_HOME: '/new', STEPCAST_HOME: '/old' }, '/home/u'), '/new');
+    assert.equal(burnexHome({ STEPCAST_HOME: '/old' }, '/home/u'), '/old');
+    assert.equal(burnexHome({ BURNEX_HOME: '/new', STEPCAST_HOME: '/old' }, '/home/u'), '/new');
     assert.equal(installManifestPath({ STEPCAST_HOME: '/old' }, '/home/u'), '/old/install.json');
   });
 });

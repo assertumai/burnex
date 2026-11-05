@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 
-import { StepcastError, ExitCode, type ExitCodeValue } from '../../../kernel/errors.js';
+import { BurnexError, ExitCode, type ExitCodeValue } from '../../../kernel/errors.js';
 import { commandRow } from '../../../kernel/cli/commandRow.js';
 import type { ParsedArgs } from '../../../kernel/cli/args.js';
 import { cabinetDir } from '../../../kernel/dirs.js';
@@ -134,7 +134,7 @@ export function runInitCommand(
 
   if (knowledge !== undefined) {
     if (knowledge !== 'fs') {
-      throw new StepcastError(`Неизвестный источник знания: ${String(knowledge)}`, {
+      throw new BurnexError(`Неизвестный источник знания: ${String(knowledge)}`, {
         hint: 'Разворачивается только встроенный источник: --knowledge fs. Свой объявляется вручную — provider: cmd',
       });
     }
@@ -144,7 +144,7 @@ export function runInitCommand(
   const pipelinePath = join(cwd, 'burnex.yml');
 
   if (existsSync(pipelinePath) && !force) {
-    throw new StepcastError(`${pipelinePath} уже существует`, {
+    throw new BurnexError(`${pipelinePath} уже существует`, {
       file: pipelinePath,
       hint: 'Передайте --force, чтобы перезаписать',
     });
@@ -177,7 +177,7 @@ function initKnowledge(cwd: string, force: boolean, write: (line: string) => voi
 
   const occupied = [dirPath, rulesPath].filter((path) => existsSync(path));
   if (occupied.length > 0 && !force) {
-    throw new StepcastError(`Практика памяти уже развёрнута: ${occupied.join(', ')}`, {
+    throw new BurnexError(`Практика памяти уже развёрнута: ${occupied.join(', ')}`, {
       file: occupied[0] as string,
       hint: 'Передайте --force, чтобы перезаписать',
     });
@@ -196,7 +196,7 @@ function initKnowledge(cwd: string, force: boolean, write: (line: string) => voi
   if (existsSync(configPath)) {
     const text = readFileSync(configPath, 'utf8');
     if (/^\s*knowledge:/m.test(text) && !force) {
-      throw new StepcastError(`Секция project.knowledge уже объявлена: ${configPath}`, {
+      throw new BurnexError(`Секция project.knowledge уже объявлена: ${configPath}`, {
         file: configPath,
         hint: 'Передайте --force, чтобы перезаписать каталог знания; конфигурацию правьте руками',
       });

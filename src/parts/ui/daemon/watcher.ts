@@ -19,7 +19,7 @@ import {
   projectDashboardsDirPath,
   type DashboardsBuildResult,
 } from '../dashboardsFile.js';
-import { StepcastError } from '../../../kernel/errors.js';
+import { BurnexError } from '../../../kernel/errors.js';
 import { buildPackageIndex, type PackageEntry } from '../../packages/index.js';
 import { summarizePackages, type PackageSummary } from '../../packages/summary.js';
 import type { JournalProblem } from '../../pipeline/run/journal/reader.js';
@@ -462,7 +462,7 @@ export function createWatcher(options: WatcherOptions): Watcher {
   try {
     routes = buildRouteTable(routeOptions);
   } catch (error) {
-    if (error instanceof StepcastError && error.file === builtinPath) throw error;
+    if (error instanceof BurnexError && error.file === builtinPath) throw error;
     routesError = reasonOf(error);
   }
   let dashboards: DashboardsBuildResult = buildDashboards(routeOptions);

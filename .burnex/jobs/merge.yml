@@ -41,7 +41,7 @@ steps:
       [
         sh,
         -c,
-        'if [ -n "${params.onto}" ]; then ONTO="--onto ${params.onto}"; else ONTO=""; fi; "$STEPCAST_BIN" merge-lanes "$STEPCAST_RUN_ID" --lanes all $ONTO --check "${project.check}"',
+        'if [ -n "${params.onto}" ]; then ONTO="--onto ${params.onto}"; else ONTO=""; fi; "$BURNEX_BIN" merge-lanes "$BURNEX_RUN_ID" --lanes all $ONTO --check "${project.check}"',
       ]
     # Объявленная команда гоняется внутри, на дорожку, дважды при двух
     # дорожках — запас кратно щедрее, чем у одиночного verify.

@@ -1,9 +1,9 @@
 # Burnex
 
 Движок пайплайнов для разработки с ИИ-агентами. Прежнее имя проекта —
-Stepcast: бинарник `stepcast` остаётся псевдонимом `burnex`, а переменные
-`STEPCAST_*`, подпути `stepcast/…`, адреса `stepcast:<имя>`, каталоги
-`.stepcast/` и `~/.stepcast` один выпуск читаются наравне с новыми
+Stepcast: переменные `STEPCAST_*`, подпути `stepcast/…`, адреса
+`stepcast:<имя>`, каталоги `.stepcast/` и `~/.stepcast` один выпуск читаются
+наравне с новыми
 ([docs/release.md](docs/release.md), «Переход со stepcast»).
 
 Агент — это тип шага, а не оркестратор. Топология работ, условия перехода,
@@ -68,12 +68,12 @@ node dist/src/bin.js run examples/minimal/burnex.yml --input topic=сессии
 Одной командой, без клонирования руками:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/assertumai/stepcast/main/scripts/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/assertumai/burnex/main/scripts/install.sh | bash
 ```
 
 Скрипт берёт последний тег `vX.Y.Z`, собирает его и раскладывает релиз в
 `~/.burnex/releases/<версия>`; ссылка `current` указывает на действующий
-релиз, а лаунчер `~/.local/bin/burnex` (и ссылка `stepcast` рядом) — на `current`. Нужны `git`, `npm` и
+релиз, а лаунчер `~/.local/bin/burnex` — на `current`. Нужны `git`, `npm` и
 Node ≥ 22. Если `~/.local/bin` не в `PATH`, скрипт печатает строку
 `export PATH=…` и профиль не правит.
 
@@ -131,7 +131,7 @@ ln -sfn ~/.burnex/releases/<прежняя> ~/.burnex/releases/current
 
 ### Разработка: `npm link`
 
-Пакет объявляет бинарники `burnex` и `stepcast` (псевдоним), но сборка сама по себе не выкладывает их
+Пакет объявляет бинарник `burnex`, но сборка сама по себе не выкладывает его
 на `PATH` — до установки команду зовут полным путём (`node dist/src/bin.js`), а
 `burnex up` отвечает `command not found`.
 
@@ -223,7 +223,7 @@ lint` предупреждает, если записанная схема ус�
 
 | | |
 |---|---|
-| Бинарник | `burnex`, псевдоним `stepcast` (на `PATH` после `npm link`, см. [Установку](#установка)) |
+| Бинарник | `burnex` (на `PATH` после `npm link`, см. [Установку](#установка)) |
 | Пайплайн | `burnex.yml` или `.burnex/pipelines/*.yml` |
 | Работы | `.burnex/jobs/*.yml` |
 | Переиспользуемые шаги | `.burnex/steps/<имя>/step.yml` |

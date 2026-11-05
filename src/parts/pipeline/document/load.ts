@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { parse as parseYaml } from 'yaml';
 import type { z } from 'zod';
 
-import { StepcastError } from '../../../kernel/errors.js';
+import { BurnexError } from '../../../kernel/errors.js';
 import { isEngineVariable } from '../../../kernel/env-names.js';
 import { describeSchemaFailure } from '../../../kernel/schema-failure.js';
 import { SECRET_ENV_PATTERN, SECRET_NAME_PATTERN, WIRING_KEYS } from './schema.js';
@@ -17,9 +17,9 @@ export function readYamlDocument(path: string): unknown {
   } catch (error) {
     const code = (error as NodeJS.ErrnoException).code;
     if (code === 'ENOENT') {
-      throw new StepcastError(`Файл не найден: ${path}`, { file: path, cause: error });
+      throw new BurnexError(`Файл не найден: ${path}`, { file: path, cause: error });
     }
-    throw new StepcastError(`Не удалось прочитать файл: ${(error as Error).message}`, {
+    throw new BurnexError(`Не удалось прочитать файл: ${(error as Error).message}`, {
       file: path,
       cause: error,
     });
@@ -28,7 +28,7 @@ export function readYamlDocument(path: string): unknown {
   try {
     return parseYaml(text);
   } catch (error) {
-    throw new StepcastError(`Документ не разбирается как YAML: ${(error as Error).message}`, {
+    throw new BurnexError(`Документ не разбирается как YAML: ${(error as Error).message}`, {
       file: path,
       cause: error,
     });
@@ -45,7 +45,7 @@ export function validateDocument<T extends z.ZodType>(
   if (parsed.success) return parsed.data;
 
   const failure = describeSchemaFailure(parsed.error);
-  throw new StepcastError(`Документ не соответствует схеме: ${failure.message}`, {
+  throw new BurnexError(`Документ не соответствует схеме: ${failure.message}`, {
     file,
     ...(failure.at === undefined ? {} : { at: failure.at }),
     hint: 'Сверьтесь с docs/pipeline-format.md',
@@ -62,7 +62,7 @@ export function rejectWiringKeys(document: unknown, file: string): void {
   if (typeof document !== 'object' || document === null) return;
   for (const key of WIRING_KEYS) {
     if (key in (document as Record<string, unknown>)) {
-      throw new StepcastError(`Ключ ${key} недопустим внутри файла работы`, {
+      throw new BurnexError(`Ключ ${key} недопустим внутри файла работы`, {
         file,
         at: key,
         hint: 'Зависимости и условия описываются на месте подключения работы в пайплайне',
@@ -84,7 +84,7 @@ export function rejectProposalsKeyInPipeline(document: unknown, file: string): v
   const project = (document as Record<string, unknown>).project;
   if (typeof project !== 'object' || project === null) return;
   if ('proposals' in (project as Record<string, unknown>)) {
-    throw new StepcastError('Режим доставки правки кабинета объявляет только конфигурация репозитория', {
+    throw new BurnexError('Режим доставки правки кабинета объявляет только конфигурация репозитория', {
       file,
       at: 'project.proposals',
       hint: 'Перенесите значение в .burnex/config.yml — документ пайплайна его не принимает',
@@ -134,7 +134,7 @@ function asRecord(value: unknown): Record<string, unknown> | undefined {
 
 function rejectJobSecretsKey(record: Record<string, unknown>, file: string, at: string): void {
   if (!('secrets' in record)) return;
-  throw new StepcastError('Ключ secrets недопустим на уровне работы: секреты объявляются только пайплайном', {
+  throw new BurnexError('Ключ secrets недопустим на уровне работы: секреты объявляются только пайплайном', {
     file,
     at,
     hint: 'Объявите секрет верхним ключом secrets: в документе пайплайна, а в шаге назовите его списком secrets: [имя]',
@@ -147,7 +147,7 @@ function checkStepsSecrets(rawSteps: unknown, file: string, at: string): void {
     const step = asRecord(raw);
     if (step === undefined) continue;
     if ('prompt' in step && 'secrets' in step) {
-      throw new StepcastError(AGENT_SECRET_REFUSAL, {
+      throw new BurnexError(AGENT_SECRET_REFUSAL, {
         file,
         at: `${at}.${index}.secrets`,
         hint: 'Секрет нужен командному шагу: вынесите обращение к сервису в шаг run или script',
@@ -162,7 +162,7 @@ function checkJudgeSecrets(rawList: unknown, file: string, at: string): void {
   for (const [index, raw] of rawList.entries()) {
     const predicate = asRecord(raw);
     if (predicate === undefined || !('judge' in predicate) || !('secrets' in predicate)) continue;
-    throw new StepcastError(AGENT_SECRET_REFUSAL, { file, at: `${at}.${index}.secrets` });
+    throw new BurnexError(AGENT_SECRET_REFUSAL, { file, at: `${at}.${index}.secrets` });
   }
 }
 
@@ -170,12 +170,12 @@ function checkSecretDeclarations(rawSecrets: unknown, file: string): void {
   if (rawSecrets === undefined) return;
   const secrets = asRecord(rawSecrets);
   if (secrets === undefined) {
-    throw new StepcastError('Ключ secrets — словарь секретов по имени', { file, at: 'secrets' });
+    throw new BurnexError('Ключ secrets — словарь секретов по имени', { file, at: 'secrets' });
   }
   for (const [name, entry] of Object.entries(secrets)) {
     const at = `secrets.${name}`;
     if (!SECRET_NAME_PATTERN.test(name)) {
-      throw new StepcastError(`Имя секрета ${name} не соответствует шаблону ${SECRET_NAME_PATTERN.source}`, {
+      throw new BurnexError(`Имя секрета ${name} не соответствует шаблону ${SECRET_NAME_PATTERN.source}`, {
         file,
         at,
         hint: 'Имя секрета — строчные латинские буквы, цифры, дефис и подчёркивание, начиная с буквы',
@@ -183,7 +183,7 @@ function checkSecretDeclarations(rawSecrets: unknown, file: string): void {
     }
     const declaration = asRecord(entry);
     if (declaration === undefined || typeof declaration.provider !== 'string' || declaration.provider === '') {
-      throw new StepcastError(`Секрет ${name} не называет провайдера`, {
+      throw new BurnexError(`Секрет ${name} не называет провайдера`, {
         file,
         at: `${at}.provider`,
         hint: 'Например, provider: env-file; доступные провайдеры показывает burnex plugins',
@@ -192,10 +192,10 @@ function checkSecretDeclarations(rawSecrets: unknown, file: string): void {
     const env = declaration.env;
     if (env === undefined) continue;
     if (typeof env !== 'string' || !SECRET_ENV_PATTERN.test(env)) {
-      throw new StepcastError(`env секрета ${name} — не имя переменной окружения`, { file, at: `${at}.env` });
+      throw new BurnexError(`env секрета ${name} — не имя переменной окружения`, { file, at: `${at}.env` });
     }
     if (isEngineVariable(env)) {
-      throw new StepcastError(`env секрета ${name} начинается с BURNEX_ или STEPCAST_: префикс принадлежит движку`, {
+      throw new BurnexError(`env секрета ${name} начинается с BURNEX_ или STEPCAST_: префикс принадлежит движку`, {
         file,
         at: `${at}.env`,
         hint: 'Выберите другое имя переменной: движок не даёт переопределять свои BURNEX_* и их прежние имена STEPCAST_*',

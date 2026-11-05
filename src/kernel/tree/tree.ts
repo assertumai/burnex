@@ -1,4 +1,4 @@
-import { StepcastError } from '../errors.js';
+import { BurnexError } from '../errors.js';
 import { canonicalAddress, canonicalSpecifier, isPackagedAddress, PACKAGE_ADDRESS_PREFIX } from '../package-name.js';
 import type { PluginPatchRow } from './patch.js';
 
@@ -177,7 +177,7 @@ export function patchOperations(rows: readonly PluginPatchRow[], file: string): 
   const operations: TreeOperation[] = [];
   for (const row of rows) {
     if (seen.has(row.id)) {
-      throw new StepcastError(`Строка ${row.id} объявлена в патче дважды`, {
+      throw new BurnexError(`Строка ${row.id} объявлена в патче дважды`, {
         file,
         at: row.id,
         hint: 'Каждый id допустим в файле патча один раз — уберите повтор',
@@ -263,7 +263,7 @@ function applyOperation(tree: readonly TreeRow[], operation: TreeOperation): Tre
     // которую заменяют, — иначе результат зависел бы от того, что написано в
     // чужом файле.
     if (operation.before !== undefined || operation.after !== undefined) {
-      throw new StepcastError(`Строка ${operation.id} уже в дереве: замена сохраняет её место`, {
+      throw new BurnexError(`Строка ${operation.id} уже в дереве: замена сохраняет её место`, {
         file: operation.file,
         at: operation.id,
         hint: 'Уберите before/after у замены — переставить строку патч не может',
@@ -275,7 +275,7 @@ function applyOperation(tree: readonly TreeRow[], operation: TreeOperation): Tre
   }
 
   if (operation.before !== undefined && operation.after !== undefined) {
-    throw new StepcastError(`Строка ${operation.id} называет и before, и after`, {
+    throw new BurnexError(`Строка ${operation.id} называет и before, и after`, {
       file: operation.file,
       at: operation.id,
       hint: 'Назовите только одно поле позиции — before либо after',
@@ -286,7 +286,7 @@ function applyOperation(tree: readonly TreeRow[], operation: TreeOperation): Tre
   if (anchorId !== undefined) {
     const anchorIndex = tree.findIndex((existing) => existing.id === anchorId);
     if (anchorIndex === -1) {
-      throw new StepcastError(`Строка ${anchorId} не найдена в дереве`, {
+      throw new BurnexError(`Строка ${anchorId} не найдена в дереве`, {
         file: operation.file,
         at: operation.id,
         hint: `Строка ${operation.id} ссылается на ${anchorId} через ${operation.after !== undefined ? 'after' : 'before'} — такой строки в дереве нет`,

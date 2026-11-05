@@ -1,5 +1,5 @@
 # Работа: проставить failed каждому взятому пункту дорожки, чей исход ещё не
-# проставлен, и закоммитить свою правку очереди адресно (stepcast backlog
+# проставлен, и закоммитить свою правку очереди адресно (burnex backlog
 # settle) — отдельным коммитом от вклада merge, в том репозитории, где
 # очередь лежит. Коммит сведённой дорожки остаётся заботой merge: settle
 # коммитит только отметку исхода дорожек, которую сам проставил.
@@ -17,6 +17,6 @@ description: Проставить failed пунктам дорожек, чей �
 
 steps:
   - id: settle
-    run: [sh, -c, '"$STEPCAST_BIN" backlog settle --run-dir "$STEPCAST_RUN_DIR"']
+    run: [sh, -c, '"$BURNEX_BIN" backlog settle --run-dir "$BURNEX_RUN_DIR"']
     timeout: 3m
     expect: [{ exit_code: 0 }]

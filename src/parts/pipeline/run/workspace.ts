@@ -6,7 +6,7 @@ import { createAnchorer, detectAnchorKind } from '../domain/anchor/index.js';
 import type { Anchor, AnchorKind, TreeAnchorer } from '../domain/anchor/index.js';
 import { loadIgnoreRules } from '../domain/anchor/ignore.js';
 import { isGitWorktree } from '../domain/anchor/git.js';
-import { StepcastError } from '../../../kernel/errors.js';
+import { BurnexError } from '../../../kernel/errors.js';
 import { buildGraph } from '../domain/graph.js';
 import type { Job, Pipeline, Workspace } from '../document/model.js';
 import type { BookkeepingScope } from './bookkeeping.js';
@@ -368,7 +368,7 @@ async function seedWorkspace(
   anchor: Anchor,
 ): Promise<void> {
   if (options.anchorKind === undefined || options.anchorsDir === undefined) {
-    throw new StepcastError('Внутренняя ошибка: для засева развилки не передан способ фиксации якорей');
+    throw new BurnexError('Внутренняя ошибка: для засева развилки не передан способ фиксации якорей');
   }
   const anchorer = (options.anchorerFor ?? createAnchorer)({
     dir,
@@ -419,7 +419,7 @@ export function checkWorkspaceAvailability(options: {
     (diagnostic) => diagnostic.severity === 'error',
   );
   if (inheritanceProblem !== undefined) {
-    throw new StepcastError(inheritanceProblem.message, {
+    throw new BurnexError(inheritanceProblem.message, {
       file: inheritanceProblem.file ?? pipeline.file,
       ...(inheritanceProblem.at === undefined ? {} : { at: inheritanceProblem.at }),
       ...(inheritanceProblem.hint === undefined ? {} : { hint: inheritanceProblem.hint }),
@@ -427,7 +427,7 @@ export function checkWorkspaceAvailability(options: {
   }
 
   if (workspaces.some((workspace) => workspace.mode === 'worktree') && !isGitWorktree(cwd)) {
-    throw new StepcastError('Режим worktree требует репозитория git', {
+    throw new BurnexError('Режим worktree требует репозитория git', {
       file: pipeline.file,
       at: 'workspace.mode',
       hint: 'Вне репозитория доступен режим copy — он работает с незакоммиченными изменениями и без git',
@@ -442,7 +442,7 @@ export function checkWorkspaceAvailability(options: {
   if (detectAnchorKind(cwd) === 'manifest') {
     const seeding = pipeline.jobs.find((job) => potentialSeedSource(graph, job) !== undefined);
     if (seeding !== undefined) {
-      throw new StepcastError(
+      throw new BurnexError(
         `Работа ${seeding.id} наследует дерево работы, каталог которой не продолжает, а вне репозитория git это невозможно`,
         {
           file: seeding.source,
@@ -456,7 +456,7 @@ export function checkWorkspaceAvailability(options: {
   for (const workspace of workspaces) {
     if (workspace.path === undefined) continue;
     if (workspacePathNeedsCopy(workspace)) {
-      throw new StepcastError('Путь размещения рабочей копии допустим только при режиме copy', {
+      throw new BurnexError('Путь размещения рабочей копии допустим только при режиме copy', {
         file: pipeline.file,
         at: 'workspace.path',
       });
@@ -465,7 +465,7 @@ export function checkWorkspaceAvailability(options: {
       mkdirSync(workspace.path, { recursive: true, mode: 0o700 });
       statSync(workspace.path);
     } catch (error) {
-      throw new StepcastError(`Место размещения рабочих копий недоступно: ${workspace.path}`, {
+      throw new BurnexError(`Место размещения рабочих копий недоступно: ${workspace.path}`, {
         file: pipeline.file,
         at: 'workspace.path',
         cause: error,
@@ -483,11 +483,11 @@ export function checkWorkspaceAvailability(options: {
   const copyJob = pipeline.jobs.find((job) => job.workspace.mode === 'copy');
   if (copyJob !== undefined) {
     const { message, hint } = describeCopyRejection(copyJob.id);
-    throw new StepcastError(message, { file: copyJob.source, at: `jobs.${copyJob.id}.workspace.mode`, hint });
+    throw new BurnexError(message, { file: copyJob.source, at: `jobs.${copyJob.id}.workspace.mode`, hint });
   }
 
   if (!isGitWorktree(cwd)) {
-    throw new StepcastError(
+    throw new BurnexError(
       'Корень рабочего дерева не является репозиторием git, а вложенные репозитории объявлены составом (project.nested_repos)',
       { file: pipeline.file, at: 'project.nested_repos' },
     );
@@ -503,7 +503,7 @@ export function checkWorkspaceAvailability(options: {
     try {
       isDirectory = statSync(full).isDirectory();
     } catch (error) {
-      throw new StepcastError(`Объявленный вложенный репозиторий не существует: ${relDir}`, {
+      throw new BurnexError(`Объявленный вложенный репозиторий не существует: ${relDir}`, {
         file: pipeline.file,
         at: 'project.nested_repos',
         hint: 'Проверьте путь в project.nested_repos — опечатку или несклонированный подмодуль',
@@ -511,7 +511,7 @@ export function checkWorkspaceAvailability(options: {
       });
     }
     if (!isDirectory || !isGitWorktree(full)) {
-      throw new StepcastError(`Объявленный вложенный репозиторий не является рабочим деревом git: ${relDir}`, {
+      throw new BurnexError(`Объявленный вложенный репозиторий не является рабочим деревом git: ${relDir}`, {
         file: pipeline.file,
         at: 'project.nested_repos',
         hint: 'project.nested_repos называет каталог, который сам является отдельным git-репозиторием',
@@ -525,7 +525,7 @@ export function checkWorkspaceAvailability(options: {
     // Отказ здесь узкий: часть, которую корень игнорирует, в его `add -A` не
     // попадает вовсе и своим репозиторием снимается без коммита прекрасно.
     if (!hasCommit(full) && !ignoredByRoot(cwd, relDir)) {
-      throw new StepcastError(
+      throw new BurnexError(
         `Объявленный вложенный репозиторий ${relDir} не имеет ни одного коммита, а корневой репозиторий его не игнорирует`,
         {
           file: pipeline.file,
@@ -537,7 +537,7 @@ export function checkWorkspaceAvailability(options: {
 
     const toplevel = git(full, ['rev-parse', '--show-toplevel']).trim();
     if (realpathSync(toplevel) !== realpathSync(full)) {
-      throw new StepcastError(
+      throw new BurnexError(
         `Объявленный вложенный репозиторий ${relDir} принадлежит репозиторию ${toplevel}, а не собственному`,
         {
           file: pipeline.file,
@@ -555,12 +555,12 @@ export function checkWorkspaceAvailability(options: {
     // собственным `worktree add` (design.md, решение 11).
     if (!hasCommit(full)) {
       const { message, hint } = describeNoCommitForWorktree(relDir);
-      throw new StepcastError(message, { file: pipeline.file, at: 'project.nested_repos', hint });
+      throw new BurnexError(message, { file: pipeline.file, at: 'project.nested_repos', hint });
     }
 
     if (rootTracksPart(cwd, relDir)) {
       const { message, hint } = describeTrackedByRoot(relDir);
-      throw new StepcastError(message, { file: pipeline.file, at: 'project.nested_repos', hint });
+      throw new BurnexError(message, { file: pipeline.file, at: 'project.nested_repos', hint });
     }
   }
 }

@@ -110,7 +110,7 @@ export const CommandContributionSchema = z
   .loose();
 
 /** Ядерная форма плагина: имя, версия и вклад команд — то, чем автор пишет плагин, не зная о пайплайне. */
-export interface StepcastPlugin {
+export interface BurnexPlugin {
   /** Имя плагина: слаг в kebab-case, уникальный среди загруженных. */
   readonly name: string;
   readonly version?: string;

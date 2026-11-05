@@ -5,7 +5,7 @@ import { hostname } from 'node:os';
 import { join } from 'node:path';
 import { describe, it } from 'node:test';
 
-import { ExitCode, StepcastError } from '../src/kernel/errors.js';
+import { ExitCode, BurnexError } from '../src/kernel/errors.js';
 import {
   backlogLockPath,
   BacklogLockTimeoutError,
@@ -149,7 +149,7 @@ describe('withBacklogLock: ожидание и предел', () => {
     assert.equal(existsSync(path), false);
   });
 
-  it('по пределу — StepcastError с кодом 2, владелец в сообщении, очередь не тронута', async () => {
+  it('по пределу — BurnexError с кодом 2, владелец в сообщении, очередь не тронута', async () => {
     const dir = tempDir('backlog-lock-');
     const file = join(dir, 'backlog.md');
     writeFileSync(file, '# Очередь\n');
@@ -164,7 +164,7 @@ describe('withBacklogLock: ожидание и предел', () => {
       }, FAST),
       (error: unknown) => {
         assert.ok(error instanceof BacklogLockTimeoutError);
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.equal(error.exitCode, ExitCode.configError);
         for (const part of [path, 'backlog pick', String(process.pid), hostname(), acquiredAt]) {
           assert.ok(error.message.includes(part), `в сообщении нет «${part}»: ${error.message}`);
@@ -204,7 +204,7 @@ describe('withBacklogLock: брошенный lock', () => {
 
     assert.throws(
       () => withBacklogLock(file, 'test', () => undefined, FAST),
-      (error: unknown) => error instanceof StepcastError && error.exitCode === ExitCode.configError,
+      (error: unknown) => error instanceof BurnexError && error.exitCode === ExitCode.configError,
     );
 
     assert.deepEqual(ownerOf(path), foreign);
@@ -216,11 +216,11 @@ describe('withBacklogLock: брошенный lock', () => {
     const path = backlogLockPath(file);
     writeFileSync(path, '{не json');
 
-    assert.throws(() => withBacklogLock(file, 'test', () => undefined, FAST), StepcastError);
+    assert.throws(() => withBacklogLock(file, 'test', () => undefined, FAST), BurnexError);
     assert.equal(readFileSync(path, 'utf8'), '{не json');
 
     writeFileSync(path, '');
-    assert.throws(() => withBacklogLock(file, 'test', () => undefined, FAST), StepcastError);
+    assert.throws(() => withBacklogLock(file, 'test', () => undefined, FAST), BurnexError);
     assert.equal(existsSync(path), true);
   });
 
@@ -334,7 +334,7 @@ describe('withBacklogLockAsync', () => {
       ticked = true;
     }, 20);
 
-    await assert.rejects(withBacklogLockAsync(file, 'waiter', () => undefined, FAST), StepcastError);
+    await assert.rejects(withBacklogLockAsync(file, 'waiter', () => undefined, FAST), BurnexError);
 
     assert.equal(ticked, true);
   });

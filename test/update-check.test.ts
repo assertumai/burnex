@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
 import type { ParsedArgs } from '../src/kernel/cli/args.js';
-import { StepcastError } from '../src/kernel/errors.js';
+import { BurnexError } from '../src/kernel/errors.js';
 import { runUpdateCommand, type UpdateHost } from '../src/parts/install/commands/update.js';
 import { parseInstallManifest } from '../src/parts/install/manifest.js';
 import { CHECK_TIMEOUT_MS, checkUpdate, type UpdateStep } from '../src/parts/install/plan.js';
@@ -259,7 +259,7 @@ describe('update-check: решение совпадает с командой up
     const { host, executed } = commandHost(JSON.stringify(checkout), answers);
     await assert.rejects(
       runUpdateCommand(args(), () => undefined, host),
-      (error: unknown) => error instanceof StepcastError && error.message === (check as { reason: string }).reason,
+      (error: unknown) => error instanceof BurnexError && error.message === (check as { reason: string }).reason,
     );
     assert.deepEqual(executed, []);
   });
@@ -275,7 +275,7 @@ describe('update-check: решение совпадает с командой up
     const { host } = commandHost(JSON.stringify(managed), { tags: 'fail' });
     await assert.rejects(
       runUpdateCommand(args(), () => undefined, host),
-      (error: unknown) => error instanceof StepcastError && /список тегов/.test(error.message),
+      (error: unknown) => error instanceof BurnexError && /список тегов/.test(error.message),
     );
   });
 });

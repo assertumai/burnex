@@ -2,7 +2,7 @@ import { readFileSync, realpathSync } from 'node:fs';
 import { join, sep } from 'node:path';
 import { z } from 'zod';
 
-import { StepcastError } from '../errors.js';
+import { BurnexError } from '../errors.js';
 import { describeSchemaFailure } from '../schema-failure.js';
 
 /**
@@ -70,7 +70,7 @@ function resolvePluginHalf(
     realDir = realpathSync(pluginDir);
     realTarget = realpathSync(target);
   } catch (error) {
-    throw new StepcastError(`Половина ${field} манифеста плагина не читается: ${relative}`, {
+    throw new BurnexError(`Половина ${field} манифеста плагина не читается: ${relative}`, {
       file: manifestPath,
       at: field,
       hint: `Файл ${target} недоступен: ${(error as Error).message}`,
@@ -78,7 +78,7 @@ function resolvePluginHalf(
   }
 
   if (realTarget !== realDir && !realTarget.startsWith(realDir + sep)) {
-    throw new StepcastError(`Половина ${field} манифеста плагина выходит за пределы каталога плагина`, {
+    throw new BurnexError(`Половина ${field} манифеста плагина выходит за пределы каталога плагина`, {
       file: manifestPath,
       at: field,
       hint: `Путь ${relative} обязан указывать внутрь каталога плагина ${pluginDir}`,
@@ -90,7 +90,7 @@ function resolvePluginHalf(
 
 /**
  * Прочитать и проверить манифест каталога плагина. Отказ называет файл и
- * место внутри документа (`StepcastError.file`/`at`) — тем же составом
+ * место внутри документа (`BurnexError.file`/`at`) — тем же составом
  * полей, каким называет их отказ разбора манифеста шага
  * (`src/parts/pipeline/document/steps.ts`). Вызывающий (`applyTreeRow`,
  * `src/kernel/load.ts`) решает, прекращает ли этот отказ загрузку
@@ -103,7 +103,7 @@ export function readPluginManifest(pluginDir: string): PluginManifest {
   try {
     text = readFileSync(manifestPath, 'utf8');
   } catch (error) {
-    throw new StepcastError(`Манифест плагина не читается: ${(error as Error).message}`, {
+    throw new BurnexError(`Манифест плагина не читается: ${(error as Error).message}`, {
       file: manifestPath,
       hint: `Каталог плагина обязан содержать ${PLUGIN_MANIFEST_FILE} (docs/plugins.md)`,
       cause: error,
@@ -114,7 +114,7 @@ export function readPluginManifest(pluginDir: string): PluginManifest {
   try {
     raw = JSON.parse(text);
   } catch (error) {
-    throw new StepcastError(`Манифест плагина не разбирается как JSON: ${(error as Error).message}`, {
+    throw new BurnexError(`Манифест плагина не разбирается как JSON: ${(error as Error).message}`, {
       file: manifestPath,
       cause: error,
     });
@@ -123,7 +123,7 @@ export function readPluginManifest(pluginDir: string): PluginManifest {
   const parsed = PluginManifestSchema.safeParse(raw);
   if (!parsed.success) {
     const failure = describeSchemaFailure(parsed.error);
-    throw new StepcastError(`Манифест плагина не соответствует формату: ${failure.message}`, {
+    throw new BurnexError(`Манифест плагина не соответствует формату: ${failure.message}`, {
       file: manifestPath,
       ...(failure.at === undefined ? {} : { at: failure.at }),
       hint: 'Формат описан в docs/plugins.md; схема — schema/plugin-manifest.schema.json',

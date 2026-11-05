@@ -3,7 +3,7 @@ import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, it } from 'node:test';
 
-import { StepcastError } from '../src/kernel/errors.js';
+import { BurnexError } from '../src/kernel/errors.js';
 import {
   buildDashboards,
   dashboardFingerprint,
@@ -242,7 +242,7 @@ describe('ui-dashboards-file: запись документа через Documen
     assert.throws(
       () => writeDashboard('home', 'release', overlapping, dashboardFingerprint(path), { home }),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.match(error.message, /overlap/);
         return true;
       },
@@ -286,7 +286,7 @@ describe('ui-dashboards-file: запись документа через Documen
     assert.throws(
       () => writeDashboard('home', 'release', document, dashboardFingerprint(path), { home }),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.equal(error.file, path);
         assert.match(error.message, /is not valid YAML/);
         assert.match(String(error.at), /line 7/);
@@ -306,7 +306,7 @@ describe('ui-dashboards-file: запись документа через Documen
     assert.throws(
       () => writeDashboard('home', 'release', document, dashboardFingerprint(path), { home }),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.equal(error.file, path);
         return true;
       },
@@ -326,7 +326,7 @@ describe('ui-dashboards-file: запись документа через Documen
       () =>
         writeDashboard('home', 'release', { ...document, title: 'Другое' }, { mtimeMs: 0, size: 0 }, { home }),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.match(error.message, /has changed since it was opened/);
         return true;
       },
@@ -339,7 +339,7 @@ describe('ui-dashboards-file: запись документа через Documen
     assert.throws(
       () => writeDashboard('project', 'release', document, undefined, { home }),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.match(error.message, /project root/);
         return true;
       },
@@ -481,7 +481,7 @@ describe('ui-dashboards-file: дашборды пакетов (packages-director
 
     assert.throws(
       () => writeDashboard('project', 'ops', changed, base, { home, projectRoot }, 'hello'),
-      (error: unknown) => error instanceof StepcastError && /changed since it was opened/.test(error.message),
+      (error: unknown) => error instanceof BurnexError && /changed since it was opened/.test(error.message),
     );
     assert.equal(readFileSync(file, 'utf8'), SIMPLE_YAML);
   });

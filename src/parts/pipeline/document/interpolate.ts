@@ -1,4 +1,4 @@
-import { StepcastError } from '../../../kernel/errors.js';
+import { BurnexError } from '../../../kernel/errors.js';
 import type { Substitution } from './model.js';
 
 /**
@@ -122,13 +122,13 @@ function renderValue(
   if (typeof value === 'string') return value;
   if (typeof value === 'number' || typeof value === 'boolean') return String(value);
   if (isStringArray(value)) {
-    throw new StepcastError(`Подстановка ${expression} даёт значение, непредставимое строкой`, {
+    throw new BurnexError(`Подстановка ${expression} даёт значение, непредставимое строкой`, {
       ...(at === undefined ? {} : { at }),
       ...(scope.file === undefined ? {} : { file: scope.file }),
       hint: 'Списочное значение раскрывается только в элементе списка, а не в скалярном поле',
     });
   }
-  throw new StepcastError(`Подстановка ${expression} даёт значение, непредставимое строкой`, {
+  throw new BurnexError(`Подстановка ${expression} даёт значение, непредставимое строкой`, {
     ...(at === undefined ? {} : { at }),
     ...(scope.file === undefined ? {} : { file: scope.file }),
     hint:
@@ -177,7 +177,7 @@ export function interpolate(template: string, scope: Scope, at?: string): Interp
 
       const expression = (plainRaw ?? '').trim();
       if (expression === '') {
-        throw new StepcastError('Пустая подстановка ${}', at === undefined ? {} : { at });
+        throw new BurnexError('Пустая подстановка ${}', at === undefined ? {} : { at });
       }
 
       const { line, column } = positionAt(template, offset);
@@ -204,7 +204,7 @@ export function interpolate(template: string, scope: Scope, at?: string): Interp
         if (late) return match;
         const namespace = expression.split('.')[0] as string;
         const available = [...Object.keys(scope.values), ...scope.deferred].sort().join(', ');
-        throw new StepcastError(`Неизвестное пространство подстановки: ${namespace}`, {
+        throw new BurnexError(`Неизвестное пространство подстановки: ${namespace}`, {
           ...(at === undefined ? {} : { at }),
           // Точечный путь поля называет место внутри документа, но не сам
           // документ: у работы, подключённой через `uses`, это файл работы, а
@@ -216,7 +216,7 @@ export function interpolate(template: string, scope: Scope, at?: string): Interp
 
       const { namespace, path, value } = resolved;
       if (value === undefined) {
-        throw new StepcastError(`Подстановка ${expression} не определена`, {
+        throw new BurnexError(`Подстановка ${expression} не определена`, {
           ...(at === undefined ? {} : { at }),
           ...(scope.file === undefined ? {} : { file: scope.file }),
           hint: scope.explain?.(expression, namespace, path) ?? `Проверьте, что ${namespace}.${path} объявлено`,
@@ -325,7 +325,7 @@ export function resolveListExpansion(
 
   if (found.length === 0) return undefined;
   if (found.length > 1) {
-    throw new StepcastError(
+    throw new BurnexError(
       `Элемент списка содержит несколько списочных подстановок: ${found
         .map((item) => `\${${item.expression}}`)
         .join(', ')}`,
@@ -343,7 +343,7 @@ export function resolveListExpansion(
     // исчезнувший глоб в `changed_only`, то есть тихую смену политики или
     // границ правок. Схемы пустой список не пропускают, но значение доезжает
     // сюда и мимо них — слоем флагов, — и молчать об этом нельзя.
-    throw new StepcastError(`Подстановка \${${only.expression}} даёт пустой список`, {
+    throw new BurnexError(`Подстановка \${${only.expression}} даёт пустой список`, {
       ...(at === undefined ? {} : { at }),
       ...(scope.file === undefined ? {} : { file: scope.file }),
       hint: 'Пустой список удалил бы элемент целиком; объявите хотя бы одно значение или снимите ссылку',
@@ -427,7 +427,7 @@ function interpolateTypedLeaf(
     if (late) return { value: template, substitutions: [] };
     const namespace = expression.split('.')[0] as string;
     const available = [...Object.keys(scope.values), ...scope.deferred].sort().join(', ');
-    throw new StepcastError(`Неизвестное пространство подстановки: ${namespace}`, {
+    throw new BurnexError(`Неизвестное пространство подстановки: ${namespace}`, {
       ...(at === undefined ? {} : { at }),
       ...(scope.file === undefined ? {} : { file: scope.file }),
       hint: scope.hints?.[namespace] ?? `Доступны: ${available}`,
@@ -436,7 +436,7 @@ function interpolateTypedLeaf(
 
   const { namespace, path, value } = resolved;
   if (value === undefined) {
-    throw new StepcastError(`Подстановка ${expression} не определена`, {
+    throw new BurnexError(`Подстановка ${expression} не определена`, {
       ...(at === undefined ? {} : { at }),
       ...(scope.file === undefined ? {} : { file: scope.file }),
       hint: scope.explain?.(expression, namespace, path) ?? `Проверьте, что ${namespace}.${path} объявлено`,

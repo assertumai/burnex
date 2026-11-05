@@ -149,7 +149,7 @@ describe('ui-plugins: сборка браузерной половины бан�
 
     assert.equal(outcome?.kind, 'ok');
     const code = (outcome as { readonly kind: 'ok'; readonly code: string }).code;
-    assert.match(code, /__stepcastWidgetStyle/);
+    assert.match(code, /__burnexWidgetStyle/);
     assert.match(code, /color:\s*red/);
   });
 
@@ -402,7 +402,7 @@ describe('ui-plugins: адрес /plugins/<id>.js в диспетчере', () =
     const res = await fetchWithHeaders(server, pluginModuleHref('demo', '1'));
     assert.equal(res.code, 200);
     assert.match(String(res.headers['content-type']), /text\/javascript/);
-    assert.doesNotMatch(res.body, /__stepcastWidgetError/);
+    assert.doesNotMatch(res.body, /__burnexWidgetError/);
   });
 
   it('ошибка сборки — тоже 200, исполняемый модуль с заголовком-пометкой', async (t) => {
@@ -413,7 +413,7 @@ describe('ui-plugins: адрес /plugins/<id>.js в диспетчере', () =
     const res = await fetchWithHeaders(server, pluginModuleHref('broken', '1'));
     assert.equal(res.code, 200);
     assert.equal(res.headers['x-stepcast-widget-error'], '1');
-    assert.match(res.body, /__stepcastWidgetError/);
+    assert.match(res.body, /__burnexWidgetError/);
   });
 
   it('небезопасный сегмент, неизвестный id, плагин без браузерной половины — один и тот же 404', async (t) => {

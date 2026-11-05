@@ -8,7 +8,7 @@ import {
   RawSpecSchema,
   RelativeRepoPathSchema,
 } from '../config/schema.js';
-import { StepcastError } from '../../../kernel/errors.js';
+import { BurnexError } from '../../../kernel/errors.js';
 import { isEngineVariable } from '../../../kernel/env-names.js';
 
 /**
@@ -348,7 +348,7 @@ function assertKeyAvailable(key: string, owner: string | undefined): void {
   const isName = owner === undefined;
   const subject = isName ? `Имя вида шага ${key} занято` : `Ключ ${key} вида шага ${owner} занят`;
   if (STEP_COMMON_KEYS.includes(key)) {
-    throw new StepcastError(`${subject} ключом общей части шага`, {
+    throw new BurnexError(`${subject} ключом общей части шага`, {
       hint: isName
         ? 'Ключи общей части (id, env, context, timeout, expect, attempts, …) не могут стать именем вида шага'
         : 'Ключи общей части (id, env, context, timeout, expect, attempts, …) вид шага занять не вправе',
@@ -356,7 +356,7 @@ function assertKeyAvailable(key: string, owner: string | undefined): void {
   }
   const owningKinds = BUILTIN_STEP_KIND_KEY_OWNERS[key];
   if (owningKinds !== undefined) {
-    throw new StepcastError(`${subject} ключом встроенного вида шага ${owningKinds.join(', ')}`, {
+    throw new BurnexError(`${subject} ключом встроенного вида шага ${owningKinds.join(', ')}`, {
       hint: isName
         ? 'Выберите другое имя: ключи встроенных видов не могут стать именем плагинного вида шага'
         : 'Выберите другой ключ: ключи встроенных видов шага плагинному виду недоступны',
@@ -404,7 +404,7 @@ export function assertStepKindNameAvailable(
       if (otherName === name) continue;
       const other = otherValue as { readonly name: string; readonly document?: { readonly keys?: readonly string[] } };
       if (!occupiedKeys(other).includes(key)) continue;
-      throw new StepcastError(`Ключ ${key} занят: его объявляют вид шага ${otherName} и вид шага ${name}`, {
+      throw new BurnexError(`Ключ ${key} занят: его объявляют вид шага ${otherName} и вид шага ${name}`, {
         hint: 'Ключ вида шага не вправе совпасть с ключом, уже занятым другим видом — переименуйте один из них',
       });
     }
@@ -458,7 +458,7 @@ export function buildDocumentSchemas(
   // объединение и разбиться о документ много позже, дампом ветвей.
   for (const name of nativePredicates) {
     if (!DEFAULT_NATIVE_PREDICATES.includes(name)) {
-      throw new StepcastError(`Предикат ${name} не имеет ветви схемы документа: неизвестный внутренний предикат`, {
+      throw new BurnexError(`Предикат ${name} не имеет ветви схемы документа: неизвестный внутренний предикат`, {
         hint: `Внутренние предикаты: ${DEFAULT_NATIVE_PREDICATES.join(', ')}; проверьте имя, поданное buildDocumentSchemas`,
       });
     }
@@ -754,7 +754,7 @@ export function buildDocumentSchemas(
   const NATIVE_STEP_KIND_NAMES = ['agent', 'run', 'script', 'uses'] as const;
   for (const name of nativeStepKinds) {
     if (!(NATIVE_STEP_KIND_NAMES as readonly string[]).includes(name)) {
-      throw new StepcastError(`Вид шага ${name} не имеет ветви схемы документа: неизвестный внутренний вид`, {
+      throw new BurnexError(`Вид шага ${name} не имеет ветви схемы документа: неизвестный внутренний вид`, {
         hint: 'Внутренние виды шага — agent, run, script, uses; проверьте имя, поданное buildDocumentSchemas',
       });
     }

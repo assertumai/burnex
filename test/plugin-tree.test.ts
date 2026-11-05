@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { describe, it } from 'node:test';
 
 import { resolveConfig, type ResolvedConfig } from '../src/parts/pipeline/config/resolve.js';
-import { StepcastError } from '../src/kernel/errors.js';
+import { BurnexError } from '../src/kernel/errors.js';
 import { createKernel } from '../src/kernel/kernel.js';
 import { walkPluginTree } from '../src/kernel/load.js';
 import { DECLARATIVE_CONTRIBUTION_FIELDS } from '../src/parts/pipeline/contract.js';
@@ -177,7 +177,7 @@ describe('plugin-tree: две формы набора строк — id в се�
     await assert.rejects(
       () => loadPlugins(config, { projectRoot: place.root }),
       (error: unknown) =>
-        error instanceof StepcastError && /несуществующую встроенную строку burnex:ui-shell/.test(error.message),
+        error instanceof BurnexError && /несуществующую встроенную строку burnex:ui-shell/.test(error.message),
     );
   });
 
@@ -268,7 +268,7 @@ describe('plugin-tree: замена строки патчем', () => {
             'version: 1\nkind: plugins-patch\nplugins:\n  - id: a\n    use: ./a2.mjs\n    after: backend-claude\n',
         }),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.equal(error.file, place.projectPatchPath);
         assert.equal(error.at, 'a');
         assert.match(error.message, /уже в дереве/);
@@ -320,7 +320,7 @@ describe('plugin-tree: вставка строки по позиции', () => {
             'version: 1\nkind: plugins-patch\nplugins:\n  - id: a\n    use: ./a.mjs\n    after: no-such-row\n',
         }),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.equal(error.file, place.projectPatchPath);
         assert.equal(error.at, 'a');
         assert.match(error.message, /no-such-row/);
@@ -339,7 +339,7 @@ describe('plugin-tree: вставка строки по позиции', () => {
             'version: 1\nkind: plugins-patch\nplugins:\n  - id: a\n    use: ./a.mjs\n    before: backend-claude\n    after: backend-claude\n',
         }),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.equal(error.file, place.projectPatchPath);
         assert.equal(error.at, 'a');
         assert.match(error.message, /before, и after/);
@@ -356,7 +356,7 @@ describe('plugin-tree: вставка строки по позиции', () => {
           projectPatch: 'version: 1\nkind: plugins-patch\nplugins:\n  - id: a\n    use: ./a.mjs\n  - id: a\n    use: ./a2.mjs\n',
         }),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.equal(error.file, place.projectPatchPath);
         assert.equal(error.at, 'a');
         assert.match(error.message, /дважды/);
@@ -423,7 +423,7 @@ describe('plugin-tree: замена встроенной строки', () => {
     await assert.rejects(
       () => loadPlugins(config, { projectRoot: place.root }),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.match(error.message, /Имя бэкенда claude занято/);
         assert.match(error.message, /встроенный вклад/);
         assert.match(error.message, /плагин impostor/);
@@ -445,7 +445,7 @@ describe('plugin-tree: замена встроенной строки', () => {
     await assert.rejects(
       () => loadPlugins(config, { projectRoot: place.root }),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.equal(error.file, place.projectPatchPath);
         assert.equal(error.at, 'plugins');
         assert.match(error.message, /claude/);
@@ -490,7 +490,7 @@ describe('plugin-tree: замена встроенной строки', () => {
     await assert.rejects(
       () => loadPlugins(config, { projectRoot: place.root }),
       (error: unknown) =>
-        error instanceof StepcastError &&
+        error instanceof BurnexError &&
         /Имя предиката exit_code занято/.test(error.message) &&
         /встроенный вклад/.test(error.message),
     );
@@ -553,7 +553,7 @@ describe('plugin-tree: фабрики строк поставки при заг�
           builtinRows: [{ id: 'ui-shell', apply: () => undefined }],
         }),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.match(error.message, /несуществующую встроенную строку burnex:screen-usage/);
         const hint = error.hint ?? '';
         assert.match(hint, /burnex:backend-claude/);
@@ -641,7 +641,7 @@ describe('plugin-tree: пересечение перечней строк — и
           builtinRows: [{ id: 'backend-claude', apply: () => { applied.push('backend-claude'); } }],
         }),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.match(error.message, /backend-claude/);
         return true;
       },
@@ -741,7 +741,7 @@ describe('plugin-tree: отказы чтения патча', () => {
     assert.throws(
       () => resolved(place, { projectPatch: 'version: 1\nkind: plugins-patch\nplugins:\n  - id: [a\n' }),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.equal(error.file, place.projectPatchPath);
         assert.match(error.message, /не разбирается как YAML/);
         return true;
@@ -754,7 +754,7 @@ describe('plugin-tree: отказы чтения патча', () => {
     assert.throws(
       () => resolved(place, { homePatch: 'version: 1\nplugins:\n  - id: a\n    use: ./a.mjs\n' }),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.equal(error.file, place.homePatchPath);
         assert.equal(error.at, 'kind');
         assert.match(error.hint ?? '', /plugins-patch/);
@@ -771,7 +771,7 @@ describe('plugin-tree: отказы чтения патча', () => {
           projectPatch: 'version: 1\nkind: plugins-patch\nplugins:\n  - id: a\n    use: ./a.mjs\n    enable: false\n',
         }),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.equal(error.file, place.projectPatchPath);
         assert.match(`${error.at ?? ''} ${error.message}`, /enable/);
         assert.match(error.hint ?? '', /docs\/plugins\.md/);
@@ -785,7 +785,7 @@ describe('plugin-tree: отказы чтения патча', () => {
     assert.throws(
       () => resolved(place, { projectPatch: 'version: 1\nkind: plugins-patch\nplugins: []\n' }),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.equal(error.file, place.projectPatchPath);
         assert.equal(error.at, 'plugins');
         return true;
@@ -989,7 +989,7 @@ describe('plugin-tree: отключение строки pipeline при вкл�
     await assert.rejects(
       () => loadPlugins(config, { projectRoot: place.root }),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.match(error.message, /backend-claude/);
         assert.match(error.message, /backends/);
         return true;

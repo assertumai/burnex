@@ -5,16 +5,16 @@ import { describe, it } from 'node:test';
 
 import { resolveConfig } from '../src/parts/pipeline/config/resolve.js';
 import { expandPipeline } from '../src/parts/pipeline/document/expand.js';
-import { StepcastError } from '../src/kernel/errors.js';
+import { BurnexError } from '../src/kernel/errors.js';
 import { buildPipelines } from '../src/parts/ui/pipelines.js';
 import { makeJournalBed, makeProject, seedRun, type Project } from './helpers.js';
 
 /** Ошибка разбора пайплайна проекта — единственное, ради чего заведён проект. */
-function refusal(project: Project): StepcastError {
+function refusal(project: Project): BurnexError {
   try {
     expandPipeline({ pipelinePath: project.path('burnex.yml'), config: project.config });
   } catch (error) {
-    assert.ok(error instanceof StepcastError);
+    assert.ok(error instanceof BurnexError);
     return error;
   }
   throw new Error('пайплайн разобрался, хотя не должен был');
@@ -183,7 +183,7 @@ jobs:
           projectPath: join(bed.projectRoot, '.burnex', 'config.yml'),
         }),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.match(error.message, /modle/);
         assert.equal(error.at, 'defaults');
         return true;

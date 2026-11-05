@@ -3,7 +3,7 @@ import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, it } from 'node:test';
 
-import { StepcastError } from '../src/kernel/errors.js';
+import { BurnexError } from '../src/kernel/errors.js';
 import { readJobData } from '../src/parts/pipeline/run/journal/data.js';
 import { exec, input, log, output, publish } from '../src/parts/pipeline/step/index.js';
 import { tempDir } from './tmp.js';
@@ -77,7 +77,7 @@ describe('step-sdk: input/output/publish/log/exec по переменным ок
     await assert.rejects(
       withStepEnv({ BURNEX_JOB_DIR: dir }, async () => publish('not-declared', 'x')),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.match(error.message, /не объявляла ключ данных/);
         return true;
       },
@@ -152,7 +152,7 @@ describe('step-sdk: input/output/publish/log/exec по переменным ок
   it('вызов вне шага прогона отказывает названно', async () => {
     await withStepEnv({ BURNEX_INPUT: undefined, BURNEX_OUTPUT: undefined, BURNEX_JOB_DIR: undefined }, () => {
       assert.throws(() => input(), (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.match(error.message, /работает только внутри шага прогона/);
         return true;
       });

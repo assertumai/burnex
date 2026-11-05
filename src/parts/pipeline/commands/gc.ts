@@ -10,7 +10,7 @@ import {
 } from '../run/journal/usageStore.js';
 import { cleanupRun, listCandidates, selectOlderThan } from '../run/cleanup.js';
 import { formatBytes, parseDuration } from '../../../kernel/units.js';
-import { ExitCode, StepcastError, type ExitCodeValue } from '../../../kernel/errors.js';
+import { ExitCode, BurnexError, type ExitCodeValue } from '../../../kernel/errors.js';
 import { formatColumns } from '../../../kernel/cli/output.js';
 import { commandRow } from '../../../kernel/cli/commandRow.js';
 import { PIPELINE_SERVICES } from '../services.js';
@@ -118,7 +118,7 @@ export function runGcCommand(
   // молча значило бы иногда снимать не то, что человек имел в виду; отказ
   // называет, какая из двух целей эти признаки понимает.
   if (!statsTarget && (failedFlag || projectFlag !== undefined)) {
-    throw new StepcastError(
+    throw new BurnexError(
       '--failed и --project снимают записи хранилища расхода и действуют только вместе с --stats',
       { hint: 'За один вызов gc снимает либо файлы (--older-than), либо записи (--stats) — не то и другое сразу' },
     );

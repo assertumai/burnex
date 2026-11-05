@@ -3,7 +3,7 @@ import { isMap, type Document } from 'yaml';
 import { z } from 'zod';
 
 import { EffortSchema, ModelNameSchema, ModelTierSchema } from '../pipeline/config/schema.js';
-import { StepcastError } from '../../kernel/errors.js';
+import { BurnexError } from '../../kernel/errors.js';
 import type { KernelCache } from './pipelines.js';
 import { editGlobalConfig, readSettings } from './settings.js';
 
@@ -67,7 +67,7 @@ export async function writePipelineAgent(
   const parsed = PipelineAgentPatchSchema.safeParse(input);
   if (!parsed.success) {
     const issue = parsed.error.issues[0]!;
-    throw new StepcastError(`Invalid pipeline agent selection ${issue.path.join('.')}: ${issue.message}`);
+    throw new BurnexError(`Invalid pipeline agent selection ${issue.path.join('.')}: ${issue.message}`);
   }
   const patch = parsed.data;
 
@@ -76,9 +76,9 @@ export async function writePipelineAgent(
   const agent = patch.selection?.agent;
   if (typeof agent === 'string') {
     const backend = (await readSettings(home, kernelCache)).backends.find((candidate) => candidate.name === agent);
-    if (backend === undefined) throw new StepcastError(`Unknown agent ${agent}`);
-    if (!backend.enabled) throw new StepcastError(`Agent ${agent} is disabled`);
-    if (!backend.available) throw new StepcastError(`Agent ${agent} is not connected: connect its plugin first`);
+    if (backend === undefined) throw new BurnexError(`Unknown agent ${agent}`);
+    if (!backend.enabled) throw new BurnexError(`Agent ${agent} is disabled`);
+    if (!backend.available) throw new BurnexError(`Agent ${agent} is not connected: connect its plugin first`);
   }
 
   const path = patch.job === undefined || patch.step === undefined

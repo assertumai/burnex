@@ -1,8 +1,8 @@
-import { ExitCode, isStepcastError, type ExitCodeValue } from '../errors.js';
+import { ExitCode, isBurnexError, type ExitCodeValue } from '../errors.js';
 
 /** Единая печать диагностики: всё, что видит пользователь при отказе. */
 export function reportError(error: unknown, write: (line: string) => void): ExitCodeValue {
-  if (isStepcastError(error)) {
+  if (isBurnexError(error)) {
     const location = error.location();
     write(`ошибка: ${error.message}`);
     if (location !== undefined) write(`  где: ${location}`);

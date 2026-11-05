@@ -13,7 +13,7 @@ import {
 
 import { estimateTokens } from '../context/assemble.js';
 import { matchesGlob } from '../context/glob.js';
-import { StepcastError } from '../../../../kernel/errors.js';
+import { BurnexError } from '../../../../kernel/errors.js';
 import { formatTokens } from '../../../../kernel/units.js';
 import { KnowledgeIdSchema } from './types.js';
 import type {
@@ -233,7 +233,7 @@ class FsKnowledgeSource implements KnowledgeSource {
         // тем же перечнем, из которого собрано оглавление (design.md, решение 1).
         const documents = this.specDocumentEntries(id, (specIndex ??= this.specEntries()));
         if (documents.length === 0) {
-          throw new StepcastError(`Единица знания не найдена: ${id}`, {
+          throw new BurnexError(`Единица знания не найдена: ${id}`, {
             hint: 'Проверьте идентификатор по оглавлению: burnex knowledge index',
           });
         }
@@ -548,7 +548,7 @@ class FsKnowledgeSource implements KnowledgeSource {
     // только там, где разбирается запрос. Источник зовут и мимо CLI.
     const validId = KnowledgeIdSchema.safeParse(request.id);
     if (!validId.success) {
-      throw new StepcastError(`Недопустимый идентификатор единицы знания: ${request.id}`, {
+      throw new BurnexError(`Недопустимый идентификатор единицы знания: ${request.id}`, {
         at: 'id',
         hint: 'Допустимы буквы, цифры, точка, дефис и подчёркивание; путь не является идентификатором',
       });
@@ -901,7 +901,7 @@ function readSpecDocument(absolute: string, path: string): string {
   try {
     return readFileSync(absolute, 'utf8');
   } catch (error) {
-    throw new StepcastError(`Документ каталога практики спецификации не читается: ${path}`, {
+    throw new BurnexError(`Документ каталога практики спецификации не читается: ${path}`, {
       file: path,
       cause: error,
       hint: describeReadFailure(error),
@@ -1007,7 +1007,7 @@ const HEAD_BOUNDARY = /^(---\r?\n)([\s\S]*?)(\r?\n---\r?\n?[\s\S]*)$/;
 function withSupersededStatus(text: string, file: string): string {
   const match = HEAD_BOUNDARY.exec(text);
   if (match === null) {
-    throw new StepcastError(`Единица знания без шапки: ${file}`, { file });
+    throw new BurnexError(`Единица знания без шапки: ${file}`, { file });
   }
   const [open, header, rest] = [match[1], match[2], match[3]] as [string, string, string];
   const statusLine = /^status:.*$/m;
@@ -1211,7 +1211,7 @@ function isoSeconds(ms: number): string {
 export function parseUnit(text: string, file: string): Unit {
   const match = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/.exec(text);
   if (match === null) {
-    throw new StepcastError(`Единица знания без шапки: ${file}`, {
+    throw new BurnexError(`Единица знания без шапки: ${file}`, {
       file,
       hint: 'Шапка YAML между строками --- обязательна: id, title, scope, status',
     });
@@ -1221,7 +1221,7 @@ export function parseUnit(text: string, file: string): Unit {
   // текст — типизация YAML его портит (см. `anchorHashSources`).
   const document = parseDocument(match[1] as string);
   if (document.errors.length > 0) {
-    throw new StepcastError(`Шапка единицы знания не разбирается как YAML: ${file}`, {
+    throw new BurnexError(`Шапка единицы знания не разбирается как YAML: ${file}`, {
       file,
       cause: document.errors[0],
     });
@@ -1231,14 +1231,14 @@ export function parseUnit(text: string, file: string): Unit {
   try {
     head = document.toJS();
   } catch (error) {
-    throw new StepcastError(`Шапка единицы знания не разбирается как YAML: ${file}`, {
+    throw new BurnexError(`Шапка единицы знания не разбирается как YAML: ${file}`, {
       file,
       cause: error,
     });
   }
 
   if (head === null || typeof head !== 'object') {
-    throw new StepcastError(`Шапка единицы знания пуста: ${file}`, { file });
+    throw new BurnexError(`Шапка единицы знания пуста: ${file}`, { file });
   }
 
   const raw = head as Record<string, unknown>;
@@ -1246,7 +1246,7 @@ export function parseUnit(text: string, file: string): Unit {
   const title = requireField(raw.title, 'title', file);
   const status = raw.status === 'superseded' ? 'superseded' : 'active';
   if (raw.status !== undefined && raw.status !== 'active' && raw.status !== 'superseded') {
-    throw new StepcastError(`Неизвестный status единицы знания: ${file}`, {
+    throw new BurnexError(`Неизвестный status единицы знания: ${file}`, {
       file,
       hint: 'Допустимы active и superseded',
     });
@@ -1281,17 +1281,17 @@ function describeType(value: unknown): string {
 
 function requireField(value: unknown, name: string, file: string): string {
   if (value === undefined) {
-    throw new StepcastError(`Шапка единицы знания без ${name}: ${file}`, { file, at: name });
+    throw new BurnexError(`Шапка единицы знания без ${name}: ${file}`, { file, at: name });
   }
   if (typeof value !== 'string') {
-    throw new StepcastError(`Поле ${name} единицы знания — строка: ${file}`, {
+    throw new BurnexError(`Поле ${name} единицы знания — строка: ${file}`, {
       file,
       at: name,
       hint: `Значение поля ${name} — ${describeType(value)}`,
     });
   }
   if (value.trim() === '') {
-    throw new StepcastError(`Шапка единицы знания без ${name}: ${file}`, { file, at: name });
+    throw new BurnexError(`Шапка единицы знания без ${name}: ${file}`, { file, at: name });
   }
   return value;
 }
@@ -1299,7 +1299,7 @@ function requireField(value: unknown, name: string, file: string): string {
 function toStringList(value: unknown, name: string, file: string): readonly string[] {
   if (value === undefined) return [];
   if (!Array.isArray(value)) {
-    throw new StepcastError(`Поле ${name} единицы знания — список строк: ${file}`, {
+    throw new BurnexError(`Поле ${name} единицы знания — список строк: ${file}`, {
       file,
       at: name,
       hint: `Значение поля ${name} — ${describeType(value)}`,
@@ -1307,7 +1307,7 @@ function toStringList(value: unknown, name: string, file: string): readonly stri
   }
   const wrong = value.findIndex((item) => typeof item !== 'string');
   if (wrong !== -1) {
-    throw new StepcastError(`Поле ${name} единицы знания — список строк: ${file}`, {
+    throw new BurnexError(`Поле ${name} единицы знания — список строк: ${file}`, {
       file,
       at: name,
       hint: `Элемент списка ${name} — ${describeType(value[wrong])}`,
@@ -1349,7 +1349,7 @@ function toAnchors(
 ): readonly Anchor[] {
   if (value === undefined) return [];
   if (!Array.isArray(value)) {
-    throw new StepcastError(`Поле anchors единицы знания — список: ${file}`, {
+    throw new BurnexError(`Поле anchors единицы знания — список: ${file}`, {
       file,
       at: 'anchors',
     });
@@ -1388,7 +1388,7 @@ function toAnchors(
         };
       }
     }
-    throw new StepcastError(`Якорь единицы знания без пути: ${file}`, { file, at: 'anchors' });
+    throw new BurnexError(`Якорь единицы знания без пути: ${file}`, { file, at: 'anchors' });
   });
 }
 
@@ -1464,7 +1464,7 @@ function toHash(value: unknown, source: string | undefined, file: string): strin
   if (value === undefined) return undefined;
   if (typeof value === 'string') return value;
   if (typeof value === 'number' || typeof value === 'bigint') return source ?? String(value);
-  throw new StepcastError(`Закрепление якоря единицы знания — строка: ${file}`, {
+  throw new BurnexError(`Закрепление якоря единицы знания — строка: ${file}`, {
     file,
     at: 'anchors.hash',
     hint: `Значение поля hash — ${describeType(value)}`,

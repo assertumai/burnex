@@ -3,7 +3,7 @@ import { mkdirSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, it } from 'node:test';
 
-import { ExitCode, StepcastError } from '../src/kernel/errors.js';
+import { ExitCode, BurnexError } from '../src/kernel/errors.js';
 import type { ParsedArgs } from '../src/kernel/cli/types.js';
 import { runLintCommand } from '../src/parts/pipeline/commands/lint.js';
 import { runResumeCommand } from '../src/parts/pipeline/commands/resume.js';
@@ -52,11 +52,11 @@ function options(project: Project): { globalConfigDir: string } {
   return { globalConfigDir: join(project.home, '.burnex') };
 }
 
-function failureOf(fn: () => unknown): StepcastError {
+function failureOf(fn: () => unknown): BurnexError {
   try {
     fn();
   } catch (error) {
-    assert.ok(error instanceof StepcastError, String(error));
+    assert.ok(error instanceof BurnexError, String(error));
     return error;
   }
   assert.fail('ожидался отказ');

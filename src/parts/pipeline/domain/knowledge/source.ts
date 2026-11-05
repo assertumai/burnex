@@ -3,7 +3,7 @@ import { spawnSync } from 'node:child_process';
 import type { z } from 'zod';
 
 import { estimateTokens } from '../context/assemble.js';
-import { StepcastError } from '../../../../kernel/errors.js';
+import { BurnexError } from '../../../../kernel/errors.js';
 import type { KnowledgeDeclaration } from '../../document/model.js';
 import { createFsKnowledgeSource, renderIndex } from './fs.js';
 import {
@@ -40,7 +40,7 @@ export function createKnowledgeSource(options: {
 
   if (knowledge.provider === 'fs') {
     if (knowledge.dir === undefined) {
-      throw new StepcastError('Встроенный источник знания объявлен без каталога', {
+      throw new BurnexError('Встроенный источник знания объявлен без каталога', {
         at: 'project.knowledge.dir',
       });
     }
@@ -57,7 +57,7 @@ export function createKnowledgeSource(options: {
   }
 
   if (knowledge.command === undefined) {
-    throw new StepcastError('Источник знания cmd объявлен без команды', {
+    throw new BurnexError('Источник знания cmd объявлен без команды', {
       at: 'project.knowledge.command',
     });
   }
@@ -126,13 +126,13 @@ class CommandKnowledgeSource implements KnowledgeSource {
     });
 
     if (result.error !== undefined && (result.error as NodeJS.ErrnoException).code === 'ETIMEDOUT') {
-      throw new StepcastError(
+      throw new BurnexError(
         `Источник знания не ответил за отведённое время: ${this.command} ${verb}`,
         { hint: 'Поднимите project.knowledge.timeout или ускорьте источник' },
       );
     }
     if (result.error !== undefined) {
-      throw new StepcastError(`Источник знания не запустился: ${(result.error as Error).message}`, {
+      throw new BurnexError(`Источник знания не запустился: ${(result.error as Error).message}`, {
         cause: result.error,
       });
     }
@@ -140,7 +140,7 @@ class CommandKnowledgeSource implements KnowledgeSource {
       // Отказ источника — отказ шага. Пустой контекст здесь был бы хуже
       // отказа: шаг отработал бы на пустоте и выглядел успешным.
       const detail = (result.stderr ?? '').trim();
-      throw new StepcastError(
+      throw new BurnexError(
         `Источник знания завершился кодом ${result.status ?? 'неизвестно'}: ${this.command} ${verb}`,
         detail === '' ? {} : { hint: detail.slice(0, 400) },
       );
@@ -150,14 +150,14 @@ class CommandKnowledgeSource implements KnowledgeSource {
     try {
       payload = JSON.parse(result.stdout ?? '');
     } catch (error) {
-      throw new StepcastError(`Источник знания отдал не JSON: ${this.command} ${verb}`, {
+      throw new BurnexError(`Источник знания отдал не JSON: ${this.command} ${verb}`, {
         cause: error,
       });
     }
 
     const parsed = schema.safeParse(payload);
     if (!parsed.success) {
-      throw new StepcastError(
+      throw new BurnexError(
         `Ответ источника знания не соответствует контракту: ${this.command} ${verb}`,
         { hint: parsed.error.issues.map((issue) => issue.message).join('; ').slice(0, 400) },
       );

@@ -2,7 +2,7 @@ import { execFileSync } from 'node:child_process';
 import { existsSync, realpathSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { StepcastError } from '../../../../kernel/errors.js';
+import { BurnexError } from '../../../../kernel/errors.js';
 import type { Anchor, AnchorComparison, TreeAnchorer } from './types.js';
 
 /**
@@ -122,14 +122,14 @@ function resolveExternalRepo(options: GitAnchorerOptions): ExternalRepo | undefi
   const { dir, repoDir } = options;
   if (isGitWorktree(dir)) return undefined;
   if (repoDir === undefined) {
-    throw new StepcastError(`Каталог ${dir} не является рабочим деревом git`, {
+    throw new BurnexError(`Каталог ${dir} не является рабочим деревом git`, {
       hint: 'Состояние такого каталога фиксируется хеш-манифестом, а не git',
     });
   }
   try {
     return { gitDir: git(repoDir, ['rev-parse', '--absolute-git-dir']).trim() };
   } catch (error) {
-    throw new StepcastError(`Репозиторий git не найден рядом с ${repoDir}`, { cause: error });
+    throw new BurnexError(`Репозиторий git не найден рядом с ${repoDir}`, { cause: error });
   }
 }
 
@@ -148,7 +148,7 @@ export function createGitAnchorer(options: GitAnchorerOptions): TreeAnchorer {
 
     restore(anchor: Anchor): void {
       if (anchor.kind !== 'git') {
-        throw new StepcastError('Состояние снято не средствами git и восстановлению не подлежит', {
+        throw new BurnexError('Состояние снято не средствами git и восстановлению не подлежит', {
           hint: 'Якорь на хеш-манифесте отвечает, изменилось ли дерево, но не хранит его содержимого',
         });
       }
@@ -158,7 +158,7 @@ export function createGitAnchorer(options: GitAnchorerOptions): TreeAnchorer {
       try {
         git(dir, ['cat-file', '-e', `${anchor.id}^{tree}`], undefined, external);
       } catch (error) {
-        throw new StepcastError(`Объекты состояния ${anchor.id} недоступны в этом репозитории`, {
+        throw new BurnexError(`Объекты состояния ${anchor.id} недоступны в этом репозитории`, {
           hint: 'Прогон мог быть снят в другом репозитории или объекты удалены уборкой git',
           cause: error,
         });
@@ -174,7 +174,7 @@ export function createGitAnchorer(options: GitAnchorerOptions): TreeAnchorer {
     restorePaths(anchor: Anchor, paths: readonly string[]): void {
       if (paths.length === 0) return;
       if (anchor.kind !== 'git') {
-        throw new StepcastError('Состояние снято не средствами git и восстановлению не подлежит');
+        throw new BurnexError('Состояние снято не средствами git и восстановлению не подлежит');
       }
 
       // Пути, которых в целевом состоянии нет, надо убрать, а не «восстановить»:

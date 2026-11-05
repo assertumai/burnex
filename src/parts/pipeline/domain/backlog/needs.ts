@@ -1,4 +1,4 @@
-import { StepcastError } from '../../../../kernel/errors.js';
+import { BurnexError } from '../../../../kernel/errors.js';
 import type { BacklogEntry } from './parse.js';
 
 /**
@@ -54,14 +54,14 @@ export function checkNeeds(entries: readonly BacklogEntry[], archived: readonly 
       const target = queue.get(need);
       if (target === undefined) {
         if (archivedSlugs.has(need)) continue;
-        throw new StepcastError(
+        throw new BurnexError(
           `пункт «${entry.slug}»: зависимость «${need}» не найдена ни в очереди, ни в архиве`,
           { at: entry.slug },
         );
       }
       const onPath = path.indexOf(need);
       if (onPath !== -1) {
-        throw new StepcastError(
+        throw new BurnexError(
           `циклическая зависимость пунктов: ${[...path.slice(onPath), need].join(' → ')}`,
           { at: need },
         );

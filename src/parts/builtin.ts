@@ -7,7 +7,7 @@
 // внутренние формы разбора из `expand.ts`. Разрывает его физический переезд
 // разбора (шаг 10 плана `docs/microkernel-target.md`) либо снятие умолчания
 // `registry` у `expandPipeline` — не этот пункт (design.md, «Risks»).
-import { StepcastError } from '../kernel/errors.js';
+import { BurnexError } from '../kernel/errors.js';
 import { createKernel, type Kernel } from '../kernel/kernel.js';
 import { registryFromKernel, type Registry } from '../kernel/registry.js';
 import type { PartRow } from './pipeline/services.js';
@@ -77,8 +77,8 @@ export function createKernelShell(): Kernel {
  * своих потребителей. Названный отказ вместо `TypeError` на обращении к
  * `ctx.<имя>.register`.
  */
-function synchronousInjectFailure(row: PartRow, name: string): StepcastError {
-  return new StepcastError(
+function synchronousInjectFailure(row: PartRow, name: string): BurnexError {
+  return new BurnexError(
     `Строка ${row.id} ждёт сервис ${name}: в синхронной сборке умолчания строки применяются в порядке перечня — поставщик обязан стоять раньше`,
     { at: 'plugins', hint: 'Проверьте порядок строк в src/parts/rows.ts: строка-поставщик обязана предшествовать своим потребителям' },
   );

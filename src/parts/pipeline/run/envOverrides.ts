@@ -1,4 +1,4 @@
-import { StepcastError } from '../../../kernel/errors.js';
+import { BurnexError } from '../../../kernel/errors.js';
 
 /**
  * Переопределения env на один прогон (`run --env KEY=VALUE`).
@@ -17,12 +17,12 @@ export function validateEnvOverrides(
 ): void {
   for (const [key, value] of Object.entries(overrides)) {
     if (!Object.hasOwn(declared, key)) {
-      throw new StepcastError(`Переменная ${key} не объявлена в верхнеуровневом env: пайплайна`, {
+      throw new BurnexError(`Переменная ${key} не объявлена в верхнеуровневом env: пайплайна`, {
         hint: `Переопределить можно только объявленные: ${Object.keys(declared).join(', ') || 'их нет'}`,
       });
     }
     if (/[\n\r]/.test(value)) {
-      throw new StepcastError(`Значение переменной ${key} должно умещаться в одну строку`);
+      throw new BurnexError(`Значение переменной ${key} должно умещаться в одну строку`);
     }
   }
 }

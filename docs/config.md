@@ -506,7 +506,7 @@ API — при работающем демоне это видно со след
 
 Расписания (`ui.triggers`) работают только в поднятом демоне, а после
 перезагрузки его никто не поднимает. `burnex up --install` записывает агент
-`~/Library/LaunchAgents/ai.stepcast.daemon.plist` и загружает его в сессию
+`~/Library/LaunchAgents/ai.burnex.daemon.plist` и загружает его в сессию
 пользователя (`launchctl bootstrap gui/<uid>`). Агент запускает
 `burnex up --foreground` с `RunAtLoad` и `KeepAlive`; рабочий каталог — каталог
 вызова, вывод — в `~/.burnex/ui.log`. Повторный вызов перезаписывает plist и

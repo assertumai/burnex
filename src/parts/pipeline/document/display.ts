@@ -1,4 +1,4 @@
-import { StepcastError } from '../../../kernel/errors.js';
+import { BurnexError } from '../../../kernel/errors.js';
 import { interpolate, placeholderNamespaces } from './interpolate.js';
 
 /**
@@ -51,7 +51,7 @@ export function renderDisplay(
     try {
       out[key] = interpolate(template, scope).value;
     } catch (error) {
-      if (error instanceof StepcastError) continue;
+      if (error instanceof BurnexError) continue;
       throw error;
     }
   }

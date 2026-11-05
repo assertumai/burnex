@@ -2,7 +2,7 @@ import { execFileSync } from 'node:child_process';
 import { mkdirSync, readFileSync, readdirSync, realpathSync, rmSync } from 'node:fs';
 import { basename, dirname, join, relative, resolve as resolvePath } from 'node:path';
 
-import { StepcastError } from '../../../kernel/errors.js';
+import { BurnexError } from '../../../kernel/errors.js';
 
 /**
  * Заведение и адресное снятие рабочих деревьев git.
@@ -166,7 +166,7 @@ export function removeWorktree(options: RemoveWorktreeOptions): RemoveWorktreeOu
   // ошибку в вычислении пути в отказ, а не в снесённое чужое дерево.
   const relativeToRun = relative(resolvePath(runDir), resolvePath(path));
   if (relativeToRun === '' || relativeToRun.startsWith('..') || relativeToRun.startsWith(`..${'/'}`)) {
-    throw new StepcastError(`Путь рабочего дерева лежит вне директории прогона: ${path}`, {
+    throw new BurnexError(`Путь рабочего дерева лежит вне директории прогона: ${path}`, {
       hint: `Директория прогона: ${runDir}`,
     });
   }

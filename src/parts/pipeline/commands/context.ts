@@ -10,7 +10,7 @@ import { createKnowledgeSource } from '../domain/knowledge/source.js';
 import { findProjectRoot } from '../run/journal/paths.js';
 import { resolveRun } from '../run/journal/reader.js';
 import { formatTokens } from '../../../kernel/units.js';
-import { StepcastError, ExitCode, type ExitCodeValue } from '../../../kernel/errors.js';
+import { BurnexError, ExitCode, type ExitCodeValue } from '../../../kernel/errors.js';
 import { defaultPipelineName } from '../../../kernel/dirs.js';
 import type { PipelineCommandEnv } from '../contract.js';
 import { formatColumns } from '../../../kernel/cli/output.js';
@@ -39,7 +39,7 @@ export function runContextCommand(
   const jobId = args.flags.job as string | undefined;
   const stepId = args.flags.step as string | undefined;
   if (jobId === undefined || stepId === undefined) {
-    throw new StepcastError('Команда context требует --job и --step', {
+    throw new BurnexError('Команда context требует --job и --step', {
       hint: 'burnex context --job <job> --step <step>',
     });
   }
@@ -55,14 +55,14 @@ export function runContextCommand(
 
   const job = pipeline.jobs.find((item) => item.id === jobId);
   if (job === undefined) {
-    throw new StepcastError(`Работа ${jobId} не найдена`, { file: pipelinePath });
+    throw new BurnexError(`Работа ${jobId} не найдена`, { file: pipelinePath });
   }
   const step = job.steps.find((item) => item.id === stepId);
   if (step === undefined) {
-    throw new StepcastError(`Шаг ${stepId} не найден в работе ${jobId}`, { file: pipelinePath });
+    throw new BurnexError(`Шаг ${stepId} не найден в работе ${jobId}`, { file: pipelinePath });
   }
   if (step.kind !== 'agent') {
-    throw new StepcastError(`Шаг ${stepId} командный, контекст не собирается`, {
+    throw new BurnexError(`Шаг ${stepId} командный, контекст не собирается`, {
       hint: 'context доступен только для агентских шагов',
     });
   }

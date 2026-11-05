@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 
 import { FiberState, Service, type Fiber } from 'cordis';
 
-import { ExitCode, StepcastError } from '../src/kernel/errors.js';
+import { ExitCode, BurnexError } from '../src/kernel/errors.js';
 import { createBuiltinKernel } from '../src/parts/builtin.js';
 import type { CommandContribution } from '../src/kernel/contract.js';
 import type { PipelineCommandEnv } from '../src/parts/pipeline/contract.js';
@@ -217,7 +217,7 @@ describe('plugin-kernel: имя ядра занято', () => {
           '<synthetic>',
         ),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.match(error.message, /commands/);
         assert.match(error.message, /ядру/);
         return true;
@@ -254,7 +254,7 @@ describe('plugin-kernel: имя, занятое строкой pipeline', () => 
             '<synthetic>',
           ),
         (error: unknown) => {
-          assert.ok(error instanceof StepcastError);
+          assert.ok(error instanceof BurnexError);
           assert.match(error.message, new RegExp(name));
           assert.match(error.message, /pipeline/);
           assert.doesNotMatch(error.message, /ядру/);
@@ -432,7 +432,7 @@ export default waiter;
     await assert.rejects(
       () => loadPlugins(config, { projectRoot: place.root }),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.match(error.message, /waiter/);
         assert.match(error.message, /служба-которой-нет/);
         // Состав полей тот же, что у прочих отказов загрузки: без файла и
@@ -556,7 +556,7 @@ broken.inject = ['backends', 'predicates', 'commands'];
       caught = error;
     }
 
-    assert.ok(caught instanceof StepcastError);
+    assert.ok(caught instanceof BurnexError);
     assert.equal(caught.file, place.projectPath);
     assert.equal(caught.at, 'plugins');
     assert.ok(caught.hint !== undefined);
@@ -636,7 +636,7 @@ describe('plugin-kernel: две формы плагина', () => {
     await assert.rejects(
       () => loadPlugins(config, { projectRoot: place.root }),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.match(error.message, /обязан иметь имя/);
         assert.equal(error.file, place.projectPath);
         assert.equal(error.at, 'plugins');
@@ -653,7 +653,7 @@ describe('plugin-kernel: две формы плагина', () => {
     await assert.rejects(
       () => loadPlugins(config, { projectRoot: place.root }),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.match(error.message, /не опознан/);
         assert.match(error.hint ?? '', /декларативный/);
         assert.match(error.hint ?? '', /apply/);
@@ -867,7 +867,7 @@ describe('plugin-surface-split: pipelineContext(ctx) — сужение доме
     assert.throws(
       () => pipelineContext(kernel.ctx),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.match(error.message, /backends/);
         assert.match(error.message, /predicates/);
         assert.match(error.message, /steps/);
@@ -901,7 +901,7 @@ describe('plugin-surface-split: pipelineContext(ctx) — сужение доме
     assert.throws(
       () => pipelineContext(kernel.ctx, ['steps']),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.match(error.message, /steps/);
         // Имена, которых вклад не просил, в отказе не названы: иначе автор
         // пошёл бы объявлять зависимость от сервисов, ему не нужных.

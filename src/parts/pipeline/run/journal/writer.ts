@@ -10,7 +10,7 @@ import {
 } from 'node:fs';
 import { basename, join } from 'node:path';
 
-import { StepcastError } from '../../../../kernel/errors.js';
+import { BurnexError } from '../../../../kernel/errors.js';
 import { JOURNAL_FORMAT } from './format.js';
 import { createMasker, type Masker } from './mask.js';
 import {
@@ -320,7 +320,7 @@ export function atomicWrite(path: string, content: string): void {
     renameSync(temporary, path);
   } catch (error) {
     rmSync(temporary, { force: true });
-    throw new StepcastError(`Не удалось записать ${path}: ${(error as Error).message}`, {
+    throw new BurnexError(`Не удалось записать ${path}: ${(error as Error).message}`, {
       file: path,
       cause: error,
     });

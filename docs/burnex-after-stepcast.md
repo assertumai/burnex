@@ -285,3 +285,17 @@
 - `user_docs/agent-resolution.md`: в примере `agent: cursor`, а имя бэкенда в коде — `cursor-agent` (`cursor` — имя плагина).
 - `openspec/changes/marketplace-plugin/.../marketplace-catalog/spec.md`: перечисляет pipelines и integrations как отдельные каталоги, хотя их заменил вид `package`.
 - `openspec/specs/backlog-queue`, `self-improvement-loop`, `lane-merge`: новые возможности (lock, `needs`, `--onto`) описаны только в `docs/`, в specs они не перенесены.
+
+---
+
+## Переименование stepcast → burnex (2026-11-05)
+
+Движок, описанный в этом документе как «stepcast», с 2026-11-05 называется
+Burnex — то же имя, что и у форка, доработки которого здесь перечислены. Два
+burnex не одно и то же: этот документ описывает **функционал форка** — что было
+добавлено после импорта `ce98cf5b`; переименованный движок — **родительский
+репозиторий** (`assertumai/burnex`, прежде `assertumai/stepcast`), в который
+эти доработки переносятся пунктами очереди `backlog.md`. Пока пункт не закрыт,
+«есть в burnex» в этом документе значит «есть в форке», а не в движке.
+Что уже переименовано в движке и что читается под прежним именем один выпуск —
+`docs/release.md`, раздел «Переход со stepcast».

@@ -1,4 +1,4 @@
-import { StepcastError } from '../../../plugin/index.js';
+import { BurnexError } from '../../../plugin/index.js';
 import { effectivePermissions } from '../../pipeline/surface.js';
 import type {
   AgentInvocation,
@@ -75,7 +75,7 @@ export function createCopilotAdapter(config: BackendConfig): BackendAdapter {
       // аргумента; громкий отказ лучше `spawn E2BIG` без имени бэкенда.
       const argument = `${PROMPT_FLAG}${invocation.prompt}`;
       if (Buffer.byteLength(argument, 'utf8') + 1 > MAX_ARG_BYTES) {
-        throw new StepcastError(
+        throw new BurnexError(
           `Промпт шага не помещается в аргумент запуска copilot: предел ${MAX_ARG_BYTES / 1024} KiB вместе с ${PROMPT_FLAG}`,
           { hint: 'Сократите контекст шага (context, выход прошлых работ): copilot получает промпт аргументом, не через stdin' },
         );
@@ -108,18 +108,18 @@ function refuseUnsupportedPermissions(permissions: AgentInvocation['permissions'
   if (permissions === undefined) return;
 
   if (permissions.enforce === 'strict') {
-    throw new StepcastError('Бэкенд copilot не умеет применять enforce: strict', {
+    throw new BurnexError('Бэкенд copilot не умеет применять enforce: strict', {
       hint: 'Снимите enforce: strict либо переведите шаг на бэкенд, объявляющий эту возможность',
     });
   }
   if (permissions.mode !== undefined) {
-    throw new StepcastError(`Бэкенд copilot не применяет permissions.mode (${permissions.mode})`, {
+    throw new BurnexError(`Бэкенд copilot не применяет permissions.mode (${permissions.mode})`, {
       hint: 'copilot запускается с --allow-all и режимов доступа не знает; снимите mode',
     });
   }
   for (const key of ['allow', 'deny'] as const) {
     if ((permissions[key] ?? []).length === 0) continue;
-    throw new StepcastError(`Бэкенд copilot не применяет permissions.${key}`, {
+    throw new BurnexError(`Бэкенд copilot не применяет permissions.${key}`, {
       hint: `copilot запускается с --allow-all; снимите ${key}`,
     });
   }

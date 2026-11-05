@@ -12,7 +12,7 @@ import {
 } from '../src/parts/backends/cursor/index.js';
 import type { BackendConfig } from '../src/parts/pipeline/surface.js';
 import type { AgentInvocation, BackendAdapter, BackendEvent } from '../src/parts/pipeline/backend/types.js';
-import { StepcastError } from '../src/kernel/errors.js';
+import { BurnexError } from '../src/kernel/errors.js';
 import { expandPipeline } from '../src/parts/pipeline/document/expand.js';
 import { lintPipeline } from '../src/parts/pipeline/domain/lint.js';
 import { runPipeline } from '../src/parts/pipeline/run/runner.js';
@@ -163,7 +163,7 @@ describe('cursor-backend: песочница', () => {
     assert.throws(
       () => adapter.launch(invocation({ permissions: { mode: 'workspace-write' } })),
       (error: unknown) =>
-        error instanceof StepcastError &&
+        error instanceof BurnexError &&
         /cursor-agent/.test(error.message) &&
         /workspace-write/.test(error.message) &&
         /enabled, disabled/.test(`${error.message} ${error.hint ?? ''}`),
@@ -176,7 +176,7 @@ describe('cursor-backend: песочница', () => {
       assert.throws(
         () => adapter.launch(invocation({ permissions: { [key]: ['Bash(git *)'] } })),
         (error: unknown) =>
-          error instanceof StepcastError && /cursor-agent/.test(error.message) && error.message.includes(key),
+          error instanceof BurnexError && /cursor-agent/.test(error.message) && error.message.includes(key),
       );
     }
     assert.doesNotThrow(() => adapter.launch(invocation({ permissions: { allow: [], deny: [] } })));
@@ -185,7 +185,7 @@ describe('cursor-backend: песочница', () => {
   it('enforce: strict отказывает: временного исключения, как у Codex, нет', () => {
     assert.throws(
       () => adapter.launch(invocation({ permissions: { enforce: 'strict' } })),
-      (error: unknown) => error instanceof StepcastError && /cursor-agent/.test(error.message) && /strict/.test(error.message),
+      (error: unknown) => error instanceof BurnexError && /cursor-agent/.test(error.message) && /strict/.test(error.message),
     );
   });
 
@@ -511,7 +511,7 @@ process.stdout.write(fs.readFileSync(path.join(${JSON.stringify(FIXTURES)}, name
 
       await assert.rejects(
         run(project),
-        (error: unknown) => error instanceof StepcastError && message.test(error.message),
+        (error: unknown) => error instanceof BurnexError && message.test(error.message),
         name,
       );
       assert.equal(existsSync(calls), false, `${name}: скрипт не должен был запуститься`);

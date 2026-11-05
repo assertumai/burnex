@@ -1,7 +1,7 @@
 import { readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { StepcastError } from '../../../../kernel/errors.js';
+import { BurnexError } from '../../../../kernel/errors.js';
 import { atomicWrite } from './writer.js';
 
 /**
@@ -92,7 +92,7 @@ export function jobDataPath(jobDirPath: string): string {
 
 export function assertDataKey(key: string): void {
   if (KEY.test(key)) return;
-  throw new StepcastError(`Недопустимый ключ данных «${key}»`, {
+  throw new BurnexError(`Недопустимый ключ данных «${key}»`, {
     hint: 'Ключ — латинские буквы, цифры, подчёркивание и дефис; точка сделала бы ${jobs.<работа>.data.<ключ>} двусмысленным',
   });
 }
@@ -192,7 +192,7 @@ export function mergeJobData(jobDirPath: string, patch: JobData): JobData {
     // по-другому: объявления здесь не «пустое», а неизвестное, и правка
     // пайплайна ничего не исправит, пока движок не кладёт файл на место.
     if (!found) {
-      throw new StepcastError(
+      throw new BurnexError(
         `Раскрытого определения работы нет — записать ключ данных «${key}» не с чем`,
         {
           hint: `Ожидался ${join(jobDirPath, RESOLVED_FILE)}: его кладёт движок перед первым шагом работы, и по нему сверяется объявленный состав данных`,
@@ -200,7 +200,7 @@ export function mergeJobData(jobDirPath: string, patch: JobData): JobData {
       );
     }
 
-    throw new StepcastError(`${subject} не объявляла ключ данных «${key}»`, {
+    throw new BurnexError(`${subject} не объявляла ключ данных «${key}»`, {
       hint:
         declared.length === 0
           ? `${subject} не объявляет ни одного ключа данных — добавьте data: [...] в её определение`

@@ -39,7 +39,7 @@ plugins:
 
 - **`burnex/plugin`** — ядро: контекст и его способности области (`effect`,
   `get`, `set`, `provide`, `inject`), сервис команд, каркас CLI (`CliIo`,
-  `CommandSpec`, `ParsedArgs`, `FlagSpec`), диагностика (`StepcastError`,
+  `CommandSpec`, `ParsedArgs`, `FlagSpec`), диагностика (`BurnexError`,
   `ExitCode`), `PluginDiagnostic`, `parseDuration`, `runProcess`,
   `definePlugin`, формы плагина контекста и `LoadedPlugin`.
 - **`burnex/pipeline`** — домен: `BackendContribution`, `PredicateContribution`,
@@ -62,7 +62,7 @@ plugins:
 заводит служебные сервисы `backends`/`predicates`/`steps`: заменяя строку
 своей, пользователь заменяет и то, и другое, а не наследует чужую
 поверхность. Домен не реэкспортирует ядро: `burnex/pipeline` не публикует
-`StepcastError`, `parseDuration` или `runProcess`, хотя доменному автору они
+`BurnexError`, `parseDuration` или `runProcess`, хотя доменному автору они
 нужны почти всегда, — иначе граница размылась бы в обратную сторону, и вопрос
 «откуда это имя» перестал бы иметь однозначный ответ. Плагин, вносящий и вклад
 пайплайна, и что-то ядерное (например, свою команду), импортирует из обоих
@@ -101,9 +101,9 @@ plugins:
 | `EvaluationInput`, `PredicateResult`, `Usage`                      | `burnex/pipeline`  |
 | `Config`, `BackendConfig`, `Registry`                              | `burnex/pipeline`  |
 | `defineBackend`, `definePredicate`, `defineStepKind`               | `burnex/pipeline`  |
-| доменные ключи `StepcastPlugin` (`backends`, `predicates`, `steps`) | `burnex/pipeline` (`definePipelinePlugin`) |
+| доменные ключи `BurnexPlugin` (`backends`, `predicates`, `steps`) | `burnex/pipeline` (`definePipelinePlugin`) |
 
-Имена, оставшиеся ядерными — `StepcastError`, `parseDuration`, `runProcess`,
+Имена, оставшиеся ядерными — `BurnexError`, `parseDuration`, `runProcess`,
 `definePlugin`, контекст ядра, каркас CLI, — импортируются прежним
 спецификом без единой правки: переезд задел только доменные объявления.
 
@@ -445,7 +445,7 @@ export default definePipelinePlugin({
 
 **В рантайме каждый хелпер — тождество**: возвращает тот же объект, что
 получил, ничем не оборачивая `evaluate`/`execute`/`create`. Форму вклада
-по-прежнему проверяет загрузка (`StepcastPluginSchema`) — вторая проверка
+по-прежнему проверяет загрузка (`BurnexPluginSchema`) — вторая проверка
 здесь разошлась бы с ней, — так что хелпер ничего не проверяет и в этом
 смысле не защищает от опечатки в рантайме сильнее объектного литерала.
 

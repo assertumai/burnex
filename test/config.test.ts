@@ -8,7 +8,7 @@ import { Ajv2020 } from 'ajv/dist/2020.js';
 import { resolveConfig } from '../src/parts/pipeline/config/resolve.js';
 import { describeSource, matchesKeyPattern } from '../src/parts/pipeline/config/merge.js';
 import { RawSpecSchema, RelativeRepoPathSchema } from '../src/parts/pipeline/config/schema.js';
-import { StepcastError } from '../src/kernel/errors.js';
+import { BurnexError } from '../src/kernel/errors.js';
 import { renderConfigReport } from '../src/parts/pipeline/commands/config.js';
 import { tempDir } from './tmp.js';
 
@@ -173,7 +173,7 @@ describe('stepcast-configuration', () => {
     assert.throws(
       () => resolveIn(box),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.match(error.message, /backends\.claude\.command/);
         assert.equal(error.file, box.projectPath);
         return true;
@@ -183,7 +183,7 @@ describe('stepcast-configuration', () => {
 
   it('отклоняет runs.root в проектном конфиге', () => {
     const box = sandbox({ project: 'runs:\n  root: /tmp/runs\n' });
-    assert.throws(() => resolveIn(box), StepcastError);
+    assert.throws(() => resolveIn(box), BurnexError);
   });
 
   it('принимает те же ключи в глобальном конфиге', () => {
@@ -193,12 +193,12 @@ describe('stepcast-configuration', () => {
 
   it('отклоняет неизвестный ключ', () => {
     const box = sandbox({ project: 'defaults:\n  modle: opus\n' });
-    assert.throws(() => resolveIn(box), StepcastError);
+    assert.throws(() => resolveIn(box), BurnexError);
   });
 
   it('отклоняет неразбираемый YAML', () => {
     const box = sandbox({ project: 'defaults:\n  - : :\n   bad\n' });
-    assert.throws(() => resolveIn(box), StepcastError);
+    assert.throws(() => resolveIn(box), BurnexError);
   });
 
   it('разворачивает тильду в корне прогонов', () => {
@@ -316,7 +316,7 @@ describe('stepcast-configuration', () => {
     assert.throws(
       () => resolveIn(box),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.equal(error.at, 'project.check');
         assert.equal(error.file, box.projectPath);
         return true;
@@ -327,7 +327,7 @@ describe('stepcast-configuration', () => {
   // Сценарий: «Неизвестный ключ секции»
   it('отклоняет неизвестный ключ секции project', () => {
     const box = sandbox({ project: 'project:\n  chek: npm run check\n' });
-    assert.throws(() => resolveIn(box), StepcastError);
+    assert.throws(() => resolveIn(box), BurnexError);
   });
 
   // Сценарий: «Команда не объявлена»
@@ -343,7 +343,7 @@ describe('stepcast-configuration', () => {
     assert.throws(
       () => resolveIn(box),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.match(error.message, /project\.check/);
         assert.equal(error.file, box.globalPath);
         assert.match(error.hint ?? '', /\.burnex\/config\.yml/);
@@ -406,7 +406,7 @@ describe('stepcast-configuration', () => {
   // Задача 1.2 / Сценарий: «Неизвестный ключ группы»
   it('отклоняет неизвестный ключ группы project.spec', () => {
     const box = sandbox({ project: 'project:\n  spec:\n    folder: openspec/changes\n' });
-    assert.throws(() => resolveIn(box), StepcastError);
+    assert.throws(() => resolveIn(box), BurnexError);
   });
 
   // Задача 1.1 / Сценарий: «Пустой каталог документов»
@@ -415,7 +415,7 @@ describe('stepcast-configuration', () => {
     assert.throws(
       () => resolveIn(box),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.equal(error.at, 'project.spec.dir');
         assert.equal(error.file, box.projectPath);
         return true;
@@ -429,7 +429,7 @@ describe('stepcast-configuration', () => {
     assert.throws(
       () => resolveIn(box),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.equal(error.at, 'project.spec.dir');
         return true;
       },
@@ -442,7 +442,7 @@ describe('stepcast-configuration', () => {
     assert.throws(
       () => resolveIn(box),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.equal(error.at, 'project.spec.rules');
         return true;
       },
@@ -470,7 +470,7 @@ describe('stepcast-configuration', () => {
     assert.throws(
       () => resolveIn(box),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.equal(error.at, 'project.spec.check');
         assert.equal(error.file, box.projectPath);
         return true;
@@ -484,7 +484,7 @@ describe('stepcast-configuration', () => {
     assert.throws(
       () => resolveIn(box),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.match(error.message, /project\.spec\.check/);
         assert.equal(error.file, box.globalPath);
         assert.match(error.hint ?? '', /\.burnex\/config\.yml/);
@@ -524,7 +524,7 @@ describe('stepcast-configuration', () => {
     assert.throws(
       () => resolveIn(box),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.equal(error.at, 'project.tools');
         assert.equal(error.file, box.projectPath);
         return true;
@@ -538,7 +538,7 @@ describe('stepcast-configuration', () => {
     assert.throws(
       () => resolveIn(box),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.equal(error.at, 'project.tools.0');
         assert.equal(error.file, box.projectPath);
         return true;
@@ -559,7 +559,7 @@ describe('stepcast-configuration', () => {
     assert.throws(
       () => resolveIn(box),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.match(error.message, /project\.tools/);
         assert.equal(error.file, box.globalPath);
         assert.match(error.hint ?? '', /\.burnex\/config\.yml/);
@@ -615,7 +615,7 @@ describe('stepcast-configuration', () => {
     assert.throws(
       () => resolveIn(box),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.equal(error.at, 'project.edit_paths');
         assert.equal(error.file, box.projectPath);
         return true;
@@ -629,7 +629,7 @@ describe('stepcast-configuration', () => {
     assert.throws(
       () => resolveIn(box),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.equal(error.at, 'project.edit_paths.0');
         assert.equal(error.file, box.projectPath);
         return true;
@@ -643,7 +643,7 @@ describe('stepcast-configuration', () => {
     assert.throws(
       () => resolveIn(box),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.equal(error.at, 'project.edit_paths.0');
         return true;
       },
@@ -656,7 +656,7 @@ describe('stepcast-configuration', () => {
     assert.throws(
       () => resolveIn(box),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.equal(error.at, 'project.edit_paths.0');
         return true;
       },
@@ -676,7 +676,7 @@ describe('stepcast-configuration', () => {
     assert.throws(
       () => resolveIn(box),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.match(error.message, /project\.edit_paths/);
         assert.equal(error.file, box.globalPath);
         assert.match(error.hint ?? '', /\.burnex\/config\.yml/);
@@ -736,7 +736,7 @@ describe('stepcast-configuration', () => {
     assert.throws(
       () => resolveIn(box),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.match(error.message, /public-site/);
         assert.equal(error.at, 'project.nested_repos');
         return true;
@@ -757,7 +757,7 @@ describe('stepcast-configuration', () => {
     assert.throws(
       () => resolveIn(box),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.equal(error.at, 'project.nested_repos');
         assert.equal(error.file, box.projectPath);
         return true;
@@ -771,7 +771,7 @@ describe('stepcast-configuration', () => {
     assert.throws(
       () => resolveIn(box),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.equal(error.at, 'project.nested_repos.0');
         assert.equal(error.file, box.projectPath);
         return true;
@@ -785,7 +785,7 @@ describe('stepcast-configuration', () => {
     assert.throws(
       () => resolveIn(box),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.equal(error.at, 'project.nested_repos.0');
         assert.equal(error.file, box.projectPath);
         return true;
@@ -799,7 +799,7 @@ describe('stepcast-configuration', () => {
     assert.throws(
       () => resolveIn(box),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.equal(error.at, 'project.nested_repos.0');
         return true;
       },
@@ -812,7 +812,7 @@ describe('stepcast-configuration', () => {
     assert.throws(
       () => resolveIn(box),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.equal(error.at, 'project.nested_repos.0');
         assert.equal(error.file, box.projectPath);
         return true;
@@ -825,7 +825,7 @@ describe('stepcast-configuration', () => {
     assert.throws(
       () => resolveIn(box),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.equal(error.at, 'project.nested_repos.0');
         return true;
       },
@@ -838,7 +838,7 @@ describe('stepcast-configuration', () => {
     assert.throws(
       () => resolveIn(box),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.match(error.message, /project\.nested_repos/);
         assert.equal(error.file, box.globalPath);
         assert.match(error.hint ?? '', /\.burnex\/config\.yml/);
@@ -906,7 +906,7 @@ describe('stepcast-configuration: объектная форма project.nested_r
     assert.throws(
       () => resolveIn(box),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.match(error.at ?? '', /dir/);
         return true;
       },
@@ -915,7 +915,7 @@ describe('stepcast-configuration: объектная форма project.nested_r
 
   it('отклоняет объект с пустым dir', () => {
     const box = sandbox({ project: 'project:\n  nested_repos:\n    - dir: ""\n' });
-    assert.throws(() => resolveIn(box), StepcastError);
+    assert.throws(() => resolveIn(box), BurnexError);
   });
 
   // Сценарий: «Недопустимые значения объявлений» — та же диагностика, что у project.check/project.spec
@@ -924,7 +924,7 @@ describe('stepcast-configuration: объектная форма project.nested_r
     assert.throws(
       () => resolveIn(box),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.match(error.at ?? '', /check/);
         assert.match(error.message, /Too small/);
         return true;
@@ -939,7 +939,7 @@ describe('stepcast-configuration: объектная форма project.nested_r
     assert.throws(
       () => resolveIn(box),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.match(error.at ?? '', /spec\.dir/);
         assert.match(error.message, /относительный путь/);
         return true;
@@ -949,7 +949,7 @@ describe('stepcast-configuration: объектная форма project.nested_r
 
   it('отклоняет символ шаблона глоба в dir объектной формы', () => {
     const box = sandbox({ project: 'project:\n  nested_repos:\n    - dir: "backend/*"\n' });
-    assert.throws(() => resolveIn(box), StepcastError);
+    assert.throws(() => resolveIn(box), BurnexError);
   });
 
   // Сценарий: «Повтор каталога в составе» — в любых формах
@@ -960,7 +960,7 @@ describe('stepcast-configuration: объектная форма project.nested_r
     assert.throws(
       () => resolveIn(box),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.match(error.message, /backend/);
         return true;
       },
@@ -1043,7 +1043,7 @@ describe('stepcast-configuration: запрет глобального слоя �
     assert.throws(
       () => resolveIn(box),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.match(error.message, /project\.spec\.dir/);
         assert.equal(error.file, box.globalPath);
         assert.match(error.hint ?? '', /\.burnex\/config\.yml/);
@@ -1058,7 +1058,7 @@ describe('stepcast-configuration: запрет глобального слоя �
     assert.throws(
       () => resolveIn(box),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.match(error.message, /project\.check/);
         return true;
       },
@@ -1099,7 +1099,7 @@ describe('stepcast-configuration: project.proposals — режим достав�
     assert.throws(
       () => resolveIn(box),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.match(error.message, /project\.proposals/);
         assert.equal(error.file, box.globalPath);
         return true;
@@ -1113,7 +1113,7 @@ describe('stepcast-configuration: project.proposals — режим достав�
     assert.throws(
       () => resolveIn(box),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.match(error.message, /queue/);
         assert.match(error.message, /direct/);
         return true;
@@ -1176,7 +1176,7 @@ describe('stepcast-configuration: практика памяти', () => {
     assert.throws(
       () => resolveIn(box),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.match(error.message, /без команды/);
         assert.equal(error.at, 'project.knowledge.command');
         return true;
@@ -1189,7 +1189,7 @@ describe('stepcast-configuration: практика памяти', () => {
     assert.throws(
       () => resolveIn(box),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.equal(error.at, 'project.knowledge.dir');
         return true;
       },
@@ -1204,7 +1204,7 @@ describe('stepcast-configuration: практика памяти', () => {
     assert.throws(
       () => resolveIn(box),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.match(error.message, /project\.knowledge/);
         assert.equal(error.file, box.globalPath);
         return true;
@@ -1217,12 +1217,12 @@ describe('stepcast-configuration: практика памяти', () => {
     const box = sandbox({
       project: 'project:\n  knowledge:\n    provider: fs\n    dir: /var/knowledge\n',
     });
-    assert.throws(() => resolveIn(box), StepcastError);
+    assert.throws(() => resolveIn(box), BurnexError);
   });
 
   it('отклоняет неизвестный ключ секции', () => {
     const box = sandbox({ project: 'project:\n  knowledge:\n    source: fs\n' });
-    assert.throws(() => resolveIn(box), StepcastError);
+    assert.throws(() => resolveIn(box), BurnexError);
   });
 });
 
@@ -1281,7 +1281,7 @@ describe('stepcast-configuration: таблица раннеров', () => {
       project: 'runners:\n  deno:\n    command: [deno, run]\n    wrapper: "burnex:нет-такой"\n',
     });
     assert.throws(() => resolveIn(box), (error: unknown) => {
-      assert.ok(error instanceof StepcastError);
+      assert.ok(error instanceof BurnexError);
       assert.match(error.message, /burnex:нет-такой/);
       assert.match(error.message, /пакетом burnex/);
       assert.equal(error.at, 'runners.deno.wrapper');
@@ -1331,7 +1331,7 @@ describe('stepcast-configuration: таблица раннеров', () => {
   it('раннер, ни в одном слое не назвавший command, — отказ разбора с его именем', () => {
     const box = sandbox({ project: 'runners:\n  uv:\n    extensions: [".uv"]\n' });
     assert.throws(() => resolveIn(box), (error: unknown) => {
-      assert.ok(error instanceof StepcastError);
+      assert.ok(error instanceof BurnexError);
       assert.match(error.message, /uv/);
       assert.equal(error.at, 'runners.uv.command');
       return true;
@@ -1352,7 +1352,7 @@ describe('stepcast-configuration: таблица раннеров', () => {
           pluginDefaults: [{ plugin: 'p', values: { runners: { bun: { extensions: ['.bun'] } } } }],
         }),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.match(error.message, /bun/);
         return true;
       },
@@ -1362,12 +1362,12 @@ describe('stepcast-configuration: таблица раннеров', () => {
   // Сценарий: «Форма записи проверяется»
   it('отклоняет command строкой', () => {
     const box = sandbox({ project: 'runners:\n  uv:\n    command: "uv run"\n' });
-    assert.throws(() => resolveIn(box), StepcastError);
+    assert.throws(() => resolveIn(box), BurnexError);
   });
 
   it('отклоняет расширение без точки', () => {
     const box = sandbox({ project: 'runners:\n  uv:\n    command: [uv]\n    extensions: ["py"]\n' });
-    assert.throws(() => resolveIn(box), StepcastError);
+    assert.throws(() => resolveIn(box), BurnexError);
   });
 
   // Сценарий: «Встроенная таблица есть без всякой конфигурации» — отчёт
@@ -1412,7 +1412,7 @@ describe('stepcast-configuration: таблица раннеров', () => {
         '  rye:\n    command: [rye, run]\n    extensions: [".py"]\n',
     });
     assert.throws(() => resolveIn(box), (error: unknown) => {
-      assert.ok(error instanceof StepcastError);
+      assert.ok(error instanceof BurnexError);
       assert.match(error.message, /rye/);
       assert.match(error.message, /uv/);
       return true;
@@ -1443,7 +1443,7 @@ describe('backends.<id>.credentials', () => {
     assert.throws(
       () => resolveIn(box),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.match(error.message, /допустим только в глобальной конфигурации/);
         assert.match(error.message, /backends\.claude\.credentials\.OPENAI_API_KEY/);
         assert.equal(error.file, box.projectPath);
@@ -1475,7 +1475,7 @@ describe('backends.<id>.credentials', () => {
           ],
         }),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.match(error.message, /вендор/);
         assert.equal(error.file, '/модули/вендор.js');
         assert.match(error.message, /backends\.codex\.credentials\.OPENAI_API_KEY/);
@@ -1492,7 +1492,7 @@ describe('backends.<id>.credentials', () => {
     assert.throws(
       () => resolveIn(box),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.match(error.message, /OPENAI_API_KEY/);
         assert.equal(error.at, 'backends.codex.credentials.OPENAI_API_KEY');
         return true;
@@ -1513,7 +1513,7 @@ describe('backends.<id>.credentials', () => {
       assert.throws(
         () => resolveIn(box),
         (error: unknown) => {
-          assert.ok(error instanceof StepcastError);
+          assert.ok(error instanceof BurnexError);
           assert.match(error.message, /схеме/);
           assert.match(error.at ?? '', /^backends\.codex\.credentials/);
           return true;
@@ -1541,7 +1541,7 @@ describe('backends.<id>.credentials', () => {
     const box = sandbox({
       global: `backends:\n  codex:\n    credentials:\n      OPENAI_API_KEY:\n        service: s\n`,
     });
-    assert.throws(() => resolveIn(box), StepcastError);
+    assert.throws(() => resolveIn(box), BurnexError);
   });
 });
 
@@ -1550,7 +1550,7 @@ describe('stepcast-configuration: pipeline_agents, step_agents и agent_policy',
     assert.throws(
       () => resolveIn(box),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.match(error.message, /схеме/);
         assert.match(error.at ?? '', at);
         assert.ok(error.file !== undefined);

@@ -9,7 +9,7 @@ import { describeSource, type Source } from '../pipeline/config/merge.js';
 import { MODEL_TIERS, type ModelTiers } from '../pipeline/config/modelTiers.js';
 import type { ResolvedConfig } from '../pipeline/config/resolve.js';
 import { EffortSchema, ModelNameSchema, ModelTierSchema, RawConfigSchema } from '../pipeline/config/schema.js';
-import { StepcastError } from '../../kernel/errors.js';
+import { BurnexError } from '../../kernel/errors.js';
 import { currentDaemonKernel } from './daemon/kernel.js';
 import type { KernelCache } from './pipelines.js';
 import { homeRoot } from '../../kernel/dirs.js';
@@ -135,7 +135,7 @@ export async function readSettings(home: string = homedir(), kernelCache?: Kerne
   // Отдать его значения за настройки значило бы показать правдоподобные и
   // неверные — и на них же проверить правку, которая пишется в настоящий файл.
   if (fallback) {
-    throw new StepcastError(`Settings cannot be read: ${buildError ?? 'the configuration does not build'}`, {
+    throw new BurnexError(`Settings cannot be read: ${buildError ?? 'the configuration does not build'}`, {
       file: globalConfigPath(home),
       hint: 'Fix the files the plugin composition is built from — the dashboard shows the same reason in the bar above the screen',
     });
@@ -225,7 +225,7 @@ export function editGlobalConfig(home: string, edit: (document: Document) => voi
   const next = document.toString();
   const parsed = RawConfigSchema.safeParse(parseDocument(next).toJS() ?? {});
   if (!parsed.success) {
-    throw new StepcastError(`The patch does not pass the configuration schema: ${parsed.error.issues[0]?.message ?? 'unknown error'}`, { file });
+    throw new BurnexError(`The patch does not pass the configuration schema: ${parsed.error.issues[0]?.message ?? 'unknown error'}`, { file });
   }
 
   mkdirSync(dirname(file), { recursive: true });
@@ -243,7 +243,7 @@ export async function writeSettings(
   const parsedPatch = SettingsPatchSchema.safeParse(input);
   if (!parsedPatch.success) {
     const issue = parsedPatch.error.issues[0]!;
-    throw new StepcastError(`Invalid settings patch ${issue.path.join('.')}: ${issue.message}`);
+    throw new BurnexError(`Invalid settings patch ${issue.path.join('.')}: ${issue.message}`);
   }
   const patch = parsedPatch.data;
   const current = await readSettings(home, kernelCache);
@@ -252,7 +252,7 @@ export async function writeSettings(
   const specifiers = new Map<string, string>();
   for (const name of connect) {
     const entry = bundledByBackend(name);
-    if (entry === undefined) throw new StepcastError(`Agent ${name} cannot be connected from the dashboard`);
+    if (entry === undefined) throw new BurnexError(`Agent ${name} cannot be connected from the dashboard`);
     specifiers.set(name, entry.specifier);
   }
   const declared = new Set(readDeclaredPlugins(home));
@@ -261,25 +261,25 @@ export async function writeSettings(
   // изменив. Подключённый же бэкенд — повтор без последствий.
   for (const [name, specifier] of specifiers) {
     if (declared.has(specifier) && known.get(name)?.available !== true) {
-      throw new StepcastError(`Agent ${name} is already declared in plugins (${specifier}) but did not load: fix the reason shown in the bar above the screen`);
+      throw new BurnexError(`Agent ${name} is already declared in plugins (${specifier}) but did not load: fix the reason shown in the bar above the screen`);
     }
   }
   for (const name of Object.keys(patch.backends ?? {})) {
-    if (!known.has(name)) throw new StepcastError(`Unknown agent ${name}`);
+    if (!known.has(name)) throw new BurnexError(`Unknown agent ${name}`);
   }
   if (patch.agent !== undefined) {
     const backend = known.get(patch.agent);
-    if (backend === undefined) throw new StepcastError(`Unknown agent ${patch.agent}`);
-    if (!backend.enabled) throw new StepcastError(`Agent ${patch.agent} is disabled`);
+    if (backend === undefined) throw new BurnexError(`Unknown agent ${patch.agent}`);
+    if (!backend.enabled) throw new BurnexError(`Agent ${patch.agent} is disabled`);
     // Неподключённый бэкенд можно выбрать только той же правкой, что его
     // подключает (объявленный, но не поднявшийся отклонён выше).
     if (!backend.available && !connect.has(patch.agent)) {
-      throw new StepcastError(`Agent ${patch.agent} is not connected: connect its plugin first`);
+      throw new BurnexError(`Agent ${patch.agent} is not connected: connect its plugin first`);
     }
   }
   for (const tier of patch.removeModelTiers ?? []) {
     if ((MODEL_TIERS as readonly string[]).includes(tier)) {
-      throw new StepcastError(`Cannot remove built-in tier ${tier}`);
+      throw new BurnexError(`Cannot remove built-in tier ${tier}`);
     }
   }
 

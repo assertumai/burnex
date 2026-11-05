@@ -10,7 +10,7 @@ import {
   type TreeAnchorer,
 } from '../domain/anchor/index.js';
 import type { Config } from '../config/resolve.js';
-import { StepcastError } from '../../../kernel/errors.js';
+import { BurnexError } from '../../../kernel/errors.js';
 import { withTempDir } from '../../../kernel/fs/tempDir.js';
 import { stepDir, type RunPaths } from './journal/paths.js';
 import { findStepDir, readManifest, readStatus } from './journal/reader.js';
@@ -1361,7 +1361,7 @@ export function planResume(request: ResumeRequest): ResumePlanResult {
   // вклада.
   const missing = missingManifestPlugins(source.manifest.plugins, request.registry);
   if (missing.length > 0) {
-    throw new StepcastError(
+    throw new BurnexError(
       missing.length === 1
         ? `Плагин ${describeManifestPlugin(missing[0]!)}, названный манифестом исходного прогона, не загружен`
         : `Плагины, названные манифестом исходного прогона, не загружены: ${missing.map(describeManifestPlugin).join(', ')}`,
@@ -1390,12 +1390,12 @@ export function planResume(request: ResumeRequest): ResumePlanResult {
     // тогда переиспользует всё и не исполняет ничего — молча и с видом успеха.
     const target = expanded.pipeline.jobs.find((item) => item.id === from.job);
     if (target === undefined) {
-      throw new StepcastError(`Работа ${from.job} в пайплайне не объявлена`, {
+      throw new BurnexError(`Работа ${from.job} в пайплайне не объявлена`, {
         hint: `Доступны: ${expanded.pipeline.jobs.map((item) => item.id).join(', ')}`,
       });
     }
     if (from.step !== undefined && !target.steps.some((item) => item.id === from.step)) {
-      throw new StepcastError(`Работа ${from.job} не объявляет шаг ${from.step}`, {
+      throw new BurnexError(`Работа ${from.job} не объявляет шаг ${from.step}`, {
         hint: `Шаги работы: ${target.steps.map((item) => item.id).join(', ')}`,
       });
     }
@@ -1407,7 +1407,7 @@ export function planResume(request: ResumeRequest): ResumePlanResult {
     if (loop !== undefined) {
       const entry = loopEntryPoints(buildGraph(expanded.pipeline).graph, loop)[0];
       if (entry !== undefined && (entry.id !== from.job || from.step !== undefined)) {
-        throw new StepcastError(
+        throw new BurnexError(
           `Работа ${from.job} состоит в цикле ${loop.id} — возобновление с участника цикла или его шага невозможно`,
           { hint: `Цикл переисполняется с первого прохода. Укажите --from ${entry.id}` },
         );
@@ -1417,13 +1417,13 @@ export function planResume(request: ResumeRequest): ResumePlanResult {
   if (from?.step !== undefined) {
     const job = expanded.pipeline.jobs.find((item) => item.id === from.job);
     if (job !== undefined && job.session === 'shared') {
-      throw new StepcastError(
+      throw new BurnexError(
         `Работа ${job.id} объявляет session: shared — возобновление с отдельного шага невозможно`,
         { hint: `Результат шага зависит от диалога, которого при частичном повторе нет. Укажите --from ${job.id}` },
       );
     }
     if (job !== undefined && job.attempts.max > 1) {
-      throw new StepcastError(
+      throw new BurnexError(
         `Работа ${job.id} объявляет attempts.max > 1 — возобновление с отдельного шага невозможно`,
         { hint: `Шаги попытки опираются на дерево, собранное предыдущими шагами той же попытки. Укажите --from ${job.id}` },
       );

@@ -6,7 +6,7 @@ import { describe, it } from 'node:test';
 import type { CliIo } from '../src/kernel/cli/args.js';
 import { buildIndependentCommandEnv, run as runCli } from '../src/parts/cli/main.js';
 import { COMMAND_ROWS } from '../src/parts/cli/rows.js';
-import { ExitCode, StepcastError, type ExitCodeValue } from '../src/kernel/errors.js';
+import { ExitCode, BurnexError, type ExitCodeValue } from '../src/kernel/errors.js';
 import { makeProject, seedRun, withHome, type Project } from './helpers.js';
 
 interface Outcome {
@@ -254,13 +254,13 @@ describe('config-error-breaks-every-command: граница выводится �
 });
 
 describe('config-error-breaks-every-command: команда перечня, обратившаяся к конфигурации', () => {
-  it('чтение config бросает StepcastError, называющую команду и её независимость', () => {
+  it('чтение config бросает BurnexError, называющую команду и её независимость', () => {
     const env = buildIndependentCommandEnv('data', '/tmp');
 
     assert.throws(
       () => env.config,
       (error: unknown) =>
-        error instanceof StepcastError &&
+        error instanceof BurnexError &&
         /data/.test(error.message) &&
         /независим/.test(error.message),
     );
@@ -272,7 +272,7 @@ describe('config-error-breaks-every-command: команда перечня, об
     assert.throws(
       () => env.registry,
       (error: unknown) =>
-        error instanceof StepcastError &&
+        error instanceof BurnexError &&
         /down/.test(error.message) &&
         /независим/.test(error.message),
     );
@@ -284,7 +284,7 @@ describe('config-error-breaks-every-command: команда перечня, об
     assert.throws(
       () => env.ctx,
       (error: unknown) =>
-        error instanceof StepcastError &&
+        error instanceof BurnexError &&
         /down/.test(error.message) &&
         /независим/.test(error.message),
     );

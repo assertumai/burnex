@@ -13,7 +13,7 @@ import {
   parsePercent,
   parseTokens,
 } from '../src/kernel/units.js';
-import { StepcastError } from '../src/kernel/errors.js';
+import { BurnexError } from '../src/kernel/errors.js';
 
 describe('единицы измерения', () => {
   // Спека pipeline-definition: «Дробное число токенов»
@@ -33,7 +33,7 @@ describe('единицы измерения', () => {
     assert.throws(
       () => parseTokens('2m'),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.match(error.hint ?? '', /Регистр различается/);
         return true;
       },
@@ -41,7 +41,7 @@ describe('единицы измерения', () => {
   });
 
   it('отклоняет заглавную M в длительности', () => {
-    assert.throws(() => parseDuration('2M'), StepcastError);
+    assert.throws(() => parseDuration('2M'), BurnexError);
   });
 
   it('разбирает остальные единицы времени', () => {
@@ -52,9 +52,9 @@ describe('единицы измерения', () => {
   });
 
   it('отклоняет мусор', () => {
-    assert.throws(() => parseTokens('много'), StepcastError);
-    assert.throws(() => parseDuration('скоро'), StepcastError);
-    assert.throws(() => parseTokens(-1), StepcastError);
+    assert.throws(() => parseTokens('много'), BurnexError);
+    assert.throws(() => parseDuration('скоро'), BurnexError);
+    assert.throws(() => parseTokens(-1), BurnexError);
   });
 
   it('печатает величины обратно в человекочитаемом виде', () => {
@@ -87,13 +87,13 @@ describe('единицы измерения', () => {
   });
 
   it('отклоняет отрицательные, нечисловые и валютные денежные величины', () => {
-    assert.throws(() => parseMoney(-5), StepcastError);
-    assert.throws(() => parseMoney('-5'), StepcastError);
-    assert.throws(() => parseMoney(''), StepcastError);
-    assert.throws(() => parseMoney('   '), StepcastError);
-    assert.throws(() => parseMoney('много'), StepcastError);
-    assert.throws(() => parseMoney('12 EUR'), StepcastError);
-    assert.throws(() => parseMoney('€12'), StepcastError);
+    assert.throws(() => parseMoney(-5), BurnexError);
+    assert.throws(() => parseMoney('-5'), BurnexError);
+    assert.throws(() => parseMoney(''), BurnexError);
+    assert.throws(() => parseMoney('   '), BurnexError);
+    assert.throws(() => parseMoney('много'), BurnexError);
+    assert.throws(() => parseMoney('12 EUR'), BurnexError);
+    assert.throws(() => parseMoney('€12'), BurnexError);
   });
 
   it('печатает денежные величины: два знака от доллара, четыре ниже', () => {
@@ -111,17 +111,17 @@ describe('единицы измерения', () => {
     });
 
     it('отклоняет нечисловые, пустые, суффиксные, нулевые и дробные значения', () => {
-      assert.throws(() => parseCount('много'), StepcastError);
-      assert.throws(() => parseCount(''), StepcastError);
-      assert.throws(() => parseCount('0'), StepcastError);
-      assert.throws(() => parseCount(0), StepcastError);
-      assert.throws(() => parseCount(1.5), StepcastError);
-      assert.throws(() => parseCount('-1'), StepcastError);
+      assert.throws(() => parseCount('много'), BurnexError);
+      assert.throws(() => parseCount(''), BurnexError);
+      assert.throws(() => parseCount('0'), BurnexError);
+      assert.throws(() => parseCount(0), BurnexError);
+      assert.throws(() => parseCount(1.5), BurnexError);
+      assert.throws(() => parseCount('-1'), BurnexError);
 
       assert.throws(
         () => parseCount('2k'),
         (error: unknown) => {
-          assert.ok(error instanceof StepcastError);
+          assert.ok(error instanceof BurnexError);
           assert.match(error.hint ?? '', /не принимает суффиксов/);
           return true;
         },
@@ -132,7 +132,7 @@ describe('единицы измерения', () => {
       assert.throws(
         () => parseCount('много'),
         (error: unknown) => {
-          assert.ok(error instanceof StepcastError);
+          assert.ok(error instanceof BurnexError);
           assert.match(error.hint ?? '', /целое положительное число/);
           return true;
         },
@@ -143,7 +143,7 @@ describe('единицы измерения', () => {
       assert.throws(
         () => parseCount('много', 'jobs.build.until.max_iterations', '${params.n}'),
         (error: unknown) => {
-          assert.ok(error instanceof StepcastError);
+          assert.ok(error instanceof BurnexError);
           assert.match(error.hint ?? '', /\$\{params\.n\}/);
           return true;
         },
@@ -161,10 +161,10 @@ describe('единицы измерения', () => {
     });
 
     it('отклоняет значения вне 0..100 и нечисловые', () => {
-      assert.throws(() => parsePercent('101'), StepcastError);
-      assert.throws(() => parsePercent(-1), StepcastError);
-      assert.throws(() => parsePercent('много'), StepcastError);
-      assert.throws(() => parsePercent(''), StepcastError);
+      assert.throws(() => parsePercent('101'), BurnexError);
+      assert.throws(() => parsePercent(-1), BurnexError);
+      assert.throws(() => parsePercent('много'), BurnexError);
+      assert.throws(() => parsePercent(''), BurnexError);
     });
   });
 
@@ -178,10 +178,10 @@ describe('единицы измерения', () => {
     });
 
     it('отклоняет дробные и нечисловые значения', () => {
-      assert.throws(() => parseExitCode('1.5'), StepcastError);
-      assert.throws(() => parseExitCode(1.5), StepcastError);
-      assert.throws(() => parseExitCode('много'), StepcastError);
-      assert.throws(() => parseExitCode(''), StepcastError);
+      assert.throws(() => parseExitCode('1.5'), BurnexError);
+      assert.throws(() => parseExitCode(1.5), BurnexError);
+      assert.throws(() => parseExitCode('много'), BurnexError);
+      assert.throws(() => parseExitCode(''), BurnexError);
     });
   });
 });

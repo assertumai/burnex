@@ -5,11 +5,11 @@ import { join } from 'node:path';
 
 import { commandRow } from '../../../kernel/cli/commandRow.js';
 import type { ParsedArgs } from '../../../kernel/cli/args.js';
-import { ExitCode, StepcastError, type ExitCodeValue } from '../../../kernel/errors.js';
+import { ExitCode, BurnexError, type ExitCodeValue } from '../../../kernel/errors.js';
 import { migrateHomeRoot } from '../../../kernel/dirs.js';
 import { enginePackageRoot } from '../../pipeline/document/packagePaths.js';
 import { resolveInstallMethod, type InferProbes } from '../infer.js';
-import { installManifestPath, stepcastHome, type InstallManifest } from '../manifest.js';
+import { installManifestPath, burnexHome, type InstallManifest } from '../manifest.js';
 import { checkUpdate, planUpdate, type UpdateStep } from '../plan.js';
 import { restartDaemon, systemRestartHost, type RestartHost } from '../restart.js';
 
@@ -62,7 +62,7 @@ export async function runUpdateCommand(
   // может сам человек, а медленная сеть — не повод отказывать.
   const check = await checkUpdate(manifest, host, { ...(ref === undefined ? {} : { ref }), remote: false });
   if (check.status === 'unknown' || check.status === 'blocked' || check.status === 'no-tags') {
-    throw new StepcastError(check.reason, { exitCode: ExitCode.jobFailed, ...(check.hint === undefined ? {} : { hint: check.hint }) });
+    throw new BurnexError(check.reason, { exitCode: ExitCode.jobFailed, ...(check.hint === undefined ? {} : { hint: check.hint }) });
   }
   if (check.status === 'up-to-date') {
     write(`уже установлена версия ${check.version}, обновлять нечего`);
@@ -75,7 +75,7 @@ export async function runUpdateCommand(
     return ExitCode.ok;
   }
   if (plan.kind === 'refuse') {
-    throw new StepcastError(plan.reason, { exitCode: ExitCode.jobFailed, ...(plan.hint === undefined ? {} : { hint: plan.hint }) });
+    throw new BurnexError(plan.reason, { exitCode: ExitCode.jobFailed, ...(plan.hint === undefined ? {} : { hint: plan.hint }) });
   }
 
   for (const step of plan.steps) {
@@ -106,7 +106,7 @@ function systemUpdateHost(): UpdateHost {
     process.stderr.write(`burnex: домашний каталог ${migrated.from} переименован в ${migrated.to}; на прежнем месте оставлена ссылка для установленного релиза\n`);
   }
   const root = enginePackageRoot();
-  const releasesDir = join(stepcastHome(process.env, home), 'releases');
+  const releasesDir = join(burnexHome(process.env, home), 'releases');
   const manifestPath = installManifestPath(process.env, home);
 
   const capture = (step: UpdateStep, timeoutMs?: number): string | undefined => {

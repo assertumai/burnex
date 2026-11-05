@@ -1,4 +1,4 @@
-export { ExitCode, StepcastError, isStepcastError, type ExitCodeValue } from '../../kernel/errors.js';
+export { ExitCode, BurnexError, isBurnexError, type ExitCodeValue } from '../../kernel/errors.js';
 export { parseTokens, parseDuration, formatTokens, formatDuration } from '../../kernel/units.js';
 export {
   resolveConfig,

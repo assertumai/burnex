@@ -12,7 +12,7 @@ import {
   splitCompositeAnchorId,
 } from '../src/parts/pipeline/domain/anchor/index.js';
 import { loadIgnoreRules } from '../src/parts/pipeline/domain/anchor/ignore.js';
-import { StepcastError } from '../src/kernel/errors.js';
+import { BurnexError } from '../src/kernel/errors.js';
 import { tempDir } from './tmp.js';
 
 interface Bed {
@@ -186,7 +186,7 @@ describe('workspace-anchor: восстановление', () => {
     assert.throws(
       () => anchorer.restore({ kind: 'git', id: '0'.repeat(40) }),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.match(error.message, /недоступны/);
         return true;
       },
@@ -205,7 +205,7 @@ describe('workspace-anchor: восстановление', () => {
     assert.throws(
       () => anchorer.restore(saved),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.match(error.message, /хеш-манифестом/);
         assert.match(error.hint ?? '', /содержимого файлов не хранит/);
         return true;
@@ -501,7 +501,7 @@ describe('workspace-anchor: составной способ фиксации', (
     assert.throws(
       () => today.restorePaths(foreignAnchor, ['public-site/a.txt']),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.match(error.message, /не совпадает с действующим/);
         return true;
       },
@@ -612,7 +612,7 @@ describe('workspace-anchor: составной способ фиксации', (
     assert.throws(
       () => anchorer.restore(saved),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.match(error.message, /public-site/);
         assert.match(error.message, /не является рабочим деревом/);
         return true;
@@ -650,7 +650,7 @@ describe('workspace-anchor: составной способ фиксации', (
     assert.throws(
       () => anchorer.restore(saved),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.match(error.message, /public-site/);
         assert.match(error.message, /не является рабочим деревом/);
         assert.match(error.hint ?? '', /собственных базах/);

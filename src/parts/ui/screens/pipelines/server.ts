@@ -1,4 +1,4 @@
-import { isStepcastError } from '../../../../kernel/errors.js';
+import { isBurnexError } from '../../../../kernel/errors.js';
 import { readBody, sendJson } from '../../daemon/http.js';
 import { writePipelineAgent } from '../../pipelineAgents.js';
 import { buildPipelines } from '../../pipelines.js';
@@ -55,7 +55,7 @@ const handleAgents: ApiHandler = async (req, res, env) => {
     await writePipelineAgent(patch, env.home, env.kernelCache);
   } catch (error) {
     const message = (error as Error).message;
-    sendJson(res, isStepcastError(error) ? 400 : 500, { error: message });
+    sendJson(res, isBurnexError(error) ? 400 : 500, { error: message });
     return;
   }
   await handlePipelines(req, res, env);

@@ -3,7 +3,7 @@ import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, it } from 'node:test';
 
-import { ExitCode, StepcastError } from '../src/kernel/errors.js';
+import { ExitCode, BurnexError } from '../src/kernel/errors.js';
 import type { ParsedArgs } from '../src/kernel/cli/types.js';
 import { createFakeBackend, initLine, resultLine } from '../src/parts/pipeline/backend/fake.js';
 import { runRunCommand } from '../src/parts/pipeline/commands/run.js';
@@ -71,7 +71,7 @@ describe('run --shadow: проверка объявлений до старта'
     assert.throws(
       () => assertShadowDeclarations(expanded.pipeline),
       (error) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.match(error.message, /build\.compile/);
         assert.match(error.message, /publish\.push/);
         assert.doesNotMatch(error.message, /publish\.tag/);

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
-import { StepcastError } from '../src/kernel/errors.js';
+import { BurnexError } from '../src/kernel/errors.js';
 import { applyDeclarativePlugin } from '../src/kernel/load.js';
 import { registryFromKernel } from '../src/kernel/registry.js';
 import { createBuiltinKernel } from '../src/parts/builtin.js';
@@ -28,11 +28,11 @@ function expand(project: Project, registry = registryFromKernel(createBuiltinKer
   });
 }
 
-function thrown(fn: () => unknown): StepcastError {
+function thrown(fn: () => unknown): BurnexError {
   try {
     fn();
   } catch (error) {
-    assert.ok(error instanceof StepcastError, `ожидался StepcastError, пришло ${String(error)}`);
+    assert.ok(error instanceof BurnexError, `ожидался BurnexError, пришло ${String(error)}`);
     return error;
   }
   assert.fail('ожидался отказ разбора');
@@ -209,7 +209,7 @@ describe('pipeline-secrets: ключ secrets на шаге', () => {
           '/модуль/g.js',
           DECLARATIVE_CONTRIBUTION_FIELDS,
         ),
-      (error: unknown) => error instanceof StepcastError && /secrets/.test(error.message),
+      (error: unknown) => error instanceof BurnexError && /secrets/.test(error.message),
     );
   });
 
@@ -253,7 +253,7 @@ describe('pipeline-secrets: ключ secrets на шаге', () => {
     const project = makeProject({
       'burnex.yml': pipelineWith(GH_TOKEN, '      - { id: a, run: [echo, ok], secrets: [GH_TOKEN] }\n'),
     });
-    assert.throws(() => expand(project), StepcastError);
+    assert.throws(() => expand(project), BurnexError);
   });
 });
 

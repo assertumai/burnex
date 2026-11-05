@@ -3,7 +3,7 @@ import { readFileSync, realpathSync, symlinkSync, writeFileSync } from 'node:fs'
 import { basename, join } from 'node:path';
 import { describe, it } from 'node:test';
 
-import { isStepcastError } from '../src/kernel/errors.js';
+import { isBurnexError } from '../src/kernel/errors.js';
 import { readPluginManifest } from '../src/kernel/tree/manifest.js';
 import { tempDir } from './tmp.js';
 
@@ -44,7 +44,7 @@ describe('plugin-manifest: чтение plugin.json', () => {
     writeManifest(dir, { version: '1.0.0' });
 
     assert.throws(() => readPluginManifest(dir), (error: unknown) => {
-      assert.ok(isStepcastError(error));
+      assert.ok(isBurnexError(error));
       assert.match(error.message, /половин/);
       assert.equal(error.file, join(dir, 'plugin.json'));
       return true;
@@ -55,7 +55,7 @@ describe('plugin-manifest: чтение plugin.json', () => {
     const dir = pluginDir();
 
     assert.throws(() => readPluginManifest(dir), (error: unknown) => {
-      assert.ok(isStepcastError(error));
+      assert.ok(isBurnexError(error));
       assert.equal(error.file, join(dir, 'plugin.json'));
       return true;
     });
@@ -66,7 +66,7 @@ describe('plugin-manifest: чтение plugin.json', () => {
     writeManifest(dir, '{ не json');
 
     assert.throws(() => readPluginManifest(dir), (error: unknown) => {
-      assert.ok(isStepcastError(error));
+      assert.ok(isBurnexError(error));
       assert.match(error.message, /JSON/);
       assert.equal(error.file, join(dir, 'plugin.json'));
       return true;
@@ -80,7 +80,7 @@ describe('plugin-manifest: чтение plugin.json', () => {
     writeManifest(dir, { server: `../${basename(outsideDir)}/escape.mjs` });
 
     assert.throws(() => readPluginManifest(dir), (error: unknown) => {
-      assert.ok(isStepcastError(error));
+      assert.ok(isBurnexError(error));
       assert.match(error.message, /пределы/);
       assert.equal(error.at, 'server');
       return true;
@@ -96,7 +96,7 @@ describe('plugin-manifest: чтение plugin.json', () => {
     writeManifest(dir, { server: 'server.mjs' });
 
     assert.throws(() => readPluginManifest(dir), (error: unknown) => {
-      assert.ok(isStepcastError(error));
+      assert.ok(isBurnexError(error));
       assert.match(error.message, /пределы/);
       return true;
     });
@@ -122,7 +122,7 @@ describe('plugin-manifest: чтение plugin.json', () => {
     writeManifest(dir, { server: 'server.mjs', name: 'clock' });
 
     assert.throws(() => readPluginManifest(dir), (error: unknown) => {
-      assert.ok(isStepcastError(error));
+      assert.ok(isBurnexError(error));
       assert.match(error.message, /name/);
       return true;
     });

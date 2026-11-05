@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { commandRow } from '../../../kernel/cli/commandRow.js';
 import type { CliIo, ParsedArgs } from '../../../kernel/cli/args.js';
 import { formatColumns } from '../../../kernel/cli/output.js';
-import { ExitCode, StepcastError, type ExitCodeValue } from '../../../kernel/errors.js';
+import { ExitCode, BurnexError, type ExitCodeValue } from '../../../kernel/errors.js';
 import type { PipelineCommandEnv } from '../../pipeline/contract.js';
 import { findProjectRoot } from '../../pipeline/run/journal/paths.js';
 import { buildPackageIndex, homePackagesDir, projectPackagesDir } from '../index.js';
@@ -111,11 +111,11 @@ package_version: 0.1.0
 function runNew(args: ParsedArgs, io: CliIo, options: PackageCommandOptions): ExitCodeValue {
   const name = args.positional[1];
   if (name === undefined) {
-    throw new StepcastError('Не назван пакет: burnex package new <имя> [--home]', { exitCode: ExitCode.configError });
+    throw new BurnexError('Не назван пакет: burnex package new <имя> [--home]', { exitCode: ExitCode.configError });
   }
   const problem = checkPackageName(name);
   if (problem !== undefined) {
-    throw new StepcastError(problem, {
+    throw new BurnexError(problem, {
       exitCode: ExitCode.configError,
       hint: 'Имя пакета — kebab-slug; stepcast и builtin зарезервированы',
     });
@@ -128,7 +128,7 @@ function runNew(args: ParsedArgs, io: CliIo, options: PackageCommandOptions): Ex
     : projectPackagesDir(findProjectRoot(options.cwd));
   const dir = join(packagesDir, name);
   if (existsSync(dir)) {
-    throw new StepcastError(`Каталог пакета ${dir} уже существует`, {
+    throw new BurnexError(`Каталог пакета ${dir} уже существует`, {
       exitCode: ExitCode.configError,
       file: dir,
       hint: 'Существующий пакет не перезаписывается — выберите другое имя или уберите каталог руками',
@@ -146,7 +146,7 @@ export function runPackageCommand(args: ParsedArgs, io: CliIo, options: PackageC
   const action = args.positional[0];
   if (action === 'list') return runList(args, io, options);
   if (action === 'new') return runNew(args, io, options);
-  throw new StepcastError(
+  throw new BurnexError(
     action === undefined ? 'Не указано действие: burnex package list|new' : `Неизвестное действие пакета: ${action}`,
     { exitCode: ExitCode.configError, hint: `Действия: ${ACTIONS.join(', ')}` },
   );

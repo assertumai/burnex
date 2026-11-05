@@ -6,7 +6,7 @@ import { listPipelineEntries, type PipelineEntry } from '../pipeline/domain/proj
 import { listProjects } from '../pipeline/run/journal/reader.js';
 import { expandPipeline } from '../pipeline/document/expand.js';
 import { displayInputs } from '../pipeline/document/displayInputs.js';
-import { isStepcastError, StepcastError } from '../../kernel/errors.js';
+import { isBurnexError, BurnexError } from '../../kernel/errors.js';
 import { describeSource } from '../pipeline/config/merge.js';
 import { resolveConfig, type Config, type ResolveOptions } from '../pipeline/config/resolve.js';
 import { resolveWithPlugins, type ResolvedWithPlugins } from '../resolve.js';
@@ -253,11 +253,11 @@ function toModelOriginView(
 ): PipelineModelOrigin {
   const hint = 'This is an inconsistency inside the daemon: restart `burnex up` and report it';
   if (origin === undefined) {
-    throw new StepcastError('Resolution did not name the layer that supplied the step model', { at, hint });
+    throw new BurnexError('Resolution did not name the layer that supplied the step model', { at, hint });
   }
   if (origin.layer !== 'config') return origin;
   if (modelConfigFile === undefined) {
-    throw new StepcastError('The step model came from settings, but the file that set it is unknown', {
+    throw new BurnexError('The step model came from settings, but the file that set it is unknown', {
       at,
       hint,
     });
@@ -272,11 +272,11 @@ function toEffortOriginView(
 ): PipelineEffortOrigin {
   const hint = 'This is an inconsistency inside the daemon: restart `burnex up` and report it';
   if (origin === undefined) {
-    throw new StepcastError('Resolution did not name the layer that supplied the step effort', { at, hint });
+    throw new BurnexError('Resolution did not name the layer that supplied the step effort', { at, hint });
   }
   if (origin.layer !== 'config') return origin;
   if (effortConfigFile === undefined) {
-    throw new StepcastError('The step effort came from settings, but the file that set it is unknown', { at, hint });
+    throw new BurnexError('The step effort came from settings, but the file that set it is unknown', { at, hint });
   }
   return { layer: 'config', file: effortConfigFile };
 }
@@ -517,7 +517,7 @@ function errorFileName(projectPath: string, file: string): string {
  * оставляла бы пользователя без ответа на вопрос «где именно».
  */
 export function toFailure(error: unknown, projectPath: string): Failure {
-  if (!isStepcastError(error)) return { error: (error as Error).message };
+  if (!isBurnexError(error)) return { error: (error as Error).message };
   const file = error.file === undefined ? undefined : errorFileName(projectPath, error.file);
   return {
     error: error.message,

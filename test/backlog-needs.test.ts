@@ -3,7 +3,7 @@ import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, it } from 'node:test';
 
-import { StepcastError } from '../src/kernel/errors.js';
+import { BurnexError } from '../src/kernel/errors.js';
 import {
   archivedPathFor,
   checkNeeds,
@@ -59,7 +59,7 @@ describe('backlog needs: чтение архива', () => {
     assert.throws(
       () => readArchivedEntries(join(dir, 'backlog.md')),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.equal(error.file, join(dir, 'archived.md'));
         return true;
       },
@@ -77,11 +77,11 @@ describe('backlog needs: статус слага', () => {
 });
 
 describe('backlog needs: проверка связей', () => {
-  function refusal(list: readonly BacklogEntry[], archived: readonly BacklogEntry[] = []): StepcastError {
+  function refusal(list: readonly BacklogEntry[], archived: readonly BacklogEntry[] = []): BurnexError {
     try {
       checkNeeds(list, archived);
     } catch (error) {
-      assert.ok(error instanceof StepcastError);
+      assert.ok(error instanceof BurnexError);
       return error;
     }
     return assert.fail('checkNeeds не отказал');

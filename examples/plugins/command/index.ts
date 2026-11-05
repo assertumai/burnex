@@ -1,4 +1,4 @@
-import { definePlugin, StepcastError, type CliIo, type CommandContribution, type ParsedArgs } from 'burnex/plugin';
+import { definePlugin, BurnexError, type CliIo, type CommandContribution, type ParsedArgs } from 'burnex/plugin';
 
 /**
  * Образец плагина, знающего только ядро (`plugin-surface-split`, design.md,
@@ -16,7 +16,7 @@ const hello: CommandContribution = {
   run(args: ParsedArgs, io: CliIo) {
     const name = args.positional[0];
     if (name === undefined) {
-      throw new StepcastError('Команда hello ждёт имя: burnex hello <имя>', {
+      throw new BurnexError('Команда hello ждёт имя: burnex hello <имя>', {
         hint: 'burnex hello <имя>',
       });
     }

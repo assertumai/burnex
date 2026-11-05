@@ -1,6 +1,6 @@
 import { relative, isAbsolute, sep } from 'node:path';
 
-import { StepcastError } from '../../kernel/errors.js';
+import { BurnexError } from '../../kernel/errors.js';
 import { PACKAGE_NAME } from '../../kernel/package-name.js';
 import { parseInstallManifest, type InstallManifest } from './manifest.js';
 
@@ -23,8 +23,8 @@ export function isInsideDir(dir: string, path: string): boolean {
   return rel !== '' && rel !== '..' && !rel.startsWith(`..${sep}`) && !isAbsolute(rel);
 }
 
-function noManifestError(root: string): StepcastError {
-  return new StepcastError(`Не удалось определить, как поставлен stepcast (${root}): паспорта установки нет`, {
+function noManifestError(root: string): BurnexError {
+  return new BurnexError(`Не удалось определить, как поставлен stepcast (${root}): паспорта установки нет`, {
     hint: 'Поставьте движок через install.sh (curl -fsSL …/scripts/install.sh | bash) или заведите install.json вручную',
   });
 }

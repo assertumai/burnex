@@ -18,7 +18,7 @@ import {
   writeBacklogFile,
   type LockWaitOptions,
 } from '../../../pipeline/domain/backlog/index.js';
-import { isStepcastError } from '../../../../kernel/errors.js';
+import { isBurnexError } from '../../../../kernel/errors.js';
 import { listProjects } from '../../../pipeline/run/journal/reader.js';
 import { readBoardColumns, writeBoardColumns, BOARD_FILE } from '../../boardFile.js';
 import { readBody, sendJson } from '../../daemon/http.js';
@@ -186,7 +186,7 @@ const handleMove: ApiHandler = async (req, res, env) => {
       sendJson(res, 409, { error: error.message });
       return;
     }
-    if (isStepcastError(error)) {
+    if (isBurnexError(error)) {
       sendJson(res, 400, { error: error.message, ...(error.at === undefined ? {} : { at: error.at }) });
       return;
     }
@@ -329,7 +329,7 @@ const handleEdit: ApiHandler = async (req, res, env) => {
       sendJson(res, 409, { error: error.message });
       return;
     }
-    if (isStepcastError(error)) {
+    if (isBurnexError(error)) {
       sendJson(res, 400, { error: error.message, ...(error.at === undefined ? {} : { at: error.at }) });
       return;
     }
@@ -403,7 +403,7 @@ const handleAddColumn: ApiHandler = async (req, res, env) => {
     }
     writeBoardColumns(project.path, next);
   } catch (error) {
-    if (isStepcastError(error)) {
+    if (isBurnexError(error)) {
       sendJson(res, 400, { error: error.message });
       return;
     }

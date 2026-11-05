@@ -167,7 +167,7 @@ describe('backends и steps/decision: публичная поверхность'
       [
         "import '../../../kernel/errors.js';",
         "import { join } from 'node:path';",
-        "const { StepcastError } = await import('../../../kernel/errors.js');",
+        "const { BurnexError } = await import('../../../kernel/errors.js');",
         "const legacy = require('../../../kernel/registry.js');",
         'const computed = await import(chosenByName);',
         "export type { Thing } from '../../../plugin/index.js';",

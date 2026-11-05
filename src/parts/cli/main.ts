@@ -1,7 +1,7 @@
 import { dirname } from 'node:path';
 
 import { globalConfigPath, resolveConfig, type ResolveOptions } from '../pipeline/config/resolve.js';
-import { ExitCode, isStepcastError, StepcastError, type ExitCodeValue } from '../../kernel/errors.js';
+import { ExitCode, isBurnexError, BurnexError, type ExitCodeValue } from '../../kernel/errors.js';
 import { parseArgs, type CliIo, type CommandSpec } from '../../kernel/cli/args.js';
 import type { RowOutcome } from '../../kernel/load.js';
 import type { PipelineCommandEnv } from '../pipeline/contract.js';
@@ -37,12 +37,12 @@ function findCommandRow(name: string): CommandRow | undefined {
  * `PipelineCommandEnv` ранней ветки: настоящих `config` и `registry` в ней
  * нет, потому что она их не разрешает. Чтение любого из двух свойств —
  * признак того, что перечень независимых команд назвал команду неверно, и это
- * StepcastError с объяснением, а не встроенные умолчания: подставленное
+ * BurnexError с объяснением, а не встроенные умолчания: подставленное
  * умолчание превратило бы ошибку разметки в тихое неверное поведение.
  */
 export function buildIndependentCommandEnv(name: string, cwd: string): PipelineCommandEnv {
   function readForbidden(): never {
-    throw new StepcastError(
+    throw new BurnexError(
       `Команда ${name} объявлена независимой от конфигурации и не вправе читать её`,
     );
   }
@@ -87,8 +87,8 @@ function describeCommandRowState(id: string, outcomes: readonly RowOutcome[]): s
 }
 
 /** Отказ на имени команды, объявленной строкой, которой в действующем составе нет (design.md, Решение 10). */
-function namedAbsenceError(row: CommandRow, outcomes: readonly RowOutcome[]): StepcastError {
-  return new StepcastError(
+function namedAbsenceError(row: CommandRow, outcomes: readonly RowOutcome[]): BurnexError {
+  return new BurnexError(
     `Команда ${row.command.name} объявлена строкой ${row.id}, которой в действующем составе нет — ${describeCommandRowState(row.id, outcomes)}`,
     { at: 'plugins', hint: 'Действующий состав покажет burnex plugins' },
   );
@@ -126,7 +126,7 @@ export async function run(argv: readonly string[], io: CliIo): Promise<ExitCodeV
       // увидеть, а реестр бэкендов `needs` сверяется лишь когда состав собран.
       // Для прочих команд поведение прежнее — отказ прекращает команду до
       // диспетчеризации.
-      if (commandName === 'package' && isStepcastError(error)) {
+      if (commandName === 'package' && isBurnexError(error)) {
         // Пакеты home — рядом с тем же глобальным конфигом, что читало
         // неудавшееся разрешение, а не рядом с собственным умолчанием команды.
         return runPackageCommand(parseArgs(argv, { package: packageRow.command.spec }), io, {
@@ -134,7 +134,7 @@ export async function run(argv: readonly string[], io: CliIo): Promise<ExitCodeV
           globalConfigDir: dirname(globalConfigPath(resolveOptions)),
         });
       }
-      if (commandName !== 'plugins' || !isStepcastError(error)) throw error;
+      if (commandName !== 'plugins' || !isBurnexError(error)) throw error;
       // Повторный разбор конфигурации без загрузки: если он тоже кинет, это
       // отказ разбора (а не загрузки), и команда обязана прекратиться как
       // прежде — исключение не перехватывается здесь второй раз.
@@ -190,7 +190,7 @@ export async function run(argv: readonly string[], io: CliIo): Promise<ExitCodeV
     // отказ (находка ревью).
     const missingInject = (contribution.inject ?? []).filter((name) => ctx.get(name) === undefined);
     if (missingInject.length > 0) {
-      throw new StepcastError(
+      throw new BurnexError(
         `Команда ${args.command} ждёт сервис ${missingInject.join(', ')}: в действующем составе его не заводит ни одна строка`,
         { at: 'plugins', hint: 'Действующий состав покажет burnex plugins — строку-поставщика отключил патч либо она снята из перечня' },
       );

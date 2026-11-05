@@ -1,4 +1,4 @@
-import { StepcastError } from '../errors.js';
+import { BurnexError } from '../errors.js';
 import type { CommandSpec, ParsedArgs } from './types.js';
 
 /**
@@ -23,12 +23,12 @@ export function parseArgs(
   const [command, ...rest] = argv;
 
   if (command === undefined || command === '--help' || command === '-h' || command === 'help') {
-    throw new StepcastError('Не указана команда', { hint: usage(commands) });
+    throw new BurnexError('Не указана команда', { hint: usage(commands) });
   }
 
   const spec = commands[command];
   if (spec === undefined) {
-    throw new StepcastError(`Неизвестная команда: ${command}`, { hint: usage(commands) });
+    throw new BurnexError(`Неизвестная команда: ${command}`, { hint: usage(commands) });
   }
 
   const positional: string[] = [];
@@ -48,14 +48,14 @@ export function parseArgs(
 
     const flagSpec = spec.flags?.[name];
     if (flagSpec === undefined) {
-      throw new StepcastError(`Неизвестный флаг --${name} у команды ${command}`, {
+      throw new BurnexError(`Неизвестный флаг --${name} у команды ${command}`, {
         hint: usage(commands, command),
       });
     }
 
     if (flagSpec.kind === 'boolean') {
       if (inlineValue !== undefined && inlineValue !== 'true' && inlineValue !== 'false') {
-        throw new StepcastError(`Флаг --${name} логический и не принимает значение ${inlineValue}`);
+        throw new BurnexError(`Флаг --${name} логический и не принимает значение ${inlineValue}`);
       }
       flags[name] = inlineValue !== 'false';
       continue;
@@ -65,7 +65,7 @@ export function parseArgs(
     if (value === undefined) {
       const next = rest[index + 1];
       if (next === undefined || next.startsWith('-')) {
-        throw new StepcastError(`Флаг --${name} требует значения`);
+        throw new BurnexError(`Флаг --${name} требует значения`);
       }
       value = next;
       index += 1;
@@ -74,7 +74,7 @@ export function parseArgs(
     if (flagSpec.kind === 'number') {
       const parsed = Number(value);
       if (!Number.isFinite(parsed)) {
-        throw new StepcastError(`Флаг --${name} требует числа, получено ${value}`);
+        throw new BurnexError(`Флаг --${name} требует числа, получено ${value}`);
       }
       flags[name] = parsed;
       continue;
@@ -83,7 +83,7 @@ export function parseArgs(
     if (flagSpec.kind === 'keyValue') {
       const separatorAt = value.indexOf('=');
       if (separatorAt === -1) {
-        throw new StepcastError(`Флаг --${name} требует пары вида ключ=значение, получено ${value}`);
+        throw new BurnexError(`Флаг --${name} требует пары вида ключ=значение, получено ${value}`);
       }
       const existing = (flags[name] as Record<string, string> | undefined) ?? {};
       existing[value.slice(0, separatorAt)] = value.slice(separatorAt + 1);
@@ -96,7 +96,7 @@ export function parseArgs(
 
   const expected = spec.positional ?? [];
   if (positional.length > expected.length) {
-    throw new StepcastError(
+    throw new BurnexError(
       `Команда ${command} принимает не больше ${expected.length} позиционных аргументов, получено ${positional.length}`,
       { hint: usage(commands, command) },
     );

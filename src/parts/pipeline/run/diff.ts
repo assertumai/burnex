@@ -2,7 +2,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import type { AnchorKind, TreeAnchorer } from '../domain/anchor/index.js';
-import { StepcastError } from '../../../kernel/errors.js';
+import { BurnexError } from '../../../kernel/errors.js';
 import { findStepDir, readManifest, readStatus } from './journal/reader.js';
 import type { RunPaths } from './journal/paths.js';
 import type { RunManifest, RunStatus, StepRecord } from './journal/schema.js';
@@ -62,7 +62,7 @@ export function diffRuns(options: DiffOptions): RunComparison {
   const bLayout = loadSessionLayout(options.b);
 
   if (a.manifest.project_root !== b.manifest.project_root) {
-    throw new StepcastError('Прогоны относятся к разным проектам и несравнимы', {
+    throw new BurnexError('Прогоны относятся к разным проектам и несравнимы', {
       hint: `${a.manifest.project_root}\n${b.manifest.project_root}`,
     });
   }

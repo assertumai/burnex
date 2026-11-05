@@ -10,7 +10,7 @@ import {
   type KnowledgeResolver,
 } from '../src/parts/pipeline/domain/context/assemble.js';
 import type { ParsedArgs } from '../src/kernel/cli/args.js';
-import { ExitCode, StepcastError } from '../src/kernel/errors.js';
+import { ExitCode, BurnexError } from '../src/kernel/errors.js';
 import { RunJournal } from '../src/parts/pipeline/run/journal/writer.js';
 import { listRuns } from '../src/parts/pipeline/run/journal/reader.js';
 import { makeProject, type Project } from './helpers.js';
@@ -189,7 +189,7 @@ describe('CLI: burnex context', () => {
     assert.throws(
       () => call(b, { job: 'consumer', step: 'write-code' }),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.match(error.message, /topic/);
         return true;
       },
@@ -201,7 +201,7 @@ describe('CLI: burnex context', () => {
     assert.throws(
       () => assembleContext({ ...assembleBase(), maxTokens: 100, noteMaxTokens: 4000 }),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.match(error.message, /100/);
         assert.match(error.message, /4k/i);
         return true;
@@ -224,7 +224,7 @@ describe('CLI: burnex context', () => {
     assert.throws(
       () => call(b, { job: 'consumer', step: 'verify', input: { topic: 'сессии' } }),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.match(error.message, /командный/);
         return true;
       },
@@ -495,7 +495,7 @@ describe('assembleContext: способ передачи по силе объя�
           onDowngraded: (path) => downgraded.push(path),
         }),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.match(error.message, /big\.md|превышает предел/);
         return true;
       },
@@ -538,7 +538,7 @@ describe('assembleContext: способ передачи по силе объя�
           onDowngraded: (path) => pinnedDowngraded.push(path),
         }),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         return true;
       },
     );
@@ -653,7 +653,7 @@ describe('assembleContext: запись item_refs', () => {
       assert.throws(
         () => assembleRefs(files),
         (error: unknown) => {
-          assert.ok(error instanceof StepcastError);
+          assert.ok(error instanceof BurnexError);
           assert.match(`${error.message} ${error.hint ?? ''}`, fragment);
           return true;
         },
@@ -741,7 +741,7 @@ jobs:
     const b = refsBed({ 'item.json': '{' });
     assert.throws(
       () => call(b, { job: 'work', step: 'write' }),
-      (error: unknown) => error instanceof StepcastError && /item\.json/.test(error.message),
+      (error: unknown) => error instanceof BurnexError && /item\.json/.test(error.message),
     );
   });
 });
@@ -811,8 +811,8 @@ describe('assembleContext: предел размера считается по �
           maxTokens: 10,
         }),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
-        const hint = (error as StepcastError).hint ?? '';
+        assert.ok(error instanceof BurnexError);
+        const hint = (error as BurnexError).hint ?? '';
         assert.equal(hint.match(/CLAUDE\.md/g)?.length ?? 0, 1);
         return true;
       },
@@ -839,7 +839,7 @@ describe('assembleContext: required у записи контекста', () => {
           step: [],
         }),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.match(error.message, /changes\/demo\/\*\*\/\*\.md/);
         return true;
       },
@@ -1034,7 +1034,7 @@ describe('step-context: запись знания', () => {
           step: [],
         }),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.match(error.message, /без источника/);
         return true;
       },
@@ -1102,7 +1102,7 @@ describe('step-context: запись знания', () => {
           knowledge: stubKnowledge([]),
         }),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.match(error.message, /превышает предел/);
         return true;
       },

@@ -1,6 +1,6 @@
 import { existsSync, readFileSync } from 'node:fs';
 
-import { StepcastError } from '../../../kernel/errors.js';
+import { BurnexError } from '../../../kernel/errors.js';
 import { decisionRecordPath, type RunPaths } from './journal/paths.js';
 import { DecisionRequestFileSchema, type AwaitingDecision, type DecisionRequestFile } from './journal/schema.js';
 import { validateDecision, type ProposedDecision, type ValidatedDecision } from './decision.js';
@@ -118,7 +118,7 @@ export function waitForDecision(options: WaitForDecisionOptions): Promise<Decisi
         // ничто не мешает.
         expiryRefused = true;
         options.onRefused(
-          `исход по истечении срока ${outcomeName} не применён: ${error instanceof StepcastError ? error.message : String(error)}`,
+          `исход по истечении срока ${outcomeName} не применён: ${error instanceof BurnexError ? error.message : String(error)}`,
         );
         return false;
       }
@@ -142,7 +142,7 @@ export function waitForDecision(options: WaitForDecisionOptions): Promise<Decisi
         return true;
       } catch (error) {
         options.onRefused(
-          `решение, перенесённое из прогона ${pending.source}, не применено: ${error instanceof StepcastError ? error.message : String(error)}`,
+          `решение, перенесённое из прогона ${pending.source}, не применено: ${error instanceof BurnexError ? error.message : String(error)}`,
         );
         return false;
       }
@@ -187,7 +187,7 @@ export function waitForDecision(options: WaitForDecisionOptions): Promise<Decisi
         finish({ kind: 'decided', decision: validated, by: 'user' });
         return true;
       } catch (error) {
-        refuseOnce(text, error instanceof StepcastError ? error.message : String(error));
+        refuseOnce(text, error instanceof BurnexError ? error.message : String(error));
         return false;
       }
     };

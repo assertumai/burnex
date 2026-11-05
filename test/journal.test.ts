@@ -44,7 +44,7 @@ import {
 } from '../src/parts/pipeline/run/journal/paths.js';
 import { isRunOrAncestor, runOwnerJudge } from '../src/parts/pipeline/run/journal/owner.js';
 import { AttemptRecordSchema, EventSchema, RunManifestSchema, RunStatusSchema, type RunStatus } from '../src/parts/pipeline/run/journal/schema.js';
-import { StepcastError } from '../src/kernel/errors.js';
+import { BurnexError } from '../src/kernel/errors.js';
 import { expandPipeline } from '../src/parts/pipeline/document/expand.js';
 import { runPipeline } from '../src/parts/pipeline/run/runner.js';
 import { createFakeBackend, resultLine } from '../src/parts/pipeline/backend/fake.js';
@@ -526,7 +526,7 @@ describe('run-journal: раскладка и состояние', () => {
     assert.equal(resolveRun(runsRoot, projectRoot, 'aaaaaa').runId.endsWith('aaaaaa'), true);
     // Ярлык называется latest, и это же имя пользователь набирает в командах.
     assert.equal(resolveRun(runsRoot, projectRoot, 'latest').runId, newer.paths.runId);
-    assert.throws(() => resolveRun(runsRoot, projectRoot, 'нет'), StepcastError);
+    assert.throws(() => resolveRun(runsRoot, projectRoot, 'нет'), BurnexError);
   });
 
   it('сообщает понятно, когда прогонов ещё не было', () => {
@@ -534,7 +534,7 @@ describe('run-journal: раскладка и состояние', () => {
     assert.throws(
       () => resolveRun(runsRoot, projectRoot),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.match(error.message, /Прогонов ещё не было/);
         return true;
       },

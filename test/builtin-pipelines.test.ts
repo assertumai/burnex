@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, it } from 'node:test';
 
-import { StepcastError } from '../src/kernel/errors.js';
+import { BurnexError } from '../src/kernel/errors.js';
 import {
   findPackageRoot,
   packagedPipelineNames,
@@ -55,7 +55,7 @@ describe('package-schema: packagedPipelinePath', () => {
     assert.throws(
       () => packagedPipelinePath('no-such-thing'),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.match(error.message, /не поставляется/);
         assert.match(error.hint ?? '', /migrate-widgets/);
         return true;
@@ -67,7 +67,7 @@ describe('package-schema: packagedPipelinePath', () => {
     assert.throws(
       () => packagedPipelinePath('../secret'),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.match(error.message, /kebab-case/);
         return true;
       },

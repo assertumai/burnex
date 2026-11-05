@@ -4,7 +4,7 @@ import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { createGitAnchorer } from '../anchor/git.js';
-import { StepcastError } from '../../../../kernel/errors.js';
+import { BurnexError } from '../../../../kernel/errors.js';
 import { withBacklogLock } from '../backlog/index.js';
 import type { MergeEventWriter } from './mergeEvents.js';
 import { addWorktree, removeWorktree } from '../../run/worktrees.js';
@@ -81,7 +81,7 @@ function captureCurrent(repoDir: string, stateDir: string): {
   const anchorer = createGitAnchorer({ dir: repoDir, indexFile });
   try {
     const captured = anchorer.capture();
-    if (captured.kind !== 'git') throw new StepcastError('Внутренняя ошибка: git-якорь вернул чужой вид состояния');
+    if (captured.kind !== 'git') throw new BurnexError('Внутренняя ошибка: git-якорь вернул чужой вид состояния');
     const worktreeTree = captured.id;
     return { head, indexTree, worktreeTree, fingerprint: fingerprint({ head, indexTree, worktreeTree }) };
   } finally {
@@ -138,7 +138,7 @@ export function preparePublication(options: {
   const { repoDir, base, target, stateDir, exclude } = options;
   const source = captureCurrent(repoDir, stateDir);
   if (source.head !== base) {
-    throw new StepcastError('Ветка сдвинулась после начала прогона', {
+    throw new BurnexError('Ветка сдвинулась после начала прогона', {
       file: repoDir,
       hint: `Ожидался ${base}, сейчас ${source.head}; результат сохранён в ${target}`,
     });
@@ -157,7 +157,7 @@ export function preparePublication(options: {
         git(worktree, ['cherry-pick', '--quiet', stagedCommit]);
       } catch (error) {
         const conflicts = conflictPaths(worktree);
-        throw new StepcastError(
+        throw new BurnexError(
           `Конфликт локальных staged-изменений с результатом${conflicts.length === 0 ? '' : `: ${conflicts.join(', ')}`}`,
           { file: repoDir, cause: error },
         );
@@ -170,7 +170,7 @@ export function preparePublication(options: {
         git(worktree, ['cherry-pick', '--quiet', visibleCommit]);
       } catch (error) {
         const conflicts = conflictPaths(worktree);
-        throw new StepcastError(
+        throw new BurnexError(
           `Конфликт локальных unstaged-изменений с результатом${conflicts.length === 0 ? '' : `: ${conflicts.join(', ')}`}`,
           { file: repoDir, cause: error },
         );
@@ -227,7 +227,7 @@ export function publishPrepared(options: {
   const { repoDir, prepared, stateDir } = options;
   const current = captureCurrent(repoDir, stateDir);
   if (current.fingerprint !== prepared.fingerprint) {
-    throw new StepcastError('Рабочее дерево изменилось после проверки публикации', {
+    throw new BurnexError('Рабочее дерево изменилось после проверки публикации', {
       file: repoDir,
       hint: `Результат сохранён в коммите ${prepared.target}; повторите публикацию после завершения параллельных правок`,
     });
@@ -249,7 +249,7 @@ export function publishPrepared(options: {
       const rollbackPaths = pathsBetween(repoDir, prepared.worktreeTree, prepared.sourceWorktreeTree);
       materialize(repoDir, prepared.sourceWorktreeTree, rollbackPaths, stateDir);
     } catch (rollbackError) {
-      throw new StepcastError('Публикация прервалась, автоматический возврат не завершён', {
+      throw new BurnexError('Публикация прервалась, автоматический возврат не завершён', {
         file: recovery,
         hint: `Данные восстановления сохранены; исходная ошибка: ${errorText(error)}; ошибка возврата: ${errorText(rollbackError)}`,
         cause: error,
@@ -277,7 +277,7 @@ export function rollbackPrepared(options: {
     worktreeTree: prepared.worktreeTree,
   });
   if (current.fingerprint !== publishedFingerprint) {
-    throw new StepcastError('Опубликованное дерево изменилось до составного возврата', {
+    throw new BurnexError('Опубликованное дерево изменилось до составного возврата', {
       file: repoDir,
       hint: `Ожидался коммит ${prepared.target}; данные восстановления оставлены на диске`,
     });

@@ -5,7 +5,7 @@ import { describe, it } from 'node:test';
 
 import { runGcCommand } from '../src/parts/pipeline/commands/gc.js';
 import type { ParsedArgs } from '../src/kernel/cli/args.js';
-import { ExitCode, isStepcastError } from '../src/kernel/errors.js';
+import { ExitCode, isBurnexError } from '../src/kernel/errors.js';
 import { projectKey } from '../src/parts/pipeline/run/journal/paths.js';
 import { readUsageStore } from '../src/parts/pipeline/run/journal/usageStore.js';
 import { RunJournal } from '../src/parts/pipeline/run/journal/writer.js';
@@ -421,7 +421,7 @@ describe('CLI: burnex gc --stats', () => {
 
     assert.throws(
       () => withHome(home, () => runGcCommand(args({ failed: true }), () => {}, projectRoot)),
-      (error: unknown) => isStepcastError(error) && /--stats/.test(error.message),
+      (error: unknown) => isBurnexError(error) && /--stats/.test(error.message),
     );
   });
 
@@ -430,7 +430,7 @@ describe('CLI: burnex gc --stats', () => {
 
     assert.throws(
       () => withHome(home, () => runGcCommand(args({ project: 'abc' }), () => {}, projectRoot)),
-      (error: unknown) => isStepcastError(error) && /--stats/.test(error.message),
+      (error: unknown) => isBurnexError(error) && /--stats/.test(error.message),
     );
   });
 });

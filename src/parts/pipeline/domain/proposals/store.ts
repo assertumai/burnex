@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, statSyn
 import { basename, dirname, join, sep } from 'node:path';
 import { z } from 'zod';
 
-import { StepcastError } from '../../../../kernel/errors.js';
+import { BurnexError } from '../../../../kernel/errors.js';
 import { cabinetDir } from '../../../../kernel/dirs.js';
 import { atomicWrite } from '../../run/journal/writer.js';
 import {
@@ -25,16 +25,16 @@ import {
  * .burnex/proposals/`, приведение цели к реальному пути, постановка,
  * решение и запись цели (`ui-proposals`, design.md Решение 1, 3, 5, 6).
  * Форма записи и проверка цели как строки — в `./entry.js`, чистом модуле без
- * `node:*`, чей `ProposalError` здесь же переводится в `StepcastError`: у
+ * `node:*`, чей `ProposalError` здесь же переводится в `BurnexError`: у
  * этого модуля есть диск и файл, к которому привязать отказ, у entry.ts — нет.
  */
 
-/** Перевести `ProposalError` чистого модуля в `StepcastError` с местом отказа. */
+/** Перевести `ProposalError` чистого модуля в `BurnexError` с местом отказа. */
 function callEntry<T>(fn: () => T): T {
   try {
     return fn();
   } catch (error) {
-    if (error instanceof ProposalError) throw new StepcastError(error.message);
+    if (error instanceof ProposalError) throw new BurnexError(error.message);
     throw error;
   }
 }
@@ -182,7 +182,7 @@ export function resolveProposalTarget(projectPath: string, target: string): Reso
   const real = realWithMissingTail(absolutePath);
 
   if (real !== cabinetReal && !real.startsWith(cabinetReal + sep)) {
-    throw new StepcastError(`Цель ${target} ведёт за пределы кабинета проекта (символическая ссылка?)`);
+    throw new BurnexError(`Цель ${target} ведёт за пределы кабинета проекта (символическая ссылка?)`);
   }
 
   const exists = existsSync(absolutePath);
@@ -229,7 +229,7 @@ function rejectIfRepeatsRejected(projectPath: string, target: string, content: s
     (record) => record.state === 'rejected' && record.target === target && contentHash(record.content) === hash,
   );
   if (repeated !== undefined) {
-    throw new StepcastError(
+    throw new BurnexError(
       `Это предложение повторяет уже отклонённую запись ${repeated.id} — цель и содержимое совпадают`,
     );
   }
@@ -284,7 +284,7 @@ function freeProposalId(projectPath: string, base: string): string {
 
 function requirePending(record: ProposalRecord): void {
   if (record.state !== 'pending') {
-    throw new StepcastError(`Запись ${record.id} уже решена (${record.state}) — решить её повторно нельзя`);
+    throw new BurnexError(`Запись ${record.id} уже решена (${record.state}) — решить её повторно нельзя`);
   }
 }
 
@@ -299,7 +299,7 @@ function writeRecord(projectPath: string, record: ProposalRecord): void {
 export function rejectProposal(projectPath: string, id: string, now: Date = new Date()): ProposalRecord {
   const record = findProposal(projectPath, id);
   if (record === undefined) {
-    throw new StepcastError(`Запись очереди ${id} не найдена`);
+    throw new BurnexError(`Запись очереди ${id} не найдена`);
   }
   requirePending(record);
   const decided: ProposalRecord = { ...record, state: 'rejected' as ProposalState, decidedAt: now.toISOString() };
@@ -317,13 +317,13 @@ export function rejectProposal(projectPath: string, id: string, now: Date = new 
 export function acceptProposal(projectPath: string, id: string, now: Date = new Date()): ProposalRecord {
   const record = findProposal(projectPath, id);
   if (record === undefined) {
-    throw new StepcastError(`Запись очереди ${id} не найдена`);
+    throw new BurnexError(`Запись очереди ${id} не найдена`);
   }
   requirePending(record);
 
   const resolved = resolveProposalTarget(projectPath, record.target);
   if (!fingerprintsEqual(record.baseFingerprint, resolved.fingerprint)) {
-    throw new StepcastError(
+    throw new BurnexError(
       `Файл цели ${record.target} изменился с момента предложения — принятие отменено, запись осталась открытой`,
     );
   }

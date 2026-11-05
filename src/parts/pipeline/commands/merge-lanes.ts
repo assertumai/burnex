@@ -1,7 +1,7 @@
 import { resolve as resolvePath } from 'node:path';
 
 import { resolveConfig, type Config } from '../config/resolve.js';
-import { ExitCode, StepcastError, type ExitCodeValue } from '../../../kernel/errors.js';
+import { ExitCode, BurnexError, type ExitCodeValue } from '../../../kernel/errors.js';
 import { readEngineEnv } from '../../../kernel/env-names.js';
 import { findProjectRoot } from '../run/journal/paths.js';
 import { runOwner } from '../domain/backlog/index.js';
@@ -34,13 +34,13 @@ function parseLaneList(raw: string): readonly string[] | 'all' {
 
   const lanes = raw.split(',').map((entry) => entry.trim());
   if (lanes.length === 0 || lanes.some((lane) => lane === '')) {
-    throw new StepcastError('ключ --lanes требует непустого перечня имён через запятую');
+    throw new BurnexError('ключ --lanes требует непустого перечня имён через запятую');
   }
   if (new Set(lanes).size !== lanes.length) {
-    throw new StepcastError('имена дорожек должны быть попарно различны');
+    throw new BurnexError('имена дорожек должны быть попарно различны');
   }
   if (lanes.includes('all')) {
-    throw new StepcastError('значение all — не имя дорожки в перечне: используйте --lanes all одним ключом, без перечня');
+    throw new BurnexError('значение all — не имя дорожки в перечне: используйте --lanes all одним ключом, без перечня');
   }
   return lanes;
 }
@@ -82,20 +82,20 @@ export async function runMergeLanesCommand(
 ): Promise<ExitCodeValue> {
   const lanesFlag = stringFlag(args.flags, 'lanes');
   if (lanesFlag === undefined) {
-    throw new StepcastError('ключ --lanes обязателен');
+    throw new BurnexError('ключ --lanes обязателен');
   }
   const lanes = parseLaneList(lanesFlag);
 
   const check = stringFlag(args.flags, 'check');
   if (check === undefined || check.trim() === '') {
-    throw new StepcastError('ключ --check обязателен: свести непроверенное молча команда не может');
+    throw new BurnexError('ключ --check обязателен: свести непроверенное молча команда не может');
   }
 
   // «Последний прогон» здесь не подставляется: команда коммитит и стирает
   // дерево, и ошибиться прогоном по умолчанию она не должна иметь возможности.
   const runId = args.positional[0] ?? readEngineEnv(process.env, 'RUN_ID', { warn: false });
   if (runId === undefined) {
-    throw new StepcastError('не назван прогон: укажите его позиционным аргументом либо переменной BURNEX_RUN_ID');
+    throw new BurnexError('не назван прогон: укажите его позиционным аргументом либо переменной BURNEX_RUN_ID');
   }
 
   const { config } = resolveConfig({ cwd });

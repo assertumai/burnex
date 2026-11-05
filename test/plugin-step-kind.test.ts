@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { describe, it } from 'node:test';
 
 import { createFakeBackend, resultLine, type FakeBackend } from '../src/parts/pipeline/backend/fake.js';
-import { StepcastError } from '../src/kernel/errors.js';
+import { BurnexError } from '../src/kernel/errors.js';
 import { findStepDir, readEvents, readExpectReports, readStatus, readUsageSoft } from '../src/parts/pipeline/run/journal/reader.js';
 import { expandPipeline } from '../src/parts/pipeline/document/expand.js';
 import { resolveLate } from '../src/parts/pipeline/document/late.js';
@@ -16,7 +16,7 @@ import type { ContributionService } from '../src/kernel/kernel.js';
 import { applyContextPlugin, applyDeclarativePlugin } from '../src/kernel/load.js';
 import { registryFromKernel, stepKindNames, type Registry } from '../src/kernel/registry.js';
 import type { StepKindContribution, StepKindInput } from '../src/parts/pipeline/contract.js';
-import { DECLARATIVE_CONTRIBUTION_FIELDS, StepcastPluginSchema } from '../src/parts/pipeline/contract.js';
+import { DECLARATIVE_CONTRIBUTION_FIELDS, BurnexPluginSchema } from '../src/parts/pipeline/contract.js';
 import { lintPipeline } from '../src/parts/pipeline/domain/lint.js';
 import { resolveConfig } from '../src/parts/pipeline/config/resolve.js';
 import { projectKey, runPaths } from '../src/parts/pipeline/run/journal/paths.js';
@@ -126,7 +126,7 @@ describe('step-kinds-registry: реестр видов шага', () => {
     await assert.rejects(
       () => applyDeclarativePlugin(kernel, { name: 'second', steps: [fakeStepKind()] }, '<second>', DECLARATIVE_CONTRIBUTION_FIELDS),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.match(error.message, /first/);
         assert.match(error.message, /second/);
         return true;
@@ -139,7 +139,7 @@ describe('step-kinds-registry: реестр видов шага', () => {
     await assert.rejects(
       () => applyDeclarativePlugin(kernel, { name: 'greedy', steps: [fakeStepKind({ name: 'run' })] }, '<synthetic>', DECLARATIVE_CONTRIBUTION_FIELDS),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.match(error.message, /run/);
         assert.match(error.message, /встроенного вида/);
         return true;
@@ -152,7 +152,7 @@ describe('step-kinds-registry: реестр видов шага', () => {
     await assert.rejects(
       () => applyDeclarativePlugin(kernel, { name: 'greedy', steps: [fakeStepKind({ name: 'expect' })] }, '<synthetic>', DECLARATIVE_CONTRIBUTION_FIELDS),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.match(error.message, /expect/);
         assert.match(error.message, /общей части/);
         return true;
@@ -165,7 +165,7 @@ describe('step-kinds-registry: реестр видов шага', () => {
     await assert.rejects(
       () => applyDeclarativePlugin(kernel, { name: 'greedy', steps: [fakeStepKind({ name: 'prompt' })] }, '<synthetic>', DECLARATIVE_CONTRIBUTION_FIELDS),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.match(error.message, /prompt/);
         assert.match(error.message, /agent/);
         return true;
@@ -197,7 +197,7 @@ describe('step-kinds-registry: реестр видов шага', () => {
           DECLARATIVE_CONTRIBUTION_FIELDS,
         ),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.match(error.message, /prompt/);
         assert.match(error.message, /agent/);
         return true;
@@ -226,7 +226,7 @@ describe('step-kinds-registry: реестр видов шага', () => {
           DECLARATIVE_CONTRIBUTION_FIELDS,
         ),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.equal(error.message, 'Имя вида шага expect занято ключом общей части шага');
         return true;
       },
@@ -241,7 +241,7 @@ describe('step-kinds-registry: реестр видов шага', () => {
           DECLARATIVE_CONTRIBUTION_FIELDS,
         ),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.equal(error.message, 'Имя вида шага prompt занято ключом встроенного вида шага agent');
         return true;
       },
@@ -276,7 +276,7 @@ describe('step-kinds-registry: реестр видов шага', () => {
       () =>
         applyDeclarativePlugin(kernel, { name: 'second', steps: [fakeStepKind({ name: 'shared' })] }, '<second>', DECLARATIVE_CONTRIBUTION_FIELDS),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.match(error.message, /shared/);
         assert.match(error.message, /first-kind/);
         return true;
@@ -307,7 +307,7 @@ describe('step-kinds-registry: реестр видов шага', () => {
           DECLARATIVE_CONTRIBUTION_FIELDS,
         ),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.match(error.message, /shared/);
         assert.match(error.message, /first-kind/);
         assert.match(error.message, /second-kind/);
@@ -333,7 +333,7 @@ describe('step-kinds-registry: реестр видов шага', () => {
           '<synthetic>',
         ),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.match(error.message, /steps/);
         assert.match(error.message, /ядру/);
         return true;
@@ -387,7 +387,7 @@ describe('step-kinds-registry: разбор документа', () => {
     assert.throws(
       () => expandPipeline({ pipelinePath: project.path('burnex.yml'), config: project.config, registry }),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.match(error.message, /http_probe/);
         assert.match(error.hint ?? '', /example-steps/);
         return true;
@@ -404,7 +404,7 @@ describe('step-kinds-registry: разбор документа', () => {
     assert.throws(
       () => expandPipeline({ pipelinePath: project.path('burnex.yml'), config: project.config, registry }),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.match(error.message, /http_prob/);
         assert.match(error.hint ?? '', /agent, decision, http_probe, run, script, uses/);
         assert.equal(error.at, 'jobs.build.steps.0');
@@ -421,7 +421,7 @@ describe('step-kinds-registry: разбор документа', () => {
     assert.throws(
       () => expandPipeline({ pipelinePath: project.path('burnex.yml'), config: project.config, registry }),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.match(error.message, /не называет ни один известный вид/);
         return true;
       },
@@ -444,7 +444,7 @@ describe('step-kinds-registry: разбор документа', () => {
     assert.throws(
       () => expandPipeline({ pipelinePath: project.path('burnex.yml'), config: project.config, registry }),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.match(error.message, /http_probe/);
         assert.match(error.message, /example-steps/);
         return true;
@@ -1292,7 +1292,7 @@ jobs:
     assert.throws(
       () => assertShadowDeclarations(expanded.pipeline),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.match(error.message, /не объявлено: build\.undeclared$/);
         return true;
       },
@@ -1368,12 +1368,12 @@ jobs:
   });
 
   it('external не значением true отклоняется схемой вклада, которой плагин проверяется при загрузке', () => {
-    const parsed = StepcastPluginSchema.safeParse({
+    const parsed = BurnexPluginSchema.safeParse({
       name: 'bad',
       steps: [{ ...fakeStepKind(), external: false }],
     });
     assert.equal(parsed.success, false);
     assert.match(JSON.stringify(parsed.error?.issues), /steps.*external|external: true/);
-    assert.equal(StepcastPluginSchema.safeParse({ name: 'ok', steps: [{ ...fakeStepKind(), external: true }] }).success, true);
+    assert.equal(BurnexPluginSchema.safeParse({ name: 'ok', steps: [{ ...fakeStepKind(), external: true }] }).success, true);
   });
 });

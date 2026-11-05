@@ -11,7 +11,7 @@ import { expandPipeline } from '../src/parts/pipeline/document/expand.js';
 import { readEvents, readStatus, resolveRun } from '../src/parts/pipeline/run/journal/reader.js';
 import { resolveInheritSource, type CompletedJob } from '../src/parts/pipeline/run/inherit.js';
 import { runPipeline, type RunResult } from '../src/parts/pipeline/run/runner.js';
-import { StepcastError } from '../src/kernel/errors.js';
+import { BurnexError } from '../src/kernel/errors.js';
 import { applyRun } from '../src/parts/pipeline/run/apply.js';
 import { HaltCause } from '../src/parts/pipeline/run/halt.js';
 import { prepareWorkspace } from '../src/parts/pipeline/run/workspace.js';
@@ -461,7 +461,7 @@ jobs:
     await assert.rejects(
       () => run(project),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.match(error.message, /worktree требует репозитория git/);
         assert.match(error.hint ?? '', /copy/);
         return true;
@@ -934,7 +934,7 @@ jobs:
     await assert.rejects(
       () => run(project),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.match(error.message, /вне репозитория git это невозможно/);
         assert.match(error.hint ?? '', /inherit: none/);
         return true;
@@ -985,7 +985,7 @@ jobs:
         return {
           ...real,
           restore: () => {
-            throw new StepcastError('объекты состояния недоступны');
+            throw new BurnexError('объекты состояния недоступны');
           },
         };
       },
@@ -1068,7 +1068,7 @@ jobs:
               recursive: true,
               force: true,
             });
-            throw new StepcastError('объекты состояния недоступны');
+            throw new BurnexError('объекты состояния недоступны');
           },
         };
       },
@@ -1366,7 +1366,7 @@ jobs:
     await assert.rejects(
       () => run(project),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.match(error.message, /допустим только при режиме copy/);
         return true;
       },
@@ -1386,7 +1386,7 @@ describe('workspace-modes: отказ подготовки не вводит н�
     await assert.rejects(
       () => run(project),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.match(error.message, /недоступно/);
         return true;
       },
@@ -1582,7 +1582,7 @@ jobs:
     assert.throws(
       () => applyRun({ paths: result.journal.paths, cwd: project.root }),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.match(error.message, /не сошлось/);
         assert.match(error.hint ?? '', /спорный\.txt/);
         return true;
@@ -1631,7 +1631,7 @@ jobs:
     assert.throws(
       () => applyRun({ paths: result.journal.paths, cwd: project.root }),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.match(error.message, /вне git/);
         assert.match(error.hint ?? '', /build:/);
         return true;
@@ -1706,7 +1706,7 @@ jobs:
     assert.throws(
       () => applyRun({ paths: result.journal.paths, cwd: project.root, nestedRepos: ['public-site'] }),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.match(error.message, /не сошлось/);
         assert.match(error.hint ?? '', /спорный\.txt/);
         return true;
@@ -1760,7 +1760,7 @@ jobs:
       // Наложение вызвано при другом составе — public-site и vendor-sdk.
       () => applyRun({ paths: result.journal.paths, cwd: project.root, nestedRepos: ['public-site', 'vendor-sdk'] }),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.match(error.message, /не совпадает с действующим/);
         return true;
       },
@@ -1808,7 +1808,7 @@ jobs:
     assert.throws(
       () => applyRun({ paths: result.journal.paths, cwd: project.root, nestedRepos: ['public-site'] }),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.match(error.message, /gitlink/);
         assert.match(error.message, /public-site/);
         return true;
@@ -1911,7 +1911,7 @@ jobs:
     assert.throws(
       () => applyRun({ paths: result.journal.paths, cwd: project.root, lane: 'a' }),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.match(error.message, /не сошлось/);
         assert.match(error.hint ?? '', /спорный\.txt/);
         return true;
@@ -2061,7 +2061,7 @@ jobs:
     assert.throws(
       () => applyRun({ paths: result.journal.paths, cwd: project.root, job: 'b' }),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.match(error.message, /не сошлось/);
         return true;
       },
@@ -2084,7 +2084,7 @@ describe('workspace-modes: адресация прогона', () => {
     assert.throws(
       () => resolveRun(runsRoot, project.root, 'нет-такого'),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.match(error.message, /не найден/);
         assert.match(error.hint ?? '', /Последние:/);
         return true;
@@ -2140,7 +2140,7 @@ jobs:
           cwd: project.root,
         }),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.match(error.message, /внутри рабочего дерева/);
         assert.match(error.hint ?? '', /вынесите runs\.root/i);
         return true;
@@ -2186,7 +2186,7 @@ jobs:
           cwd: project.root,
         }),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.match(error.message, /внутри рабочего дерева/);
         return true;
       },
@@ -2206,7 +2206,7 @@ describe('workspace-modes: состав вложенных репозитори�
     await assert.rejects(
       () => runWithConfig(project, withNestedRepos(project, ['public-site'])),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.match(error.message, /не существует/);
         assert.match(error.message, /public-site/);
         return true;
@@ -2226,7 +2226,7 @@ describe('workspace-modes: состав вложенных репозитори�
     await assert.rejects(
       () => runWithConfig(project, withNestedRepos(project, ['public-site'])),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.match(error.message, /не является рабочим деревом git/);
         assert.match(error.message, /public-site/);
         return true;
@@ -2245,7 +2245,7 @@ describe('workspace-modes: состав вложенных репозитори�
     await assert.rejects(
       () => runWithConfig(project, withNestedRepos(project, ['public-site'])),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.match(error.message, /принадлежит репозиторию/);
         assert.match(error.message, /а не собственному/);
         assert.match(error.message, /public-site/);
@@ -2266,7 +2266,7 @@ describe('workspace-modes: состав вложенных репозитори�
     await assert.rejects(
       () => runWithConfig(project, withNestedRepos(project, ['public-site'])),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.match(error.message, /Корень рабочего дерева не является репозиторием git/);
         return true;
       },
@@ -2289,7 +2289,7 @@ describe('workspace-modes: состав вложенных репозитори�
     await assert.rejects(
       () => runWithConfig(project, withNestedRepos(project, ['public-site'])),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.match(error.message, /public-site/);
         assert.match(error.message, /не имеет ни одного коммита/);
         assert.equal(error.at, 'project.nested_repos');
@@ -2348,7 +2348,7 @@ describe('workspace-modes: состав вложенных репозитори�
     await assert.rejects(
       () => runWithConfig(project, withNestedRepos(project, ['public-site'])),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.match(error.message, /public-site/);
         assert.match(error.message, /не имеет ни одного коммита/);
         assert.match(error.message, /worktree/);
@@ -2374,7 +2374,7 @@ describe('workspace-modes: состав вложенных репозитори�
     await assert.rejects(
       () => runWithConfig(project, withNestedRepos(project, ['public-site'])),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.match(error.message, /public-site/);
         assert.match(error.message, /отслеживает файлы/);
         assert.equal(error.at, 'project.nested_repos');
@@ -2396,7 +2396,7 @@ describe('workspace-modes: состав вложенных репозитори�
     await assert.rejects(
       () => runWithConfig(project, withNestedRepos(project, ['public-site'])),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.match(error.message, /copy/);
         return true;
       },

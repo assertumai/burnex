@@ -3,7 +3,7 @@ import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { checkCompositeComposition, createAnchorer, type AnchorKind } from '../domain/anchor/index.js';
-import { StepcastError } from '../../../kernel/errors.js';
+import { BurnexError } from '../../../kernel/errors.js';
 import { withTempDir } from '../../../kernel/fs/tempDir.js';
 import { readManifest, readStatus } from './journal/reader.js';
 import type { RunPaths } from './journal/paths.js';
@@ -97,7 +97,7 @@ function applyPatch(dir: string, patch: string, patchFile: string, conflictMessa
   } catch (error) {
     const output = String((error as { stderr?: string }).stderr ?? '');
     const paths_ = conflictingPaths(output);
-    throw new StepcastError(conflictMessage, {
+    throw new BurnexError(conflictMessage, {
       hint:
         paths_.length === 0
           ? 'Текущее дерево изменилось несовместимо с результатом прогона'
@@ -163,9 +163,9 @@ function applyDiffByRepo(options: DiffByRepoOptions): boolean {
   }
 
   const fromCheck = checkCompositeComposition(from, nestedRepos);
-  if (!fromCheck.ok) throw new StepcastError(fromCheck.reason);
+  if (!fromCheck.ok) throw new BurnexError(fromCheck.reason);
   const toCheck = checkCompositeComposition(to, nestedRepos);
-  if (!toCheck.ok) throw new StepcastError(toCheck.reason);
+  if (!toCheck.ok) throw new BurnexError(toCheck.reason);
 
   const canonical = [...nestedRepos].sort();
   let applied = false;
@@ -173,7 +173,7 @@ function applyDiffByRepo(options: DiffByRepoOptions): boolean {
   if (fromCheck.parsed.root !== toCheck.parsed.root) {
     const gitlinkPaths = gitlinkPathsTouched(cwd, fromCheck.parsed.root, toCheck.parsed.root, canonical);
     if (gitlinkPaths.length > 0) {
-      throw new StepcastError(
+      throw new BurnexError(
         `Вклад ${subject} двигает запись gitlink объявленного каталога ${gitlinkPaths.join(', ')}`,
         {
           hint: 'Запись gitlink меняет коммит внутри части, которого дорожка не делает — наложить такой патч в корень значило бы записать ссылку на несуществующий в базе корня коммит',
@@ -230,7 +230,7 @@ function isolatedJobs(paths: RunPaths, only: string | undefined): JobRecord[] {
   const found = jobs.find((job) => job.id === only);
   if (found === undefined) {
     const known = jobs.map((job) => job.id).join(', ');
-    throw new StepcastError(`В прогоне нет изолированной работы ${only}`, {
+    throw new BurnexError(`В прогоне нет изолированной работы ${only}`, {
       hint: known === '' ? 'Все работы прогона исполнялись в каталоге запуска' : `Есть: ${known}`,
     });
   }
@@ -289,7 +289,7 @@ function refuseIfMerged(paths: RunPaths, lane: string, force: boolean): void {
   if (force) return;
   const record = readLaneMerge(paths.dir, lane);
   if (record?.kind !== 'merged') return;
-  throw new StepcastError(
+  throw new BurnexError(
     `Дорожка «${lane}» уже сведена (${describeMergeCommits(record.commits)})`,
     { hint: 'Повторное наложение сведённой дорожки отсекается — если это осознанное решение, передайте --force' },
   );
@@ -319,7 +319,7 @@ function applyLane(
   const { from, to } = range;
 
   if (manifest.anchor_kind !== 'git' && manifest.anchor_kind !== 'composite') {
-    throw new StepcastError(`Дорожка ${lane} снята вне git: накладывать нечего`, {
+    throw new BurnexError(`Дорожка ${lane} снята вне git: накладывать нечего`, {
       hint: 'Объектов деревьев нет, поэтому дифф не вычислить.',
     });
   }
@@ -379,7 +379,7 @@ export function applyRun(options: ApplyOptions): ApplyOutcome {
 
   if (manifest.anchor_kind !== 'git' && manifest.anchor_kind !== 'composite') {
     const where = jobs.map((job) => `  ${job.id}: ${job.workspace?.path}`).join('\n');
-    throw new StepcastError('Прогон снят вне git: накладывать нечего', {
+    throw new BurnexError('Прогон снят вне git: накладывать нечего', {
       hint: `Объектов деревьев нет, поэтому дифф не вычислить. Результат лежит здесь:\n${where}`,
     });
   }
@@ -408,7 +408,7 @@ export function applyRun(options: ApplyOptions): ApplyOutcome {
         const to = [...steps].reverse().find((step) => step.tree_id !== undefined)?.tree_id;
 
         if (from === undefined || to === undefined) {
-          throw new StepcastError(`У работы ${job.id} нет якорей состояния`, {
+          throw new BurnexError(`У работы ${job.id} нет якорей состояния`, {
             hint: 'Прогон снят до введения якоря либо фиксация не удалась — см. events.ndjson',
           });
         }

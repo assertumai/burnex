@@ -1,4 +1,4 @@
-import { StepcastError } from '../../../kernel/errors.js';
+import { BurnexError } from '../../../kernel/errors.js';
 import { hasStepExecutor } from '../contract.js';
 import type { Registry } from '../../../kernel/registry.js';
 import { interpolateTree, interpolateTypedTree, type Scope } from './interpolate.js';
@@ -220,8 +220,8 @@ export function resolveLate(job: Job, scope: LateScope, registry?: Registry): Jo
   } catch (error) {
     // Файл, из которого пришло определение, интерполятору неизвестен, а без
     // него сообщение не говорит, где искать.
-    if (error instanceof StepcastError && error.file === undefined) {
-      throw new StepcastError(error.message, {
+    if (error instanceof BurnexError && error.file === undefined) {
+      throw new BurnexError(error.message, {
         file: job.source,
         ...(error.at === undefined ? {} : { at: error.at }),
         ...(error.hint === undefined ? {} : { hint: error.hint }),

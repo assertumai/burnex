@@ -3,7 +3,7 @@ import { realpathSync, rmSync, statSync } from 'node:fs';
 import { join, relative, resolve as resolvePath } from 'node:path';
 
 import { isGitWorktree } from '../anchor/git.js';
-import { StepcastError } from '../../../../kernel/errors.js';
+import { BurnexError } from '../../../../kernel/errors.js';
 
 /**
  * Операции над деревом запуска, которые нужны сведению дорожек: проверка
@@ -92,21 +92,21 @@ function assertOwnWorktree(dir: string, relDir: string, full: string): void {
   try {
     isDirectory = statSync(full).isDirectory();
   } catch (error) {
-    throw new StepcastError(`Объявленный вложенный репозиторий не существует: ${relDir}`, {
+    throw new BurnexError(`Объявленный вложенный репозиторий не существует: ${relDir}`, {
       file: dir,
       hint: 'Проверьте путь в project.nested_repos — опечатку или несклонированный подмодуль',
       cause: error,
     });
   }
   if (!isDirectory || !isGitWorktree(full)) {
-    throw new StepcastError(`Объявленный вложенный репозиторий не является рабочим деревом git: ${relDir}`, {
+    throw new BurnexError(`Объявленный вложенный репозиторий не является рабочим деревом git: ${relDir}`, {
       file: dir,
       hint: 'project.nested_repos называет каталог, который сам является отдельным git-репозиторием',
     });
   }
   const toplevel = git(full, ['rev-parse', '--show-toplevel']).trim();
   if (realpathSync(toplevel) !== realpathSync(full)) {
-    throw new StepcastError(
+    throw new BurnexError(
       `Объявленный вложенный репозиторий ${relDir} принадлежит репозиторию ${toplevel}, а не собственному`,
       {
         file: dir,
@@ -180,7 +180,7 @@ export function assertCleanTree(dir: string, options: CleanTreeOptions = {}): vo
   try {
     rootStatus = git(dir, ['status', '--porcelain']);
   } catch (error) {
-    throw new StepcastError(`Дерево запуска не является репозиторием git: ${dir}`, {
+    throw new BurnexError(`Дерево запуска не является репозиторием git: ${dir}`, {
       file: dir,
       hint: 'Сведение дорожек опирается на git — откатывать красную проверку больше нечем',
       cause: error,
@@ -223,7 +223,7 @@ export function assertCleanTree(dir: string, options: CleanTreeOptions = {}): vo
       // самого git — битый индекс, гонка с чужим коммитом, снятая посреди
       // проверки блокировка. Отказ обязан остаться названным: «внутренняя
       // ошибка» со стеком в логе шага неотличима от дефекта движка.
-      throw new StepcastError(`Состояние объявленного вложенного репозитория ${relDir} не снять`, {
+      throw new BurnexError(`Состояние объявленного вложенного репозитория ${relDir} не снять`, {
         file: dir,
         hint: 'git отказал на status в этом каталоге — проверьте репозиторий вручную',
         cause: error,
@@ -240,7 +240,7 @@ export function assertCleanTree(dir: string, options: CleanTreeOptions = {}): vo
       nested.length === 0
         ? 'есть незакоммиченные либо неотслеживаемые изменения'
         : `незакоммиченные либо неотслеживаемые изменения есть в: ${dirtyLabels.join(', ')}`;
-    throw new StepcastError(`Дерево запуска не чисто: ${detail}`, {
+    throw new BurnexError(`Дерево запуска не чисто: ${detail}`, {
       file: dir,
       hint: 'Закоммитьте или отложите правки и повторите — откат красной проверки стирает их безвозвратно',
     });

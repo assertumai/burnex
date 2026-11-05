@@ -7,7 +7,7 @@ import { PERMISSIVE_MODES } from '../../backends/claude/adapter.js';
 import { effectivePermissions } from '../backend/permissions.js';
 import { parseExpression, references } from './expr/parse.js';
 import { buildGraph } from './graph.js';
-import { isStepcastError } from '../../../kernel/errors.js';
+import { isBurnexError } from '../../../kernel/errors.js';
 import { describeBroken, describeResourceConflict, describeScriptUnresolved } from '../document/expand.js';
 import { buildPublishedSchemas, pluginPredicateEntries, pluginStepKindEntries } from '../document/published-schema.js';
 import { builtinRegistry } from '../../builtin.js';
@@ -957,10 +957,10 @@ function checkCondition(
   } catch (error) {
     push({
       severity: 'error',
-      message: isStepcastError(error) ? error.message : String(error),
+      message: isBurnexError(error) ? error.message : String(error),
       file,
       at,
-      ...(isStepcastError(error) && error.hint !== undefined ? { hint: error.hint } : {}),
+      ...(isBurnexError(error) && error.hint !== undefined ? { hint: error.hint } : {}),
     });
     return;
   }
@@ -2526,10 +2526,10 @@ function checkLoopWhile(
   } catch (error) {
     push({
       severity: 'error',
-      message: isStepcastError(error) ? error.message : String(error),
+      message: isBurnexError(error) ? error.message : String(error),
       file,
       at,
-      ...(isStepcastError(error) && error.hint !== undefined ? { hint: error.hint } : {}),
+      ...(isBurnexError(error) && error.hint !== undefined ? { hint: error.hint } : {}),
     });
     return;
   }

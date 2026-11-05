@@ -10,7 +10,7 @@ import {
   SLUG,
   type CommandEnv,
   type PluginDiagnostic,
-  type StepcastPlugin,
+  type BurnexPlugin,
 } from '../../kernel/contract.js';
 import type { Context, ContributionRegistrar } from '../../kernel/context.js';
 import type { Registry } from '../../kernel/registry.js';
@@ -493,11 +493,11 @@ export function hasPredicateEvaluator(kind: PredicateKind): kind is PredicateCon
 }
 
 /**
- * Доменная форма плагина: ядерная (`StepcastPlugin` — `name`, `version`,
+ * Доменная форма плагина: ядерная (`BurnexPlugin` — `name`, `version`,
  * `commands`) плюс вклад пайплайна. `definePipelinePlugin` (`surface.ts`)
  * типизирует именно её (design.md, Решение 8).
  */
-export interface PipelinePlugin extends StepcastPlugin {
+export interface PipelinePlugin extends BurnexPlugin {
   readonly backends?: Readonly<Record<string, BackendContribution>>;
   readonly predicates?: readonly PredicateContribution[];
   readonly steps?: readonly StepKindContribution[];
@@ -629,7 +629,7 @@ const StepKindContributionSchema = z
  * `backends`/`predicates`/`steps`: загрузчик (`load.ts`) не разбирает две
  * половины по отдельности, а разбирает объект автора одним проходом.
  */
-export const StepcastPluginSchema = z
+export const BurnexPluginSchema = z
   .object({
     name: z.string().regex(SLUG, 'имя плагина — слаг в kebab-case'),
     version: z.string().optional(),
@@ -669,7 +669,7 @@ export type DeclarativeContributionFields = {
 /**
  * Ключ декларативной формы → служебный сервис → как достать из него имя
  * вклада (design.md изменения `pipeline-owns-services`, Решение 10). Живёт
- * рядом со `StepcastPluginSchema`, чьи ключи описывает: загрузчик
+ * рядом со `BurnexPluginSchema`, чьи ключи описывает: загрузчик
  * (`toContextPlugin`, `kernel/load.ts`) идёт по поданной ему таблице
  * этой же формы и только по ней — и регистрирует вклады, и объявляет
  * `inject`, — а не по двум независимым перечням имён в своём теле. Ключ,

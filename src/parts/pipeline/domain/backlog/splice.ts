@@ -1,4 +1,4 @@
-import { StepcastError } from '../../../../kernel/errors.js';
+import { BurnexError } from '../../../../kernel/errors.js';
 import { parse, type BacklogEntry } from './parse.js';
 
 /**
@@ -19,7 +19,7 @@ function blockRange(entry: BacklogEntry): readonly [number, number] {
 export function withOwnBlock(tipText: string, liveText: string, slug: string): string {
   const live = parse(liveText).find((entry) => entry.slug === slug);
   if (live === undefined) {
-    throw new StepcastError(`пункт «${slug}» в живом файле очереди не найден`, { at: slug });
+    throw new BurnexError(`пункт «${slug}» в живом файле очереди не найден`, { at: slug });
   }
   const [liveFrom, liveTo] = blockRange(live);
   const block = liveText.split('\n').slice(liveFrom, liveTo);

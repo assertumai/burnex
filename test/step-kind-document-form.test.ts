@@ -3,7 +3,7 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, it } from 'node:test';
 
-import { StepcastError } from '../src/kernel/errors.js';
+import { BurnexError } from '../src/kernel/errors.js';
 import { readStatus } from '../src/parts/pipeline/run/journal/reader.js';
 import { expandPipeline } from '../src/parts/pipeline/document/expand.js';
 import { resolveLate } from '../src/parts/pipeline/document/late.js';
@@ -136,7 +136,7 @@ jobs:
     assert.throws(
       () => expandPipeline({ pipelinePath: project.path('burnex.yml'), config: project.config, registry }),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.match(error.hint ?? '', /deploy-kind/);
         return true;
       },
@@ -214,7 +214,7 @@ jobs:
     assert.throws(
       () => expandPipeline({ pipelinePath: project.path('burnex.yml'), config: project.config, registry }),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.match(error.message, /deploy-kind/);
         assert.match(error.message, /deploy/);
         assert.equal(error.at, 'jobs.build.steps.0');
@@ -258,7 +258,7 @@ jobs:
     assert.throws(
       () => expandPipeline({ pipelinePath: project.path('burnex.yml'), config: project.config, registry }),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.match(error.message, /deploy-kind/);
         assert.match(error.message, /деплой недоступен/);
         assert.equal(error.at, 'jobs.build.steps.0');
@@ -404,7 +404,7 @@ jobs:
           registry,
         ),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.equal(error.at, 'jobs.build.steps.0.to');
         return true;
       },
@@ -504,7 +504,7 @@ jobs:
     assert.throws(
       () => expandPipeline({ pipelinePath: project.path('burnex.yml'), config: project.config, registry }),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.match(error.message, /Шаг вида deploy-kind не соответствует его форме/);
         assert.match(error.message, /to/);
         assert.equal(error.at, 'jobs.build.steps.0');
@@ -533,7 +533,7 @@ jobs:
     assert.throws(
       () => expandPipeline({ pipelinePath: project.path('burnex.yml'), config: project.config, registry }),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.match(error.message, /unknown_key/);
         return true;
       },

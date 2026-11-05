@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
-import { StepcastError } from '../src/kernel/errors.js';
+import { BurnexError } from '../src/kernel/errors.js';
 import { computeWaitId, selectAwaiting, toDecisionRecord, validateDecision } from '../src/parts/pipeline/run/decision.js';
 import { computeStepKey } from '../src/parts/pipeline/run/stepKey.js';
 import type { AwaitingDecision } from '../src/parts/pipeline/run/journal/schema.js';
@@ -41,7 +41,7 @@ describe('parts/pipeline/run/decision: идентификатор ожидани
 describe('parts/pipeline/run/decision: выбор ожидания', () => {
   it('нет ожиданий вовсе — отказ', () => {
     assert.throws(() => selectAwaiting([]), (error: unknown) => {
-      assert.ok(error instanceof StepcastError);
+      assert.ok(error instanceof BurnexError);
       assert.match(error.message, /не ждёт решения/);
       return true;
     });
@@ -56,7 +56,7 @@ describe('parts/pipeline/run/decision: выбор ожидания', () => {
     const a = awaiting({ wait_id: 'a', step: 'gate-a' });
     const b = awaiting({ wait_id: 'b', step: 'gate-b' });
     assert.throws(() => selectAwaiting([a, b]), (error: unknown) => {
-      assert.ok(error instanceof StepcastError);
+      assert.ok(error instanceof BurnexError);
       assert.match(error.message, /нескольких шагах/);
       assert.match(error.hint ?? '', /gate-a/);
       assert.match(error.hint ?? '', /gate-b/);
@@ -67,7 +67,7 @@ describe('parts/pipeline/run/decision: выбор ожидания', () => {
   it('--step называет неизвестный шаг — отказ с перечнем ожидающих', () => {
     const a = awaiting({ wait_id: 'a', step: 'gate-a' });
     assert.throws(() => selectAwaiting([a], 'gate-z'), (error: unknown) => {
-      assert.ok(error instanceof StepcastError);
+      assert.ok(error instanceof BurnexError);
       assert.match(error.message, /gate-z/);
       assert.match(error.hint ?? '', /build\/gate-a/);
       return true;
@@ -85,7 +85,7 @@ describe('parts/pipeline/run/decision: выбор ожидания', () => {
     const a = awaiting({ wait_id: 'a', job: 'a', step: 'gate' });
     const b = awaiting({ wait_id: 'b', job: 'b', step: 'gate' });
     assert.throws(() => selectAwaiting([a, b], 'gate'), (error: unknown) => {
-      assert.ok(error instanceof StepcastError);
+      assert.ok(error instanceof BurnexError);
       assert.match(error.message, /нескольких работах/);
       assert.match(error.hint ?? '', /a\/gate/);
       assert.match(error.hint ?? '', /b\/gate/);
@@ -106,7 +106,7 @@ describe('parts/pipeline/run/decision: проверка предложенног
 
   it('исход вне перечня — отказ с перечнем допустимых', () => {
     assert.throws(() => validateDecision(awaiting(), { outcome: 'ignore' }, knownSteps), (error: unknown) => {
-      assert.ok(error instanceof StepcastError);
+      assert.ok(error instanceof BurnexError);
       assert.match(error.message, /ignore/);
       assert.match(error.hint ?? '', /approve/);
       return true;
@@ -131,7 +131,7 @@ describe('parts/pipeline/run/decision: проверка предложенног
     assert.throws(
       () => validateDecision(awaiting(), { outcome: 'redo', restartFrom: 'unknown' }, knownSteps),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.match(error.message, /unknown/);
         assert.match(error.hint ?? '', /build\/gate/);
         return true;

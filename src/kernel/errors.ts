@@ -14,7 +14,7 @@ export const ExitCode = {
 
 export type ExitCodeValue = (typeof ExitCode)[keyof typeof ExitCode];
 
-export interface StepcastErrorOptions {
+export interface BurnexErrorOptions {
   /** Код возврата процесса. По умолчанию — ошибка конфигурации. */
   readonly exitCode?: ExitCodeValue;
   /** Файл, к которому относится ошибка. */
@@ -30,15 +30,15 @@ export interface StepcastErrorOptions {
  * Единственный тип ошибки, который движок выпускает наружу осознанно.
  * Всё остальное, всплывшее наверх, считается дефектом и печатается со стеком.
  */
-export class StepcastError extends Error {
+export class BurnexError extends Error {
   readonly exitCode: ExitCodeValue;
   readonly file: string | undefined;
   readonly at: string | undefined;
   readonly hint: string | undefined;
 
-  constructor(message: string, options: StepcastErrorOptions = {}) {
+  constructor(message: string, options: BurnexErrorOptions = {}) {
     super(message, options.cause === undefined ? undefined : { cause: options.cause });
-    this.name = 'StepcastError';
+    this.name = 'BurnexError';
     this.exitCode = options.exitCode ?? ExitCode.configError;
     this.file = options.file;
     this.at = options.at;
@@ -52,6 +52,6 @@ export class StepcastError extends Error {
   }
 }
 
-export function isStepcastError(value: unknown): value is StepcastError {
-  return value instanceof StepcastError;
+export function isBurnexError(value: unknown): value is BurnexError {
+  return value instanceof BurnexError;
 }

@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, it } from 'node:test';
 
-import { StepcastError } from '../src/kernel/errors.js';
+import { BurnexError } from '../src/kernel/errors.js';
 import { evaluatePredicates } from '../src/parts/pipeline/expect/evaluate.js';
 import { findStepDir, readStatus } from '../src/parts/pipeline/run/journal/reader.js';
 import { expandPipeline } from '../src/parts/pipeline/document/expand.js';
@@ -128,7 +128,7 @@ describe('plugin-contributions: предикат плагина в докуме�
           registry,
         }),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.match(error.message, /Значение предиката text_has не соответствует его схеме/);
         assert.match(error.at ?? '', /expect\.0\.text_has/);
         return true;
@@ -148,7 +148,7 @@ describe('plugin-contributions: предикат плагина в докуме�
           registry,
         }),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         // Перечень называет и встроенные, и плагинные — пользователь не обязан
         // знать, что из этого чем предоставлено.
         assert.match(error.message, /не соответствует схеме|Неизвестный предикат/);
@@ -338,7 +338,7 @@ describe('plugin-contributions: возобновление прогона с п�
           registry: builtinRegistry(),
         }),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.match(error.message, /example/);
         assert.match(error.message, /1\.0\.0/);
         assert.match(error.message, /\/модуль\/example\.js/);
@@ -368,7 +368,7 @@ describe('plugin-contributions: возобновление прогона с п�
           registry,
         }),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.match(error.message, /неизвестный ключ exit_cod/);
         assert.equal(error.hint, 'Сверьтесь с docs/pipeline-format.md');
         return true;
@@ -392,7 +392,7 @@ describe('plugin-contributions: возобновление прогона с п�
           registry,
         }),
       (error: unknown) => {
-        assert.ok(error instanceof StepcastError);
+        assert.ok(error instanceof BurnexError);
         assert.match(error.message, /неизвестный ключ exit_cod/);
         assert.equal(error.hint, 'Сверьтесь с docs/pipeline-format.md');
         return true;

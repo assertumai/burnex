@@ -31,7 +31,7 @@ data: [title, title-a, slug-a]
 
 output:
   from: pick-lanes
-  schema: stepcast:backlog-slots
+  schema: burnex:backlog-slots
 
 steps:
   # Свой вызов git здесь не годится: он смотрит состояние одного каталога, а
@@ -49,7 +49,7 @@ steps:
   # журнале, меняется только действие; ветвление — на стороне sh, как --only
   # в pick-lanes.
   - id: guard-clean-tree
-    run: [sh, -c, 'if [ -n "${params.onto}" ]; then exit 0; fi; "$STEPCAST_BIN" assert-clean']
+    run: [sh, -c, 'if [ -n "${params.onto}" ]; then exit 0; fi; "$BURNEX_BIN" assert-clean']
     timeout: 1m
     expect: [{ exit_code: 0 }]
 
@@ -85,9 +85,9 @@ steps:
       [
         sh,
         -c,
-        'if [ -n "${params.item}" ]; then ONLY="--only ${params.item}"; else ONLY=""; fi; "$STEPCAST_BIN" backlog pick --lanes a $ONLY --owner "run:$(basename "$STEPCAST_RUN_DIR")" --run-dir "$STEPCAST_RUN_DIR" | "$STEPCAST_BIN" project repos',
+        'if [ -n "${params.item}" ]; then ONLY="--only ${params.item}"; else ONLY=""; fi; "$BURNEX_BIN" backlog pick --lanes a $ONLY --owner "run:$(basename "$BURNEX_RUN_DIR")" --run-dir "$BURNEX_RUN_DIR" | "$BURNEX_BIN" project repos',
       ]
     timeout: 1m
-    output_schema: stepcast:backlog-slots
+    output_schema: burnex:backlog-slots
     expect:
-      - schema: stepcast:backlog-slots
+      - schema: burnex:backlog-slots
