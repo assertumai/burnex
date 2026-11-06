@@ -71,7 +71,17 @@ const TEXT_EXTENSIONS = new Set([
   '.env', '.toml', '.ini', '.cfg', '.py', '.rb', '.gitignore', '.plist', '.xml',
 ]);
 const TEXT_BASENAMES = new Set(['.gitignore', '.env', 'Makefile', 'Dockerfile', 'README']);
-const SKIPPED_DIRS = new Set(['.git', '.claude', 'node_modules', 'dist', 'build', 'out', 'target', '.gradle', '.idea', '.next', 'coverage', 'proposals']);
+const SKIPPED_DIRS = new Set(['node_modules', 'dist', 'build', 'out', 'target', 'coverage', 'proposals']);
+/** Скрытые каталоги, которые всё же читаются: кабинет движка и правила агентов. Остальные (.git, .claude, .runtime, .idea…) — чужие или служебные. */
+const READ_HIDDEN_DIRS = new Set([CABINET_DIR_NAME, LEGACY_CABINET_DIR_NAME, '.agents', '.github', '.cursor']);
+
+/** Вложенный репозиторий git — другой проект со своим переносом; архив openspec — история, которую не правят. */
+function isForeignDir(dir: string, name: string): boolean {
+  if (name.startsWith('.') && !READ_HIDDEN_DIRS.has(name)) return true;
+  if (SKIPPED_DIRS.has(name)) return true;
+  if (name === 'archive' && dir.endsWith(join('openspec', 'changes'))) return true;
+  return existsSync(join(dir, name, '.git'));
+}
 const MAX_FILE_BYTES = 1_000_000;
 
 function isTextFile(path: string): boolean {
@@ -81,7 +91,7 @@ function isTextFile(path: string): boolean {
   return dot !== -1 && TEXT_EXTENSIONS.has(name.slice(dot));
 }
 
-/** Файлы проекта, которые стоит читать: без `.git`, зависимостей, сборок, очереди предложений и бинарников. */
+/** Файлы проекта, которые стоит читать: без служебных и скрытых каталогов, вложенных репозиториев, зависимостей, сборок, архива openspec, очереди предложений и бинарников. */
 function* walk(root: string): Generator<string> {
   const stack = [root];
   while (stack.length > 0) {
@@ -96,7 +106,7 @@ function* walk(root: string): Generator<string> {
       const path = join(dir, entry.name);
       if (entry.isSymbolicLink()) continue;
       if (entry.isDirectory()) {
-        if (!SKIPPED_DIRS.has(entry.name)) stack.push(path);
+        if (!isForeignDir(dir, entry.name)) stack.push(path);
         continue;
       }
       if (!entry.isFile() || !isTextFile(path)) continue;

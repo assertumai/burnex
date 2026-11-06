@@ -69,14 +69,28 @@ describe('burnex migrate-stepcast: отсылки проекта на прежн
     assert.equal(pairs.filter((p) => p[1] === 7 && p[2] === '.stepcast').length, 2);
   });
 
-  it('слово stepcast в прозе и имя burnex-after-stepcast.md отсылками не считаются; .git и node_modules не читаются', () => {
+  it('слово stepcast в прозе и имя burnex-after-stepcast.md отсылками не считаются; .git, node_modules, скрытые каталоги, вложенные репозитории и архив openspec не читаются', () => {
     const root = project({
       'docs/burnex-after-stepcast.md': 'Движок stepcast был переименован. Stepcast — прежнее имя.\n',
       'node_modules/x/index.js': 'process.env.STEPCAST_JOB\n',
       '.claude/worktrees/w/.stepcast/config.yml': 'runs: {}\n',
+      '.runtime/checks/a/pipeline.py': 'stepcast run x\n',
       '.git/config': 'stepcast.yml\n',
+      'other/.git/HEAD': 'ref: refs/heads/main\n',
+      'other/.stepcast/config.yml': 'runs: {}\n',
+      'other/pipeline.yml': 'uses: stepcast:lint\n',
+      'openspec/changes/archive/2026-01-01-x/tasks.md': 'stepcast run x\n',
     });
     assert.deepEqual(collectMigrationFindings(root), []);
+  });
+
+  it('скрытые каталоги кабинета и правил агентов читаются', () => {
+    const root = project({
+      '.burnex/pipelines/a.yml': 'env: { STEPCAST_HOME: x }\n',
+      '.agents/skills/s/SKILL.md': 'run `stepcast lint`\n',
+      '.github/workflows/ci.yml': 'run: stepcast lint\n',
+    });
+    assert.deepEqual(collectMigrationFindings(root).map((f) => f.where).sort(), ['.agents/skills/s/SKILL.md', '.burnex/pipelines/a.yml', '.github/workflows/ci.yml']);
   });
 
   it('домашний каталог: ~/.stepcast без ~/.burnex и паспорт npm с пакетом stepcast', () => {
