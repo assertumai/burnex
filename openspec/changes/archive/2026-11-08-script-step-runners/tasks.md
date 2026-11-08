@@ -142,7 +142,7 @@
 
 - [x] 8.1 Зелёная `npm run check`. (typecheck, typecheck:ui, lint, build,
   test:only — 2529 тестов, 0 отказов.)
-- [ ] 8.2 `openspec validate "script-step-runners" --strict` проходит.
+- [x] 8.2 `openspec validate "script-step-runners" --strict` проходит. — выполнено 2026-11-08: `openspec validate script-step-runners --type change --strict` → valid.
   Не выполнено средой этого прогона: любой вызов бинаря `openspec` (включая
   `openspec status`, `openspec instructions`) в песочнице этой задачи
   отклоняется на этапе разрешения инструмента без права одобрения — сессия
