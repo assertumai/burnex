@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'none'; form-action 'none'; base-uri 'none'">
+  <title>burnex — 5 моделей навигации</title>
+  <link rel="stylesheet" href="styles.css">
+  <script src="prototype.js" defer></script>
+</head>
+<body>
+  <header class="lab-header">
+    <a class="lab-brand" href="#1"><span class="brand-mark">b.</span><strong>burnex</strong><span class="lab-label">DESIGN STUDY / 01</span></a>
+    <div class="lab-actions"><span class="demo-dot"></span><span>Макет · данные вымышлены</span><button data-action="compare" class="quiet">Сравнить варианты ↗</button></div>
+  </header>
+  <nav id="concept-tabs" class="concept-tabs" aria-label="Варианты дизайна"></nav>
+  <section class="hypothesis" aria-label="Гипотеза варианта"><div><span id="concept-label" class="eyebrow"></span><h1 id="concept-title"></h1><p id="concept-description"></p></div><div class="hypothesis-aside"><span class="eyebrow">ПРОВЕРЯЕМ ГИПОТЕЗУ</span><p id="concept-hypothesis"></p><button data-action="rationale" class="text-button">Логика и ограничения ↗</button></div></section>
+  <main id="prototype" class="prototype" aria-label="Интерактивный макет"></main>
+  <footer class="lab-footer"><span>Пять способов объяснить один продукт. Одинаковые возможности и визуальный язык.</span><span>Никакие действия в макете не запускают прогоны.</span></footer>
+  <dialog id="dialog"><div class="dialog-head"><span class="eyebrow">BURNEX / DESIGN REVIEW</span><button data-action="close" class="icon-button" aria-label="Закрыть диалог">×</button></div><div id="dialog-content"></div></dialog>
+  <div id="toast" class="toast" role="status"></div>
+</body>
+</html>
