@@ -4,7 +4,7 @@ import { isEstimate, mergeCostSources } from '../pipeline/run/budget/costSource.
 import type { CostSource, StatusValue, UsageRecord } from '../pipeline/run/journal/schema.js';
 import { UNKNOWN_MODEL, iterateAttempts, spread } from '../pipeline/run/journal/usageSpread.js';
 import { readUsageStore } from '../pipeline/run/journal/usageStore.js';
-import type { Overview, ProjectOverview, RunOverview } from './overview.js';
+import { overviewFromRecord, type Overview, type ProjectOverview, type RunOverview } from './overview.js';
 
 export { UNKNOWN_MODEL } from '../pipeline/run/journal/usageSpread.js';
 
@@ -289,7 +289,7 @@ function decomposeRun(
   run: RunOverview,
 ): RunDecomposition {
   const record = records.get(`${projectKey}/${run.runId}`);
-  return record === undefined ? decomposeFromDisk(runsRoot, projectKey, run) : decomposeFromRecord(record);
+  return record === undefined || run.running ? decomposeFromDisk(runsRoot, projectKey, run) : decomposeFromRecord(record);
 }
 
 interface PipelineIdentity {
@@ -366,12 +366,26 @@ export function buildUsage(runsRoot: string, overview: Overview, options: UsageO
   const dated: DatedRun[] = [];
   let undated = 0;
 
+  const live = new Set<string>();
   for (const project of overview.projects) {
     for (const run of project.runs) {
+      const address = `${project.key}/${run.runId}`;
+      // Живой расход не заменяется старым снимком оборванного прогона.
+      if (run.running) live.add(address);
+      else if (records.has(address)) continue;
       const day = runDay(run.startedAt);
       if (day === undefined) undated += 1;
       else dated.push({ project, run, day });
     }
+  }
+  // История существует независимо от каталога и списка /runs.
+  for (const [address, record] of records) {
+    if (live.has(address)) continue;
+    const project: ProjectOverview = { key: record.project.key, path: record.project.path, runs: [] };
+    const run = overviewFromRecord(record, record.project.path);
+    const day = runDay(run.startedAt);
+    if (day === undefined) undated += 1;
+    else dated.push({ project, run, day });
   }
 
   // Без указанного числа дней — весь период наблюдений: нижняя граница берётся

@@ -43,7 +43,7 @@ import { launchDecide, launchResume, launchRun } from '../src/parts/ui/runLaunch
 import { declaration as runDeclaration } from '../src/parts/ui/screens/run/declaration.js';
 import { createWatcher, type Watcher } from '../src/parts/ui/daemon/watcher.js';
 import { resolveConfig, type Config } from '../src/parts/pipeline/config/resolve.js';
-import { projectKey, runPaths, shortRunId, stepDir, usageStorePath } from '../src/parts/pipeline/run/journal/paths.js';
+import { projectKey, runPaths, shortRunId, stepDir, usageDatabasePath } from '../src/parts/pipeline/run/journal/paths.js';
 import { MAX_FILE_BYTES } from '../src/parts/ui/file.js';
 import { proposeEntry } from '../src/parts/pipeline/domain/proposals/store.js';
 import { runGcCommand } from '../src/parts/pipeline/commands/gc.js';
@@ -1353,8 +1353,8 @@ jobs:
 describe('ui-dashboard: удаление прогона', () => {
   // Требование ui-dashboard «Отказ от статистики требует отдельного
   // действия»: удаление без указания судьбы статистики сохраняет её, и
-  // прогон остаётся в обзоре — файлов нет, а запись есть (Решение 10).
-  it('снимает прогон с диска, но по умолчанию сохраняет его статистику и место в обзоре', async (t) => {
+  // прогон исчезает из обзора, а расход остаётся в истории.
+  it('снимает прогон с диска и из обзора, но по умолчанию сохраняет статистику', async (t) => {
     const { runsRoot, projectRoot } = makeJournalBed();
     seedRun(runsRoot, projectRoot, { runId: 'a' });
     seedRun(runsRoot, projectRoot, { runId: 'b' });
@@ -1373,9 +1373,10 @@ describe('ui-dashboard: удаление прогона', () => {
     const runs = pick(overview.json, 'projects', 0, 'runs') as Array<{ runId: string; filesGone: boolean }>;
     assert.deepEqual(
       runs.map((run) => run.runId).sort(),
-      ['a', 'b'],
+      ['b'],
     );
-    assert.equal(runs.find((run) => run.runId === 'a')?.filesGone, true);
+    const usage = await fetchJson(server, '/api/usage');
+    assert.equal(pick(usage.json, 'total', 'runs'), 2);
   });
 
   it('stats: drop снимает и статистику — прогон целиком пропадает из обзора', async (t) => {
@@ -2304,15 +2305,15 @@ describe('ui-dashboard: согласие отбора витрины с диск
     const key = projectKey(projectRoot);
     const journal = seedRun(runsRoot, projectRoot, { runId: 'a', status: 'failed' });
     const server = await startServer(t, { runsRoot });
-    const before = readFileSync(usageStorePath(runsRoot), 'utf8');
+    const before = readFileSync(usageDatabasePath(runsRoot));
 
     await fetchJson(server, '/api/runs?trait=failed');
     await fetchJson(server, `/api/usage-records?trait=failed&project=${key}`);
     await fetchJson(server, `/api/runs?run=${address(key, 'a')}`);
 
     assert.ok(existsSync(journal.paths.dir), 'каталог прогона обязан остаться');
-    const after = readFileSync(usageStorePath(runsRoot), 'utf8');
-    assert.ok(after.startsWith(before), 'отбор может дописать хранилище, но не переписать и не урезать его');
+    const after = readFileSync(usageDatabasePath(runsRoot));
+    assert.deepEqual(after, before, 'отбор существующих записей не меняет БД');
   });
 });
 

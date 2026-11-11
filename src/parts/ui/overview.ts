@@ -209,6 +209,7 @@ function readRun(
   runId: string,
   now: Date,
   projectPath: string | undefined,
+  record: UsageRecord | undefined,
 ): RunOverview {
   const paths = runPaths(runsRoot, key, runId);
   const shortId = runId.slice(runId.lastIndexOf('-') + 1);
@@ -249,28 +250,32 @@ function readRun(
     // она пишется по ходу (usage-live-progress) и лишь помечена `partial`.
     // Состояние остаётся запасным — на окно до первой записи сводки и на
     // прогон, чья сводка не проходит текущую схему.
-    const { summary, problem: usageFailure } = readUsageSoft(paths);
-    usageProblem = usageFailure;
-    const costUsd = summary?.total.cost_usd ?? state.budget.cost_used_usd;
-    usage = {
-      billableTokens: summary?.total.billable_tokens ?? state.budget.tokens_used,
-      wallclockMs: summary?.total.wallclock_ms ?? state.budget.wallclock_ms,
-      ...(summary === undefined
-        ? {}
-        : {
-            breakdown: {
-              tokensIn: summary.total.tokens_in,
-              tokensOut: summary.total.tokens_out,
-              cacheRead: summary.total.cache_read,
-              cacheWrite: summary.total.cache_write,
-            },
-          }),
-      costUsd: costUsd === undefined ? null : costUsd,
-      ...costProvenance(summary, state.budget),
-      aggregated: summary !== undefined,
-      partial: summary?.partial === true,
-      unreported: summary?.unreported ?? [],
-    };
+    if (record !== undefined && state.status !== 'running' && record.status !== 'running') {
+      usage = overviewFromRecord(record, projectPath).usage;
+    } else {
+      const { summary, problem: usageFailure } = readUsageSoft(paths);
+      usageProblem = usageFailure;
+      const costUsd = summary?.total.cost_usd ?? state.budget.cost_used_usd;
+      usage = {
+        billableTokens: summary?.total.billable_tokens ?? state.budget.tokens_used,
+        wallclockMs: summary?.total.wallclock_ms ?? state.budget.wallclock_ms,
+        ...(summary === undefined
+          ? {}
+          : {
+              breakdown: {
+                tokensIn: summary.total.tokens_in,
+                tokensOut: summary.total.tokens_out,
+                cacheRead: summary.total.cache_read,
+                cacheWrite: summary.total.cache_write,
+              },
+            }),
+        costUsd: costUsd === undefined ? null : costUsd,
+        ...costProvenance(summary, state.budget),
+        aggregated: summary !== undefined,
+        partial: summary?.partial === true,
+        unreported: summary?.unreported ?? [],
+      };
+    }
   }
 
   // Манифест разбирается первым — при беде в нескольких файлах его диагноз и
@@ -337,11 +342,11 @@ function recordDurationMs(record: UsageRecord): number | undefined {
 }
 
 /**
- * Прогон без каталога — целиком из записи хранилища (Решение 12). Разрез по
+ * Сохранённый прогон для исторического расхода. В список /runs не входит. Разрез по
  * моделям в обзоре не показывается (это дело экрана расхода), только итог —
  * тот же набор полей, что несёт `RunUsageOverview` для прогона с диска.
  */
-function overviewFromRecord(record: UsageRecord, projectPath: string | undefined): RunOverview {
+export function overviewFromRecord(record: UsageRecord, projectPath: string | undefined): RunOverview {
   const durationMs = recordDurationMs(record);
   return {
     runId: record.run_id,
@@ -383,32 +388,16 @@ function pathFromRecords(records: ReadonlyMap<string, UsageRecord>, key: string)
 }
 
 export function buildOverview(runsRoot: string, now: Date = new Date()): Overview {
-  // Хранилище только читается здесь: перенос накопленного делает тот, кто
-  // открывает хранилище (демон при старте), а не сборка обзора на каждый
-  // запрос (design.md изменения run-stats-retention, Решение 9).
+  // Сохранённые сводки заменяют чтение usage.json завершённых прогонов.
+  // Наличие строки в БД само по себе не возвращает удалённый run в список.
   const { records } = readUsageStore(runsRoot);
 
-  const diskProjects = listProjects(runsRoot);
-  const pathByKey = new Map(diskProjects.map((project) => [project.key, project.path] as const));
-  const keys = new Set(diskProjects.map((project) => project.key));
-  for (const record of records.values()) keys.add(record.project.key);
-
-  const projects = [...keys].sort().map((key) => {
-    const path = pathByKey.get(key) ?? pathFromRecords(records, key);
-    const diskRunIds = listRunsByKey(runsRoot, key);
-    const diskRuns = diskRunIds.map((runId) => readRun(runsRoot, key, runId, now, path));
-
-    // Прогоны, чьи файлы удалены, а запись сохранена: не входят в
-    // `listRunsByKey`, потому что каталога у них нет вовсе.
-    const onDisk = new Set(diskRunIds);
-    const recordOnlyRuns = [...records.values()]
-      .filter((record) => record.project.key === key && !onDisk.has(record.run_id))
-      .map((record) => overviewFromRecord(record, path));
-
-    // Общий порядок — новейшими первыми, тот же, что даёт `listRunsByKey` для
-    // каталогов: идентификатор прогона начинается отметкой времени.
-    const runs = [...diskRuns, ...recordOnlyRuns].sort((a, b) => b.runId.localeCompare(a.runId));
-
+  const projects = listProjects(runsRoot).map((project) => {
+    const { key } = project;
+    const path = project.path ?? pathFromRecords(records, key);
+    const runs = listRunsByKey(runsRoot, key).map((runId) =>
+      readRun(runsRoot, key, runId, now, path, records.get(`${key}/${runId}`)),
+    );
     return { key, ...(path === undefined ? {} : { path }), runs };
   });
 

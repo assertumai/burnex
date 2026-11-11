@@ -130,13 +130,8 @@ describe('ui-dashboard: наблюдатель за корнем прогоно�
     watcher.dispose();
   });
 
-  /**
-   * Найдено ревью: у прогона без файлов каталога нет вовсе, и он живёт в
-   * обзоре одной лишь записью хранилища. Пока отпечаток перечислял только
-   * каталоги, снятие такой записи (`DELETE /api/usage-records`,
-   * `burnex gc --stats`) отпечатка не меняло, и снятый прогон оставался на
-   * экране и в разрезе расхода до первого изменения какого-нибудь каталога.
-   */
+  // Снятие исторической записи должно обновить расход, даже когда файлов
+  // прогона и строки в обзоре уже нет.
   it('замечает появление и снятие записи хранилища у прогона без файлов', () => {
     const { runsRoot, projectRoot } = makeJournalBed();
     const key = projectKey(projectRoot);
@@ -148,11 +143,11 @@ describe('ui-dashboard: наблюдатель за корнем прогоно�
     watcher.subscribe((overview) => seen.push(overview));
 
     // Файлы сняты, статистика сохранена: каталога у прогона больше нет, но в
-    // обзоре он остаётся записью.
+    // обзоре его уже нет, но экран расхода должен продолжать обновляться.
     removeRunWithStats(runsRoot, key, 'a');
     watcher.poll();
     const afterRemoval = seen.at(-1)?.projects[0]?.runs.find((run) => run.runId === 'a');
-    assert.equal(afterRemoval?.filesGone, true, 'прогон без файлов обязан остаться в обзоре записью');
+    assert.equal(afterRemoval, undefined, 'прогон без файлов не возвращается в обзор');
 
     const before = seen.length;
     removeUsageRecords(runsRoot, [`${key}/a`]);

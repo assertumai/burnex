@@ -4,7 +4,7 @@ import { join } from 'node:path';
 
 import { listProjects, listRunsByKey } from '../../pipeline/run/journal/reader.js';
 import { isAbandoned, readOwner } from '../../pipeline/domain/lockfile.js';
-import { runPaths, usageStorePath } from '../../pipeline/run/journal/paths.js';
+import { runPaths, usageDatabasePath, usageStorePath } from '../../pipeline/run/journal/paths.js';
 import { buildBacklog, lockPathOf, type BacklogOverview } from '../backlog.js';
 import { BOARD_FILE } from '../boardFile.js';
 import { buildOverview, type Overview, type RunOverview } from '../overview.js';
@@ -169,11 +169,9 @@ interface Fingerprint {
  * `burnex gc` сносит содержимое прогона, не трогая `status.json`, и по
  * одному лишь mtime состояния уборка неотличима от её отсутствия.
  *
- * По той же причине сюда входит и хранилище расхода: прогон без файлов живёт в
- * обзоре одной лишь своей записью (`buildOverview`), и его появление или снятие
- * не меняет ни одного каталога корня. Хранилище — единственный файл, который
- * дописывается без создания каталога, поэтому размер идёт рядом с mtime:
- * дозапись и снятие записи в пределах одной секунды mtime могут не сдвинуть.
+ * Изменение SQLite или старого NDJSON тоже будит подписчиков: экран расхода
+ * должен обновляться и после снятия статистики прогона, которого в /runs
+ * уже нет. inode и mtimeNs различают замену файла и быстрые записи.
  *
  * Часть `backlog` — оба файла очереди каждого проекта (`backlog.md` и
  * `archived.md`), тем же приёмом: `mtime` **и** размер
@@ -292,13 +290,13 @@ function fingerprint(
   const routes = routesFingerprint(builtinPath, home, projectRoot, packages);
   const dashboards = dashboardsFingerprint(home, projectRoot, packages);
 
-  try {
-    const store = statSync(usageStorePath(runsRoot));
-    parts.push(`usage:${store.mtimeMs}:${store.size}`);
-  } catch {
-    // Хранилища ещё нет: до первой записи его отсутствие — такое же состояние,
-    // как и любое другое, и его смена на «файл появился» отпечаток заметит.
-    parts.push('usage:-');
+  for (const path of [usageDatabasePath(runsRoot), usageStorePath(runsRoot)]) {
+    try {
+      const store = statSync(path, { bigint: true });
+      parts.push(`usage:${store.ino}:${store.mtimeNs}:${store.size}`);
+    } catch {
+      parts.push('usage:-');
+    }
   }
 
   for (const project of listProjects(runsRoot)) {

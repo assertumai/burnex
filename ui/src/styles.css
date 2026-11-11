@@ -257,6 +257,7 @@ input, select {
 input:focus, select:focus { outline: 2px solid var(--primary); outline-offset: -1px; }
 input.narrow { width: 7rem; }
 input { min-width: 14rem; max-width: 100%; }
+input[type="checkbox"], input[type="radio"] { min-width: 0; }
 
 /* Поле формы: подпись слева той же шириной, что `.row > .label`, — экраны
    настроек и уборки должны читаться одной колонкой подписей. */

@@ -1,16 +1,7 @@
-import {
-  appendFileSync,
-  existsSync,
-  readFileSync,
-  renameSync,
-  writeFileSync,
-} from 'node:fs';
-
 import { USAGE_STORE_FORMAT } from './format.js';
-import { runPaths, usageStorePath } from './paths.js';
-import { listProjects, listRunsByKey, readManifest, readStatus, readUsageSoft } from './reader.js';
+import { runPaths, usageDatabasePath } from './paths.js';
+import { isRunAlive, listProjects, listRunsByKey, readManifest, readStatus, readUsageSoft } from './reader.js';
 import {
-  UsageRecordSchema,
   isFailure,
   type RunManifest,
   type RunStatus,
@@ -19,22 +10,9 @@ import {
 } from './schema.js';
 import { breakdownReport } from './usageSpread.js';
 
-/**
- * Хранилище расхода: построчный журнал `<корень прогонов>/usage.ndjson`, по
- * строке JSON на прогон (design.md изменения run-stats-retention, Решение 1).
- *
- * Дозапись (`appendUsageRecord`) — единственный горячий путь и не переписывает
- * накопленного никогда; переписывание случается только при явном снятии
- * записей (`removeUsageRecords`), редко и не в состязании с дозаписью.
- */
-
-/** Те же права, что у прочих файлов журнала (`journal/writer.ts`). */
-const FILE_MODE = 0o600;
-
-/** Адрес записи в хранилище — тот же вид, что у адреса каталога прогона. */
-export function usageRecordAddress(record: UsageRecord): string {
-  return `${record.project.key}/${record.run_id}`;
-}
+import { appendUsageRecord, readUsageStore } from './usageDatabase.js';
+export { appendUsageRecord, readUsageStore, removeUsageRecords, usageRecordAddress } from './usageDatabase.js';
+export type { UsageStoreReadResult } from './usageDatabase.js';
 
 /**
  * Собрать запись хранилища из манифеста, состояния и сводки расхода прогона —
@@ -103,66 +81,6 @@ export function usageRecord(
   };
 }
 
-/** Дозаписать одну запись — не переписывая накопленного (Решение 8). */
-export function appendUsageRecord(runsRoot: string, record: UsageRecord): void {
-  appendFileSync(usageStorePath(runsRoot), `${JSON.stringify(record)}\n`, { mode: FILE_MODE });
-}
-
-export interface UsageStoreReadResult {
-  /** Ключ — адрес записи (`usageRecordAddress`); поздняя строка вытесняет раннюю. */
-  readonly records: ReadonlyMap<string, UsageRecord>;
-  /** Строки, не прошедшие разбор JSON или схему, — хвост обрыва и тому подобное. */
-  readonly corrupted: number;
-  /** Записи версии новее этого читателя — прочитаны по известным полям. */
-  readonly versionSkew: number;
-}
-
-/**
- * Прочитать хранилище целиком. Отсутствие файла — пустое хранилище, а не
- * ошибка: до первой записи (или на установке без единого перенесённого
- * прогона) файла попросту ещё нет.
- *
- * Строка, не прошедшая разбор, — обрыв процесса на дозаписи или любая другая
- * порча, — пропускается и не роняет чтение остальных (Решение 4): ту же
- * защиту уже даёт `readEventsSoft` для `events.ndjson`.
- */
-export function readUsageStore(runsRoot: string): UsageStoreReadResult {
-  const path = usageStorePath(runsRoot);
-  if (!existsSync(path)) return { records: new Map(), corrupted: 0, versionSkew: 0 };
-
-  const records = new Map<string, UsageRecord>();
-  let corrupted = 0;
-  let versionSkew = 0;
-
-  for (const line of readFileSync(path, 'utf8').split('\n')) {
-    if (line.trim() === '') continue;
-
-    const record = parseRecordLine(line);
-    if (record === undefined) {
-      corrupted += 1;
-      continue;
-    }
-    if (record.format > USAGE_STORE_FORMAT) versionSkew += 1;
-    // Поздняя запись прогона вытесняет раннюю (Решение 6): дозапись остаётся
-    // идемпотентной, и переносу, повторному завершению и будущей правке
-    // формата не нужно искать и править строку на месте.
-    records.set(usageRecordAddress(record), record);
-  }
-
-  return { records, corrupted, versionSkew };
-}
-
-function parseRecordLine(line: string): UsageRecord | undefined {
-  let raw: unknown;
-  try {
-    raw = JSON.parse(line);
-  } catch {
-    return undefined;
-  }
-  const parsed = UsageRecordSchema.safeParse(raw);
-  return parsed.success ? parsed.data : undefined;
-}
-
 /** Хранилища, перенос которых уже выполнен в этом процессе (Решение 9). */
 const backfilled = new Set<string>();
 
@@ -186,7 +104,7 @@ export interface CatchUpUsageStoreOptions {
  * хранилища от диска видно и вредно. Обеим функциям нужны разные имена, чтобы
  * разница была видна в местах вызова, а не только в комментарии здесь.
  *
- * Переносятся и незавершённые прогоны — оборванные, застрявшие в `running`:
+ * Живые прогоны пропускаются. Переносятся оборванные, застрявшие в `running`:
  * их расход накоплен и реален, а исход берётся из состояния как есть. Если
  * прогон впоследствии завершится, его запись перезапишется терминальной
  * (Решение 6) — перенос её не защищает от этого и не должен.
@@ -227,7 +145,7 @@ export function catchUpUsageRecords(
  * Догон дописывает производное (хранилище выводится из каталогов прогонов) и
  * зовётся с путей, которые сами по себе — чтение: отбор, который человек
  * запросил и ждёт. Отказ дозаписи — корень только для чтения, кончилось место,
- * `usage.ndjson` заведён другим пользователем — обязан вырождать догон в
+ * база заведена другим пользователем — обязан вырождать догон в
  * «отбор без свежих записей», а не в отказ отбора и не в падение демона:
  * маршруты витрины синхронны, и брошенное отсюда исключение уронило бы весь
  * процесс. Обход при этом прекращается на первом же отказе: причина у всех
@@ -257,7 +175,7 @@ function catchUpRun(runsRoot: string, key: string, runId: string, present: Set<s
  * запрос, зовёт догон `catchUpUsageStore` напрямую.
  */
 export function backfillUsageStore(runsRoot: string): void {
-  const path = usageStorePath(runsRoot);
+  const path = usageDatabasePath(runsRoot);
   if (backfilled.has(path)) return;
   backfilled.add(path);
   catchUpUsageStore(runsRoot);
@@ -270,6 +188,7 @@ export function backfillUsageStore(runsRoot: string): void {
  */
 function appendIfSummarized(runsRoot: string, key: string, runId: string): boolean {
   const paths = runPaths(runsRoot, key, runId);
+  if (isRunAlive(paths)) return false;
   let manifest: RunManifest;
   let status: RunStatus;
   try {
@@ -293,14 +212,14 @@ function appendIfSummarized(runsRoot: string, key: string, runId: string): boole
  * Адреса записей, уже лежащих в хранилище. Отдаётся изменяемым набором: тот,
  * кто обходит список прогонов, читает хранилище один раз на весь список и
  * ведёт этот набор дальше сам (`ensureUsageRecord`), вместо того чтобы
- * разбирать `usage.ndjson` заново на каждый адрес.
+ * читать таблицу SQLite заново на каждый адрес.
  */
 export function usageRecordAddresses(runsRoot: string): Set<string> {
   return new Set(readUsageStore(runsRoot).records.keys());
 }
 
 /**
- * Дописать запись прогона из его каталога, если её ещё нет в хранилище, — не
+ * Сохранить свежую запись прогона из его каталога перед удалением, не
  * зная про перенос всего корня и не запуская его. Используется удалением
  * файлов прогона: обязано убедиться, что запись есть, прежде чем каталог
  * уйдёт под `rmSync` (design.md, Решение 10).
@@ -316,7 +235,8 @@ export function ensureUsageRecord(
   present: Set<string> = usageRecordAddresses(runsRoot),
 ): void {
   const address = `${key}/${runId}`;
-  if (present.has(address)) return;
+  // Перед удалением перечитать сводку: перенос мог сохранить промежуточный
+  // расход оборванного прогона, после которого движок успел дописать файлы.
   if (appendIfSummarized(runsRoot, key, runId)) present.add(address);
 }
 
@@ -386,58 +306,3 @@ export function selectUsageRecords(
   return selected;
 }
 
-function addressOfLine(line: string): string | undefined {
-  const record = parseRecordLine(line);
-  return record === undefined ? undefined : usageRecordAddress(record);
-}
-
-/**
- * Хвост, дописанный в файл хранилища после того, как было прочитано
- * `original`, — или пустая строка, если хвоста нет. Вынесено отдельной чистой
- * функцией: догон хвоста — единственная часть снятия записей, которая имеет
- * дело с состязанием во времени, и её проще проверить как чистое
- * преобразование двух строк, чем воспроизводить настоящую гонку в тесте.
- */
-export function mergeAppendedTail(original: string, current: string): string {
-  return current.length > original.length && current.startsWith(original)
-    ? current.slice(original.length)
-    : '';
-}
-
-/**
- * Снять записи по явному списку адресов — переписыванием файла, а не
- * дозаписью тумбстоуна (Решение 8): читает файл, отбирает остающиеся, пишет
- * их во временный файл, дочитывает хвост, появившийся с начала чтения (другой
- * прогон мог завершиться, пока шло снятие), и заменяет файл через `rename`.
- *
- * Строка, не прошедшая разбор, сохраняется как есть: снятие отбирает по
- * адресу записи, а адрес неразобранной строки взять неоткуда — надёжнее
- * оставить её, чем стереть данные, о которых нечего сказать.
- */
-export function removeUsageRecords(runsRoot: string, addresses: readonly string[]): number {
-  const path = usageStorePath(runsRoot);
-  if (!existsSync(path)) return 0;
-
-  const toRemove = new Set(addresses);
-  const original = readFileSync(path, 'utf8');
-
-  const kept: string[] = [];
-  let removedCount = 0;
-  for (const line of original.split('\n')) {
-    if (line.trim() === '') continue;
-    const address = addressOfLine(line);
-    if (address !== undefined && toRemove.has(address)) {
-      removedCount += 1;
-      continue;
-    }
-    kept.push(line);
-  }
-
-  const content =
-    (kept.length === 0 ? '' : `${kept.join('\n')}\n`) + mergeAppendedTail(original, readFileSync(path, 'utf8'));
-
-  const tmp = `${path}.tmp-${process.pid}`;
-  writeFileSync(tmp, content, { mode: FILE_MODE });
-  renameSync(tmp, path);
-  return removedCount;
-}

@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { appendFileSync, chmodSync, existsSync, readFileSync, statSync } from 'node:fs';
 import { describe, it } from 'node:test';
 
-import { projectKey, usageStorePath } from '../src/parts/pipeline/run/journal/paths.js';
+import { projectKey, usageDatabasePath, usageStorePath } from '../src/parts/pipeline/run/journal/paths.js';
 import { readUsage } from '../src/parts/pipeline/run/journal/reader.js';
 import type { RunManifest, RunStatus, UsageReport } from '../src/parts/pipeline/run/journal/schema.js';
 import {
@@ -11,7 +11,6 @@ import {
   catchUpUsageRecords,
   catchUpUsageStore,
   ensureUsageRecord,
-  mergeAppendedTail,
   readUsageStore,
   removeUsageRecords,
   selectUsageRecords,
@@ -263,9 +262,9 @@ describe('usage-store: хранилище расхода', () => {
     assert.equal(records.get(`${key}/finished`)?.status, 'success');
     assert.equal(records.get(`${key}/stuck`)?.status, 'running');
 
-    const sizeBefore = statSync(usageStorePath(runsRoot)).size;
+    const sizeBefore = statSync(usageDatabasePath(runsRoot)).size;
     backfillUsageStore(runsRoot);
-    const sizeAfter = statSync(usageStorePath(runsRoot)).size;
+    const sizeAfter = statSync(usageDatabasePath(runsRoot)).size;
     assert.equal(sizeBefore, sizeAfter, 'повторный перенос не должен дописывать строк');
   });
 
@@ -317,11 +316,11 @@ describe('usage-store: хранилище расхода', () => {
     const { runsRoot, projectRoot } = makeJournalBed();
     const journal = seedRun(runsRoot, projectRoot, { runId: 'a' });
     backfillUsageStore(runsRoot);
-    const before = readFileSync(usageStorePath(runsRoot), 'utf8');
+    const before = readFileSync(usageDatabasePath(runsRoot));
 
     catchUpUsageStore(runsRoot);
 
-    assert.equal(readFileSync(usageStorePath(runsRoot), 'utf8'), before, 'догон без нового на диске не меняет файла');
+    assert.deepEqual(readFileSync(usageDatabasePath(runsRoot)), before, 'догон без нового на диске не меняет файла');
     assert.ok(existsSync(journal.paths.dir));
     assert.ok(existsSync(journal.paths.manifest));
   });
@@ -370,9 +369,9 @@ describe('usage-store: хранилище расхода', () => {
     seedRun(runsRoot, projectRoot, { runId: 'a' });
 
     catchUpUsageStore(runsRoot);
-    const sizeBefore = statSync(usageStorePath(runsRoot)).size;
+    const sizeBefore = statSync(usageDatabasePath(runsRoot)).size;
     catchUpUsageStore(runsRoot);
-    const sizeAfter = statSync(usageStorePath(runsRoot)).size;
+    const sizeAfter = statSync(usageDatabasePath(runsRoot)).size;
 
     assert.equal(sizeBefore, sizeAfter, 'второй вызов подряд не должен дописывать строк');
   });
@@ -425,17 +424,6 @@ describe('usage-store: хранилище расхода', () => {
     const selected = selectUsageRecords(runsRoot, { failed: true, olderThanMs: 1000 * 60 * 60 * 24 * 365 });
 
     assert.deepEqual(selected.map((s) => s.address), [`${key}/old-failed`]);
-  });
-
-  // Догон хвоста — часть снятия, которая имеет дело с состязанием во
-  // времени (другой прогон дописывает свою запись, пока снятие уже читает
-  // файл для отбора); проверяется как чистое преобразование двух срезов
-  // содержимого файла, а не воспроизведением настоящей гонки потоков.
-  it('mergeAppendedTail отдаёт хвост, дописанный после исходного чтения, и ничего — когда его нет', () => {
-    const before = '{"a":1}\n';
-    const appended = `${before}{"a":2}\n`;
-    assert.equal(mergeAppendedTail(before, appended), '{"a":2}\n');
-    assert.equal(mergeAppendedTail(before, before), '');
   });
 
   it('запись, дописанная во время снятия, остаётся: снятие учитывает содержимое файла на момент замены', () => {

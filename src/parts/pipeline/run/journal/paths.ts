@@ -138,13 +138,14 @@ export function decisionRecordPath(paths: RunPaths, waitId: string): string {
   return join(paths.decisions, `${waitId}.json`);
 }
 
-/**
- * Хранилище расхода: построчный журнал в корне прогонов, а не в каталоге
- * прогона, — сводка обязана пережить удаление своего каталога
- * (run-stats-retention, Решение 1).
- */
+/** Старое хранилище: источник совместимого импорта, новые записи идут в SQLite. */
 export function usageStorePath(runsRoot: string): string {
   return join(runsRoot, 'usage.ndjson');
+}
+
+/** SQLite со сводками расхода; `usageStorePath` сохранён для импорта старых установок. */
+export function usageDatabasePath(runsRoot: string): string {
+  return join(runsRoot, 'usage.sqlite');
 }
 
 export function jobDir(paths: RunPaths, jobId: string): string {

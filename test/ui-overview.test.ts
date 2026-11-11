@@ -446,8 +446,7 @@ describe('ui-dashboard: обзор всех проектов и прогонов
     }
   });
 
-  // Требование ui-dashboard «Прогон без файлов остаётся видимым и отличимым».
-  it('прогон без файлов виден в обзоре с признаком filesGone и отличим от убранного', () => {
+  it('удалённый прогон отсутствует в обзоре, а убранный остаётся', () => {
     const { runsRoot, projectRoot } = makeJournalBed();
     const key = projectKey(projectRoot);
     seedRun(runsRoot, projectRoot, {
@@ -470,11 +469,7 @@ describe('ui-dashboard: обзор всех проектов и прогонов
     const gone = runs.find((r) => r.runId === 'gone');
     const swept = runs.find((r) => r.runId === 'swept');
 
-    assert.ok(gone !== undefined, 'прогон без файлов обязан остаться в обзоре');
-    assert.equal(gone.filesGone, true);
-    assert.equal(gone.swept, false);
-    assert.equal(gone.usage?.billableTokens, 40);
-    assert.equal(gone.usage?.costUsd, 4);
+    assert.equal(gone, undefined, 'историческая статистика не возвращает удалённый прогон в список');
 
     assert.ok(swept !== undefined);
     assert.equal(swept.swept, true);
