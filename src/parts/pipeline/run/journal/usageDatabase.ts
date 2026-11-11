@@ -1,4 +1,4 @@
-import { closeSync, existsSync, fstatSync, openSync, readSync } from 'node:fs';
+import { closeSync, existsSync, fstatSync, openSync, readFileSync, readSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
 
 import { USAGE_STORE_FORMAT } from './format.js';
@@ -176,7 +176,7 @@ function storeExists(runsRoot: string): boolean {
   return existsSync(usageDatabasePath(runsRoot)) || existsSync(usageStorePath(runsRoot));
 }
 
-export function readUsageStore(runsRoot: string): UsageStoreReadResult {
+function readWritableStore(runsRoot: string): UsageStoreReadResult {
   if (!storeExists(runsRoot)) return { records: new Map(), corrupted: 0, versionSkew: 0 };
   return withDatabase(runsRoot, (db) => {
     const records = new Map<string, UsageRecord>();
@@ -191,6 +191,58 @@ export function readUsageStore(runsRoot: string): UsageStoreReadResult {
     }
     return { records, corrupted, versionSkew };
   });
+}
+
+/** Если миграция запрещена правами, история остаётся доступна для чтения. */
+function readOnlyStore(runsRoot: string): UsageStoreReadResult {
+  const records = new Map<string, UsageRecord>();
+  let corrupted = 0;
+  const legacyExists = existsSync(usageStorePath(runsRoot));
+  if (legacyExists) {
+    for (const line of readFileSync(usageStorePath(runsRoot), 'utf8').split('\n')) {
+      if (line.trim() === '') continue;
+      const record = parseRecord(line);
+      if (record === undefined) corrupted += 1;
+      else records.set(usageRecordAddress(record), record);
+    }
+  }
+  if (existsSync(usageDatabasePath(runsRoot))) {
+    const db = new DatabaseSync(usageDatabasePath(runsRoot), { readOnly: true });
+    try {
+      const version = Number(db.prepare('PRAGMA user_version').get()?.user_version);
+      if (version > SCHEMA_VERSION) throw new Error(`Unsupported usage database schema version: ${version}`);
+      // При отказе создания схемы может остаться пустой файл версии 0.
+      if (version === SCHEMA_VERSION) {
+        if (!legacyExists) {
+          const count = db.prepare('SELECT corrupted + torn AS count FROM usage_legacy_import WHERE id = 1').get();
+          corrupted += Number(count?.count ?? 0);
+        }
+        for (const row of db.prepare('SELECT address, record, source FROM usage_records').all()) {
+          const address = String(row.address);
+          if (row.record === null) { records.delete(address); continue; }
+          const record = parseRecord(String(row.record));
+          if (record === undefined) { corrupted += 1; continue; }
+          if (row.source === 'native' || !records.has(address)) records.set(address, record);
+        }
+      }
+    } finally { db.close(); }
+  }
+  return {
+    records,
+    corrupted,
+    versionSkew: [...records.values()].filter((record) => record.format > USAGE_STORE_FORMAT).length,
+  };
+}
+
+export function readUsageStore(runsRoot: string): UsageStoreReadResult {
+  try {
+    return readWritableStore(runsRoot);
+  } catch (error) {
+    const failure = error as NodeJS.ErrnoException & { errcode?: number };
+    // Только отказ записи: повреждение БД и незнакомую схему не скрываем.
+    if (failure.code !== 'EACCES' && failure.code !== 'EROFS' && ((failure.errcode ?? 0) & 0xff) !== 8) throw error;
+    return readOnlyStore(runsRoot);
+  }
 }
 
 /** Автокоммит SQLite атомарно заменяет один агрегат, не переписывая историю. */

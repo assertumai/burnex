@@ -128,13 +128,15 @@ describe('usage-store: SQLite migration', () => {
     removeUsageRecords(runsRoot, [`${key}/old`]);
     appendUsageRecord(runsRoot, { ...record, run_id: 'native', total: { ...record.total, billable_tokens: 55 } });
     appendFileSync(usageStorePath(runsRoot), `${JSON.stringify({ ...record, run_id: 'late' })}\n${JSON.stringify({ ...record, run_id: 'native' })}\n`);
-    chmodSync(database, 0o400);
-    try {
-      const result = readUsageStore(runsRoot);
-      assert.equal(result.records.has(`${key}/old`), false);
-      assert.equal(result.records.has(`${key}/late`), true);
-      assert.equal(result.records.get(`${key}/native`)?.total.billable_tokens, 55);
-    } finally { chmodSync(database, 0o600); }
+    for (const target of [database, runsRoot]) {
+      chmodSync(target, target === database ? 0o400 : 0o500);
+      try {
+        const result = readUsageStore(runsRoot);
+        assert.equal(result.records.has(`${key}/old`), false);
+        assert.equal(result.records.has(`${key}/late`), true);
+        assert.equal(result.records.get(`${key}/native`)?.total.billable_tokens, 55);
+      } finally { chmodSync(target, target === database ? 0o600 : 0o700); }
+    }
   });
 
   it('расход сохраняет адрес пайплайна пакета у существующего прогона', () => {
@@ -144,6 +146,33 @@ describe('usage-store: SQLite migration', () => {
     const overview = buildOverview(runsRoot);
     assert.equal(overview.projects[0]?.runs[0]?.pipelineFile, '@example/demo');
     assert.equal(buildUsage(runsRoot, overview).pipelines[0]?.pipelineFile, '@example/demo');
+    removeRunWithStats(runsRoot, projectKey(projectRoot), 'package');
+    assert.equal(buildUsage(runsRoot, buildOverview(runsRoot)).pipelines[0]?.pipelineFile, '@example/demo');
+  });
+
+  it('старый агрегат использует адрес пакета из доступного манифеста', () => {
+    const { runsRoot, projectRoot } = makeJournalBed();
+    const journal = seedRun(runsRoot, projectRoot, { runId: 'package', manifest: { pipeline_address: '@example/demo', pipeline_file: '/packages/demo/pipeline.yml' } });
+    const record = usageRecord(projectKey(projectRoot), readManifest(journal.paths), readStatus(journal.paths), readUsage(journal.paths));
+    appendUsageRecord(runsRoot, { ...record, pipeline: { ...record.pipeline, file: '/packages/demo/pipeline.yml' } });
+    assert.equal(buildUsage(runsRoot, buildOverview(runsRoot)).pipelines[0]?.pipelineFile, '@example/demo');
+  });
+
+  it('ошибка посреди миграции откатывает и строки, и курсор; повторный импорт полный', () => {
+    const { runsRoot, record, database } = fixture();
+    appendUsageRecord(runsRoot, { ...record, run_id: 'native' });
+    const legacy = `${JSON.stringify(record)}\n${JSON.stringify({ ...record, run_id: 'blocked' })}\n`;
+    writeFileSync(usageStorePath(runsRoot), legacy);
+    const db = new DatabaseSync(database);
+    try {
+      db.exec("CREATE TRIGGER reject_import BEFORE INSERT ON usage_records WHEN NEW.address LIKE '%/blocked' BEGIN SELECT RAISE(ABORT, 'test import failure'); END;");
+      assert.throws(() => readUsageStore(runsRoot), /test import failure/);
+      assert.equal(db.prepare('SELECT count(*) AS n FROM usage_records').get()?.n, 1);
+      assert.equal(db.prepare('SELECT count(*) AS n FROM usage_legacy_import').get()?.n, 0);
+      db.exec('DROP TRIGGER reject_import');
+    } finally { db.close(); }
+    assert.equal(readUsageStore(runsRoot).records.size, 3);
+    assert.equal(readFileSync(usageStorePath(runsRoot), 'utf8'), legacy);
   });
 
   it('миграция и параллельные записи/удаления из разных процессов не теряют соседние записи', async () => {

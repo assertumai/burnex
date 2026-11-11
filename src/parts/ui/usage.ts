@@ -367,9 +367,11 @@ export function buildUsage(runsRoot: string, overview: Overview, options: UsageO
   let undated = 0;
 
   const live = new Set<string>();
+  const diskRuns = new Map<string, RunOverview>();
   for (const project of overview.projects) {
     for (const run of project.runs) {
       const address = `${project.key}/${run.runId}`;
+      diskRuns.set(address, run);
       // Живой расход не заменяется старым снимком оборванного прогона.
       if (run.running) live.add(address);
       else if (records.has(address)) continue;
@@ -382,7 +384,11 @@ export function buildUsage(runsRoot: string, overview: Overview, options: UsageO
   for (const [address, record] of records) {
     if (live.has(address)) continue;
     const project: ProjectOverview = { key: record.project.key, path: record.project.path, runs: [] };
-    const run = overviewFromRecord(record, record.project.path);
+    const storedRun = overviewFromRecord(record, record.project.path);
+    // Старые записи не сохраняли адрес пакета. Пока каталог есть,
+    // используем его идентичность, оставляя все суммы и времена из БД.
+    const pipelineFile = diskRuns.get(address)?.pipelineFile ?? storedRun.pipelineFile;
+    const run = { ...storedRun, ...(pipelineFile === undefined ? {} : { pipelineFile }) };
     const day = runDay(run.startedAt);
     if (day === undefined) undated += 1;
     else dated.push({ project, run, day });

@@ -575,8 +575,8 @@ describe('usage-store: попытки работы не сливаются в у
 });
 
 describe('usage-store: движок дописывает запись по завершении прогона', () => {
-  it('прогон, завершившийся любым исходом, получает строку в хранилище с величинами своего usage.json', async () => {
-    const project = makeProject({ 'burnex.yml': MINIMAL_PIPELINE });
+  for (const expected of ['success', 'failed'] as const) it(`завершение ${expected} сразу записывает SQLite с величинами usage.json`, async () => {
+    const project = makeProject({ 'burnex.yml': expected === 'success' ? MINIMAL_PIPELINE : 'version: 1\nkind: pipeline\nname: fails\njobs:\n  test:\n    steps:\n      - id: fails\n        run: [sh, -c, "exit 1"]\n' });
     const runsRoot = tempDir('runs-');
     const expanded = expandPipeline({ pipelinePath: project.path('burnex.yml'), config: project.config });
 
@@ -588,6 +588,8 @@ describe('usage-store: движок дописывает запись по за�
     });
 
     const key = projectKey(project.root);
+    assert.equal(result.status, expected);
+    assert.ok(existsSync(usageDatabasePath(runsRoot)), 'БД создана самим движком до чтения хранилища');
     const { records } = readUsageStore(runsRoot);
     const record = records.get(`${key}/${result.journal.paths.runId}`);
     assert.ok(record !== undefined, 'завершённый прогон обязан получить запись в хранилище');

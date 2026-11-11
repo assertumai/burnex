@@ -77,8 +77,8 @@ fi
 
 command -v git >/dev/null 2>&1 || die "нужен git"
 command -v npm >/dev/null 2>&1 || die "нужен npm"
-command -v node >/dev/null 2>&1 || die "нужен Node.js >= 22.13"
-node -e 'const [major, minor] = process.versions.node.split(".").map(Number); process.exit(major > 22 || (major === 22 && minor >= 13) ? 0 : 1)' || die "нужен Node.js >= 22.13, найден $(node -v)"
+command -v node >/dev/null 2>&1 || die "нужен Node.js 22.13+ (ветка 22) или >= 23.4"
+node -e 'const [major, minor] = process.versions.node.split(".").map(Number); process.exit(major > 23 || (major === 23 && minor >= 4) || (major === 22 && minor >= 13) ? 0 : 1)' || die "нужен Node.js 22.13+ (ветка 22) или >= 23.4, найден $(node -v)"
 
 # Временные каталоги убираются при любом выходе; current при сбое не трогается:
 # он переключается последним шагом, после того как релиз полностью разложен.

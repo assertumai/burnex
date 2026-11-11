@@ -38,7 +38,7 @@ export function usageRecord(
   return {
     format: USAGE_STORE_FORMAT,
     project: { key, path: manifest.project_root },
-    pipeline: { name: manifest.pipeline, file: manifest.pipeline_file },
+    pipeline: { name: manifest.pipeline, file: manifest.pipeline_address ?? manifest.pipeline_file },
     run_id: manifest.run_id,
     started_at: manifest.started_at,
     ...(manifest.finished_at === undefined ? {} : { finished_at: manifest.finished_at }),

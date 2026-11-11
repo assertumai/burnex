@@ -12,7 +12,7 @@
     "access": "public"
   },
   "engines": {
-    "node": ">=22.13"
+    "node": "^22.13.0 || >=23.4.0"
   },
   "bin": {
     "burnex": "./dist/src/bin.js"
