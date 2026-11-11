@@ -225,6 +225,31 @@ export interface AgentStep extends StepCommon {
   readonly permissions?: Permissions;
   /** Действующее для шага объявление MCP-серверов — своё либо унаследованное. */
   readonly mcp?: McpServers;
+  /**
+   * Профиль, давший агента шага (`agent-profiles`). Справочное поле: замок
+   * его печатает, а ключ шага и хеш работы снимают (`withoutProfileName`) —
+   * переименование профиля без смены содержимого переиспользования не ломает.
+   */
+  readonly profile?: string;
+  /**
+   * Контекст профиля — уровень «профиль» перед уровнем пайплайна. Пути
+   * глобального профиля абсолютные; поле отсутствует у шага без контекста
+   * профиля, чтобы ключи прежних шагов не сдвинулись.
+   */
+  readonly profileContext?: readonly ContextEntry[];
+  /**
+   * Отпечаток содержимого файлов контекста профиля, лежащих вне рабочего
+   * дерева (абсолютные пути): их правка обязана инвалидировать шаг, а
+   * отпечаток входов работы их не видит (design.md, решение 5).
+   */
+  readonly profileContextFingerprint?: string;
+}
+
+/** Снять с шага имя профиля перед хешированием (ключ шага, хеш работы). */
+export function withoutProfileName<T extends object>(step: T): T {
+  if (!('profile' in step)) return step;
+  const { profile: _profile, ...rest } = step;
+  return rest as T;
 }
 
 export interface RunStep extends StepCommon {
@@ -650,13 +675,22 @@ export interface ConfigEntryLayer {
   readonly file: string;
 }
 
+/**
+ * Профиль, через который значение пришло в слой (`agent-profiles`, решение 6):
+ * слой называет место, где назван профиль, а `profile` — сам профиль.
+ */
+export interface ViaProfile {
+  readonly profile?: string;
+}
+
 /** Звено цепочки, давшее агента агентского шага. */
-export type AgentOrigin =
+export type AgentOrigin = (
   | { readonly layer: 'step' }
   | { readonly layer: 'job' }
   | { readonly layer: 'pipeline' }
   | { readonly layer: 'config' }
-  | ConfigEntryLayer;
+  | ConfigEntryLayer
+) & ViaProfile;
 
 /**
  * Явная модель документа, отброшенная как чужая агенту, пришедшему от
@@ -680,7 +714,7 @@ export type ModelOrigin = (
       readonly layer: 'tier';
       readonly backend: string;
       readonly tier: ModelTier;
-      readonly tierLayer: 'pipeline' | 'job' | 'step' | 'pipeline_agents' | 'step_agents';
+      readonly tierLayer: 'pipeline' | 'job' | 'step' | 'config' | 'pipeline_agents' | 'step_agents';
       /** Файл записи пользователя, когда tier выбран ею. */
       readonly file?: string;
       readonly fallback?: true;
@@ -690,26 +724,27 @@ export type ModelOrigin = (
   | ConfigEntryLayer
   | { readonly layer: 'backend'; readonly backend: string }
   | { readonly layer: 'none' }
-) & {
+) & ViaProfile & {
   /** Явная модель документа, замененная потому, что она чужая выбранному агенту. */
   readonly dropped?: DroppedModel;
 };
 
 /** Звено цепочки, давшее reasoning effort агентского шага. */
-export type EffortOrigin =
+export type EffortOrigin = (
   | { readonly layer: 'step' }
   | { readonly layer: 'job' }
   | {
       readonly layer: 'tier';
       readonly backend: string;
       readonly tier: ModelTier;
-      readonly tierLayer: 'pipeline' | 'job' | 'step' | 'pipeline_agents' | 'step_agents';
+      readonly tierLayer: 'pipeline' | 'job' | 'step' | 'config' | 'pipeline_agents' | 'step_agents';
       readonly file?: string;
     }
   | { readonly layer: 'pipeline' }
   | { readonly layer: 'config' }
   | ConfigEntryLayer
-  | { readonly layer: 'none' };
+  | { readonly layer: 'none' }
+) & ViaProfile;
 
 /**
  * Запись выбора пользователя, не повлиявшая ни на один шаг пайплайна, и

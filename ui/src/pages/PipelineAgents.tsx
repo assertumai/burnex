@@ -28,8 +28,13 @@ function tierLayerLabel(layer: string, file: string | undefined): string {
  * и то же решение (design.md, «Экран пайплайна показывает значение, не
  * называя слоя»).
  */
+/** Подпись слоя, дополненная профилем, через который значение пришло. */
+export function withProfile(label: string, origin: { readonly profile?: string }): string {
+  return origin.profile === undefined ? label : `${label} · profile ${origin.profile}`;
+}
+
 export function modelOriginLabel(origin: PipelineModelOrigin): string {
-  const label = ((): string => {
+  const label = withProfile(((): string => {
     switch (origin.layer) {
       case 'job':
         return 'job model';
@@ -49,7 +54,7 @@ export function modelOriginLabel(origin: PipelineModelOrigin): string {
       case 'none':
         return 'no model set — the backend picks one';
     }
-  })();
+  })(), origin);
   // Отброшенная модель — часть ответа на «почему именно эта»: без неё выбор
   // агента выглядел бы необъяснимой подменой модели документа.
   return origin.dropped === undefined
@@ -58,6 +63,10 @@ export function modelOriginLabel(origin: PipelineModelOrigin): string {
 }
 
 export function effortOriginLabel(origin: PipelineEffortOrigin): string {
+  return withProfile(effortLayerLabel(origin), origin);
+}
+
+function effortLayerLabel(origin: PipelineEffortOrigin): string {
   switch (origin.layer) {
     case 'job':
       return 'job effort';
@@ -78,6 +87,10 @@ export function effortOriginLabel(origin: PipelineEffortOrigin): string {
 }
 
 export function agentOriginLabel(origin: PipelineAgentOrigin): string {
+  return withProfile(agentLayerLabel(origin), origin);
+}
+
+function agentLayerLabel(origin: PipelineAgentOrigin): string {
   switch (origin.layer) {
     case 'step':
       return 'agent declared by the step';
@@ -102,8 +115,10 @@ export function entryMarkLabel(mark: NonNullable<AgentEntryView['mark']>, policy
     : 'part of this entry comes from a project file — the screen writes only the global file, so editing here does not override it';
 }
 
-/** Варианты выбора: агенты, tier и имена моделей из настроек — без новой пробы CLI. */
+/** Варианты выбора: профили, агенты, tier и имена моделей из настроек — без новой пробы CLI. */
 export interface AgentChoices {
+  /** Профили — встроенный `default` и профили глобального файла (`agent-profiles`). */
+  readonly profiles: readonly string[];
   readonly agents: readonly string[];
   readonly tiers: readonly string[];
   readonly models: readonly string[];
@@ -116,6 +131,9 @@ export function agentChoices(settings: Settings): AgentChoices {
     for (const selection of Object.values(backend.modelTiers)) models.add(selection.model);
   }
   return {
+    // Проектный профиль сюда не попадает: запись ложится в глобальный файл, и
+    // пайплайн того же имени в другом проекте его бы не нашёл.
+    profiles: ['default', ...(settings.profiles ?? []).map((profile) => profile.name)],
     agents: settings.backends.filter((backend) => backend.enabled && backend.available).map((backend) => backend.name),
     tiers: settings.modelTiers,
     models: [...models].sort(),
@@ -195,11 +213,20 @@ export function AgentSelector({
           onChange={(event) => setDraft({ ...draft, agent: event.target.value })}
         >
           <option value="">— not set —</option>
-          {choices.agents.map((name) => (
-            <option key={name} value={name}>
-              {name}
-            </option>
-          ))}
+          <optgroup label="profiles">
+            {choices.profiles.map((name) => (
+              <option key={`profile-${name}`} value={name}>
+                {name}
+              </option>
+            ))}
+          </optgroup>
+          <optgroup label="backends">
+            {choices.agents.map((name) => (
+              <option key={name} value={name}>
+                {name}
+              </option>
+            ))}
+          </optgroup>
         </select>
       </label>
       <label className="agent-select-field">

@@ -18,12 +18,18 @@ import { commandRow } from '../../../kernel/cli/commandRow.js';
 import { PIPELINE_SERVICES } from '../services.js';
 import type { ParsedArgs } from '../../../kernel/cli/args.js';
 
-const LEVEL_LABEL: Record<Origin, string> = {
+const LEVEL_LABEL: Record<'upstream' | 'pipeline' | 'job' | 'step', string> = {
   upstream: 'выходы предшественников',
   pipeline: 'пайплайн',
   job: 'работа',
   step: 'шаг',
 };
+
+function levelLabel(origin: Origin): string {
+  return origin.startsWith('profile:')
+    ? `профиль ${origin.slice('profile:'.length)}`
+    : LEVEL_LABEL[origin as keyof typeof LEVEL_LABEL];
+}
 
 /**
  * `burnex context` вычисляет состав и размер контекста агентского шага без
@@ -77,6 +83,9 @@ export function runContextCommand(
 
   const assembled = assembleContext({
     workspace: cwd,
+    ...(step.profile === undefined || step.profileContext === undefined
+      ? {}
+      : { profile: { name: step.profile, entries: step.profileContext } }),
     pipeline: pipeline.context,
     job: job.context,
     step: step.context,
@@ -106,7 +115,11 @@ export function runContextCommand(
     totals.set(entry.origin, (totals.get(entry.origin) ?? 0) + entry.tokens);
   }
 
+  const profileTokens = [...totals].filter(([origin]) => origin.startsWith('profile:')).reduce((sum, [, tokens]) => sum + tokens, 0);
   const rows: string[][] = [
+    ...(step.profile === undefined || step.profileContext === undefined
+      ? []
+      : [[`профиль ${step.profile}`, `${formatTokens(profileTokens)} ток.`]]),
     [
       LEVEL_LABEL.upstream,
       known ? `${formatTokens(totals.get('upstream') ?? 0)} ток.` : 'неизвестно',
@@ -145,7 +158,7 @@ export function runContextCommand(
       // У записи знания пути может не быть вовсе (оглавление), и называть её
       // пустой строкой значило бы показать склейку, не сказав, чего именно.
       `  ${entry.path ?? entry.id ?? ''}`,
-      (entry.declared_in ?? []).map((level) => LEVEL_LABEL[level]).join(', '),
+      (entry.declared_in ?? []).map(levelLabel).join(', '),
     ]);
     for (const line of formatColumns(mergedRows)) write(line);
   }

@@ -176,9 +176,18 @@ export const ExpectReportSchema = z
   })
   .strict();
 
+/**
+ * Уровень записи контекста: место в документе либо профиль агента
+ * (`profile:<имя>`, `agent-profiles`).
+ */
+const ContextOriginSchema = z.union([
+  z.enum(['upstream', 'pipeline', 'job', 'step']),
+  z.templateLiteral(['profile:', z.string().regex(/^[a-z][a-z0-9_-]*$/)]),
+]);
+
 export const ContextEntryReportSchema = z
   .object({
-    origin: z.enum(['upstream', 'pipeline', 'job', 'step']),
+    origin: ContextOriginSchema,
     /**
      * `knowledge` — запись, пришедшая от источника знания. Отдельный вид, а
      * не `path`/`text` с признаком: разбирающий состав контекста постфактум
@@ -196,7 +205,7 @@ export const ContextEntryReportSchema = z
      * одного. `origin` остаётся местом, где запись фактически вошла в
      * контекст; запись, объявленная однажды, этого поля не несёт.
      */
-    declared_in: z.array(z.enum(['upstream', 'pipeline', 'job', 'step'])).optional(),
+    declared_in: z.array(ContextOriginSchema).optional(),
   })
   .strict();
 

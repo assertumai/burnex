@@ -1,14 +1,23 @@
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
-import { parseDocument, type Document } from 'yaml';
+import { isMap, parseDocument, type Document } from 'yaml';
 import { z } from 'zod';
 
 import { BUNDLED_BACKENDS, bundledByBackend } from '../backends/bundled.js';
-import { describeSource, type Source } from '../pipeline/config/merge.js';
+import { checkProfileName } from '../pipeline/config/agentProfiles.js';
+import { describeSource, unflatten, type Source } from '../pipeline/config/merge.js';
 import { MODEL_TIERS, type ModelTiers } from '../pipeline/config/modelTiers.js';
 import type { ResolvedConfig } from '../pipeline/config/resolve.js';
-import { EffortSchema, ModelNameSchema, ModelTierSchema, RawConfigSchema } from '../pipeline/config/schema.js';
+import {
+  AgentProfileSchema,
+  EffortSchema,
+  ModelNameSchema,
+  ModelTierSchema,
+  ProfileNameSchema,
+  RawConfigSchema,
+  type RawAgentProfile,
+} from '../pipeline/config/schema.js';
 import { BurnexError } from '../../kernel/errors.js';
 import { currentDaemonKernel } from './daemon/kernel.js';
 import type { KernelCache } from './pipelines.js';
@@ -34,8 +43,20 @@ export interface BackendView {
   readonly modelTierEffortSources: Readonly<Record<string, string>>;
 }
 
+/**
+ * Профиль агента глобального файла (`agent-profiles`) в объявленном виде —
+ * записи контекста с путями как написаны: форма правит именно их.
+ */
+export interface ProfileView {
+  readonly name: string;
+  readonly profile: RawAgentProfile;
+  readonly file: string;
+}
+
 export interface Settings {
   readonly agent: SettingsValue;
+  /** Профили глобального файла, по имени. Проектные приходят с `/api/pipelines`. */
+  readonly profiles: readonly ProfileView[];
   /** Старое общее переопределение модели сохраняется для совместимости. */
   readonly model: SettingsValue;
   readonly effort: SettingsValue;
@@ -61,6 +82,8 @@ const SettingsPatchSchema = z.object({
   effort: EffortSchema.nullable().optional(),
   backends: z.record(z.string(), BackendPatchSchema).optional(),
   removeModelTiers: z.array(ModelTierSchema).optional(),
+  /** Профиль целиком либо `null` — удалить; переименование — удаление и запись одной правкой. */
+  profiles: z.record(ProfileNameSchema, AgentProfileSchema.nullable()).optional(),
   /** Явное подключение адаптеров из поставки (имена бэкендов), без установки внешнего пакета. */
   connect: z.array(ModelNameSchema).optional(),
   /** Прежняя форма `connect: ['codex']`: оставлена, чтобы старые клиенты не ломались. */
@@ -194,8 +217,21 @@ export async function readSettings(home: string = homedir(), kernelCache?: Kerne
     }
   }
 
+  // Объявленный вид, а не `config.agents`: там пути контекста уже разрешены,
+  // а форма правит то, что написано в файле.
+  const declaredProfiles = (unflatten(new Map([...resolved.values].filter(([path]) => path.startsWith('agents.')))).agents ?? {}) as Record<
+    string,
+    RawAgentProfile
+  >;
+  const profiles: ProfileView[] = Object.keys(declaredProfiles).sort().map((name) => ({
+    name,
+    profile: declaredProfiles[name]!,
+    file: describeSettingSource(resolved.provenance.get(`agents.${name}.backend`)),
+  }));
+
   return {
     agent: valueOf(resolved, 'defaults.agent', config.defaults.agent),
+    profiles,
     model: valueOf(resolved, 'defaults.model', config.defaults.model),
     effort: valueOf(resolved, 'defaults.effort', config.defaults.effort),
     modelTiers: sharedModelTiers(backends),
@@ -282,6 +318,11 @@ export async function writeSettings(
       throw new BurnexError(`Cannot remove built-in tier ${tier}`);
     }
   }
+  // Та же проверка имени, что у разбора конфигурации, и тем же текстом: иначе
+  // форма записала бы файл, который следующий разбор отклонит.
+  for (const [name, profile] of Object.entries(patch.profiles ?? {})) {
+    if (profile !== null) checkProfileName(name, [...known.keys()]);
+  }
 
   editGlobalConfig(home, (document) => {
     const plugins = (document.toJS() as { plugins?: string[] } | null)?.plugins ?? [];
@@ -317,6 +358,15 @@ export async function writeSettings(
         }
       }
     }
+    for (const [name, profile] of Object.entries(patch.profiles ?? {})) {
+      if (profile === null) {
+        if (document.hasIn(['agents', name])) document.deleteIn(['agents', name]);
+      } else {
+        document.setIn(['agents', name], document.createNode(profile));
+      }
+    }
+    const agentsNode = document.get('agents', true);
+    if (isMap(agentsNode) && agentsNode.items.length === 0) document.delete('agents');
     const documentBackends = (document.toJS() as { backends?: Record<string, unknown> } | null)?.backends ?? {};
     for (const tier of patch.removeModelTiers ?? []) {
       for (const name of new Set([...Object.keys(documentBackends), ...current.backends.map((backend) => backend.name)])) {

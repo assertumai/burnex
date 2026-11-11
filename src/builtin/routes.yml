@@ -68,7 +68,7 @@ routes:
   - id: screen-agents
     path: /agents/:tab?
     target: { screen: screen-agents }
-    values: { tab: [default, backends, tiers, policy] }
+    values: { tab: [default, profiles, backends, tiers, policy] }
     nav: { order: 7, group: config, active_for: [screen-settings] }
 
   # Прежний адрес настроек — строка-псевдоним с чужой целью, не редирект

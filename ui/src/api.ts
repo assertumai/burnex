@@ -203,7 +203,8 @@ export interface UsageSnapshot {
 }
 
 export interface ContextBreakdown {
-  readonly levels: Readonly<Record<'upstream' | 'pipeline' | 'job' | 'step', number>>;
+  /** `profile` — контекст профиля агента; есть только у шага, которому он достался. */
+  readonly levels: Readonly<Record<'upstream' | 'pipeline' | 'job' | 'step', number>> & { readonly profile?: number };
   readonly total: number;
 }
 
@@ -337,13 +338,19 @@ export interface PipelineEntryLayer {
   readonly file: string;
 }
 
+/** Профиль, через который значение пришло в слой (`agent-profiles`). */
+export interface ViaProfile {
+  readonly profile?: string;
+}
+
 /** Слой, давший агента шага. */
-export type PipelineAgentOrigin =
+export type PipelineAgentOrigin = (
   | { readonly layer: 'step' }
   | { readonly layer: 'job' }
   | { readonly layer: 'pipeline' }
   | { readonly layer: 'config' }
-  | PipelineEntryLayer;
+  | PipelineEntryLayer
+) & ViaProfile;
 
 /** Слой, из которого пришла модель шага. Слой `config` несёт файл, победивший в этом проекте. */
 export type PipelineModelOrigin = (
@@ -353,7 +360,7 @@ export type PipelineModelOrigin = (
       readonly layer: 'tier';
       readonly backend: string;
       readonly tier: string;
-      readonly tierLayer: 'pipeline' | 'job' | 'step' | 'pipeline_agents' | 'step_agents';
+      readonly tierLayer: 'pipeline' | 'job' | 'step' | 'config' | 'pipeline_agents' | 'step_agents';
       readonly file?: string;
       readonly fallback?: true;
     }
@@ -362,23 +369,24 @@ export type PipelineModelOrigin = (
   | PipelineEntryLayer
   | { readonly layer: 'backend'; readonly backend: string }
   | { readonly layer: 'none' }
-) & { readonly dropped?: DroppedModel };
+) & ViaProfile & { readonly dropped?: DroppedModel };
 
 /** Слой, из которого пришёл действующий reasoning effort шага. */
-export type PipelineEffortOrigin =
+export type PipelineEffortOrigin = (
   | { readonly layer: 'step' }
   | { readonly layer: 'job' }
   | {
       readonly layer: 'tier';
       readonly backend: string;
       readonly tier: string;
-      readonly tierLayer: 'pipeline' | 'job' | 'step' | 'pipeline_agents' | 'step_agents';
+      readonly tierLayer: 'pipeline' | 'job' | 'step' | 'config' | 'pipeline_agents' | 'step_agents';
       readonly file?: string;
     }
   | { readonly layer: 'pipeline' }
   | { readonly layer: 'config'; readonly file: string }
   | PipelineEntryLayer
-  | { readonly layer: 'none' };
+  | { readonly layer: 'none' }
+) & ViaProfile;
 
 export interface AgentEntryFieldView {
   readonly value: string;
@@ -497,8 +505,50 @@ export interface StepParamView {
   readonly description?: string;
 }
 
+/**
+ * Запись контекста профиля в объявленном виде — та же форма, что `context`
+ * шага. Форма вкладки Profiles правит `text` и `path`, прочие сохраняет как есть.
+ */
+export type ProfileContextEntry =
+  | string
+  | { readonly path: string; readonly mode?: 'inline' | 'reference' | 'auto'; readonly required?: boolean }
+  | { readonly text: string }
+  | { readonly item_refs: string; readonly mode?: 'inline' | 'reference' | 'auto' }
+  | { readonly knowledge: unknown };
+
+/** Профиль агента в объявленном виде (`agents.<имя>`). Сверено с `RawAgentProfile`. */
+export interface AgentProfileValue {
+  readonly backend: string;
+  readonly model?: string;
+  readonly model_tier?: string;
+  readonly effort?: string;
+  readonly context?: readonly ProfileContextEntry[];
+}
+
+/** Профиль глобального файла. Сверено с `ProfileView` (`src/parts/ui/settings.ts`). */
+export interface ProfileView {
+  readonly name: string;
+  readonly profile: AgentProfileValue;
+  readonly file: string;
+}
+
+/** Профиль проектного файла — только для чтения. Сверено с `ProjectProfileView` (`src/parts/ui/pipelines.ts`). */
+export interface ProjectProfileView {
+  readonly projectKey: string;
+  readonly projectPath: string;
+  readonly name: string;
+  readonly backend: string;
+  readonly model?: string;
+  readonly modelTier?: string;
+  readonly effort?: string;
+  readonly context: readonly ProfileContextEntry[];
+  readonly file: string;
+}
+
 export interface PipelinesOverview {
   readonly pipelines: readonly PipelineView[];
+  /** Профили проектных файлов; у прежнего демона поля нет. */
+  readonly projectProfiles?: readonly ProjectProfileView[];
   readonly generatedAt: string;
 }
 
@@ -844,6 +894,8 @@ export interface BackendView {
 
 export interface Settings {
   readonly agent: SettingsValue;
+  /** Профили глобального файла по имени; у прежнего демона поля нет. */
+  readonly profiles?: readonly ProfileView[];
   readonly model: SettingsValue;
   readonly effort: SettingsValue;
   readonly modelTiers: readonly string[];
@@ -901,6 +953,8 @@ export interface SettingsPatch {
   readonly effort?: string | null;
   /** Кастомные tier удаляются из карт всех агентов одной записью. */
   readonly removeModelTiers?: readonly string[];
+  /** Профиль целиком либо `null` — удалить. */
+  readonly profiles?: Readonly<Record<string, AgentProfileValue | null>>;
 }
 
 /** Признак отбора прогонов к уборке. Имена — те же, что принимает демон. */

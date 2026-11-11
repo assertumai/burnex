@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { EffortSchema, ModelNameSchema, ModelTierSchema } from '../pipeline/config/schema.js';
 import { BurnexError } from '../../kernel/errors.js';
 import type { KernelCache } from './pipelines.js';
+import { DEFAULT_PROFILE } from '../pipeline/config/agentProfiles.js';
 import { editGlobalConfig, readSettings } from './settings.js';
 
 /**
@@ -75,7 +76,13 @@ export async function writePipelineAgent(
   // пайплайна отказало бы с названным ключом, и карточка осталась бы с ошибкой.
   const agent = patch.selection?.agent;
   if (typeof agent === 'string') {
-    const backend = (await readSettings(home, kernelCache)).backends.find((candidate) => candidate.name === agent);
+    const settings = await readSettings(home, kernelCache);
+    // Профиль глобального файла и встроенный `default` — тоже агенты
+    // (`agent-profiles`); проектный профиль сюда не годится: запись ложится в
+    // глобальный файл, и пайплайн того же имени в другом проекте его не нашёл бы.
+    const profile = agent === DEFAULT_PROFILE ? undefined : settings.profiles.find((candidate) => candidate.name === agent);
+    const name = agent === DEFAULT_PROFILE ? settings.agent.value : profile?.profile.backend ?? agent;
+    const backend = settings.backends.find((candidate) => candidate.name === name);
     if (backend === undefined) throw new BurnexError(`Unknown agent ${agent}`);
     if (!backend.enabled) throw new BurnexError(`Agent ${agent} is disabled`);
     if (!backend.available) throw new BurnexError(`Agent ${agent} is not connected: connect its plugin first`);

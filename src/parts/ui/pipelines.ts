@@ -8,6 +8,7 @@ import { expandPipeline } from '../pipeline/document/expand.js';
 import { displayInputs } from '../pipeline/document/displayInputs.js';
 import { isBurnexError, BurnexError } from '../../kernel/errors.js';
 import { describeSource } from '../pipeline/config/merge.js';
+import type { AgentProfile } from '../pipeline/config/agentProfiles.js';
 import { resolveConfig, type Config, type ResolveOptions } from '../pipeline/config/resolve.js';
 import { resolveWithPlugins, type ResolvedWithPlugins } from '../resolve.js';
 import type { BuiltinRow, LoadOptions } from '../../kernel/load.js';
@@ -229,8 +230,26 @@ export interface PipelineView {
   readonly errorHint?: string;
 }
 
+/**
+ * Профиль проектного файла (`agent-profiles`): витрина его только
+ * показывает — проектный файл лежит в репозитории и правится там.
+ */
+export interface ProjectProfileView {
+  readonly projectKey: string;
+  readonly projectPath: string;
+  readonly name: string;
+  readonly backend: string;
+  readonly model?: string;
+  readonly modelTier?: string;
+  readonly effort?: string;
+  readonly context: AgentProfile['context'];
+  readonly file: string;
+}
+
 export interface PipelinesOverview {
   readonly pipelines: readonly PipelineView[];
+  /** Профили проектных файлов известных проектов. Глобальные — в `/api/settings`. */
+  readonly projectProfiles: readonly ProjectProfileView[];
   readonly generatedAt: string;
 }
 
@@ -599,6 +618,8 @@ export interface ProjectOverrides {
   readonly agentPolicyFile: string;
   readonly pipelineAgents: Config['pipelineAgents'];
   readonly stepAgents: Config['stepAgents'];
+  /** Профили агентов проекта — оба слоя: шаги проекта раскрываются ими. */
+  readonly agents: Config['agents'];
   /** Глобальный конфиг, прочитанный от домашнего каталога вызова: рядом с ним лежат пакеты home. */
   readonly globalConfigDir: Config['globalConfigDir'];
   readonly globalConfigFile: Config['globalConfigFile'];
@@ -846,6 +867,7 @@ export async function projectSection(
     globalConfigFile: resolved.config.globalConfigFile,
     pipelineAgents: resolved.config.pipelineAgents,
     stepAgents: resolved.config.stepAgents,
+    agents: resolved.config.agents,
     registry,
   };
 }
@@ -867,6 +889,7 @@ export function withProjectSection(config: Config, overrides: ProjectOverrides):
     agentPolicy: overrides.agentPolicy,
     pipelineAgents: overrides.pipelineAgents,
     stepAgents: overrides.stepAgents,
+    agents: overrides.agents,
     globalConfigDir: overrides.globalConfigDir,
     globalConfigFile: overrides.globalConfigFile,
   };
@@ -890,6 +913,7 @@ export async function buildPipelines(
   options: BuildPipelinesOptions = {},
 ): Promise<PipelinesOverview> {
   const pipelines: PipelineView[] = [];
+  const projectProfiles: ProjectProfileView[] = [];
 
   // Проекты обходятся последовательно, а не `Promise.all`: параллельный
   // импорт чужого кода плагинов не выигрывает после первого запроса (реестр
@@ -921,6 +945,10 @@ export async function buildPipelines(
       modelConfigFile = overrides.modelConfigFile;
       effortConfigFile = overrides.effortConfigFile;
       agentPolicyFile = overrides.agentPolicyFile;
+      for (const profile of Object.values(overrides.agents)) {
+        if (profile.file === overrides.globalConfigFile) continue;
+        projectProfiles.push({ projectKey: project.key, projectPath: project.path, ...profile });
+      }
     } catch (error) {
       failure = toFailure(error, project.path);
     }
@@ -943,5 +971,5 @@ export async function buildPipelines(
     }
   }
 
-  return { pipelines, generatedAt: (options.now ?? new Date()).toISOString() };
+  return { pipelines, projectProfiles, generatedAt: (options.now ?? new Date()).toISOString() };
 }

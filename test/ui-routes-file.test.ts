@@ -342,6 +342,11 @@ describe('ui-routes-file: сборка таблицы трёх слоёв', () =
     assert.equal(policy?.route.id, 'screen-agents');
     assert.equal(policy?.pathParams.tab, 'policy');
 
+    // `agent-profiles`: вкладка профилей — тот же закрытый перечень.
+    const profiles = parseRoute('/agents/profiles', table);
+    assert.equal(profiles?.route.id, 'screen-agents');
+    assert.equal(profiles?.pathParams.tab, 'profiles');
+
     const bare = parseRoute('/agents', table);
     assert.equal(bare?.route.id, 'screen-agents');
     assert.equal(bare?.pathParams.tab, undefined);

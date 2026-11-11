@@ -41,7 +41,7 @@ import { readJournalJson } from './file.js';
 export type ContextLevel = 'upstream' | 'pipeline' | 'job' | 'step';
 
 export interface ContextBreakdown {
-  readonly levels: Readonly<Record<ContextLevel, number>>;
+  readonly levels: Readonly<Record<ContextLevel, number>> & { readonly profile?: number };
   readonly total: number;
 }
 
@@ -281,9 +281,15 @@ function contextBreakdown(dir: string | undefined): ContextBreakdown | undefined
   if (!parsed.success) return undefined;
 
   const levels: Record<ContextLevel, number> = { upstream: 0, pipeline: 0, job: 0, step: 0 };
-  for (const entry of parsed.data.entries) levels[entry.origin] += entry.tokens;
+  let profile = 0;
+  for (const entry of parsed.data.entries) {
+    // Уровень профиля агента (`profile:<имя>`) — отдельной суммой, только
+    // когда он есть: прежние снимки шага не меняются.
+    if (entry.origin.startsWith('profile:')) profile += entry.tokens;
+    else levels[entry.origin as ContextLevel] += entry.tokens;
+  }
 
-  return { levels, total: parsed.data.total_tokens };
+  return { levels: profile === 0 ? levels : { ...levels, profile }, total: parsed.data.total_tokens };
 }
 
 function stepUsage(summary: UsageReport | undefined, jobId: string, stepId: string): UsageSnapshot {

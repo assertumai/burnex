@@ -2,6 +2,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join, resolve as resolvePath } from 'node:path';
 
 import type { BackendConfig, Config } from '../config/resolve.js';
+import { describeKnownAgents } from '../config/agentProfiles.js';
 import type { BackendAdapter } from '../backend/types.js';
 import { PERMISSIVE_MODES } from '../../backends/claude/adapter.js';
 import { effectivePermissions } from '../backend/permissions.js';
@@ -1619,7 +1620,7 @@ function checkStep(
         message: `Неизвестный бэкенд ${step.agent} у шага ${job.id}/${step.id}`,
         file: job.source,
         at: `${at}.agent`,
-        hint: `Настроены: ${Object.keys(options.config.backends).sort().join(', ')}`,
+        hint: describeKnownAgents(options.config.agents, Object.keys(options.config.backends)),
       });
     } else if (!backend.enabled) {
       push({

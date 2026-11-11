@@ -27,6 +27,7 @@ import {
   PluginsPatchDocumentSchema,
   PROJECT_ONLY_KEYS,
   RawConfigSchema,
+  REPLACE_WHOLE_KEYS,
   TIGHTEN_ONLY_KEYS,
   UNION_LIST_KEYS,
   type PluginsPatchDocument,
@@ -34,6 +35,8 @@ import {
 } from './schema.js';
 import { BUILTIN_CONFIG } from './defaults.js';
 import { buildAgentSelections, type PipelineAgents, type StepAgents } from './agentSelections.js';
+import { buildAgentProfiles, type AgentProfile } from './agentProfiles.js';
+import { BUNDLED_BACKENDS } from '../../backends/bundled.js';
 import type { ModelTierSelection, ModelTiers } from './modelTiers.js';
 import {
   flatten,
@@ -193,6 +196,12 @@ export interface Config {
   readonly pipelineAgents: PipelineAgents;
   /** Выбор пользователя для шага: пайплайн → работа → шаг. */
   readonly stepAgents: StepAgents;
+  /**
+   * Профили агентов (`agent-profiles`), ключ — имя. Встроенный `default` и
+   * неявные профили бэкендов здесь не хранятся: они выводятся из `defaults.*`
+   * и `backends` (`document/agentChoice.ts`, `lookupProfile`).
+   */
+  readonly agents: Readonly<Record<string, AgentProfile>>;
   readonly project: {
     /** Команда проверки репозитория. Нет встроенного умолчания: неверная угадка исполнялась бы в чужом дереве. */
     readonly check: string | undefined;
@@ -844,6 +853,7 @@ export function resolveConfig(options: ResolveOptions): ResolvedConfig {
   const merged = mergeLayers(layers, {
     unionLists: UNION_LIST_KEYS,
     tightenOnly: TIGHTEN_ONLY_KEYS,
+    replaceWhole: REPLACE_WHOLE_KEYS,
   });
 
   // Дерево плагинов (`plugin-tree`, `user-plugins`): встроенный слой, затем
@@ -944,6 +954,16 @@ export function resolveConfig(options: ResolveOptions): ResolvedConfig {
     });
   }
 
+  const backends = buildBackends(values, home);
+  const agents = buildAgentProfiles(values, merged.provenance, {
+    home,
+    globalPath,
+    backendNames: [
+      ...Object.keys(backends),
+      ...BUNDLED_BACKENDS.flatMap((entry) => Object.keys(entry.plugin.backends ?? {})),
+    ],
+  });
+
   const config: Config = {
     runs: {
       root: isAbsolute(runsRoot) ? runsRoot : resolvePath(options.cwd, runsRoot),
@@ -989,12 +1009,13 @@ export function resolveConfig(options: ResolveOptions): ResolvedConfig {
     },
     globalConfigDir: dirname(globalPath),
     globalConfigFile: globalPath,
-    backends: buildBackends(values, home),
+    backends,
     runners,
     runnersByExtension,
     ui: { port: requireNumber(values, 'ui.port') },
     agentPolicy: values.get('agent_policy') === 'fallback' ? 'fallback' : 'force',
     ...buildAgentSelections(values, merged.provenance, layers),
+    agents,
     project: {
       check: typeof projectCheck === 'string' ? projectCheck : undefined,
       tools:

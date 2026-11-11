@@ -1,4 +1,6 @@
-import type { AgentSelectionConfig } from '../config/agentSelections.js';
+import { BurnexError } from '../../../kernel/errors.js';
+import { DEFAULT_PROFILE, describeKnownAgents, type AgentProfile } from '../config/agentProfiles.js';
+import type { AgentSelectionConfig, SelectionField } from '../config/agentSelections.js';
 import { isForeignModel, modelOwners, type ModelTier } from '../config/modelTiers.js';
 import type { Config } from '../config/resolve.js';
 import type { AgentPolicy } from '../config/schema.js';
@@ -30,6 +32,106 @@ export function layerRank(policy: AgentPolicy, layer: ChoiceLayer): number {
 
 type DocumentLayer = 'step' | 'job' | 'pipeline';
 
+/**
+ * Профиль, названный полем `agent` слоя (`agent-profiles`, design.md,
+ * решение 3), и какие поля он дописал в этот слой: только те, что слой не
+ * объявил сам. Ранги и правила выбора к дописанному слою применяются без
+ * изменений — профиль лишь «дописывает» слой.
+ */
+export interface ProfileUse {
+  readonly profile: AgentProfile;
+  /** Профиль дал слою выбор модели (`model` либо `model_tier`). */
+  readonly model: boolean;
+  /** Профиль дал слою `effort`. */
+  readonly effort: boolean;
+}
+
+/**
+ * Профиль по имени: объявленный в `agents`, встроенный `default` — те же
+ * `defaults.agent/model/effort` — либо `undefined`, когда имя — бэкенд, то
+ * есть неявный профиль `{ backend: <имя> }` без модели, effort и контекста.
+ */
+export function lookupProfile(config: Config, name: string): AgentProfile | undefined {
+  if (name !== DEFAULT_PROFILE) return Object.hasOwn(config.agents, name) ? config.agents[name] : undefined;
+  const base = config.defaults.agent === DEFAULT_PROFILE ? undefined : lookupProfile(config, config.defaults.agent);
+  const model = config.defaults.model ?? base?.model;
+  const modelTier = config.defaults.model === undefined ? base?.modelTier : undefined;
+  const effort = config.defaults.effort ?? base?.effort;
+  return {
+    name: DEFAULT_PROFILE,
+    backend: base?.backend ?? config.defaults.agent,
+    ...(model === undefined ? {} : { model }),
+    ...(modelTier === undefined ? {} : { modelTier }),
+    ...(effort === undefined ? {} : { effort }),
+    context: base?.context ?? [],
+    file: base?.file ?? 'defaults.agent',
+  };
+}
+
+/** Объявления одного слоя выбора, как их видит раскрытие профиля. */
+export interface LayerDeclaration {
+  readonly agent: string | undefined;
+  readonly model: string | undefined;
+  readonly tier: ModelTier | undefined;
+  readonly effort: string | undefined;
+}
+
+/**
+ * Раскрыть профиль, названный слоем: агент — `backend` профиля, его модель
+ * или уровень и effort ложатся в поля, которые слой не объявил сам. Выбор
+ * модели слоя — целое: объявленная слоем `model` закрывает и `model_tier`
+ * профиля, и наоборот.
+ */
+export function applyProfile(
+  config: Config,
+  layer: LayerDeclaration,
+): { readonly layer: LayerDeclaration; readonly use?: ProfileUse } {
+  const profile = layer.agent === undefined ? undefined : lookupProfile(config, layer.agent);
+  if (profile === undefined) return { layer };
+  const fillModel = layer.model === undefined && layer.tier === undefined &&
+    (profile.model !== undefined || profile.modelTier !== undefined);
+  const fillEffort = layer.effort === undefined && profile.effort !== undefined;
+  return {
+    layer: {
+      agent: profile.backend,
+      model: fillModel ? profile.model : layer.model,
+      tier: fillModel ? profile.modelTier : layer.tier,
+      effort: fillEffort ? profile.effort : layer.effort,
+    },
+    use: { profile, model: fillModel, effort: fillEffort },
+  };
+}
+
+/** То же для записи выбора пользователя: дописанные поля получают файл, назвавший профиль. */
+function applyEntryProfile(
+  config: Config,
+  entry: AgentSelectionConfig | undefined,
+): { readonly entry: AgentSelectionConfig | undefined; readonly use?: ProfileUse } {
+  if (entry?.agent === undefined) return { entry };
+  const { layer, use } = applyProfile(config, {
+    agent: entry.agent.value,
+    model: entry.model?.value,
+    tier: entry.modelTier?.value as ModelTier | undefined,
+    effort: entry.effort?.value,
+  });
+  if (use === undefined) return { entry };
+  const file = entry.agent.file;
+  const field = (value: string | undefined, own: SelectionField | undefined): SelectionField | undefined =>
+    own ?? (value === undefined ? undefined : { value, file });
+  const model = field(layer.model, entry.model);
+  const modelTier = field(layer.tier, entry.modelTier);
+  const effort = field(layer.effort, entry.effort);
+  return {
+    entry: {
+      agent: { value: layer.agent as string, file },
+      ...(model === undefined ? {} : { model }),
+      ...(modelTier === undefined ? {} : { modelTier }),
+      ...(effort === undefined ? {} : { effort }),
+    },
+    use,
+  };
+}
+
 /** То, что документ объявил для шага на уровнях работы и корня (уровень шага — в `RawStepChoice`). */
 export interface DocumentChoice {
   readonly agent: string | undefined;
@@ -42,6 +144,12 @@ export interface DocumentChoice {
   readonly tierLayer: 'job' | 'pipeline';
   /** Работа сама объявила `model` либо `model_tier` — для уровня выбора документа. */
   readonly jobDeclaresModel: boolean;
+  /**
+   * Профили, названные работой и корнем документа. Поля выше уже раскрыты
+   * (`applyProfile` по каждому слою до склейки): склеенное значение теряет,
+   * какой слой что объявил сам.
+   */
+  readonly profiles?: { readonly job?: ProfileUse; readonly pipeline?: ProfileUse };
 }
 
 export interface StepLevelChoice {
@@ -57,6 +165,8 @@ export type EntryOutcome = Partial<Record<EntryField, FieldOutcome>>;
 
 export interface AgentChoice {
   readonly agent: string;
+  /** Профиль, давший агента шага, — его контекст становится уровнем «профиль». */
+  readonly profile?: AgentProfile;
   readonly agentOrigin: AgentOrigin;
   readonly model: string | undefined;
   readonly modelOrigin: ModelOrigin;
@@ -125,9 +235,32 @@ type ModelPick =
   | { readonly kind: 'tier'; readonly value: ModelTier; readonly layer: ChoiceLayer; readonly file?: string };
 
 export function resolveAgentChoice(input: ResolveAgentChoiceInput): AgentChoice {
-  const { config, step, doc, pipelineEntry, stepEntry } = input;
+  const { config, doc } = input;
   const policy = config.agentPolicy;
   const rank = (layer: ChoiceLayer): number => layerRank(policy, layer);
+
+  // --- Профили. Каждый слой, назвавший профиль, раскрывается до выбора: дальше
+  // работают прежние правила рангов и замены (design.md, решение 3).
+  const stepProfile = applyProfile(config, input.step);
+  const step = stepProfile.layer;
+  const pipelineProfile = applyEntryProfile(config, input.pipelineEntry);
+  const pipelineEntry = pipelineProfile.entry;
+  const stepEntryProfile = applyEntryProfile(config, input.stepEntry);
+  const stepEntry = stepEntryProfile.entry;
+  // Слой `config` — объявленное пользователем `defaults.*`. Встроенное
+  // `defaults.agent` — имя бэкенда и профилем не раскрывается.
+  const configProfile = config.defaults.agentFromUser
+    ? applyProfile(config, { agent: config.defaults.agent, model: config.defaults.model, tier: undefined, effort: config.defaults.effort })
+    : { layer: { agent: undefined, model: config.defaults.model, tier: undefined, effort: config.defaults.effort } };
+  const configLayer = configProfile.layer;
+  const profiles: Partial<Record<ChoiceLayer, ProfileUse>> = {
+    ...(stepProfile.use === undefined ? {} : { step: stepProfile.use }),
+    ...(doc.profiles?.job === undefined ? {} : { job: doc.profiles.job }),
+    ...(doc.profiles?.pipeline === undefined ? {} : { pipeline: doc.profiles.pipeline }),
+    ...(configProfile.use === undefined ? {} : { config: configProfile.use }),
+    ...(pipelineProfile.use === undefined ? {} : { pipeline_agents: pipelineProfile.use }),
+    ...(stepEntryProfile.use === undefined ? {} : { step_agents: stepEntryProfile.use }),
+  };
 
   // --- Агент. Встроенное умолчание `defaults.agent` — не выбор пользователя:
   // оно слабее всего, как и было, поэтому слоем `config` считается только
@@ -135,12 +268,25 @@ export function resolveAgentChoice(input: ResolveAgentChoiceInput): AgentChoice 
   const agentWinner = strongest<string>(policy, [
     step.agent === undefined ? undefined : { layer: 'step', value: step.agent },
     doc.agent === undefined || doc.agentLayer === undefined ? undefined : { layer: doc.agentLayer, value: doc.agent },
-    config.defaults.agentFromUser ? { layer: 'config', value: config.defaults.agent } : undefined,
+    configLayer.agent === undefined ? undefined : { layer: 'config', value: configLayer.agent },
     entryField('pipeline_agents', pipelineEntry?.agent),
     entryField('step_agents', stepEntry?.agent),
   ]);
   const agent = agentWinner?.value ?? config.defaults.agent;
-  const agentOrigin: AgentOrigin = agentWinner === undefined ? { layer: 'config' } : agentOriginOf(agentWinner);
+  const agentProfile = agentWinner === undefined ? undefined : profiles[agentWinner.layer];
+  const agentOrigin: AgentOrigin = agentWinner === undefined
+    ? { layer: 'config' }
+    : { ...agentOriginOf(agentWinner), ...(agentProfile === undefined ? {} : { profile: agentProfile.profile.name }) };
+  if (agentProfile !== undefined && !Object.hasOwn(config.backends, agentProfile.profile.backend)) {
+    throw new BurnexError(
+      `Профиль ${agentProfile.profile.name} называет бэкенд ${agentProfile.profile.backend}, которого нет среди бэкендов`,
+      {
+        file: agentProfile.profile.file,
+        at: `agents.${agentProfile.profile.name}.backend`,
+        hint: describeKnownAgents(config.agents, Object.keys(config.backends)),
+      },
+    );
+  }
   const agentFromUser = agentWinner !== undefined && (
     agentWinner.layer === 'config' || agentWinner.layer === 'pipeline_agents' || agentWinner.layer === 'step_agents'
   );
@@ -176,7 +322,9 @@ export function resolveAgentChoice(input: ResolveAgentChoiceInput): AgentChoice 
     return undefined;
   };
   const userPicks: ModelPick[] = [
-    config.defaults.model === undefined ? undefined : ({ kind: 'model', value: config.defaults.model, layer: 'config' } as const),
+    configLayer.model === undefined
+      ? configLayer.tier === undefined ? undefined : ({ kind: 'tier', value: configLayer.tier, layer: 'config' } as const)
+      : ({ kind: 'model', value: configLayer.model, layer: 'config' } as const),
     pickOf('pipeline_agents', pipelineEntry),
     pickOf('step_agents', stepEntry),
   ].filter((pick): pick is ModelPick => pick !== undefined);
@@ -191,7 +339,7 @@ export function resolveAgentChoice(input: ResolveAgentChoiceInput): AgentChoice 
     const selection = backend?.modelTiers?.[pick.value];
     const origin = {
       layer: 'tier' as const, backend: agent, tier: pick.value,
-      tierLayer: pick.layer as 'pipeline' | 'job' | 'step' | 'pipeline_agents' | 'step_agents',
+      tierLayer: pick.layer as 'pipeline' | 'job' | 'step' | 'config' | 'pipeline_agents' | 'step_agents',
       ...(pick.file === undefined ? {} : { file: pick.file }),
     };
     if (selection === undefined) {
@@ -236,6 +384,7 @@ export function resolveAgentChoice(input: ResolveAgentChoiceInput): AgentChoice 
       const assigned = [
         step.tier === undefined ? undefined : ({ kind: 'tier', value: step.tier, layer: 'step' } as const),
         doc.tier === undefined ? undefined : ({ kind: 'tier', value: doc.tier, layer: doc.tierLayer } as const),
+        configLayer.tier === undefined ? undefined : ({ kind: 'tier', value: configLayer.tier, layer: 'config' } as const),
         pickOf('pipeline_agents', pipelineEntry),
         pickOf('step_agents', stepEntry),
       ]
@@ -248,15 +397,25 @@ export function resolveAgentChoice(input: ResolveAgentChoiceInput): AgentChoice 
       // Устаревшее и сохранённое: `defaults.model` конфигурации бьёт tier
       // документа при `force` (docs/pipeline-format.md). При `fallback` оно —
       // обычный слой пользователя и до сюда не доходит.
-      if (policy === 'force' && config.defaults.model !== undefined) {
-        return viaModel({ kind: 'model', value: config.defaults.model, layer: 'config' });
+      if (policy === 'force' && configLayer.model !== undefined) {
+        return viaModel({ kind: 'model', value: configLayer.model, layer: 'config' });
       }
       return viaTier(documentTier);
     }
     return viaBackendDefault();
   })();
   const { model, bundle } = resolved;
-  const modelOrigin = resolved.origin;
+  // Происхождение модели называет профиль, если выбор модели слою дописал он.
+  const modelLayerOf = (origin: ModelOrigin | EffortOrigin): ChoiceLayer | undefined =>
+    origin.layer === 'tier' ? origin.tierLayer : origin.layer === 'backend' || origin.layer === 'none' ? undefined : origin.layer;
+  const modelProfile = ((): ProfileUse | undefined => {
+    const layer = modelLayerOf(resolved.origin);
+    const use = layer === undefined ? undefined : profiles[layer];
+    return use?.model === true ? use : undefined;
+  })();
+  const modelOrigin: ModelOrigin = modelProfile === undefined
+    ? resolved.origin
+    : { ...resolved.origin, profile: modelProfile.profile.name };
 
   // --- Effort. Явный effort побеждает по рангу; effort tier едет вместе с
   // моделью: у tier документа он слабее любого явного (прежнее правило), у
@@ -264,13 +423,13 @@ export function resolveAgentChoice(input: ResolveAgentChoiceInput): AgentChoice 
   const effortWinner = strongest<string>(policy, [
     step.effort === undefined ? undefined : { layer: 'step', value: step.effort },
     doc.effort === undefined || doc.effortLayer === undefined ? undefined : { layer: doc.effortLayer, value: doc.effort },
-    config.defaults.effort === undefined ? undefined : { layer: 'config', value: config.defaults.effort },
+    configLayer.effort === undefined ? undefined : { layer: 'config', value: configLayer.effort },
     entryField('pipeline_agents', pipelineEntry?.effort),
     entryField('step_agents', stepEntry?.effort),
   ]);
   const bundleRank = bundle === undefined
     ? undefined
-    : bundle.layer === 'pipeline_agents' || bundle.layer === 'step_agents'
+    : bundle.layer === 'pipeline_agents' || bundle.layer === 'step_agents' || bundle.layer === 'config'
       ? rank(bundle.layer)
       : 0;
   const bundleWins = bundle !== undefined && bundle.effort !== undefined && bundleRank !== undefined &&
@@ -282,26 +441,23 @@ export function resolveAgentChoice(input: ResolveAgentChoiceInput): AgentChoice 
     effort = bundle.effort;
     effortOrigin = {
       layer: 'tier', backend: agent, tier: bundle.tier,
-      tierLayer: bundle.layer as 'pipeline' | 'job' | 'step' | 'pipeline_agents' | 'step_agents',
+      tierLayer: bundle.layer as 'pipeline' | 'job' | 'step' | 'config' | 'pipeline_agents' | 'step_agents',
       ...(bundle.file === undefined ? {} : { file: bundle.file }),
+      ...(profiles[bundle.layer]?.model === true ? { profile: profiles[bundle.layer]!.profile.name } : {}),
     };
   } else if (effortWinner !== undefined) {
     effort = effortWinner.value;
+    const via = profiles[effortWinner.layer]?.effort === true ? { profile: profiles[effortWinner.layer]!.profile.name } : {};
     effortOrigin = effortWinner.layer === 'pipeline_agents' || effortWinner.layer === 'step_agents'
-      ? { layer: effortWinner.layer, file: effortWinner.file ?? '' }
-      : { layer: effortWinner.layer as 'step' | 'job' | 'pipeline' | 'config' };
+      ? { layer: effortWinner.layer, file: effortWinner.file ?? '', ...via }
+      : { layer: effortWinner.layer as 'step' | 'job' | 'pipeline' | 'config', ...via };
   } else {
     effort = undefined;
     effortOrigin = { layer: 'none' };
   }
 
   // --- Что стало с записями пользователя: победило поле или кому проиграло.
-  const finalModelLayer: ChoiceLayer | undefined = (() => {
-    const origin = modelOrigin;
-    if (origin.layer === 'tier') return origin.tierLayer;
-    if (origin.layer === 'backend' || origin.layer === 'none') return undefined;
-    return origin.layer;
-  })();
+  const finalModelLayer: ChoiceLayer | undefined = modelLayerOf(modelOrigin);
   const finalEffortLayer: ChoiceLayer | undefined = effortOrigin.layer === 'tier'
     ? effortOrigin.tierLayer
     : effortOrigin.layer === 'none' ? undefined : effortOrigin.layer;
@@ -322,6 +478,7 @@ export function resolveAgentChoice(input: ResolveAgentChoiceInput): AgentChoice 
 
   return {
     agent,
+    ...(agentProfile === undefined ? {} : { profile: agentProfile.profile }),
     agentOrigin,
     model,
     modelOrigin,

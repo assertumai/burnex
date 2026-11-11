@@ -163,11 +163,31 @@ export function matchesKeyPattern(path: string, pattern: string): boolean {
   return patternSegments.every((segment, index) => segment === '*' || segment === pathSegments[index]);
 }
 
+/** Записи слоя, подпадающие под шаблоны замены целиком, — префиксом пути. */
+function replacedHeads(leaves: ReadonlyArray<readonly [string, unknown]>, patterns: readonly string[]): ReadonlySet<string> {
+  const heads = new Set<string>();
+  for (const pattern of patterns) {
+    const depth = pattern.split('.').length;
+    for (const [path] of leaves) {
+      const segments = path.split('.');
+      if (segments.length < depth) continue;
+      const head = segments.slice(0, depth).join('.');
+      if (matchesKeyPattern(head, pattern)) heads.add(head);
+    }
+  }
+  return heads;
+}
+
 export interface MergeOptions {
   /** Пути списков, которые объединяются между слоями вместо замены. */
   readonly unionLists: readonly string[];
   /** Пути потолков, где побеждает строжайшее значение независимо от порядка слоёв. */
   readonly tightenOnly: readonly string[];
+  /**
+   * Шаблоны записей (`agents.*`), которые слой заменяет целиком: прежде чем
+   * лечь, запись слоя снимает все листья одноимённой записи нижних слоёв.
+   */
+  readonly replaceWhole?: readonly string[];
 }
 
 /**
@@ -184,7 +204,15 @@ export function mergeLayers(layers: readonly Layer[], options: MergeOptions): Me
   const denyContributions = new Map<string, DenyContribution[]>();
 
   for (const layer of layers) {
-    for (const [path, rawValue] of flatten(layer.values)) {
+    const leaves = flatten(layer.values);
+    for (const head of replacedHeads(leaves, options.replaceWhole ?? [])) {
+      for (const path of [...values.keys()]) {
+        if (path !== head && !path.startsWith(`${head}.`)) continue;
+        values.delete(path);
+        provenance.delete(path);
+      }
+    }
+    for (const [path, rawValue] of leaves) {
       if (options.unionLists.includes(path)) {
         const incoming = Array.isArray(rawValue) ? (rawValue as string[]) : [];
         if (incoming.length > 0) {

@@ -111,8 +111,8 @@ describe('ui-agents: причина недоступности перечисл�
 });
 
 describe('ui-agents: вкладка из адреса и область действия модели по умолчанию', () => {
-  it('tabOf знает четыре вкладки, пустое и неизвестное значение открывают Default', () => {
-    assert.deepEqual(AGENT_TABS, ['default', 'backends', 'tiers', 'policy']);
+  it('tabOf знает пять вкладок, пустое и неизвестное значение открывают Default', () => {
+    assert.deepEqual(AGENT_TABS, ['default', 'profiles', 'backends', 'tiers', 'policy']);
     for (const tab of AGENT_TABS) assert.equal(tabOf(tab), tab);
     assert.equal(tabOf(undefined), 'default');
     assert.equal(tabOf(''), 'default');

@@ -3613,6 +3613,12 @@ async function runAgentStep(
         const firstInJob = !jobContextSent.has(key);
         context.pipelineContextSent.add(key);
         jobContextSent.add(key);
+        // Контекст профиля — по правилам общего контекста: один раз на диалог,
+        // но для каждого профиля свой — шаги разных профилей в одной сессии
+        // не делят его.
+        const profileKey = step.profile === undefined ? undefined : `${key}\0profile:${step.profile}`;
+        const firstForProfile = profileKey !== undefined && !context.pipelineContextSent.has(profileKey);
+        if (profileKey !== undefined) context.pipelineContextSent.add(profileKey);
 
         const interrupted = interruptedNotePending;
         interruptedNotePending = false;
@@ -3639,6 +3645,9 @@ async function runAgentStep(
 
         const assembled = assembleContext({
           workspace: context.cwd,
+          ...(firstForProfile && step.profile !== undefined && step.profileContext !== undefined
+            ? { profile: { name: step.profile, entries: step.profileContext } }
+            : {}),
           pipeline: first ? pipeline.context : [],
           job: firstInJob ? job.context : [],
           step: stepEntries.entries,

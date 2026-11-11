@@ -390,6 +390,57 @@ export const RawProjectSchema = z
   .strict();
 
 /**
+ * Запись контекста — одна схема для документа пайплайна (`context` шага,
+ * работы, корня) и для профиля агента (`agents.<имя>.context`). Живёт здесь,
+ * а не в схеме документа: схема документа импортирует схему конфигурации, и
+ * обратный импорт замкнул бы цикл.
+ */
+export const ContextEntrySchema = z.union([
+  z.string(),
+  z
+    .object({
+      path: z.string(),
+      mode: z.enum(['inline', 'reference', 'auto']).optional(),
+      // Только у формы объектом: строковая запись — это короткая форма для
+      // «как получится», и требование совпадений в ней негде выразить.
+      required: z.boolean().optional(),
+    })
+    .strict(),
+  z.object({ text: z.string() }).strict(),
+  // Материалы пункта очереди: путь называет JSON-файл записи пункта, из
+  // которого движок берёт только `goal` и `details`. Лишние ключи — отказ:
+  // `required` и прочее из формы `path` здесь нечем исполнить.
+  z
+    .object({
+      item_refs: z.string(),
+      mode: z.enum(['inline', 'reference', 'auto']).optional(),
+    })
+    .strict(),
+  // Запись, разрешаемая источником знания. Три формы селектора и ни одной
+  // сверх них: свободный запрос (`query`) потребовал бы от источника
+  // недетерминированного отбора, а воспроизводимость прогона в движке стоит
+  // выше удобства формулировки.
+  //
+  // `scope` и `id` принимают строку и список: список нужен подстановке
+  // `${project.edit_paths}`, которая раскрывается по элементу на значение и
+  // в скалярном поле не раскрывается вовсе.
+  z
+    .object({
+      knowledge: z.union([
+        z.literal('index'),
+        z
+          .object({
+            scope: z.union([z.string(), z.array(z.string())]).optional(),
+            id: z.union([z.string(), z.array(z.string())]).optional(),
+            budget: amount.optional(),
+          })
+          .strict(),
+      ]),
+    })
+    .strict(),
+]);
+
+/**
  * Запись выбора пользователя для пайплайна или шага (`agent-policy-and-pipeline-agents`,
  * design.md, решение 2): частичный выбор, любое поле необязательно, но хотя бы
  * одно названо. `model` и `model_tier` вместе отклоняются: в документе
@@ -428,6 +479,39 @@ const AgentEntryKeySchema = z
   .min(1)
   .regex(/^[^.]+$/, 'ключ записи выбора не может содержать точку');
 
+/**
+ * Имя профиля агента (`agent-profiles`, design.md, решение 1) — тот же образец,
+ * что у имени уровня модели. Отказы на `default` и на имени бэкенда — в
+ * разрешении конфигурации (`buildAgentProfiles`): имена подключённых бэкендов
+ * схема одного файла не видит.
+ */
+export const ProfileNameSchema = z.string().regex(
+  /^[a-z][a-z0-9_-]*$/,
+  'имя профиля должно начинаться со строчной буквы и состоять из строчных букв, цифр, дефиса и подчёркивания',
+);
+
+/**
+ * Профиль агента: бэкенд, модель либо уровень, effort и контекст, который
+ * получает каждый агентский шаг этого профиля. `model` и `model_tier` вместе
+ * отклоняются тем же правилом, что у записи выбора; `context` — те же записи,
+ * что `context` шага.
+ */
+export const AgentProfileSchema = z
+  .object({
+    backend: z.string().trim().min(1).regex(/\S/),
+    model: ModelNameSchema.optional(),
+    model_tier: ModelTierSchema.optional(),
+    effort: EffortSchema.optional(),
+    context: z.array(ContextEntrySchema).optional(),
+  })
+  .strict()
+  .refine((value) => value.model === undefined || value.model_tier === undefined, {
+    message: 'профиль называет и model, и model_tier: оставьте одно из двух',
+  })
+  .meta({ not: { required: ['model', 'model_tier'] } });
+
+export type RawAgentProfile = z.infer<typeof AgentProfileSchema>;
+
 export const AgentPolicySchema = z.enum(['force', 'fallback']);
 export type AgentPolicy = z.infer<typeof AgentPolicySchema>;
 
@@ -460,6 +544,12 @@ export const RawConfigSchema = z
      * `pipeline_agents`, `step_agents`). Умолчание `force` — встроенный слой.
      */
     agent_policy: AgentPolicySchema.optional(),
+    /**
+     * Профили агентов (`agent-profiles`): имя → бэкенд, модель или уровень,
+     * effort и контекст. Между слоями профиль заменяется целиком
+     * (`REPLACE_WHOLE_KEYS`).
+     */
+    agents: z.record(ProfileNameSchema, AgentProfileSchema).optional(),
     /** Выбор пользователя для пайплайна по `name` его документа. */
     pipeline_agents: z.record(AgentEntryKeySchema, AgentSelectionSchema).optional(),
     /** Выбор пользователя для шага: пайплайн → работа → шаг. */
@@ -493,6 +583,13 @@ export const PROJECT_ONLY_KEYS = ['project.**'] as const;
 
 /** Списки, которые между слоями объединяются, а не заменяются. */
 export const UNION_LIST_KEYS = ['env_deny', 'context.deny', 'plugins'] as const;
+
+/**
+ * Записи, которые ближний слой заменяет целиком, а не по листьям: профиль,
+ * склеенный из `backend` одного файла и `context` другого, — агент, которого
+ * не объявлял никто (`agent-profiles`, design.md, решение 1).
+ */
+export const REPLACE_WHOLE_KEYS = ['agents.*'] as const;
 
 /** Потолки: между слоями берётся строжайшее значение, поднять их снизу нельзя. */
 export const TIGHTEN_ONLY_KEYS = [

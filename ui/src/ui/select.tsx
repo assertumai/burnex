@@ -6,6 +6,13 @@ import './select.css';
 
 export const Select = SelectPrimitive.Root;
 export const SelectValue = SelectPrimitive.Value;
+export const SelectGroup = SelectPrimitive.Group;
+
+export const SelectLabel = forwardRef<HTMLDivElement, ComponentPropsWithoutRef<typeof SelectPrimitive.Label>>(
+  function SelectLabel({ className, ...props }, ref) {
+    return <SelectPrimitive.Label ref={ref} className={cn('sc-select-label', className)} {...props} />;
+  },
+);
 
 export const SelectTrigger = forwardRef<HTMLButtonElement, ComponentPropsWithoutRef<typeof SelectPrimitive.Trigger>>(
   function SelectTrigger({ className, children, ...props }, ref) {

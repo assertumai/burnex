@@ -40,6 +40,13 @@ export type KnowledgeResolver = (
 
 export interface AssembleOptions {
   readonly workspace: string;
+  /**
+   * Контекст профиля агента (`agent-profiles`): уровень перед пайплайном. Не
+   * снимается `inherit: false` и не фильтруется `exclude` — его просили «при
+   * каждом старте агента», а не по иерархии документа; `deny` и предел
+   * действуют на него наравне с прочими.
+   */
+  readonly profile?: { readonly name: string; readonly entries: readonly ContextEntry[] };
   readonly pipeline: readonly ContextEntry[];
   readonly job: readonly ContextEntry[];
   readonly step: readonly ContextEntry[];
@@ -132,13 +139,17 @@ export function assembleContext(options: AssembleOptions): AssembledContext {
     registry.set(key, item);
   }
 
+  const profileLevel: Array<readonly [Origin, readonly ContextEntry[]]> = options.profile === undefined
+    ? []
+    : [[`profile:${options.profile.name}`, options.profile.entries]];
   const levels: Array<readonly [Origin, readonly ContextEntry[]]> = options.inherit
     ? [
+        ...profileLevel,
         ['pipeline', options.pipeline],
         ['job', options.job],
         ['step', options.step],
       ]
-    : [['step', options.step]];
+    : [...profileLevel, ['step', options.step]];
 
   for (const [origin, entries] of levels) {
     for (const entry of entries) {
@@ -299,7 +310,7 @@ function includeFile(
     return;
   }
 
-  if (matchesAnyGlob(relativePath, options.exclude) !== undefined) return;
+  if (!isProfileOrigin(origin) && matchesAnyGlob(relativePath, options.exclude) !== undefined) return;
 
   const existing = registry.get(key);
   if (existing !== undefined) {
@@ -578,7 +589,7 @@ function render(resolved: readonly Resolved[], workspace: string): string {
 
   for (const item of resolved) {
     if (item.origin !== lastOrigin) {
-      blocks.push(`## ${ORIGIN_TITLE[item.origin]}`);
+      blocks.push(`## ${originTitle(item.origin)}`);
       lastOrigin = item.origin;
     }
 
@@ -599,9 +610,19 @@ function render(resolved: readonly Resolved[], workspace: string): string {
   return `${blocks.join('\n\n')}\n\nРабочая директория: ${workspace}\n`;
 }
 
-const ORIGIN_TITLE: Record<Origin, string> = {
+function isProfileOrigin(origin: Origin): boolean {
+  return origin.startsWith('profile:');
+}
+
+function originTitle(origin: Origin): string {
+  return isProfileOrigin(origin)
+    ? `Контекст профиля ${origin.slice('profile:'.length)}`
+    : ORIGIN_TITLE[origin as keyof typeof ORIGIN_TITLE];
+}
+
+const ORIGIN_TITLE = {
   upstream: 'Результаты предыдущих работ',
   pipeline: 'Контекст пайплайна',
   job: 'Контекст работы',
   step: 'Контекст шага',
-};
+} as const;

@@ -315,7 +315,7 @@ export const row = commandRow<PipelineCommandEnv>(
         agent: {
           kind: 'string',
           description:
-            'бэкенд агента на этот прогон — слой флага над defaults.agent; агент шага или работы документа, pipeline_agents и step_agents сильнее флага, агент корня документа — только при agent_policy: force',
+            'профиль или бэкенд агента на этот прогон — слой флага над defaults.agent; агент шага или работы документа, pipeline_agents и step_agents сильнее флага, агент корня документа — только при agent_policy: force',
         },
         scheduled: {
           kind: 'string',

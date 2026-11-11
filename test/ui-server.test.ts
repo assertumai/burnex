@@ -5976,6 +5976,89 @@ jobs:
   });
 });
 
+/**
+ * `agent-profiles`, вкладка Profiles: профили глобального файла читаются и
+ * правятся `/api/settings`, проектные приходят с `/api/pipelines` только для
+ * чтения, имя профиля принимается записью выбора.
+ */
+describe('agent-profiles: профили на витрине', () => {
+  const PIPELINE = `kind: pipeline
+name: p
+jobs:
+  implement:
+    steps:
+      - id: code
+        prompt: hi
+`;
+
+  function profilesBed() {
+    const { runsRoot, projectRoot, home } = makeJournalBed();
+    seedRun(runsRoot, projectRoot, { runId: 'a' });
+    mkdirSync(join(projectRoot, '.burnex', 'pipelines'), { recursive: true });
+    writeFileSync(join(projectRoot, '.burnex', 'pipelines', 'p.yml'), PIPELINE);
+    const file = join(home, '.burnex', 'config.yml');
+    const { config } = resolveConfig({ cwd: home, home, projectPath: null });
+    return { runsRoot, projectRoot, home, file, config };
+  }
+
+  const putSettings = (server: UiServer, body: unknown) =>
+    sendJson(server, { method: 'PUT', path: '/api/settings', body: JSON.stringify(body) });
+
+  it('создаёт, читает и удаляет профиль глобального файла', async (t) => {
+    const { runsRoot, home, file, config } = profilesBed();
+    const server = await startServer(t, { runsRoot, home, config });
+    const profile = { backend: 'claude', model_tier: 'deep', context: [{ text: 'Ты строгий ревьюер.' }] };
+
+    const saved = await putSettings(server, { profiles: { 'reviewer-strict': profile } });
+    assert.equal(saved.code, 200, JSON.stringify(saved.json));
+    assert.deepEqual(pick(saved.json, 'profiles'), [{ name: 'reviewer-strict', profile, file }]);
+    assert.match(readFileSync(file, 'utf8'), /agents:\n {2}reviewer-strict:\n {4}backend: claude/);
+
+    // Профиль выбирается агентом записи пайплайна, и шаг называет его в происхождении.
+    const entry = await sendJson(server, {
+      method: 'PUT', path: '/api/pipelines/agents',
+      body: JSON.stringify({ pipeline: 'p', selection: { agent: 'reviewer-strict' } }),
+    });
+    assert.equal(entry.code, 200, JSON.stringify(entry.json));
+    const pipelines = pick(entry.json, 'pipelines') as Array<{ name: string; jobs: Array<{ steps: Array<Record<string, unknown>> }> }>;
+    const step = pipelines.find((item) => item.name === 'p')?.jobs[0]?.steps[0];
+    assert.deepEqual(step?.agentOrigin, { layer: 'pipeline_agents', file, profile: 'reviewer-strict' });
+
+    const removed = await putSettings(server, { profiles: { 'reviewer-strict': null } });
+    assert.equal(removed.code, 200, JSON.stringify(removed.json));
+    assert.deepEqual(pick(removed.json, 'profiles'), []);
+    assert.doesNotMatch(readFileSync(file, 'utf8'), /^agents:/m);
+  });
+
+  it('имя бэкенда отклоняется тем же текстом, что разбор конфигурации, файл не тронут', async (t) => {
+    const { runsRoot, home, file, config } = profilesBed();
+    const server = await startServer(t, { runsRoot, home, config });
+    const before = readFileSync(file, 'utf8');
+
+    const refused = await putSettings(server, { profiles: { claude: { backend: 'claude', model_tier: 'deep' } } });
+
+    assert.equal(refused.code, 400);
+    assert.match(String(refused.json.error), /Профиль claude назван именем бэкенда/);
+    assert.equal(readFileSync(file, 'utf8'), before);
+  });
+
+  it('проектный профиль приходит с /api/pipelines с файлом-источником', async (t) => {
+    const { runsRoot, projectRoot, home, config } = profilesBed();
+    const projectFile = join(projectRoot, '.burnex', 'config.yml');
+    writeFileSync(projectFile, 'agents:\n  arch: { backend: claude, model_tier: deep }\n');
+    const server = await startServer(t, { runsRoot, home, config });
+
+    const overview = await fetchJson(server, '/api/pipelines');
+    assert.equal(overview.code, 200);
+    const profiles = pick(overview.json, 'projectProfiles') as Array<Record<string, unknown>>;
+    assert.deepEqual(profiles.map((profile) => [profile.name, profile.backend, profile.modelTier, profile.file]), [
+      ['arch', 'claude', 'deep', projectFile],
+    ]);
+    const settings = await fetchJson(server, '/api/settings');
+    assert.deepEqual(pick(settings.json, 'profiles'), []);
+  });
+});
+
 describe('ui-daemon: пайплайны пакетов (packages-directory-layer)', () => {
   function writePackagePipeline(root: string, name: string, pipeline: string, yaml: string): string {
     const dir = join(root, '.burnex', 'packages', name);
