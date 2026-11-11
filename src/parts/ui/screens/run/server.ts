@@ -11,6 +11,7 @@ import { INVALID, readBody, readNonNegativeInt, sendJson } from '../../daemon/ht
 import { readJournalFile } from '../../file.js';
 import { parseRunAddress, snapshotOrRecord } from '../../runAddress.js';
 import { isSafeSegment } from '../../routes.js';
+import { readReviewFeed } from '../../reviewFeed.js';
 import { readStepOutput } from '../../stepOutput.js';
 import { screenRow, type ApiHandler } from '../registry.js';
 import { declaration } from './declaration.js';
@@ -106,6 +107,18 @@ const handleStepOutput: ApiHandler = (req, res, env) => {
     return;
   }
 
+  // Вызов участника шага `review` — сегментом раскладки, как работа и шаг.
+  const participant = url.searchParams.get('participant');
+  if (participant !== null && !isSafeSegment(participant)) {
+    sendJson(res, 400, { error: 'participant must be a single layout segment' });
+    return;
+  }
+  const round = readNonNegativeInt(url, 'round');
+  if (round === INVALID || round === 0 || (round !== undefined && participant === null)) {
+    sendJson(res, 400, { error: 'round must be a positive integer and needs participant' });
+    return;
+  }
+
   const stdoutOffset = readNonNegativeInt(url, 'stdoutOffset');
   const stderrOffset = readNonNegativeInt(url, 'stderrOffset');
   if (stdoutOffset === INVALID || stderrOffset === INVALID) {
@@ -120,6 +133,8 @@ const handleStepOutput: ApiHandler = (req, res, env) => {
       readStepOutput(paths, jobId, stepId, {
         ...(attempt === undefined ? {} : { attempt }),
         ...(pass === undefined ? {} : { pass }),
+        ...(participant === null ? {} : { participant }),
+        ...(round === undefined ? {} : { round }),
         ...(stdoutOffset === undefined ? {} : { stdoutOffset }),
         ...(stderrOffset === undefined ? {} : { stderrOffset }),
       }),
@@ -131,6 +146,49 @@ const handleStepOutput: ApiHandler = (req, res, env) => {
     // необработанное исключение в слушателе запроса роняет весь демон —
     // отвечать надо одному запросу, как это делает `handleFile`.
     const message = isBurnexError(error) ? error.message : 'Step output cannot be read';
+    sendJson(res, isBurnexError(error) ? 400 : 404, { error: message });
+  }
+};
+
+/**
+ * Лента шага `review` (`ui-review-discussion`, design.md, Решение 1): модель,
+ * собранная из журнала шага. Витрина опрашивает её, пока `done` не настал, —
+ * тем же приёмом, что вывод шага.
+ */
+const handleReviewFeed: ApiHandler = (req, res, env) => {
+  const url = new URL(req.url ?? '/', 'http://internal');
+  const parsed = parseRunAddress(url.searchParams.get('run'));
+  const jobId = url.searchParams.get('job');
+  const stepId = url.searchParams.get('step');
+  if (parsed === undefined || jobId === null || stepId === null || !isSafeSegment(jobId) || !isSafeSegment(stepId)) {
+    sendJson(res, 400, {
+      error: 'Parameters run=<project>/<run>, job and step (single layout segments) are required',
+    });
+    return;
+  }
+
+  const paths = runPaths(env.runsRoot, parsed.key, parsed.runId);
+  if (!existsSync(paths.dir)) {
+    sendJson(res, 404, { error: `Run ${parsed.runId} not found` });
+    return;
+  }
+
+  const pass = readNonNegativeInt(url, 'pass');
+  if (pass === INVALID || pass === 0) {
+    sendJson(res, 400, { error: 'pass must be a positive integer' });
+    return;
+  }
+
+  try {
+    const feed = readReviewFeed(paths, jobId, stepId, pass === undefined ? {} : { pass });
+    if (feed === undefined) {
+      sendJson(res, 404, { error: `Step ${jobId}/${stepId} has no review record` });
+      return;
+    }
+    sendJson(res, 200, feed);
+  } catch (error) {
+    // Та же гонка с удалением прогона, что у `handleStepOutput`.
+    const message = isBurnexError(error) ? error.message : 'Review feed cannot be read';
     sendJson(res, isBurnexError(error) ? 400 : 404, { error: message });
   }
 };
@@ -212,4 +270,5 @@ export const row = screenRow(declaration.id, ['screens', 'api'], (ctx) => {
   ctx.api.register('GET', '/api/run', handleSnapshot);
   ctx.api.register('GET', '/api/file', handleFile);
   ctx.api.register('GET', '/api/step-output', handleStepOutput);
+  ctx.api.register('GET', '/api/review-feed', handleReviewFeed);
 });

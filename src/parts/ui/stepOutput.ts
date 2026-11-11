@@ -3,6 +3,7 @@ import { join } from 'node:path';
 
 import { findStepDir, isRunAlive, listLoopPasses } from '../pipeline/run/journal/reader.js';
 import { type RunPaths } from '../pipeline/run/journal/paths.js';
+import { participantDir, replyDir } from '../pipeline/run/exec/reviewStep.js';
 import { MAX_FILE_BYTES, trimPartialUtf8 } from './file.js';
 
 /**
@@ -23,6 +24,12 @@ export interface StepOutputQuery {
   readonly stderrOffset?: number;
   /** Проход цикла; без него берётся последний. Прохода без каталога ответ не подменяет. */
   readonly pass?: number;
+  /**
+   * Участник шага `review`: вывод его вызова из `participants/<id>/`
+   * (`ui-review-discussion`). С `round` — реплика этого раунда обсуждения.
+   */
+  readonly participant?: string;
+  readonly round?: number;
 }
 
 export interface StreamChunk {
@@ -191,8 +198,17 @@ export function readStepOutput(
   const pastPass = pass !== undefined && lastPass !== undefined && pass < lastPass;
   const empty = (): StepOutputResult => ({ attempts: [], done: pastPass || !isRunAlive(paths) });
 
-  const dir = findStepDir(paths, jobId, stepId, undefined, undefined, pass);
-  if (dir === undefined) return empty();
+  const stepDir = findStepDir(paths, jobId, stepId, undefined, undefined, pass);
+  if (stepDir === undefined) return empty();
+  // Каталог вызова участника несёт ту же раскладку, что каталог агентского
+  // шага: файлы попыток и `step.json` по завершении.
+  const dir =
+    query.participant === undefined
+      ? stepDir
+      : query.round === undefined
+        ? participantDir(stepDir, query.participant)
+        : replyDir(stepDir, query.participant, query.round);
+  if (!existsSync(dir)) return empty();
 
   const attempts = listAttempts(dir);
   if (attempts.length === 0) return empty();

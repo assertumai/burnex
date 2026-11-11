@@ -46,6 +46,15 @@
      объявлено здесь, `@burnex/ui` (`dialog.css`, `select.css`) его читает. */
   --overlay: rgb(0 0 0 / 45%);
   --popover-shadow: 0 4px 16px rgb(0 0 0 / 16%);
+  /* Участники ленты обсуждения (`ui-review-discussion`): цвет — по позиции в
+     стратегии, а не по бэкенду, чтобы два ревьюера одного бэкенда
+     различались. Шесть тонов, дальше палитра повторяется. */
+  --participant-0: #2f6db5;
+  --participant-1: #8a4fb0;
+  --participant-2: #2a7d73;
+  --participant-3: #b8611a;
+  --participant-4: #a83f6c;
+  --participant-5: #5f7a1f;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -79,6 +88,12 @@
     --edge: rgb(255 255 255 / 16%);
     --overlay: rgb(0 0 0 / 60%);
     --popover-shadow: 0 8px 24px rgb(0 0 0 / 45%);
+    --participant-0: #7fb0ec;
+    --participant-1: #c49be0;
+    --participant-2: #7ccfc3;
+    --participant-3: #f0a868;
+    --participant-4: #ec8fb6;
+    --participant-5: #b3cf6e;
   }
 }
 

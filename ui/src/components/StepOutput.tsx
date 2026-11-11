@@ -130,6 +130,9 @@ export function StepOutput({
   stepId,
   kind,
   pass,
+  participant,
+  round,
+  defaultOpen = false,
 }: {
   readonly address: string;
   readonly jobId: string;
@@ -145,8 +148,17 @@ export function StepOutput({
    * тем же именем, что и процесс командного шага.
    */
   readonly kind: 'agent' | 'run' | 'script' | 'plugin' | 'review';
+  /**
+   * Вызов участника шага `review` (`ui-review-discussion`): его ход
+   * разбирается тем же представлением, что и агентский шаг; `round` — реплика
+   * этого раунда обсуждения.
+   */
+  readonly participant?: string;
+  readonly round?: number;
+  /** Раскрыть сразу — ход участника открывают выбором, второй щелчок лишний. */
+  readonly defaultOpen?: boolean;
 }): JSX.Element {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(defaultOpen);
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState<string | undefined>(undefined);
   const [attempts, setAttempts] = useState<readonly number[]>([]);
@@ -186,6 +198,8 @@ export function StepOutput({
         stepId,
         ...(targetAttempt === undefined ? {} : { attempt: targetAttempt }),
         ...(pass === undefined ? {} : { pass }),
+        ...(participant === undefined ? {} : { participant }),
+        ...(round === undefined ? {} : { round }),
         stdoutOffset: offsetsRef.current.stdout,
         ...(kind !== 'agent' ? { stderrOffset: offsetsRef.current.stderr } : {}),
       });
@@ -249,6 +263,11 @@ export function StepOutput({
     else setLoaded(false);
   }, [pass]);
 
+  // Раскрытое сразу окно читает вывод при показе, а не щелчком.
+  useEffect(() => {
+    if (defaultOpen) void poll(undefined);
+  }, []);
+
   // Опрос идёт, пока окно раскрыто и демон не назвал вывод завершённым;
   // сворачивание, размонтирование и признак завершённости снимают его.
   // Таймер перевзводит себя сам — тот же приём, что `follow()` в
@@ -268,7 +287,7 @@ export function StepOutput({
       alive = false;
       clearTimeout(timer);
     };
-  }, [open, done, attempt, address, jobId, stepId, kind, pass]);
+  }, [open, done, attempt, address, jobId, stepId, kind, pass, participant, round]);
 
   return (
     <div className="step-output">
