@@ -79,6 +79,13 @@ routes:
     target: { screen: screen-agents }
     params: { tab: default }
 
+  # Стратегии ревью проекта демона и домашнего каталога: список, правка, кто
+  # использует (`ui-review-strategies`). Пункт меню — сразу после «Agents».
+  - id: screen-review-strategies
+    path: /review-strategies/:name?
+    target: { screen: screen-review-strategies }
+    nav: { order: 7.5, group: config }
+
   # Статусы секретов проектов: проба провайдеров на каждом открытии, значения
   # не показываются (`ui-secrets-screen`).
   - id: screen-secrets

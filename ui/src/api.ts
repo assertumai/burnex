@@ -447,6 +447,13 @@ export interface PipelineStepView {
   readonly pluginHasOutput?: boolean;
   /** Действующий реестр вида не знает: причина вместо пустой карточки. */
   readonly pluginUnknownReason?: string;
+  /** Стратегия шага `review:` — как написана и куда разрешилась. Сверено с `ReviewStrategyView`. */
+  readonly reviewStrategy?: {
+    readonly ref: string;
+    readonly name?: string;
+    readonly layer?: 'project' | 'home' | 'explicit';
+    readonly path?: string;
+  };
 }
 
 export interface PipelineJobView {
@@ -1770,4 +1777,76 @@ export async function deleteUsageRecords(addresses: readonly string[]): Promise<
       body: JSON.stringify({ records: addresses }),
     }),
   );
+}
+
+/**
+ * Стратегии ревью (`ui-review-strategies`): зеркало `ReviewStrategiesOverview`
+ * (`src/parts/ui/reviewStrategies.ts`) и ответа `GET /api/review-strategies`.
+ */
+export type StrategyLayer = 'project' | 'home';
+
+export interface StrategyProblem {
+  readonly message: string;
+  /** Путь ключа внутри документа, например `reviewers.1.id`. */
+  readonly at?: string;
+}
+
+export interface StrategyUsage {
+  readonly pipeline: string;
+  readonly file: string;
+  readonly job: string;
+  readonly step: string;
+}
+
+export interface StrategyView {
+  readonly name: string;
+  readonly layer: StrategyLayer;
+  readonly path: string;
+  readonly text: string;
+  readonly shadowed?: true;
+  readonly document?: Record<string, unknown>;
+  readonly error?: StrategyProblem;
+  readonly usage: readonly StrategyUsage[];
+}
+
+export interface ReviewStrategiesOverview {
+  readonly projectDir?: string;
+  readonly homeDir: string;
+  readonly strategies: readonly StrategyView[];
+  readonly generatedAt: string;
+}
+
+export async function fetchReviewStrategies(): Promise<ReviewStrategiesOverview> {
+  return json<ReviewStrategiesOverview>(await fetch('/api/review-strategies'));
+}
+
+/** Отказ записи стратегии: текст разбора движка и путь ключа для поля формы. */
+export class StrategySaveError extends Error {
+  constructor(
+    message: string,
+    readonly at: string | undefined,
+  ) {
+    super(message);
+  }
+}
+
+export async function saveReviewStrategy(request: {
+  readonly layer: StrategyLayer;
+  readonly name: string;
+  readonly document: Record<string, unknown>;
+  readonly create?: boolean;
+}): Promise<void> {
+  const response = await fetch('/api/review-strategies', {
+    method: 'PUT',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(request),
+  });
+  if (response.ok) return;
+  const data = (await response.json()) as { error?: string; at?: string };
+  throw new StrategySaveError(data.error ?? `Daemon responded ${response.status}`, data.at);
+}
+
+export async function deleteReviewStrategy(layer: StrategyLayer, name: string): Promise<void> {
+  const query = new URLSearchParams({ layer, name });
+  await json<{ ok: true }>(await fetch(`/api/review-strategies?${query.toString()}`, { method: 'DELETE' }));
 }

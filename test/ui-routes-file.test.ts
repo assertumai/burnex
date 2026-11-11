@@ -169,8 +169,8 @@ describe('ui-routes-file: сборка таблицы трёх слоёв', () =
     const result = buildRouteTable({ home, projectRoot });
     // 19 встроенных маршрутов (включая screen-home, screen-scrum,
     // screen-decisions, screen-proposals, screen-secrets, screen-schedule,
-    // screen-system и screen-packages) плюс этот новый.
-    assert.equal(result.entries.length, 19);
+    // screen-system, screen-packages и screen-review-strategies) плюс этот новый.
+    assert.equal(result.entries.length, 20);
     const entry = result.entries.find((candidate) => candidate.id === 'my-dashboard');
     assert.deepEqual(entry?.definition.target, { kind: 'widget', id: 'proj/team' });
     const runs = result.entries.find((candidate) => candidate.id === 'screen-runs');

@@ -181,7 +181,12 @@ function UsageNote({ usedBy }: { readonly usedBy: readonly string[] | undefined 
   );
 }
 
-function ProfileForm({
+/**
+ * Форма одного профиля. Ею же экран стратегий ревью правит локальные профили
+ * стратегии (`ui-review-strategies`): там другая метка, пути контекста
+ * разрешаются от файла стратегии, а «где используется» говорит сама стратегия.
+ */
+export function ProfileForm({
   draft,
   index,
   backends,
@@ -189,6 +194,10 @@ function ProfileForm({
   usedBy,
   onChange,
   onRemove,
+  badge = 'global',
+  contextBase = '~/.burnex/',
+  idPrefix = 'profile',
+  showUsage = true,
 }: {
   readonly draft: ProfileDraft;
   readonly index: number;
@@ -197,8 +206,13 @@ function ProfileForm({
   readonly usedBy: readonly string[] | undefined;
   readonly onChange: (next: ProfileDraft) => void;
   readonly onRemove: () => void;
+  readonly badge?: string;
+  /** Откуда разрешаются относительные пути контекста — подсказка поля. */
+  readonly contextBase?: string;
+  readonly idPrefix?: string;
+  readonly showUsage?: boolean;
 }): JSX.Element {
-  const id = `profile-${index}`;
+  const id = `${idPrefix}-${index}`;
   const setContext = (position: number, next: ContextDraft | undefined): void => {
     const context = [...draft.context];
     if (next === undefined) context.splice(position, 1);
@@ -210,10 +224,10 @@ function ProfileForm({
       <CardHeader>
         <div className="agent-card-head">
           <CardTitle>{draft.name.trim() === '' ? 'New profile' : draft.name}</CardTitle>
-          <Badge variant="secondary">global</Badge>
+          <Badge variant="secondary">{badge}</Badge>
           <Button variant="ghost" size="sm" onClick={onRemove} aria-label={`Delete profile ${draft.name}`}>Delete</Button>
         </div>
-        <UsageNote usedBy={usedBy} />
+        {showUsage ? <UsageNote usedBy={usedBy} /> : null}
       </CardHeader>
       <CardContent>
         <div className="agent-field">
@@ -279,7 +293,7 @@ function ProfileForm({
                     onChange={(event) => setContext(position, { kind: 'text', value: event.target.value })} />
                 ) : (
                   <Input aria-label={`context path ${position + 1}`} className="mono" value={entry.value}
-                    placeholder="guides/security.md — relative to ~/.burnex/"
+                    placeholder={`guides/security.md — relative to ${contextBase}`}
                     onChange={(event) => setContext(position, { kind: 'path', value: event.target.value })} />
                 )}
                 <Button variant="ghost" size="sm" onClick={() => setContext(position, undefined)}>Remove</Button>
