@@ -144,24 +144,29 @@ describe('ui-review-strategies: запись', () => {
     assert.deepEqual(readdirSync(projectDir), ['panel.yml']);
   });
 
-  it('режим discussion, которого разбор этой ветки не знает, отклоняется у поля режима', () => {
+  it('режим discussion с лимитом сохраняется, без лимита отклоняется у поля лимита', () => {
     const { home, projectRoot, projectDir } = bed();
     writeFileSync(join(projectDir, 'panel.yml'), COMMENTED);
     const document = readReviewStrategies({ home, projectRoot, backendNames: BACKENDS }).strategies[0]!.document!;
+    const save = (edited: Record<string, unknown>): string =>
+      saveReviewStrategy({ layer: 'project', name: 'panel', document: edited }, { home, projectRoot, backendNames: BACKENDS });
 
-    const rejected = (edited: Record<string, unknown>): StrategyRejected => {
-      try {
-        saveReviewStrategy({ layer: 'project', name: 'panel', document: edited }, { home, projectRoot, backendNames: BACKENDS });
-      } catch (error) {
-        if (error instanceof StrategyRejected) return error;
-        throw error;
-      }
-      assert.fail('запись discussion должна быть отклонена разбором');
-    };
+    let rejected: StrategyRejected | undefined;
+    try {
+      save({ ...document, mode: 'discussion' });
+    } catch (error) {
+      if (!(error instanceof StrategyRejected)) throw error;
+      rejected = error;
+    }
+    assert.equal(rejected?.at, 'discussion.max_messages');
+    assert.equal(readFileSync(join(projectDir, 'panel.yml'), 'utf8'), COMMENTED);
 
-    assert.equal(rejected({ ...document, mode: 'discussion' }).at, 'mode');
-    // Лимит без знакомого разбору ключа: движок называет ключ текстом, форма — полем.
-    assert.equal(rejected({ ...document, mode: 'discussion', discussion: { max_messages: 6 } }).at, 'discussion');
+    save({ ...document, mode: 'discussion', discussion: { max_messages: 6 } });
+    const saved = readReviewStrategies({ home, projectRoot, backendNames: BACKENDS }).strategies[0]!;
+    assert.equal(saved.error, undefined);
+    assert.equal(saved.document?.mode, 'discussion');
+    assert.deepEqual(saved.document?.discussion, { max_messages: 6 });
+    assert.match(readFileSync(join(projectDir, 'panel.yml'), 'utf8'), /# безопасность — на Codex/);
   });
 
   it('новая стратегия создаётся в выбранном слое с именем файла по name; занятое имя отклоняется', () => {
