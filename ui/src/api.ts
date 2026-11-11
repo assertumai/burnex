@@ -1221,6 +1221,9 @@ export async function fetchStepOutput(options: {
   readonly pass?: number;
   readonly stdoutOffset?: number;
   readonly stderrOffset?: number;
+  /** Участник шага `review` и раунд его реплики — вывод его вызова. */
+  readonly participant?: string;
+  readonly round?: number;
 }): Promise<StepOutputResult> {
   const query = new URLSearchParams({
     run: options.address,
@@ -1229,9 +1232,126 @@ export async function fetchStepOutput(options: {
   });
   if (options.attempt !== undefined) query.set('attempt', String(options.attempt));
   if (options.pass !== undefined) query.set('pass', String(options.pass));
+  if (options.participant !== undefined) query.set('participant', options.participant);
+  if (options.round !== undefined) query.set('round', String(options.round));
   if (options.stdoutOffset !== undefined) query.set('stdoutOffset', String(options.stdoutOffset));
   if (options.stderrOffset !== undefined) query.set('stderrOffset', String(options.stderrOffset));
   return json<StepOutputResult>(await fetch(`/api/step-output?${query.toString()}`));
+}
+
+/**
+ * Лента шага `review` (`ui-review-discussion`): зеркало `ReviewFeed`
+ * (`src/parts/ui/reviewFeed.ts`) и ответа `GET /api/review-feed`.
+ */
+export type ReviewStance = 'propose' | 'agree' | 'disagree';
+export type NoConsensusReason = 'limit' | 'stalled' | 'budget' | 'participants';
+
+export interface ReviewFeedSession {
+  readonly round?: number;
+  readonly status?: StatusValue;
+  readonly reason?: string;
+  readonly running: boolean;
+  readonly stdout?: JournalFileRef;
+}
+
+export interface ReviewFeedParticipant {
+  readonly id: string;
+  readonly role: 'reviewer' | 'aggregator';
+  readonly agent?: string;
+  readonly model?: string;
+  readonly focus?: string;
+  readonly color: number;
+  readonly status?: StatusValue;
+  readonly reason?: string;
+  readonly running: boolean;
+  readonly messages: number;
+  readonly sessions: readonly ReviewFeedSession[];
+  readonly usage: {
+    readonly billableTokens: number | null;
+    readonly costUsd: number | null;
+    readonly costSource?: CostSource;
+    readonly wallclockMs: number;
+  };
+}
+
+export interface ReviewFeedQuote {
+  readonly id: string;
+  readonly by?: string;
+  readonly summary: string;
+}
+
+export interface ReviewFinding {
+  readonly severity?: string;
+  readonly title?: string;
+  readonly location?: string;
+  readonly detail?: string;
+  readonly suggestion?: string;
+}
+
+export type ReviewFeedEntry =
+  | {
+      readonly kind: 'findings';
+      readonly participant: string;
+      readonly messageId?: string;
+      readonly proposal?: string;
+      readonly summary: string;
+      readonly findings: readonly ReviewFinding[];
+    }
+  | {
+      readonly kind: 'message';
+      readonly participant: string;
+      readonly messageId: string;
+      readonly round: number;
+      readonly seq: number;
+      readonly stance: ReviewStance;
+      readonly text: string;
+      readonly count: number;
+      readonly proposal?: ReviewFeedQuote;
+      readonly target?: ReviewFeedQuote;
+      readonly replyTo?: readonly ReviewFeedQuote[];
+      readonly invalid?: true;
+    }
+  | { readonly kind: 'round'; readonly round: number }
+  | { readonly kind: 'failure'; readonly participant: string; readonly reason: string }
+  | { readonly kind: 'outcome'; readonly consensus: true; readonly proposal: string }
+  | { readonly kind: 'outcome'; readonly consensus: false; readonly reason: NoConsensusReason }
+  | {
+      readonly kind: 'verdict';
+      readonly participant: string;
+      readonly status?: StatusValue;
+      readonly reason?: string;
+      readonly verdict?: string;
+      readonly summary?: string;
+      readonly output?: unknown;
+    };
+
+export interface ReviewFeedProposal {
+  readonly id: string;
+  readonly by: string;
+  readonly round: number;
+  readonly summary: string;
+  readonly status: 'active' | 'accepted' | 'unsupported';
+}
+
+export interface ReviewFeed {
+  readonly mode?: 'independent' | 'discussion';
+  readonly maxMessages?: number;
+  readonly participants: readonly ReviewFeedParticipant[];
+  readonly entries: readonly ReviewFeedEntry[];
+  readonly proposals: readonly ReviewFeedProposal[];
+  readonly legacy: boolean;
+  readonly done: boolean;
+}
+
+export async function fetchReviewFeed(options: {
+  readonly address: string;
+  readonly jobId: string;
+  readonly stepId: string;
+  readonly pass?: number;
+}): Promise<ReviewFeed> {
+  const query = new URLSearchParams({ run: options.address, job: options.jobId, step: options.stepId });
+  if (options.pass !== undefined) query.set('pass', String(options.pass));
+  return json<ReviewFeed>(await fetch(`/api/review-feed?${query.toString()}`));
 }
 
 export async function fetchPipelines(): Promise<PipelinesOverview> {

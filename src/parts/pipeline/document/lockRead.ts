@@ -50,7 +50,62 @@ export interface LockStep {
   readonly pluginFields?: unknown;
   /** Имена секретов, названных шагом. Значений в замке нет. */
   readonly secrets?: readonly string[];
+  /** Разрешённая стратегия шага `review` — у шага этого вида. */
+  readonly review?: LockReview;
   readonly context: readonly string[];
+}
+
+/** Участник шага `review`, как его записал замок. */
+export interface LockReviewParticipant {
+  readonly id: string;
+  readonly agent?: string;
+  readonly model?: string;
+  readonly focus?: string;
+}
+
+/**
+ * Стратегия шага `review` в замке: режим, лимит реплик и участники в порядке
+ * стратегии. Порядок нужен ленте обсуждения (`ui-review-discussion`):
+ * цвет участника — по его позиции, а каталоги участников в журнале порядка
+ * не хранят.
+ */
+export interface LockReview {
+  readonly mode?: string;
+  readonly maxMessages?: number;
+  readonly reviewers: readonly LockReviewParticipant[];
+  readonly aggregator?: LockReviewParticipant;
+}
+
+function reviewParticipant(value: unknown): LockReviewParticipant | undefined {
+  const record = asRecord(value);
+  const id = asString(record?.id);
+  if (record === undefined || id === undefined) return undefined;
+  const agent = asString(record.agent);
+  const model = asString(record.model);
+  const focus = asString(record.focus);
+  return {
+    id,
+    ...(agent === undefined ? {} : { agent }),
+    ...(model === undefined ? {} : { model }),
+    ...(focus === undefined ? {} : { focus }),
+  };
+}
+
+function reviewOf(record: Record<string, unknown>): LockReview | undefined {
+  const strategy = asRecord(record.review);
+  if (strategy === undefined) return undefined;
+  const mode = asString(strategy.mode);
+  const maxMessages = asRecord(strategy.discussion)?.max_messages;
+  const reviewers = Array.isArray(record.reviewers)
+    ? record.reviewers.map(reviewParticipant).filter((entry): entry is LockReviewParticipant => entry !== undefined)
+    : [];
+  const aggregator = reviewParticipant(record.aggregator);
+  return {
+    ...(mode === undefined ? {} : { mode }),
+    ...(typeof maxMessages === 'number' ? { maxMessages } : {}),
+    reviewers,
+    ...(aggregator === undefined ? {} : { aggregator }),
+  };
 }
 
 export interface LockJob {
@@ -177,7 +232,8 @@ function toStep(value: unknown): LockStep | undefined {
 
   // Ни один из трёх встроенных маркеров не найден — оставшийся единственный
   // ключ сверх общей части и есть имя плагинного вида (design.md, решение 3).
-  const isReview = asRecord(record.review) !== undefined;
+  const review = reviewOf(record);
+  const isReview = review !== undefined;
   const isBuiltin = scriptPath !== undefined || prompt !== undefined || record.run !== undefined || isReview;
   const pluginKindName = isBuiltin ? undefined : pluginKindKey(record);
 
@@ -207,6 +263,7 @@ function toStep(value: unknown): LockStep | undefined {
     ...(usesParams === undefined ? {} : { usesParams }),
     ...(pluginKindName === undefined ? {} : { pluginKindName, pluginFields: record[pluginKindName] }),
     ...(secretNames === undefined ? {} : { secrets: secretNames }),
+    ...(review === undefined ? {} : { review }),
     context: contextLabels(record.context),
   };
 }

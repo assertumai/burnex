@@ -20,6 +20,7 @@ import { Cost } from '../components/Cost';
 import { FileView } from '../components/FileView';
 import { JobGraph } from '../components/JobGraph';
 import { StepOutput } from '../components/StepOutput';
+import { ReviewFeedPanel } from '../components/ReviewFeed';
 import { ShadowBadge } from '../components/ShadowBadge';
 import { TargetLink } from '../routeLink';
 import { DECISIONS_TARGET } from '../screens/decisions';
@@ -226,14 +227,30 @@ function Step({
         </div>
       )}
 
-      <StepOutput
-        key={outputKey}
-        address={address}
-        jobId={jobId}
-        stepId={step.id}
-        kind={step.kind}
-        {...(pass === undefined ? {} : { pass })}
-      />
+      {/*
+        Шаг `review` — лентой обсуждения (`ui-review-discussion`): своего
+        вывода у него нет, ходы участников открываются из ленты.
+      */}
+      {step.kind === 'review' ? (
+        <ReviewFeedPanel
+          key={outputKey}
+          address={address}
+          jobId={jobId}
+          stepId={step.id}
+          pass={pass}
+          stepUsage={step.usage}
+          asOf={asOf}
+        />
+      ) : (
+        <StepOutput
+          key={outputKey}
+          address={address}
+          jobId={jobId}
+          stepId={step.id}
+          kind={step.kind}
+          {...(pass === undefined ? {} : { pass })}
+        />
+      )}
     </div>
   );
 }
