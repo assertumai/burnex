@@ -246,10 +246,35 @@ export interface AgentStep extends StepCommon {
 }
 
 /** Снять с шага имя профиля перед хешированием (ключ шага, хеш работы). */
-export function withoutProfileName<T extends object>(step: T): T {
+function withoutProfileName<T extends object>(step: T): T {
   if (!('profile' in step)) return step;
   const { profile: _profile, ...rest } = step;
   return rest as T;
+}
+
+/**
+ * Шаг в том виде, в каком он входит в ключ шага и хеш работы: без справочных
+ * полей, не меняющих исполнения. У агентского шага — имя профиля
+ * (`agent-profiles`, решение 6). У шага `review` — ещё слой и путь стратегии
+ * (`review-strategies`, решение 7: перенос файла между слоями ключ не
+ * меняет) и контекст локальных профилей: его пути лежат рядом с файлом
+ * стратегии, а содержимое уже входит в отпечаток стратегии.
+ */
+export function forStepHash(step: Step): Step {
+  if (step.kind !== 'review') return withoutProfileName(step);
+  const { layer: _layer, path: _path, ...strategy } = step.strategy;
+  const participant = (entry: ReviewParticipant): ReviewParticipant => {
+    const rest = withoutProfileName(entry);
+    if (rest.localProfile !== true) return rest;
+    const { profileContext: _context, profileContextFingerprint: _fingerprint, ...own } = rest;
+    return own;
+  };
+  return {
+    ...step,
+    strategy,
+    reviewers: step.reviewers.map(participant),
+    ...(step.aggregator === undefined ? {} : { aggregator: participant(step.aggregator) }),
+  };
 }
 
 export interface RunStep extends StepCommon {
@@ -445,7 +470,78 @@ export interface PluginStep extends StepCommon {
   readonly fields: unknown;
 }
 
-export type Step = AgentStep | RunStep | ScriptStep | PluginStep;
+/** Режимы стратегии ревью. `discussion` — изменение `review-discussion`. */
+export const REVIEW_MODES = ['independent'] as const;
+export type ReviewMode = (typeof REVIEW_MODES)[number];
+
+/** Псевдоним агрегатора среди участников: каталог журнала, адрес `step_agents` нет. */
+export const AGGREGATOR_ID = 'aggregator';
+
+/**
+ * Участник стратегии ревью, уже раскрытый в агента (`review-strategies`,
+ * решение 3) тем же `resolveAgentChoice`, что агентский шаг: слой стратегии
+ * стоит на месте слоя «шаг».
+ */
+export interface ReviewParticipant {
+  /** `id` ревьюера либо `aggregator`. */
+  readonly id: string;
+  readonly agent: string;
+  readonly model?: string;
+  readonly effort?: string;
+  /** Профиль, давший агента: справочное поле, ключ его снимает. */
+  readonly profile?: string;
+  /** Профиль объявлен в `profiles` стратегии, а не в настройках. */
+  readonly localProfile?: true;
+  readonly profileContext?: readonly ContextEntry[];
+  readonly profileContextFingerprint?: string;
+  /** Направление ревьюера — текст, уже прочитанный из `file:`. */
+  readonly focus?: string;
+  /** Дополнение стратегии к промпту агрегатора. */
+  readonly prompt?: string;
+}
+
+/** Откуда пришла стратегия. Слой и путь — справочные, в ключ шага не входят. */
+export interface ReviewStrategyOrigin {
+  /** Значение `review` шага — имя либо путь, как написано. */
+  readonly ref: string;
+  /** `name` документа стратегии; нет, пока документ не прочитан. */
+  readonly name?: string;
+  readonly layer?: 'project' | 'home' | 'explicit';
+  readonly path?: string;
+  /** sha256 файла стратегии и файлов, на которые она ссылается. */
+  readonly fingerprint?: string;
+}
+
+/**
+ * Почему стратегия не разрешилась. Не исключение раскрытия, а отказ шага с
+ * диагностикой — как у `uses`: `burnex lint` называет все промахи документа
+ * за один проход, а прогон отказывает шагу названно.
+ */
+export type ReviewStrategyUnresolved =
+  | { readonly reason: 'not_found'; readonly name: string; readonly searched: readonly string[] }
+  | { readonly reason: 'invalid'; readonly path: string; readonly at?: string; readonly detail: string }
+  | { readonly reason: 'name_mismatch'; readonly name: string; readonly declared: string; readonly path: string };
+
+/**
+ * Шаг ревью (`review-strategies`): задача и форма итога — с шага, кто и как
+ * ревьюит — со стратегии. Выход шага — выход агрегатора по `output_schema`.
+ */
+export interface ReviewStep extends StepCommon {
+  readonly kind: 'review';
+  readonly prompt: string;
+  readonly promptSource?: string;
+  readonly outputSchemaPath: string;
+  readonly permissions?: Permissions;
+  readonly strategy: ReviewStrategyOrigin;
+  readonly mode: ReviewMode;
+  /** Пусто, пока стратегия не разрешилась. */
+  readonly reviewers: readonly ReviewParticipant[];
+  /** Нет, пока стратегия не разрешилась. */
+  readonly aggregator?: ReviewParticipant;
+  readonly unresolved?: ReviewStrategyUnresolved;
+}
+
+export type Step = AgentStep | RunStep | ScriptStep | PluginStep | ReviewStep;
 
 export interface JobOutput {
   readonly from?: string;
@@ -769,7 +865,11 @@ export type AgentEntryReason =
   | { readonly kind: 'no_agent_steps' }
   | { readonly kind: 'no_job' }
   | { readonly kind: 'no_step' }
-  | { readonly kind: 'not_agent' };
+  | { readonly kind: 'not_agent' }
+  /** Запись `<шаг>/<ревьюер>` у шага не вида `review`. */
+  | { readonly kind: 'not_review' }
+  /** Запись `<шаг>/<ревьюер>`, а ревьюера с таким `id` в стратегии нет. */
+  | { readonly kind: 'no_reviewer' };
 
 export interface ExpandedPipeline {
   readonly pipeline: Pipeline;

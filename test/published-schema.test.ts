@@ -123,7 +123,7 @@ describe('published-schema: печать встроенного дерева', (
 
     // Порядок намеренно не канонический: ветви объединения собираются в
     // каноническом всегда, перечень отвечает лишь «входит ли вид в состав».
-    const shuffled = ['uses', 'agent', 'script', 'run'];
+    const shuffled = ['uses', 'review', 'agent', 'script', 'run'];
     const { pipeline, job, notes } = buildPublishedSchemas(predicates, stepKinds, shuffled);
 
     assert.deepEqual(notes, []);

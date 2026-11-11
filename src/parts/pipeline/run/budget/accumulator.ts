@@ -252,8 +252,11 @@ export class UsageAccumulator {
    * накопительный итог, разойдётся именно денежная сумма при `session:
    * shared`, а не токены, и чинить нужно будет здесь — взяв цену диффом.
    */
-  record(jobId: string, stepId: string, attempt: number, usage: Usage): void {
-    const key = `${jobId}/${stepId}#${attempt}`;
+  record(jobId: string, stepId: string, attempt: number, usage: Usage, participant?: string): void {
+    // Участник шага `review` (`review-strategies`, design.md, решение 5) —
+    // своя запись под тем же шагом: потолок шага общий на всех участников, а
+    // сводка раскладывает расход по ним (`%<участник>` в ключе попытки).
+    const key = `${jobId}/${stepId}#${attempt}${participant === undefined ? '' : `%${participant}`}`;
     const previous = this.steps.get(key) ?? emptyCounters();
     const current = toCounters(usage, this.cacheReadWeight(usage.backend));
 
@@ -391,10 +394,13 @@ export class UsageAccumulator {
    * он уже вошёл в счётчики прогона и работы и остаётся в собственном счёте
    * шага под новым внутренним именем.
    */
-  sealStep(jobId: string, stepId: string): void {
+  sealStep(jobId: string, stepId: string, participant?: string): void {
     const prefix = `${jobId}/${stepId}#`;
     for (const [key, counters] of [...this.steps]) {
       if (!key.startsWith(prefix)) continue;
+      // Переисполняется один участник шага `review`: записи его соседей,
+      // идущих параллельно, живые и запечатыванию не подлежат.
+      if (participant !== undefined && !key.slice(prefix.length).replace(/@.*$/, '').endsWith(`%${participant}`)) continue;
       this.sealCounter += 1;
       const sealedKey = `${key}@seal${this.sealCounter}`;
       this.steps.delete(key);
@@ -659,6 +665,18 @@ export class UsageAccumulator {
               costFromCatalog: number;
             }
           >;
+          /** Расход участников шага `review` по `id`; у прочих шагов пусто. */
+          participants: Map<
+            string,
+            {
+              billable_tokens: number;
+              wallclock_ms: number;
+              costMicroUsd: number;
+              costReportedAttempts: number;
+              costFromReported: number;
+              costFromCatalog: number;
+            }
+          >;
         }
       > = {};
 
@@ -670,13 +688,16 @@ export class UsageAccumulator {
         const stepId = rest.slice(0, hashAt);
         const attemptPart = rest.slice(hashAt + 1);
         const sealAt = attemptPart.indexOf('@');
-        const attempt = Number(sealAt === -1 ? attemptPart : attemptPart.slice(0, sealAt));
+        const attemptHead = sealAt === -1 ? attemptPart : attemptPart.slice(0, sealAt);
+        const participantAt = attemptHead.indexOf('%');
+        const participant = participantAt === -1 ? undefined : attemptHead.slice(participantAt + 1);
+        const attempt = Number(participantAt === -1 ? attemptHead : attemptHead.slice(0, participantAt));
         // Запись запечатанной попытки работы несёт её номер в ключе, живая —
         // действующий номер работы.
         const sealedJobAttempt = /@job(\d+)/.exec(attemptPart);
         const jobAttempt =
           sealedJobAttempt === null ? this.jobAttempts.get(jobId) : Number(sealedJobAttempt[1]);
-        const attemptKey = jobAttempt === undefined ? String(attempt) : `${jobAttempt}.${attempt}`;
+        const attemptKey = `${jobAttempt === undefined ? String(attempt) : `${jobAttempt}.${attempt}`}${participant === undefined ? '' : `%${participant}`}`;
 
         const existing =
           steps[stepId] ??
@@ -689,6 +710,7 @@ export class UsageAccumulator {
             costFromCatalog: 0,
             peak: undefined,
             attempts: new Map(),
+            participants: new Map(),
           };
         const priorAttempt = existing.attempts.get(attemptKey);
         // Переисполнение шага запечатывает старую попытку под тем же номером
@@ -698,6 +720,7 @@ export class UsageAccumulator {
         existing.attempts.set(attemptKey, {
           attempt,
           ...(jobAttempt === undefined ? {} : { job_attempt: jobAttempt }),
+          ...(participant === undefined ? {} : { participant }),
           backend: step.backend,
           ...(step.model === undefined ? {} : { model: step.model }),
           billable_tokens: (priorAttempt?.billable_tokens ?? 0) + step.billable,
@@ -717,7 +740,19 @@ export class UsageAccumulator {
           costFromCatalog: existing.costFromCatalog + step.costFromCatalog,
           peak: maxOptional(existing.peak, step.peak),
           attempts: existing.attempts,
+          participants: existing.participants,
         };
+        if (participant !== undefined) {
+          const prior = existing.participants.get(participant);
+          existing.participants.set(participant, {
+            billable_tokens: (prior?.billable_tokens ?? 0) + step.billable,
+            wallclock_ms: (prior?.wallclock_ms ?? 0) + step.wallclockMs,
+            costMicroUsd: (prior?.costMicroUsd ?? 0) + step.costMicroUsd,
+            costReportedAttempts: (prior?.costReportedAttempts ?? 0) + step.costReportedAttempts,
+            costFromReported: (prior?.costFromReported ?? 0) + step.costFromReported,
+            costFromCatalog: (prior?.costFromCatalog ?? 0) + step.costFromCatalog,
+          });
+        }
       }
       jobs[jobId] = {
         billable_tokens: counters.billable,
@@ -731,6 +766,16 @@ export class UsageAccumulator {
               wallclock_ms: step.wallclock_ms,
               ...costFields(step),
               ...(step.peak === undefined ? {} : { peak_prefix_tokens: step.peak }),
+              ...(step.participants.size === 0
+                ? {}
+                : {
+                    participants: Object.fromEntries(
+                      [...step.participants].map(([id, { billable_tokens, wallclock_ms, ...cost }]) => [
+                        id,
+                        { billable_tokens, wallclock_ms, ...costFields(cost) },
+                      ]),
+                    ),
+                  }),
               attempts: [...step.attempts.values()]
                 .sort((a, b) => (a.job_attempt ?? 0) - (b.job_attempt ?? 0) || a.attempt - b.attempt)
                 .map(({ costMicroUsd, costReportedAttempts, costFromReported, costFromCatalog, ...attempt }) => ({

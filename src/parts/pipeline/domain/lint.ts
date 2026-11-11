@@ -10,6 +10,8 @@ import { parseExpression, references } from './expr/parse.js';
 import { buildGraph } from './graph.js';
 import { isBurnexError } from '../../../kernel/errors.js';
 import { describeBroken, describeResourceConflict, describeScriptUnresolved } from '../document/expand.js';
+import { describeStrategyUnresolved } from '../document/reviewStrategy.js';
+import { agentCallsOf } from '../steps/review/participants.js';
 import { buildPublishedSchemas, pluginPredicateEntries, pluginStepKindEntries } from '../document/published-schema.js';
 import { builtinRegistry } from '../../builtin.js';
 import { hasPredicateEvaluator, hasStepExecutor } from '../contract.js';
@@ -621,7 +623,7 @@ function checkWaitingStepKind(
  * освобождать её от потолка прогона без собственного потолка так же нельзя.
  */
 function callsModel(step: Step): boolean {
-  return step.kind === 'agent' || step.expect.some((predicate) => predicate.kind === 'judge');
+  return step.kind === 'agent' || step.kind === 'review' || step.expect.some((predicate) => predicate.kind === 'judge');
 }
 
 export function lintPipeline(expanded: ExpandedPipeline, given: LintOptions): Diagnostic[] {
@@ -774,7 +776,7 @@ export function lintPipeline(expanded: ExpandedPipeline, given: LintOptions): Di
     checkLaneSubstitutions(job, lanes, laneOf, substitutions, pipeline.file, push);
     checkEnv(job.env, envDenyMatchers, pipeline.envDeny, job.source, `${at}.env`, push);
 
-    if (job.context.length > 0 && !job.steps.some((step) => step.kind === 'agent')) {
+    if (job.context.length > 0 && !job.steps.some((step) => step.kind === 'agent' || step.kind === 'review')) {
       push({
         severity: 'warning',
         message: `У работы ${job.id} объявлен context, но нет агентских шагов`,
@@ -1612,41 +1614,48 @@ function checkStep(
     }
   }
 
-  if (step.kind === 'agent') {
-    const backend = options.config.backends[step.agent];
+  if (step.kind === 'review') checkReviewStep(job, step, at, options, push);
+
+  // Участник шага `review` проверяется тем же кодом, что агентский шаг:
+  // адрес называет участника, а место ключа — шаг `review` (агента участнику
+  // объявляет стратегия, а не документ).
+  for (const { id, call } of agentCallsOf(step)) {
+    const address = step.kind === 'review' ? `${job.id}/${step.id}/${id}` : `${job.id}/${step.id}`;
+    const agentAt = step.kind === 'review' ? `${at}.review` : `${at}.agent`;
+    const backend = options.config.backends[call.agent];
     if (backend === undefined) {
       push({
         severity: 'error',
-        message: `Неизвестный бэкенд ${step.agent} у шага ${job.id}/${step.id}`,
+        message: `Неизвестный бэкенд ${call.agent} у шага ${address}`,
         file: job.source,
-        at: `${at}.agent`,
+        at: agentAt,
         hint: describeKnownAgents(options.config.agents, Object.keys(options.config.backends)),
       });
     } else if (!backend.enabled) {
       push({
         severity: 'error',
-        message: `Бэкенд ${step.agent} выключен в конфигурации`,
+        message: `Бэкенд ${call.agent} выключен в конфигурации`,
         file: job.source,
-        at: `${at}.agent`,
+        at: agentAt,
       });
     } else {
-      const capable = declaredCapabilities(step.agent, backend, options.registry);
-      checkPermissionsEnforce(job, step, step.agent, capable, at, push);
-      checkMcp(job, step, step.agent, capable, at, pipelineMcp, pipelineFile, push);
-      if (step.outputSchemaPath !== undefined && !capable.structuredOutput) {
+      const capable = declaredCapabilities(call.agent, backend, options.registry);
+      checkPermissionsEnforce(job, call, call.agent, capable, at, push);
+      checkMcp(job, call, call.agent, capable, at, pipelineMcp, pipelineFile, push);
+      if (call.outputSchemaPath !== undefined && !capable.structuredOutput) {
         push({
           severity: 'error',
-          message: `Бэкенд ${step.agent} не поддерживает структурированный вывод, нужный для output_schema шага ${job.id}/${step.id}`,
+          message: `Бэкенд ${call.agent} не поддерживает структурированный вывод, нужный для output_schema шага ${address}`,
           file: job.source,
           at: `${at}.output_schema`,
-          hint: capabilityHint(step.agent, capable.configured.structuredOutput, 'structured_output', 'output_schema'),
+          hint: capabilityHint(call.agent, capable.configured.structuredOutput, 'structured_output', 'output_schema'),
         });
       }
     }
   }
 
   if (
-    (step.kind === 'agent' || step.kind === 'run' || step.kind === 'script') &&
+    (step.kind === 'agent' || step.kind === 'run' || step.kind === 'script' || step.kind === 'review') &&
     step.outputSchemaPath !== undefined
   ) {
     // Схему выхода шага `uses` объявляет манифест, а не место вызова: ключа
@@ -1794,6 +1803,53 @@ function checkStep(
  * возникают только когда файл уже найден, и способ, каким собран его путь,
  * на них не влияет.
  */
+/**
+ * Шаг `review` (`review-strategies`): промах стратегии — ошибка, как промах
+ * `uses`; стратегия только из домашнего слоя и локальный профиль, перекрывший
+ * профиль настроек, — предупреждения (design.md, «Риски»; решение 1).
+ */
+function checkReviewStep(
+  job: Job,
+  step: Extract<Step, { kind: 'review' }>,
+  at: string,
+  options: ResolvedLintOptions,
+  push: (diagnostic: Diagnostic) => void,
+): void {
+  if (step.unresolved !== undefined) {
+    push({
+      severity: 'error',
+      message: `Шаг ${job.id}/${step.id}: ${describeStrategyUnresolved(step.unresolved)}`,
+      file: step.unresolved.reason === 'invalid' ? step.unresolved.path : job.source,
+      at: step.unresolved.reason === 'invalid' && step.unresolved.at !== undefined ? step.unresolved.at : `${at}.review`,
+    });
+    return;
+  }
+  if (step.strategy.layer === 'home') {
+    push({
+      severity: 'warning',
+      message: `Шаг ${job.id}/${step.id} зависит от стратегии ревью ${step.strategy.name ?? step.strategy.ref} домашнего слоя`,
+      file: job.source,
+      at: `${at}.review`,
+      hint: `Стратегия найдена только в ${step.strategy.path ?? '~/.burnex/review-strategies/'}: на другой машине прогон её не найдёт — положите её в .burnex/review-strategies/ проекта`,
+    });
+  }
+  const reported = new Set<string>();
+  for (const participant of [...step.reviewers, ...(step.aggregator === undefined ? [] : [step.aggregator])]) {
+    const name = participant.profile;
+    if (participant.localProfile !== true || name === undefined || reported.has(name)) continue;
+    const shadowed = options.config.agents[name];
+    if (shadowed === undefined) continue;
+    reported.add(name);
+    push({
+      severity: 'warning',
+      message: `Стратегия ревью ${step.strategy.name ?? step.strategy.ref} перекрывает профиль ${name} настроек своим`,
+      file: step.strategy.path ?? job.source,
+      at: `profiles.${name}`,
+      hint: `Участники стратегии исполняются её профилем; профиль настроек объявлен в ${shadowed.file}`,
+    });
+  }
+}
+
 function checkScriptStep(
   job: Job,
   step: Extract<Step, { kind: 'script' }>,

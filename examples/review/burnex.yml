@@ -1,0 +1,44 @@
+# Шаг review: со стратегией из двух ревьюеров на разных бэкендах (Codex и
+# Claude) и агрегатором. Как запускать и что сверить — README.md рядом.
+#
+# Пайплайн намеренно дёшев: три коротких вызова, код для ревью — прямо в
+# промпте, инструменты агентам не нужны.
+
+version: 1
+kind: pipeline
+name: review-example
+
+workspace:
+  mode: cwd
+
+budget:
+  tokens: 600k
+  wallclock: 15m
+
+jobs:
+  review:
+    description: Два независимых ревьюера и агрегатор, сводящий вердикт
+    output: { from: review-diff }
+    steps:
+      - id: review-diff
+        review: ./strategy.yml
+        prompt: |
+          Проведи ревью функции ниже. Инструменты не используй — весь код перед тобой.
+
+          ```ts
+          export function login(user: string, password: string): boolean {
+            console.log("login " + user + " " + password);
+            const query = "SELECT * FROM users WHERE name = '" + user + "' AND pass = '" + password + "'";
+            return db.run(query).length > 0;
+          }
+          ```
+        output_schema: ./schemas/verdict.json
+        permissions: { allow: [Read, Grep, Glob] }
+        timeout: 5m
+        budget: { tokens: 400k }
+
+  report:
+    needs: [review]
+    steps:
+      - id: echo
+        run: [sh, -c, 'printf "%s\n" "${jobs.review.output.verdict}"']

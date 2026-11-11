@@ -1,0 +1,18 @@
+version: 1
+kind: review-strategy
+name: strategy
+description: Безопасность на Codex, тесты и сопровождаемость на Claude; итог сводит Claude
+reviewers:
+  - id: security
+    agent: codex
+    model_tier: balance
+    focus: Границы доверия, секреты в логах, инъекции
+  - id: tests
+    agent: claude
+    model_tier: balance
+    focus: file:./tests-focus.md
+aggregator:
+  agent: claude
+  model_tier: balance
+  prompt: Вердикт request_changes, если есть хотя бы одна находка critical или major.
+mode: independent

@@ -144,7 +144,7 @@ export function StepOutput({
    * читается как командный — исполнитель вклада пишет `stdout.log` попытки
    * тем же именем, что и процесс командного шага.
    */
-  readonly kind: 'agent' | 'run' | 'script' | 'plugin';
+  readonly kind: 'agent' | 'run' | 'script' | 'plugin' | 'review';
 }): JSX.Element {
   const [open, setOpen] = useState(false);
   const [loaded, setLoaded] = useState(false);

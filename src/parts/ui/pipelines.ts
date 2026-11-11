@@ -81,7 +81,7 @@ export interface AgentEntryView {
 
 export interface PipelineStepView {
   readonly id: string;
-  readonly kind: 'agent' | 'run' | 'script' | 'plugin';
+  readonly kind: 'agent' | 'run' | 'script' | 'plugin' | 'review';
   /** Агент шага: он и есть ответ на вопрос «чем это будет исполняться». */
   readonly agent?: string;
   /** Модель, которой шаг исполнится. Отсутствует у шага без модели ни на одном слое. */

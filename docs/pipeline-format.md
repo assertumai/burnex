@@ -1267,8 +1267,9 @@ jobs:
 
 ## Шаги
 
-Четыре вида ниже — `agent`, `run`, `script`, `uses` — приходят строками
-поставки (`step-agent`, `step-run`, `step-script`, `step-uses`), теми же, что
+Пять видов ниже — `agent`, `run`, `script`, `uses`, `review` — приходят
+строками поставки (`step-agent`, `step-run`, `step-script`, `step-uses`,
+`step-review`), теми же, что
 и плагинный `decision`: патч состава вправе отключить любую из них наравне с
 `backend-claude` ([docs/plugins.md](plugins.md#объявление-и-разрешение)). Шаг,
 назвавший ключ вида, чья строка отключена, отказывает разбором, называющим
@@ -1751,6 +1752,84 @@ output_schema: ./output.schema.json
 Пакет поставляет встроенный образец `changed-files` — перечень файлов рабочего
 дерева, изменённых относительно `ref`, — доступный без единого каталога
 `.burnex/steps/` в проекте или в домашнем каталоге.
+
+### review
+
+Ревью несколькими агентами: шаг объявляет задачу и форму итога, а **стратегия
+ревью** — кто ревьюит, с каким фокусом и кто выносит вердикт.
+
+```yaml
+steps:
+  - id: review-diff
+    review: panel                       # имя стратегии либо ./путь/к/файлу.yml
+    prompt: file:../prompts/review.md
+    output_schema: ../schemas/review.json
+    permissions: { enforce: strict, allow: [Read, Grep, Glob, "Bash(git diff*)"] }
+    timeout: 25m
+```
+
+Обязательны `review`, `prompt` и `output_schema`; допустимы `permissions`,
+`context`, `context_inherit`, `context_exclude`, `expect`, `timeout`,
+`attempts`, `budget`. Ключи `agent`, `model`, `model_tier`, `effort` и
+`session` шаг отклоняет: участников объявляет стратегия, а их сессии живут
+только внутри шага. Выход шага — вердикт агрегатора по `output_schema`, так
+что `output.from` и `${jobs.*.output.*}` работают как у агентского шага.
+
+Стратегия — отдельный документ (`schema/review-strategy.schema.json`):
+
+```yaml
+version: 1
+kind: review-strategy
+name: panel
+profiles:                       # локальные профили, видны только участникам стратегии
+  arch: { backend: claude, model_tier: deep, context: [{ path: ./architecture-rules.md }] }
+reviewers:
+  - id: security
+    agent: reviewer-strict      # профиль настроек
+    focus: "Границы доверия, секреты, инъекции"
+  - id: architecture
+    agent: arch                 # локальный профиль
+    focus: file:./architecture-focus.md
+  - id: tests
+    model_tier: balance         # профиль default с уровнем balance
+aggregator:                     # необязателен: по умолчанию профиль default
+  agent: default
+  model_tier: max
+  prompt: file:./aggregate.md
+mode: independent
+```
+
+Ссылка `review:` с `./`, `../` или абсолютная — файл от объявившего
+документа; голое имя ищется в `.burnex/review-strategies/<имя>.yml` проекта,
+затем в `~/.burnex/review-strategies/<имя>.yml`, и `name` найденного файла
+обязан совпадать с именем. Промах — не исключение, а отказ шага: `burnex lint`
+называет все промахи документа за проход, а прогон отказывает шагу названно.
+Пути стратегии (`file:`, `context`) разрешаются от её файла.
+
+Участник раскрывается в агента теми же правилами, что агентский шаг: слой
+стратегии стоит на месте слоя «шаг», локальный профиль перекрывает одноимённый
+профиль настроек (линт предупреждает). `step_agents.<p>.<работа>.<шаг>`
+выбирает агента агрегатору, `step_agents.<p>.<работа>.<шаг>/<ревьюер>` —
+ревьюеру; запись к ревьюеру, которого нет, — запись без действия.
+
+Режим `independent` (единственный пока; `discussion` — следующий этап):
+ревьюеры идут параллельно — не больше `limits.concurrency` разом и под общими
+местами бэкендов (`backends.<id>.concurrency`) — и отдают находки по встроенной
+схеме `schema/review-findings.schema.json`; невалидные находки дают ревьюеру
+один повтор с ошибкой схемы. Затем агрегатор получает задачу шага, находки
+каждого ревьюера с его `id` и `focus`, `prompt` стратегии и `output_schema`
+шага. Отказ ревьюера шаг не роняет — агрегатор получает отметку и причину; если
+находок не дал никто, шаг проваливается без агрегатора. `expect` и `attempts`
+шага относятся к агрегатору: повтор шага перезапускает только его, с прежними
+находками. `budget` шага общий на всех участников.
+
+В журнале у каждого участника свой каталог `participants/<id>/` (ревьюеры по
+`id`, агрегатор — `aggregator`) с `prompt.txt`, `context.json`, `stdout.log`,
+`stderr.log`, `output.json` и `step.json`; события
+`review.participant.started|finished`; `usage.json` раскладывает расход шага
+по участникам (`participants`). В ключ шага входят разрешённые участники и
+отпечаток стратегии с файлами, на которые она ссылается; слой и путь стратегии
+— нет, их печатает `pipeline.lock`.
 
 ### decision
 

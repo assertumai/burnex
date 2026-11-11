@@ -10,6 +10,7 @@ import type {
   UnusedAgentEntry,
 } from '../document/model.js';
 import { backendsKnowingModel } from '../run/budget/priceCatalog.js';
+import { agentCallsOf } from '../steps/review/participants.js';
 import { formatColumns } from '../../../kernel/cli/output.js';
 
 /**
@@ -110,6 +111,10 @@ function describeReason(entry: UnusedAgentEntry): string {
       return 'шага нет в пайплайне';
     case 'not_agent':
       return 'шаг не агентский';
+    case 'not_review':
+      return 'шаг не вида review — ревьюеров у него нет';
+    case 'no_reviewer':
+      return 'ревьюера нет в стратегии';
     case 'no_agent_steps':
       return 'в пайплайне нет агентских шагов';
   }
@@ -121,9 +126,15 @@ export function renderAgentsReport(resolved: ResolvedConfig, expanded: ExpandedP
 
   const rows: string[][] = [];
   for (const job of expanded.pipeline.jobs) {
-    for (const step of job.steps) {
-      if (step.kind !== 'agent') continue;
-      const id = `${job.id}/${step.id}`;
+    // Участники шага `review` — строками `<работа>/<шаг>/<участник>`: их
+    // выбор адресуется записями `step_agents` того же вида (`review-strategies`).
+    for (const { step, participant } of job.steps.flatMap((entry) =>
+      agentCallsOf(entry).map(({ id: participant, call }) => ({
+        step: call,
+        participant: entry.kind === 'review' ? participant : undefined,
+      })),
+    )) {
+      const id = participant === undefined ? `${job.id}/${step.id}` : `${job.id}/${step.id}/${participant}`;
       rows.push([
         id,
         step.agent,

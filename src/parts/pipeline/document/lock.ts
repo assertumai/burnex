@@ -3,7 +3,7 @@ import { writeFileSync } from 'node:fs';
 import { stringify } from 'yaml';
 
 import { formatDuration, formatTokens } from '../../../kernel/units.js';
-import { withoutProfileName, type Budget, type Job, type Loop, type Pipeline, type PipelinePublication, type Step, type Triggers, type Workspace } from './model.js';
+import { forStepHash, type Budget, type Job, type Loop, type Pipeline, type PipelinePublication, type ReviewParticipant, type Step, type Triggers, type Workspace } from './model.js';
 import { normalizePackagePaths, portableForm, type PackagePathForm } from './packagePaths.js';
 
 /**
@@ -141,6 +141,45 @@ function stepToPlain(step: Step): Record<string, unknown> {
     };
   }
 
+  if (step.kind === 'review') {
+    // Стратегия — имя, слой, путь и отпечаток — и разрешённые участники:
+    // замок называет, кто ревьюил, не заставляя читать файл стратегии
+    // (`review-strategies`, решение 7). Происхождение выбора каждого
+    // участника — в `burnex config --pipeline`, как у агентского шага.
+    const participant = (entry: ReviewParticipant): Record<string, unknown> => ({
+      id: entry.id,
+      agent: entry.agent,
+      ...(entry.model === undefined ? {} : { model: entry.model }),
+      ...(entry.effort === undefined ? {} : { effort: entry.effort }),
+      ...(entry.profile === undefined ? {} : { profile: entry.profile }),
+      ...(entry.localProfile === true ? { local_profile: true } : {}),
+      ...(entry.profileContext === undefined ? {} : { profile_context: entry.profileContext }),
+      ...(entry.profileContextFingerprint === undefined
+        ? {}
+        : { profile_context_fingerprint: entry.profileContextFingerprint }),
+      ...(entry.focus === undefined ? {} : { focus: entry.focus }),
+      ...(entry.prompt === undefined ? {} : { prompt: entry.prompt }),
+    });
+    return {
+      ...common,
+      review: {
+        ref: step.strategy.ref,
+        ...(step.strategy.name === undefined ? {} : { name: step.strategy.name }),
+        ...(step.strategy.layer === undefined ? {} : { layer: step.strategy.layer }),
+        ...(step.strategy.path === undefined ? {} : { path: step.strategy.path }),
+        ...(step.strategy.fingerprint === undefined ? {} : { fingerprint: step.strategy.fingerprint }),
+        mode: step.mode,
+      },
+      prompt: step.prompt,
+      ...(step.promptSource === undefined ? {} : { prompt_source: step.promptSource }),
+      output_schema: step.outputSchemaPath,
+      ...(step.permissions === undefined ? {} : { permissions: step.permissions }),
+      reviewers: step.reviewers.map(participant),
+      ...(step.aggregator === undefined ? {} : { aggregator: participant(step.aggregator) }),
+      ...(step.unresolved === undefined ? {} : { unresolved: step.unresolved }),
+    };
+  }
+
   if (step.kind === 'plugin') {
     // Один ключ — имя вида, — все поля под ним, в объявленном виде: с
     // нераскрытыми отложенными подстановками, тем же приёмом, что и `input`
@@ -253,13 +292,14 @@ export function serializeLock(pipeline: Pipeline): string {
 }
 
 /**
- * Определение работы для хеша: без имён профилей шагов. Ключ уже держится на
- * итоговых агенте, модели и контексте, а переименование профиля без смены
- * содержимого переиспользования не ломает (`agent-profiles`, решение 6).
+ * Определение работы для хеша: без справочных полей шагов (`forStepHash`).
+ * Ключ уже держится на итоговых агенте, модели и контексте, а переименование
+ * профиля без смены содержимого переиспользования не ломает
+ * (`agent-profiles`, решение 6); перенос стратегии ревью между слоями —
+ * тоже (`review-strategies`, решение 7).
  */
 function jobForHash(job: Job): Record<string, unknown> {
-  const plain = jobToPlain(job);
-  return { ...plain, steps: (plain.steps as Record<string, unknown>[]).map(withoutProfileName) };
+  return { ...jobToPlain(job), steps: job.steps.map((step) => stepToPlain(forStepHash(step))) };
 }
 
 /**
