@@ -4028,8 +4028,19 @@ async function runReviewStep(
     stepDir: stepDirPath,
     journal: context.journal,
     concurrency: context.config.limits.concurrency,
-    runParticipant: (participant, call, dir) =>
-      runAgentStep(call, job, context, dir, context.sessions, sessionKey, jobContextSent, budgetScopes, changedPaths, participant.id),
+    runParticipant: (participant, call, dir) => {
+      // Ревьюер в обсуждении вызывается не раз, и номера его попыток
+      // начинаются заново: прежний расход запечатывается, а не затирается
+      // (`review-discussion`, решение 6).
+      context.usage.sealStep(job.id, step.id, participant.id);
+      return runAgentStep(call, job, context, dir, context.sessions, sessionKey, jobContextSent, budgetScopes, changedPaths, participant.id);
+    },
+    budgetStop: () => {
+      const exceeded = context.usage.check(budgetScopes());
+      return exceeded === undefined
+        ? undefined
+        : { status: 'budget_exceeded', reason: describeExceeded(exceeded), attempts: [], results: [], exceeded };
+    },
     originOf: (participant) => {
       const key = `${job.id}/${step.id}/${participant}`;
       const agent = context.expanded.agentOrigins.get(key);

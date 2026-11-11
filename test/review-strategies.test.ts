@@ -166,11 +166,11 @@ describe('review-strategies: документ стратегии', () => {
     assert.match(`${extra.at ?? ''} ${extra.message}`, /temperature/);
   });
 
-  it('режим вне independent отклоняется с перечнем известных режимов', () => {
-    const b = box({ 's.yml': `${PANEL}mode: discussion\n` });
+  it('неизвестный режим отклоняется с перечнем известных режимов', () => {
+    const b = box({ 's.yml': `${PANEL}mode: debate\n` });
     const error = rejection(() => parseReviewStrategyFile(join(b.cwd, 's.yml'), []));
     assert.equal(error.at, 'mode');
-    assert.match(error.message, /известны independent/);
+    assert.match(error.message, /известны independent, discussion/);
   });
 
   it('без aggregator агрегатор исполняется профилем default', () => {

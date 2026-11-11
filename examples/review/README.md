@@ -39,3 +39,29 @@ cd "$T" && burnex lint /путь/к/burnex/examples/review/burnex.yml && burnex 
 - `usage.json` → `jobs.review.steps.review-diff.participants` — расход каждого
   участника, в сумме — расход шага;
 - `events.ndjson` — по паре `review.participant.started|finished` на участника.
+
+## Режим discussion
+
+`burnex-discussion.yml` — то же ревью со стратегией `strategy-discussion.yml`:
+ревьюеры обсуждают находки до трёх реплик каждый (`discussion.max_messages: 3`),
+затем агрегатор оформляет согласованное предложение либо решает сам по ленте.
+Тратит от четырёх до девяти вызовов модели. Запуск — как выше, с этим файлом:
+
+```bash
+cd "$T" && burnex lint /путь/к/burnex/examples/review/burnex-discussion.yml && burnex run /путь/к/burnex/examples/review/burnex-discussion.yml
+```
+
+Что сверить:
+
+- `jobs/review/steps/1-review-diff/discussion.ndjson` — предложения `p1`, `p2`
+  находок раунда 0, реплики раундов в форме A2A `Message` (`messageId`, `role`,
+  `parts`) и последняя запись `outcome`: `consensus: true` с id предложения
+  либо `consensus: false` с причиной (`limit`, `stalled`, `budget`);
+- `participants/<ревьюер>/rounds/<раунд>/` — промпт и ответ каждой реплики;
+  промпт раунда несёт только реплики другого ревьюера, которых тот ещё не видел;
+- `participants/aggregator/prompt.txt` — согласованное предложение и требование
+  оформить его без изменения решения либо вся лента с позициями;
+- `events.ndjson` — `review.message` на каждую реплику и `review.consensus` или
+  `review.no_consensus`;
+- `usage.json` → `jobs.review.steps.review-diff.participants` — расход всех
+  вызовов каждого ревьюера.

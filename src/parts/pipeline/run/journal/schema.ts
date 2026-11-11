@@ -889,8 +889,28 @@ export const EventSchema = z.discriminatedUnion('kind', [
   // Участник шага `review` (`review-strategies`, design.md, решение 6): ревьюер
   // по своему `id` либо `aggregator`. Исход — статус участника; провал
   // ревьюера шага не роняет, и `reason` называет то, что получит агрегатор.
-  z.object({ ...eventBase, kind: z.literal('review.participant.started'), job: z.string(), step: z.string(), participant: z.string(), agent: z.string(), model: z.string().optional() }).strict(),
-  z.object({ ...eventBase, kind: z.literal('review.participant.finished'), job: z.string(), step: z.string(), participant: z.string(), status: StatusValueSchema, reason: z.string().optional() }).strict(),
+  // `round` — раунд обсуждения (`review-discussion`): реплика ревьюера в
+  // раунде N ≥ 1; у независимого ревью и агрегатора поля нет.
+  z.object({ ...eventBase, kind: z.literal('review.participant.started'), job: z.string(), step: z.string(), participant: z.string(), round: z.number().int().positive().optional(), agent: z.string(), model: z.string().optional() }).strict(),
+  z.object({ ...eventBase, kind: z.literal('review.participant.finished'), job: z.string(), step: z.string(), participant: z.string(), round: z.number().int().positive().optional(), status: StatusValueSchema, reason: z.string().optional() }).strict(),
+  // Обсуждение ревьюеров (`review-discussion`, решение 1): запись реплики в
+  // `discussion.ndjson` — событием по ходу шага, затем исход обсуждения.
+  // Раунд 0 — находки независимого ревью, первые предложения.
+  z.object({
+    ...eventBase,
+    kind: z.literal('review.message'),
+    job: z.string(),
+    step: z.string(),
+    participant: z.string(),
+    round: z.number().int().nonnegative(),
+    message_id: z.string(),
+    stance: z.enum(['propose', 'agree', 'disagree']),
+    proposal: z.string().optional(),
+    target: z.string().optional(),
+    invalid: z.literal(true).optional(),
+  }).strict(),
+  z.object({ ...eventBase, kind: z.literal('review.consensus'), job: z.string(), step: z.string(), proposal: z.string() }).strict(),
+  z.object({ ...eventBase, kind: z.literal('review.no_consensus'), job: z.string(), step: z.string(), reason: z.enum(['limit', 'stalled', 'budget', 'participants']) }).strict(),
   // Внешнее действие шага записано, а не совершено (`shadow-run-mode`): `n` —
   // сквозной номер действий шага, `path` — файл `action-<n>.json`. Достаточно,
   // чтобы перечислить действия, не читая файлов.

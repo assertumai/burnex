@@ -470,8 +470,8 @@ export interface PluginStep extends StepCommon {
   readonly fields: unknown;
 }
 
-/** Режимы стратегии ревью. `discussion` — изменение `review-discussion`. */
-export const REVIEW_MODES = ['independent'] as const;
+/** Режимы стратегии ревью: `discussion` — обсуждение ревьюеров (`review-discussion`). */
+export const REVIEW_MODES = ['independent', 'discussion'] as const;
 export type ReviewMode = (typeof REVIEW_MODES)[number];
 
 /** Псевдоним агрегатора среди участников: каталог журнала, адрес `step_agents` нет. */
@@ -534,6 +534,8 @@ export interface ReviewStep extends StepCommon {
   readonly permissions?: Permissions;
   readonly strategy: ReviewStrategyOrigin;
   readonly mode: ReviewMode;
+  /** Лимит реплик каждого ревьюера в режиме `discussion` (`discussion.max_messages`). */
+  readonly maxMessages?: number;
   /** Пусто, пока стратегия не разрешилась. */
   readonly reviewers: readonly ReviewParticipant[];
   /** Нет, пока стратегия не разрешилась. */

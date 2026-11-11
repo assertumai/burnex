@@ -169,6 +169,7 @@ function stepToPlain(step: Step): Record<string, unknown> {
         ...(step.strategy.path === undefined ? {} : { path: step.strategy.path }),
         ...(step.strategy.fingerprint === undefined ? {} : { fingerprint: step.strategy.fingerprint }),
         mode: step.mode,
+        ...(step.maxMessages === undefined ? {} : { discussion: { max_messages: step.maxMessages } }),
       },
       prompt: step.prompt,
       ...(step.promptSource === undefined ? {} : { prompt_source: step.promptSource }),
