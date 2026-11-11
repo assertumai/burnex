@@ -63,9 +63,50 @@ export const ReviewStrategySchema = z
     reviewers: z.array(ReviewerSchema).min(1, 'стратегия объявляет хотя бы одного ревьюера'),
     aggregator: AggregatorSchema.optional(),
     mode: z.enum(REVIEW_MODES, { error: () => `неизвестный режим: известны ${REVIEW_MODES.join(', ')}` }).optional(),
+    discussion: z
+      .object({
+        max_messages: z
+          .number()
+          .int('max_messages — целое число')
+          .min(1, 'max_messages — от 1 до 50')
+          .max(50, 'max_messages — от 1 до 50'),
+      })
+      .strict()
+      .optional(),
   })
   .strict()
+  .meta({
+    // То же, что проверяет `superRefine` ниже, — для подсказок редактора.
+    if: { properties: { mode: { const: 'discussion' } }, required: ['mode'] },
+    then: { required: ['discussion'], properties: { reviewers: { minItems: 2 } } },
+    else: { not: { required: ['discussion'] } },
+  })
   .superRefine((value, ctx) => {
+    // Режим `discussion` (`review-discussion`, решение 3): лимит реплик
+    // обязателен, блок при другом режиме — ошибка, а одному ревьюеру
+    // обсуждать не с кем.
+    if (value.mode === 'discussion') {
+      if (value.discussion === undefined) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['discussion', 'max_messages'],
+          message: 'режим discussion требует лимит реплик discussion.max_messages (от 1 до 50)',
+        });
+      }
+      if (value.reviewers.length < 2) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['reviewers'],
+          message: 'режиму discussion нужны хотя бы два ревьюера: одному обсуждать не с кем',
+        });
+      }
+    } else if (value.discussion !== undefined) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['discussion'],
+        message: `блок discussion действует только при mode: discussion, а режим — ${value.mode ?? 'independent'}`,
+      });
+    }
     const seen = new Set<string>();
     for (const [index, reviewer] of value.reviewers.entries()) {
       if (reviewer.id === AGGREGATOR_ID) {
@@ -105,6 +146,8 @@ export interface StrategyAggregator extends StrategyChoice {
 export interface ReviewStrategy {
   readonly origin: Required<Pick<ReviewStrategyOrigin, 'name' | 'layer' | 'path' | 'fingerprint'>> & ReviewStrategyOrigin;
   readonly mode: ReviewMode;
+  /** Лимит реплик ревьюера — только в режиме `discussion`. */
+  readonly maxMessages?: number;
   readonly reviewers: readonly StrategyReviewer[];
   /** Не объявлен — агрегатор исполняется профилем `default`. */
   readonly aggregator: StrategyAggregator;
@@ -343,6 +386,7 @@ function buildStrategy(
   return {
     origin: { ...located, name: raw.name, fingerprint: `sha256:${hash.digest('hex')}` },
     mode: raw.mode ?? 'independent',
+    ...(raw.discussion === undefined ? {} : { maxMessages: raw.discussion.max_messages }),
     reviewers,
     aggregator,
     profiles,

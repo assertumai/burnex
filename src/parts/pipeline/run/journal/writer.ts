@@ -285,6 +285,17 @@ export class RunJournal {
     return this.writeStepFile(dir, name, `${JSON.stringify(value, null, 2)}\n`);
   }
 
+  /**
+   * Дописать запись строкой NDJSON в файл шага — ленту, читаемую по ходу шага
+   * (`discussion.ndjson`, `review-discussion`). Маскируется, как событие:
+   * реплики модели могли процитировать значение секрета.
+   */
+  appendStepLine(dir: string, name: string, value: unknown): string {
+    const path = join(dir, name);
+    appendFileSync(path, `${JSON.stringify(this.masker.maskValue(value))}\n`, { mode: FILE_MODE });
+    return path;
+  }
+
   writeContextReport(dir: string, report: ContextReport): string {
     return this.writeStepJson(dir, 'context.json', report);
   }

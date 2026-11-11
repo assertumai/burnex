@@ -263,8 +263,23 @@
     "mode": {
       "type": "string",
       "enum": [
-        "independent"
+        "independent",
+        "discussion"
       ]
+    },
+    "discussion": {
+      "type": "object",
+      "properties": {
+        "max_messages": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 50
+        }
+      },
+      "required": [
+        "max_messages"
+      ],
+      "additionalProperties": false
     }
   },
   "required": [
@@ -273,5 +288,32 @@
     "name",
     "reviewers"
   ],
-  "additionalProperties": false
+  "additionalProperties": false,
+  "if": {
+    "properties": {
+      "mode": {
+        "const": "discussion"
+      }
+    },
+    "required": [
+      "mode"
+    ]
+  },
+  "then": {
+    "required": [
+      "discussion"
+    ],
+    "properties": {
+      "reviewers": {
+        "minItems": 2
+      }
+    }
+  },
+  "else": {
+    "not": {
+      "required": [
+        "discussion"
+      ]
+    }
+  }
 }

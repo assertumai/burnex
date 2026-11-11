@@ -1,0 +1,45 @@
+# Шаг review в режиме discussion: два ревьюера на разных бэкендах (Codex и
+# Claude) обсуждают находки до трёх реплик каждый, затем агрегатор. Как
+# запускать и что сверить — README.md рядом.
+#
+# Код для ревью — прямо в промпте, инструменты агентам не нужны. Вызовов
+# модели — от четырёх (согласие в первом раунде) до девяти.
+
+version: 1
+kind: pipeline
+name: review-discussion-example
+
+workspace:
+  mode: cwd
+
+budget:
+  tokens: 1000k
+  wallclock: 30m
+
+jobs:
+  review:
+    description: Два ревьюера обсуждают находки, агрегатор сводит вердикт
+    output: { from: review-diff }
+    steps:
+      - id: review-diff
+        review: ./strategy-discussion.yml
+        prompt: |
+          Проведи ревью функции ниже. Инструменты не используй — весь код перед тобой.
+
+          ```ts
+          export function login(user: string, password: string): boolean {
+            console.log("login " + user + " " + password);
+            const query = "SELECT * FROM users WHERE name = '" + user + "' AND pass = '" + password + "'";
+            return db.run(query).length > 0;
+          }
+          ```
+        output_schema: ./schemas/verdict.json
+        permissions: { allow: [Read, Grep, Glob] }
+        timeout: 5m
+        budget: { tokens: 800k }
+
+  report:
+    needs: [review]
+    steps:
+      - id: echo
+        run: [sh, -c, 'printf "%s\n" "${jobs.review.output.verdict}"']

@@ -1789,7 +1789,14 @@ function parseReviewStep(raw: RawStep, ctx: BuiltinStepParseContext): StepParseR
   };
 
   return {
-    step: { ...base, strategy: strategy.origin, mode: strategy.mode, reviewers, aggregator },
+    step: {
+      ...base,
+      strategy: strategy.origin,
+      mode: strategy.mode,
+      ...(strategy.maxMessages === undefined ? {} : { maxMessages: strategy.maxMessages }),
+      reviewers,
+      aggregator,
+    },
     participantOrigins: origins,
   };
 }
