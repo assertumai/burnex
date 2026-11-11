@@ -2,6 +2,7 @@ import { z } from 'zod';
 
 import {
   CheckCommandSchema,
+  ContextEntrySchema,
   EffortSchema,
   ModelTierSchema,
   RawKnowledgeSchema,
@@ -35,51 +36,6 @@ const SelectionShape = {
     z.string().regex(/^\$\{[^}]+\}$/, 'model_tier: ожидается имя tier или подстановка'),
   ]).optional(),
 };
-
-const ContextEntrySchema = z.union([
-  z.string(),
-  z
-    .object({
-      path: z.string(),
-      mode: z.enum(['inline', 'reference', 'auto']).optional(),
-      // Только у формы объектом: строковая запись — это короткая форма для
-      // «как получится», и требование совпадений в ней негде выразить.
-      required: z.boolean().optional(),
-    })
-    .strict(),
-  z.object({ text: z.string() }).strict(),
-  // Материалы пункта очереди: путь называет JSON-файл записи пункта, из
-  // которого движок берёт только `goal` и `details`. Лишние ключи — отказ:
-  // `required` и прочее из формы `path` здесь нечем исполнить.
-  z
-    .object({
-      item_refs: z.string(),
-      mode: z.enum(['inline', 'reference', 'auto']).optional(),
-    })
-    .strict(),
-  // Запись, разрешаемая источником знания. Три формы селектора и ни одной
-  // сверх них: свободный запрос (`query`) потребовал бы от источника
-  // недетерминированного отбора, а воспроизводимость прогона в движке стоит
-  // выше удобства формулировки.
-  //
-  // `scope` и `id` принимают строку и список: список нужен подстановке
-  // `${project.edit_paths}`, которая раскрывается по элементу на значение и
-  // в скалярном поле не раскрывается вовсе.
-  z
-    .object({
-      knowledge: z.union([
-        z.literal('index'),
-        z
-          .object({
-            scope: z.union([z.string(), z.array(z.string())]).optional(),
-            id: z.union([z.string(), z.array(z.string())]).optional(),
-            budget: amount.optional(),
-          })
-          .strict(),
-      ]),
-    })
-    .strict(),
-]);
 
 const ContextUpstreamSchema = z.union([
   z.literal('all'),

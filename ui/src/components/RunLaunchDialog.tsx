@@ -20,7 +20,9 @@ import {
   SelectValue,
   Switch,
 } from '@burnex/ui';
-import { fetchPipelines, fetchSettings, launchRun, type BackendView, type PipelineView } from '../api';
+// Группа пунктов — внутренняя часть набора, не имя общей таблицы модулей.
+import { SelectGroup, SelectLabel } from '../ui/select';
+import { fetchPipelines, fetchSettings, launchRun, type BackendView, type PipelineView, type ProfileView } from '../api';
 import {
   DEFAULT_AGENT,
   agentChoices,
@@ -77,6 +79,8 @@ function draftFor(
 export interface RunLaunchFormProps {
   readonly pipelines: readonly PipelineView[];
   readonly backends: readonly BackendView[];
+  /** Профили глобального файла — группой над бэкендами в выборе агента. */
+  readonly profiles?: readonly ProfileView[];
   readonly preselect?: LaunchPreselect;
   readonly onClose: () => void;
   /** Отправка запроса; в тестах — заглушка. */
@@ -87,6 +91,7 @@ export interface RunLaunchFormProps {
 export function RunLaunchForm({
   pipelines,
   backends,
+  profiles = [],
   preselect = {},
   onClose,
   launch = launchRun,
@@ -103,7 +108,10 @@ export function RunLaunchForm({
   const rows = envRowsOf(draft, selected);
   const blocker = launchBlocker(draft, selected);
   const impact = selected === undefined ? undefined : agentImpact(selected);
-  const choices = agentChoices(backends);
+  const choices = agentChoices(backends, profiles);
+  const groups = (['profiles', 'backends'] as const)
+    .map((group) => ({ group, items: choices.filter((choice) => choice.group === group) }))
+    .filter((entry) => entry.items.length > 0);
 
   const chooseProject = (project: string): void => {
     setError(undefined);
@@ -280,11 +288,16 @@ export function RunLaunchForm({
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value={AGENT_DEFAULT_VALUE}>Configured default</SelectItem>
-                {choices.map((choice) => (
-                  <SelectItem key={choice.name} value={choice.name} disabled={choice.disabled}>
-                    {choice.name}
-                    {choice.disabled ? ' (unavailable)' : ''}
-                  </SelectItem>
+                {groups.map(({ group, items }) => (
+                  <SelectGroup key={group}>
+                    <SelectLabel>{group === 'profiles' ? 'Profiles' : 'Backends'}</SelectLabel>
+                    {items.map((choice) => (
+                      <SelectItem key={`${group}-${choice.name}`} value={choice.name} disabled={choice.disabled}>
+                        {choice.name}
+                        {choice.disabled ? ' (unavailable)' : ''}
+                      </SelectItem>
+                    ))}
+                  </SelectGroup>
                 ))}
               </SelectContent>
             </Select>
@@ -328,7 +341,11 @@ export function RunLaunchDialog({
   readonly preselect?: LaunchPreselect;
   readonly onClose: () => void;
 }): JSX.Element {
-  const [data, setData] = useState<{ pipelines: readonly PipelineView[]; backends: readonly BackendView[] } | undefined>(
+  const [data, setData] = useState<{
+    pipelines: readonly PipelineView[];
+    backends: readonly BackendView[];
+    profiles: readonly ProfileView[];
+  } | undefined>(
     undefined,
   );
   const [loadError, setLoadError] = useState<string | undefined>(undefined);
@@ -344,7 +361,9 @@ export function RunLaunchDialog({
     // Список бэкендов необязателен: без него поле агента просто пусто.
     Promise.all([fetchPipelines(), fetchSettings().catch(() => undefined)])
       .then(([overview, settings]) => {
-        if (alive) setData({ pipelines: overview.pipelines, backends: settings?.backends ?? [] });
+        if (alive) {
+          setData({ pipelines: overview.pipelines, backends: settings?.backends ?? [], profiles: settings?.profiles ?? [] });
+        }
       })
       .catch((cause: Error) => {
         if (alive) setLoadError(cause.message);
@@ -378,6 +397,7 @@ export function RunLaunchDialog({
           <RunLaunchForm
             pipelines={data.pipelines}
             backends={data.backends}
+            profiles={data.profiles}
             {...(preselect === undefined ? {} : { preselect })}
             onClose={onClose}
           />

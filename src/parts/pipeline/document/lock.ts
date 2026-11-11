@@ -3,7 +3,7 @@ import { writeFileSync } from 'node:fs';
 import { stringify } from 'yaml';
 
 import { formatDuration, formatTokens } from '../../../kernel/units.js';
-import type { Budget, Job, Loop, Pipeline, PipelinePublication, Step, Triggers, Workspace } from './model.js';
+import { withoutProfileName, type Budget, type Job, type Loop, type Pipeline, type PipelinePublication, type Step, type Triggers, type Workspace } from './model.js';
 import { normalizePackagePaths, portableForm, type PackagePathForm } from './packagePaths.js';
 
 /**
@@ -163,6 +163,12 @@ function stepToPlain(step: Step): Record<string, unknown> {
     ...(step.outputSchemaPath === undefined ? {} : { output_schema: step.outputSchemaPath }),
     ...(step.permissions === undefined ? {} : { permissions: step.permissions }),
     ...(step.mcp === undefined ? {} : { mcp: step.mcp }),
+    // Имя профиля — справочное: хеш работы его снимает (`jobLockHash`).
+    ...(step.profile === undefined ? {} : { profile: step.profile }),
+    ...(step.profileContext === undefined ? {} : { profile_context: step.profileContext }),
+    ...(step.profileContextFingerprint === undefined
+      ? {}
+      : { profile_context_fingerprint: step.profileContextFingerprint }),
   };
 }
 
@@ -247,6 +253,16 @@ export function serializeLock(pipeline: Pipeline): string {
 }
 
 /**
+ * Определение работы для хеша: без имён профилей шагов. Ключ уже держится на
+ * итоговых агенте, модели и контексте, а переименование профиля без смены
+ * содержимого переиспользования не ломает (`agent-profiles`, решение 6).
+ */
+function jobForHash(job: Job): Record<string, unknown> {
+  const plain = jobToPlain(job);
+  return { ...plain, steps: (plain.steps as Record<string, unknown>[]).map(withoutProfileName) };
+}
+
+/**
  * Хеш определения одной работы: пайплайновые настройки, общие для всех
  * работ, плюс определение именно этой. Ключ шага держится на нём, а не на
  * хеше всего пайплайна, — иначе правка файла одной работы меняла бы ключи
@@ -266,7 +282,7 @@ export function jobLockHash(pipeline: Pipeline, job: Job, form: PackagePathForm 
     .update(
       JSON.stringify(
         normalizePackagePaths(
-          { shared, job: jobToPlain(job), ...(loop === undefined ? {} : { loop: loopToPlain(loop) }) },
+          { shared, job: jobForHash(job), ...(loop === undefined ? {} : { loop: loopToPlain(loop) }) },
           form,
         ),
       ),

@@ -1,15 +1,18 @@
 import { createHash } from 'node:crypto';
-import { readFileSync, statSync } from 'node:fs';
+import { globSync, readFileSync, statSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, extname, isAbsolute, join, posix, resolve as resolvePath } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { EffortSchema, ModelTierSchema } from '../config/schema.js';
 import type { AgentSelectionConfig, StepAgents } from '../config/agentSelections.js';
+import { describeKnownAgents } from '../config/agentProfiles.js';
 import type { ModelTier } from '../config/modelTiers.js';
 import type { AgentPolicy } from '../config/schema.js';
 import {
+  applyProfile,
   layerRank,
+  lookupProfile,
   resolveAgentChoice,
   type AgentChoice,
   type ChoiceLayer,
@@ -1623,7 +1626,8 @@ function parseAgentStep(raw: RawStep, ctx: BuiltinStepParseContext): StepParseRe
     pipelineEntry: defaults.pipelineEntry,
     stepEntry,
   });
-  const { agent, model, effort, agentOrigin, modelOrigin, effortOrigin } = choice;
+  const { agent, model, effort, agentOrigin, modelOrigin, effortOrigin, profile } = choice;
+  const profileContext = profile === undefined ? [] : toContext(profile.context, `agents.${profile.name}.context`);
   recordEntryUsage(defaults.entryUsage, config, {
     pipeline: defaults.pipelineEntry === undefined ? undefined : defaults.entryKeys.pipeline,
     step: stepEntry === undefined ? undefined : `${defaults.entryKeys.stepPrefix}.${raw.id}`,
@@ -1660,11 +1664,45 @@ function parseAgentStep(raw: RawStep, ctx: BuiltinStepParseContext): StepParseRe
         : defaults.mcp === undefined
           ? {}
           : { mcp: defaults.mcp }),
+      ...(profile === undefined ? {} : { profile: profile.name }),
+      ...(profileContext.length === 0
+        ? {}
+        : {
+            profileContext,
+            ...profileContextFingerprintOf(profileContext),
+          }),
     },
     modelOrigin,
     effortOrigin,
     agentOrigin,
   };
+}
+
+/**
+ * Отпечаток содержимого файлов контекста профиля вне рабочего дерева
+ * (`agent-profiles`, design.md, решение 5): абсолютные пути — то, что
+ * разрешилось от `~/.burnex/` или названо так автором. Отпечаток входов работы
+ * их не видит, а шаг хешируется целиком — поле в шаге и есть их место в ключе.
+ * Отсутствующий файл даёт свою метку: его появление тоже меняет ключ.
+ */
+function profileContextFingerprintOf(entries: readonly ContextEntry[]): { profileContextFingerprint?: string } {
+  const hash = createHash('sha256');
+  let any = false;
+  for (const entry of entries) {
+    if ((entry.kind !== 'path' && entry.kind !== 'item_refs') || !isAbsolute(entry.path)) continue;
+    const paths = /[*?[]/.test(entry.path) ? [...globSync(entry.path)].sort() : [entry.path];
+    for (const path of paths) {
+      any = true;
+      hash.update(path).update('\0');
+      try {
+        hash.update(readFileSync(path));
+      } catch {
+        hash.update('missing');
+      }
+      hash.update('\0');
+    }
+  }
+  return any ? { profileContextFingerprint: `sha256:${hash.digest('hex')}` } : {};
 }
 
 /**
@@ -2261,17 +2299,22 @@ export function expandPipeline(options: ExpandOptions): ExpandedPipeline {
   const defaultSession = doc.defaults?.session ?? config.defaults.session;
   // Корень документа отдельно от конфигурации: слои конфигурации ранжирует
   // политика, и склеенное значение потеряло бы их порядок (`agentChoice.ts`).
-  const rootAgent = doc.agent ?? doc.defaults?.agent;
-  const rootModel = doc.model ?? doc.defaults?.model;
-  const rootEffort = parseEffort(
-    doc.effort ?? doc.defaults?.effort,
-    pipelinePath,
-    doc.effort !== undefined ? 'effort' : 'defaults.effort',
-  );
-  const rootModelTier = parseModelTier(
-    doc.model_tier ?? doc.defaults?.model_tier, pipelinePath,
-    doc.model_tier !== undefined ? 'model_tier' : 'defaults.model_tier',
-  );
+  // Профиль, названный корнем, раскрывается до склейки с работой: склеенное
+  // значение уже не знает, какой слой что объявил сам (`agent-profiles`).
+  const rootProfile = applyProfile(config, {
+    agent: doc.agent ?? doc.defaults?.agent,
+    model: doc.model ?? doc.defaults?.model,
+    tier: parseModelTier(
+      doc.model_tier ?? doc.defaults?.model_tier, pipelinePath,
+      doc.model_tier !== undefined ? 'model_tier' : 'defaults.model_tier',
+    ),
+    effort: parseEffort(
+      doc.effort ?? doc.defaults?.effort,
+      pipelinePath,
+      doc.effort !== undefined ? 'effort' : 'defaults.effort',
+    ),
+  });
+  const { agent: rootAgent, model: rootModel, effort: rootEffort, tier: rootModelTier } = rootProfile.layer;
 
   // Выбор пользователя для этого пайплайна: по `name` документа. Запись
   // чужого пайплайна не читается и не проверяется вовсе (design.md, решение 6).
@@ -2436,16 +2479,21 @@ export function expandPipeline(options: ExpandOptions): ExpandedPipeline {
       };
     }
 
-    const jobModelTier = parseModelTier(
-      body.model_tier,
-      'uses' in entry && entry.model_tier !== undefined ? pipelinePath : declaringFile,
-      `${at}.model_tier`,
-    );
-    const jobEffort = parseEffort(
-      body.effort,
-      'uses' in entry && entry.effort !== undefined ? pipelinePath : declaringFile,
-      `${at}.effort`,
-    );
+    const jobProfile = applyProfile(config, {
+      agent: body.agent as string | undefined,
+      model: body.model as string | undefined,
+      tier: parseModelTier(
+        body.model_tier,
+        'uses' in entry && entry.model_tier !== undefined ? pipelinePath : declaringFile,
+        `${at}.model_tier`,
+      ),
+      effort: parseEffort(
+        body.effort,
+        'uses' in entry && entry.effort !== undefined ? pipelinePath : declaringFile,
+        `${at}.effort`,
+      ),
+    });
+    const { agent: jobAgent, model: jobModel, tier: jobModelTier, effort: jobEffort } = jobProfile.layer;
     const jobEntryKey = jobEntries === undefined
       ? undefined
       : findJobEntryKey(jobEntries, id, wiring.value.lane as string | undefined);
@@ -2607,15 +2655,23 @@ export function expandPipeline(options: ExpandOptions): ExpandedPipeline {
           bodyScope,
           {
             document: {
-              agent: (body.agent as string | undefined) ?? rootAgent,
-              agentLayer: body.agent !== undefined ? 'job' : rootAgent !== undefined ? 'pipeline' : undefined,
-              model: (body.model as string | undefined) ?? rootModel,
-              modelLayer: body.model !== undefined ? 'job' : rootModel !== undefined ? 'pipeline' : undefined,
+              agent: jobAgent ?? rootAgent,
+              agentLayer: jobAgent !== undefined ? 'job' : rootAgent !== undefined ? 'pipeline' : undefined,
+              model: jobModel ?? rootModel,
+              modelLayer: jobModel !== undefined ? 'job' : rootModel !== undefined ? 'pipeline' : undefined,
               effort: jobEffort ?? rootEffort,
               effortLayer: jobEffort !== undefined ? 'job' : rootEffort !== undefined ? 'pipeline' : undefined,
               tier: jobModelTier ?? rootModelTier,
               tierLayer: jobModelTier !== undefined ? 'job' : 'pipeline',
-              jobDeclaresModel: body.model !== undefined || jobModelTier !== undefined,
+              jobDeclaresModel: jobModel !== undefined || jobModelTier !== undefined,
+              ...(jobProfile.use === undefined && rootProfile.use === undefined
+                ? {}
+                : {
+                    profiles: {
+                      ...(jobProfile.use === undefined ? {} : { job: jobProfile.use }),
+                      ...(rootProfile.use === undefined ? {} : { pipeline: rootProfile.use }),
+                    },
+                  }),
             },
             pipelineEntry,
             stepEntries: jobEntryKey === undefined ? undefined : jobEntries?.[jobEntryKey],
@@ -2763,13 +2819,14 @@ function rejectUnknownEntryAgents(
   config: Config,
   registry: Registry,
 ): void {
-  const known = (agent: string): boolean => Object.hasOwn(config.backends, agent) || registry.backends.has(agent);
+  const known = (agent: string): boolean =>
+    lookupProfile(config, agent) !== undefined || Object.hasOwn(config.backends, agent) || registry.backends.has(agent);
   const check = (entry: AgentSelectionConfig | undefined, at: string): void => {
     if (entry?.agent === undefined || known(entry.agent.value)) return;
-    throw new BurnexError(`Запись выбора называет агента ${entry.agent.value}, которого нет среди бэкендов`, {
+    throw new BurnexError(`Запись выбора называет агента ${entry.agent.value}, которого нет ни среди профилей, ни среди бэкендов`, {
       file: entry.agent.file,
       at: `${at}.agent`,
-      hint: `Доступны: ${[...new Set([...Object.keys(config.backends), ...registry.backends.keys()])].sort().join(', ')}`,
+      hint: describeKnownAgents(config.agents, [...Object.keys(config.backends), ...registry.backends.keys()]),
     });
   };
   check(pipelineEntry, `pipeline_agents.${name}`);

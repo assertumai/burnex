@@ -40,3 +40,10 @@
 }
 .sc-select-item[data-highlighted] { background: var(--accent); color: var(--accent-foreground); outline: none; }
 .sc-select-item-indicator { width: .8rem; display: inline-flex; }
+
+/* Подпись группы пунктов (профили / бэкенды в выборе агента). */
+.sc-select-label {
+  font-size: .75rem;
+  color: var(--muted-foreground);
+  padding: .3rem .5rem .1rem;
+}

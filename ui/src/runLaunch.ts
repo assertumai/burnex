@@ -1,4 +1,4 @@
-import type { BackendView, PipelineView } from './api';
+import type { BackendView, PipelineView, ProfileView } from './api';
 import { envOfRows, parseEnvLines, type EnvRow } from './runLaunchEnv';
 
 /**
@@ -95,9 +95,23 @@ export function agentImpact(pipeline: PipelineView): { readonly affected: number
   return { affected, agentSteps };
 }
 
-/** Агенты, из которых форма предлагает выбрать: недоступный бэкенд остаётся виден, но выключен. */
-export function agentChoices(backends: readonly BackendView[]): { name: string; disabled: boolean }[] {
-  return backends.map((backend) => ({ name: backend.name, disabled: !backend.enabled || !backend.available }));
+/**
+ * Агенты, из которых форма предлагает выбрать: профили глобального файла
+ * группой над бэкендами (`agent-profiles`), недоступный бэкенд остаётся виден,
+ * но выключен. Профиль выключен вместе с бэкендом, которым он исполняется.
+ */
+export function agentChoices(
+  backends: readonly BackendView[],
+  profiles: readonly ProfileView[] = [],
+): { name: string; disabled: boolean; group: 'profiles' | 'backends' }[] {
+  const unusable = (name: string): boolean => {
+    const backend = backends.find((candidate) => candidate.name === name);
+    return backend === undefined || !backend.enabled || !backend.available;
+  };
+  return [
+    ...profiles.map((profile) => ({ name: profile.name, disabled: unusable(profile.profile.backend), group: 'profiles' as const })),
+    ...backends.map((backend) => ({ name: backend.name, disabled: unusable(backend.name), group: 'backends' as const })),
+  ];
 }
 
 export function envRowsOf(draft: Pick<LaunchDraft, 'envText'>, pipeline: PipelineView | undefined): EnvRow[] {

@@ -23,7 +23,13 @@ const LAYER_TITLES: Record<string, string> = {
   step: 'шаг',
   job: 'работа',
   pipeline: 'пайплайн',
+  config: 'defaults',
 };
+
+/** Значение пришло через профиль: слой называет место, где профиль назван. */
+function viaProfile(text: string, origin: { readonly profile?: string } | undefined): string {
+  return origin?.profile === undefined ? text : `${text} через профиль ${origin.profile}`;
+}
 
 /** Слой конфигурации (`config`) подписывается файлом, давшим `defaults.<поле>`. */
 function configFile(resolved: ResolvedConfig, key: string): string {
@@ -121,11 +127,11 @@ export function renderAgentsReport(resolved: ResolvedConfig, expanded: ExpandedP
       rows.push([
         id,
         step.agent,
-        describeAgentOrigin(expanded.agentOrigins.get(id), resolved),
+        viaProfile(describeAgentOrigin(expanded.agentOrigins.get(id), resolved), expanded.agentOrigins.get(id)),
         step.model ?? '—',
-        describeModelOrigin(expanded.modelOrigins.get(id), resolved),
+        viaProfile(describeModelOrigin(expanded.modelOrigins.get(id), resolved), expanded.modelOrigins.get(id)),
         step.effort ?? '—',
-        describeEffortOrigin(expanded.effortOrigins.get(id), resolved),
+        viaProfile(describeEffortOrigin(expanded.effortOrigins.get(id), resolved), expanded.effortOrigins.get(id)),
       ]);
       const dropped = expanded.modelOrigins.get(id)?.dropped;
       if (dropped !== undefined) {

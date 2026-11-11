@@ -34,6 +34,7 @@ function jobOf(step: Record<string, unknown>): PipelineJobView {
 }
 
 const CHOICES = {
+  profiles: ['default'],
   agents: ['claude', 'codex'],
   tiers: ['max', 'deep', 'fast'],
   models: ['opus', 'sonnet'],
@@ -181,7 +182,8 @@ describe('ui-pipelines: правка записи из черновика', () =
         },
       ],
     });
-    assert.deepEqual(choices, { agents: ['claude'], tiers: ['max', 'fast'], models: ['haiku', 'sonnet'] });
+    // Без профилей в настройках группа профилей — один встроенный `default`.
+    assert.deepEqual(choices, { profiles: ['default'], agents: ['claude'], tiers: ['max', 'fast'], models: ['haiku', 'sonnet'] });
   });
 
   it('подписи: отброшенная модель называет слой, из которого пришла', () => {

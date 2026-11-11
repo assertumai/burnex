@@ -208,6 +208,7 @@ function Step({
 
       {step.contextBreakdown === undefined ? null : (
         <div className="ctx">
+          {step.contextBreakdown.levels.profile === undefined ? null : <>profile {step.contextBreakdown.levels.profile} · </>}
           upstream {step.contextBreakdown.levels.upstream} · pipeline{' '}
           {step.contextBreakdown.levels.pipeline} · job {step.contextBreakdown.levels.job} · step{' '}
           {step.contextBreakdown.levels.step} · <b>total {step.contextBreakdown.total} tokens</b>

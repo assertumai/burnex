@@ -3,7 +3,8 @@ import { useEffect, useState, type JSX } from 'react';
 import { MODEL_TIERS, type ModelTier, type ModelTierSelection } from '../../../src/parts/pipeline/config/modelTiers';
 import {
   fetchModels, fetchPipelines, fetchSettings, saveSettings,
-  type ModelOption, type ModelsForBackend, type ModelsResult, type PipelineView, type Settings, type SettingsPatch,
+  type ModelOption, type ModelsForBackend, type ModelsResult, type PipelineView, type ProjectProfileView, type Settings,
+  type SettingsPatch,
 } from '../api';
 import {
   Alert,
@@ -31,6 +32,7 @@ import {
   type ComboboxOption,
 } from '@burnex/ui';
 import { AgentsPolicy } from './AgentsPolicy';
+import { AgentsProfiles, profileDraftOf, profileDraftProblem, profilesPatch, type ProfileDraft } from './AgentsProfiles';
 import './agents.css';
 
 export type TierDraft = { model: string; effort: string };
@@ -43,7 +45,7 @@ const TIER_NAME = /^[a-z][a-z0-9_-]*$/;
  * `screen-agents` в `src/builtin/routes.yml` (`ui-agents-settings-merge`,
  * design.md Решение 1). Порядок — порядок кнопок.
  */
-export const AGENT_TABS = ['default', 'backends', 'tiers', 'policy'] as const;
+export const AGENT_TABS = ['default', 'profiles', 'backends', 'tiers', 'policy'] as const;
 export type AgentTab = (typeof AGENT_TABS)[number];
 
 /** Вкладка по параметру маршрута: пустое или неизвестное значение — Default. */
@@ -321,12 +323,13 @@ function ScopeNote({
 }
 
 /**
- * Экран «Agents» — все настройки агентов одним экраном с четырьмя вкладками
- * (`ui-agents-settings-merge`): Default — агент, модель и effort по умолчанию;
+ * Экран «Agents» — все настройки агентов одним экраном с пятью вкладками
+ * (`ui-agents-settings-merge`, `agent-profiles`): Default — агент, модель и
+ * effort по умолчанию; Profiles — профили агентов;
  * Backends — бэкенды и исход перечисления их моделей; Tiers — общие уровни и
  * модели по агентам; Policy — `agent_policy` и выбор агента на пайплайн и шаг.
  *
- * Default, Backends и Tiers правят один глобальный файл одним `PUT
+ * Default, Profiles, Backends и Tiers правят один глобальный файл одним `PUT
  * /api/settings`, поэтому черновик, `Save` и `Discard` у них общие и живут в
  * этом компоненте: смена вкладки меняет адрес, а не компонент, и черновик
  * переживает её (design.md Решение 4). Policy пишет другой маршрут и своими
@@ -359,6 +362,8 @@ export function Agents({
   const [modelsBusy, setModelsBusy] = useState(true);
   const [pipelines, setPipelines] = useState<readonly PipelineView[]>();
   const [pipelinesError, setPipelinesError] = useState<string>();
+  const [projectProfiles, setProjectProfiles] = useState<readonly ProjectProfileView[]>([]);
+  const [profileDrafts, setProfileDrafts] = useState<readonly ProfileDraft[]>([]);
   // Вкладка без маршрута к цели: адрес не меняется, а экран всё же переключается.
   const [localTab, setLocalTab] = useState<AgentTab | undefined>(undefined);
   const activeTab = localTab ?? tab;
@@ -373,6 +378,7 @@ export function Agents({
     setConnect(new Set());
     setNewTier('');
     setTierError(undefined);
+    setProfileDrafts((data.profiles ?? []).map(profileDraftOf));
     setDraft(Object.fromEntries(data.backends.map((backend) => [backend.name, {
       defaultModel: backend.defaultModel ?? '',
       modelTiers: Object.fromEntries(orderedTierNames(data.modelTiers).map((tier) => {
@@ -387,7 +393,7 @@ export function Agents({
     // Один запрос на экран: Default считает по нему область действия модели,
     // Policy показывает по нему политику и записи выбора.
     fetchPipelines()
-      .then((data) => setPipelines(data.pipelines))
+      .then((data) => { setPipelines(data.pipelines); setProjectProfiles(data.projectProfiles ?? []); })
       .catch((failure: Error) => setPipelinesError(failure.message));
   }, []);
 
@@ -459,11 +465,12 @@ export function Agents({
   const modelChanged = model.trim() !== (settings.model.value ?? '');
   const effortChanged = effort.trim() !== (settings.effort.value ?? '');
   const addedTiers = tierNames.filter((tier) => !settings.modelTiers.includes(tier));
+  const profilePatch = profilesPatch(settings.profiles ?? [], profileDrafts);
   const dirty = agent !== settings.agent.value || modelChanged || effortChanged || connect.size > 0 || removedTiers.length > 0 ||
-    addedTiers.length > 0 || Object.keys(backendPatch).length > 0;
+    addedTiers.length > 0 || Object.keys(backendPatch).length > 0 || profilePatch !== undefined;
   const selected = settings.backends.find((backend) => backend.name === agent);
   const canSelect = selected !== undefined && selectableAgent(selected, connect);
-  const draftProblem = tierDraftProblem(tierNames, settings.modelTiers, draft);
+  const draftProblem = tierDraftProblem(tierNames, settings.modelTiers, draft) ?? profileDraftProblem(profileDrafts);
   const selectedDiscovery = models?.backends[agent];
   const selectedModels = selectedDiscovery?.status === 'ok' ? selectedDiscovery.models : [];
   const selectedModel = model.trim() || draft[agent]?.defaultModel.trim() || selected?.defaultModel || '';
@@ -529,6 +536,7 @@ export function Agents({
       ...connectPatch(connect),
       ...(removedTiers.length === 0 ? {} : { removeModelTiers: removedTiers }),
       ...(Object.keys(backendPatch).length === 0 ? {} : { backends: backendPatch }),
+      ...(profilePatch === undefined ? {} : { profiles: profilePatch }),
     }).then((data) => { adopt(data); setSaved(true); })
       .catch((failure: Error) => setError(failure.message))
       .finally(() => setSaving(false));
@@ -769,15 +777,28 @@ export function Agents({
       <Tabs value={activeTab} onValueChange={selectTab}>
         <TabsList aria-label="Agent settings">
           <TabsTrigger value="default">Default</TabsTrigger>
+          <TabsTrigger value="profiles">Profiles</TabsTrigger>
           <TabsTrigger value="backends">Backends</TabsTrigger>
           <TabsTrigger value="tiers">Tiers</TabsTrigger>
           <TabsTrigger value="policy">Policy</TabsTrigger>
         </TabsList>
 
-        {/* Один `fieldset` на три вкладки одного файла: `disabled` на время записи
-            гасит поля всех трёх разом, а черновик живёт выше вкладок. */}
+        {/* Один `fieldset` на четыре вкладки одного файла: `disabled` на время записи
+            гасит поля всех четырёх разом, а черновик живёт выше вкладок. */}
         <fieldset className="agent-settings" disabled={saving}>
           <TabsContent value="default">{defaultTab}</TabsContent>
+          <TabsContent value="profiles">
+            <AgentsProfiles
+              settings={settings}
+              drafts={profileDrafts}
+              projectProfiles={projectProfiles}
+              pipelines={pipelines}
+              tiers={tierNames}
+              onDrafts={(next) => { setProfileDrafts(next); setSaved(false); }}
+              onOpenDefault={() => selectTab('default')}
+              confirm={(message) => window.confirm(message)}
+            />
+          </TabsContent>
           <TabsContent value="backends">{backendsTab}</TabsContent>
           <TabsContent value="tiers">{tiersTab}</TabsContent>
           {activeTab === 'policy' ? null : (
@@ -788,6 +809,9 @@ export function Agents({
                 {saved && !dirty ? <span role="status" className="small dim">Saved</span> : null}
                 {dirty && activeTab !== 'tiers' && (removedTiers.length > 0 || addedTiers.length > 0 || Object.keys(backendPatch).length > 0) ? (
                   <span className="small dim">includes unsaved changes on the Tiers tab</span>
+                ) : null}
+                {dirty && activeTab !== 'profiles' && profilePatch !== undefined ? (
+                  <span className="small dim">includes unsaved changes on the Profiles tab</span>
                 ) : null}
               </div>
               {draftProblem === undefined ? null : <Alert variant="warning">{draftProblem}</Alert>}
