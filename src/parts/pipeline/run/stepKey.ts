@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 
-import { withoutProfileName, type Step } from '../document/model.js';
+import { forStepHash, type Step } from '../document/model.js';
 import { normalizePackagePaths, portableForm, type PackagePathForm } from '../document/packagePaths.js';
 
 /**
@@ -78,7 +78,8 @@ export function upstreamForKey(
 export function computeStepKey(input: StepKeyInput): string {
   // Имя профиля — справочное (`agent-profiles`, решение 6): его контекст и
   // отпечаток файлов вне дерева остаются в шаге и входят в ключ, имя — нет.
-  const step = normalizePackagePaths(withoutProfileName(input.step), input.packagePaths ?? portableForm());
+  // Слой и путь стратегии ревью — тоже (`review-strategies`, решение 7).
+  const step = normalizePackagePaths(forStepHash(input.step), input.packagePaths ?? portableForm());
 
   return createHash('sha256')
     .update(

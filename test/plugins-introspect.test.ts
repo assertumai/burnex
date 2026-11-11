@@ -261,7 +261,7 @@ describe('introspect: встроенное вне строк дерева', () =
     // Виды шага (`run`, `uses`, `script`, `agent`, `decision`) — вклады строк
     // `step-*`, приписанные им по их собственной области, а не строке
     // `pipeline` и не встроенному вне строк (`builtin-step-kinds-as-rows`).
-    for (const name of ['run', 'uses', 'script', 'agent', 'decision']) {
+    for (const name of ['run', 'uses', 'script', 'agent', 'review', 'decision']) {
       const row = model.rows.find((candidate) => candidate.id === `step-${name}`);
       assert.deepEqual(row?.contributions.steps, [name]);
     }

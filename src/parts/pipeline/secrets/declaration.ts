@@ -2,6 +2,7 @@ import { Ajv2020 } from 'ajv/dist/2020.js';
 
 import type { SecretProviderContribution } from '../contract.js';
 import type { Pipeline, SecretDeclaration } from '../document/model.js';
+import { agentCallsOf } from '../steps/review/participants.js';
 
 /**
  * Объявления секретов в модели документа и проверка их параметров схемой
@@ -61,7 +62,7 @@ export function backendsInUse(pipeline: Pipeline, defaultAgent: string): Readonl
   const used = new Set<string>();
   for (const job of pipeline.jobs) {
     for (const step of job.steps) {
-      if (step.kind === 'agent') used.add(step.agent);
+      for (const { call } of agentCallsOf(step)) used.add(call.agent);
       for (const predicate of step.expect) {
         if (predicate.kind === 'judge') used.add(predicate.agent ?? defaultAgent);
       }

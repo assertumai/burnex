@@ -104,9 +104,9 @@ describe('plugin-tree: burnex plugins печатает дерево со сло�
     const lines = outcome.stdout.split('\n');
     // Пять колонок дерева — на прежних четырёх строках. Первой стоит строка
     // `pipeline` (design.md `pipeline-owns-services`, Решение 1) с объявленными
-    // сервисами; каждая из семи строк-потребителей движка (`backend-claude`,
+    // сервисами; каждая из восьми строк-потребителей движка (`backend-claude`,
     // `predicates`, `step-run`, `step-uses`, `step-script`, `step-agent`,
-    // `step-decision`) названа и запрошенным сервисом, и своим вкладом
+    // `step-review`, `step-decision`) названа и запрошенным сервисом, и своим вкладом
     // (Решение 2); следом — 25 строк команд (`cli-commands-as-rows`,
     // Решение 1), каждая со своим вкладом `commands: <имя>`, а доменные —
     // ещё и запрошенными сервисами пайплайна. Раздел встроенного вне строк
@@ -137,15 +137,18 @@ describe('plugin-tree: burnex plugins печатает дерево со сло�
     assert.match(lines[17] ?? '', /^7\s+step-agent\s+встроенный\s+burnex:step-agent\s+действует$/);
     assert.equal(lines[18], '    сервисы запрошены: steps (разрешён)');
     assert.equal(lines[19], '    вклады: steps: agent');
-    assert.match(lines[20] ?? '', /^8\s+step-decision\s+встроенный\s+burnex:step-decision\s+действует$/);
+    assert.match(lines[20] ?? '', /^8\s+step-review\s+встроенный\s+burnex:step-review\s+действует$/);
     assert.equal(lines[21], '    сервисы запрошены: steps (разрешён)');
-    assert.equal(lines[22], '    вклады: steps: decision');
-    assert.match(lines[23] ?? '', /^9\s+secret-providers\s+встроенный\s+burnex:secret-providers\s+действует$/);
-    assert.equal(lines[24], '    сервисы запрошены: secretProviders (разрешён)');
-    assert.equal(lines[25], '    вклады: secretProviders: env-file, keychain');
+    assert.equal(lines[22], '    вклады: steps: review');
+    assert.match(lines[23] ?? '', /^9\s+step-decision\s+встроенный\s+burnex:step-decision\s+действует$/);
+    assert.equal(lines[24], '    сервисы запрошены: steps (разрешён)');
+    assert.equal(lines[25], '    вклады: steps: decision');
+    assert.match(lines[26] ?? '', /^10\s+secret-providers\s+встроенный\s+burnex:secret-providers\s+действует$/);
+    assert.equal(lines[27], '    сервисы запрошены: secretProviders (разрешён)');
+    assert.equal(lines[28], '    вклады: secretProviders: env-file, keychain');
 
-    let cursor = 26;
-    let place = 10;
+    let cursor = 29;
+    let place = 11;
     for (const row of COMMAND_ROWS) {
       cursor = assertCommandRowLines(lines, cursor, place, row.command.name);
       place += 1;
@@ -233,7 +236,7 @@ describe('plugin-tree: отказ загрузки не заслоняет де�
     const lines = outcome.stdout.split('\n');
     // Вклады соседних строк по-прежнему называются — отказ одной строки не
     // теряет их (`plugin-introspection`, «Осмотр после отказа загрузки»); за
-    // строкой `pipeline` и семью строками-потребителями идёт явная строка
+    // строкой `pipeline` и восемью строками-потребителями идёт явная строка
     // `./plugins/нет.mjs` (отказавшая, останавливает применение — строка не
     // каталожная), а следом — вторая явная строка и все 25 строк команд:
     // применение до них не дошло, каждая напечатана «не загружалась».
@@ -253,16 +256,18 @@ describe('plugin-tree: отказ загрузки не заслоняет де�
     assert.match(lines[17] ?? '', /действует/);
     assert.equal(lines[19], '    вклады: steps: agent');
     assert.match(lines[20] ?? '', /действует/);
-    assert.equal(lines[22], '    вклады: steps: decision');
-    assert.match(lines[23] ?? '', /действует/); // secret-providers
-    assert.equal(lines[25], '    вклады: secretProviders: env-file, keychain');
+    assert.equal(lines[22], '    вклады: steps: review');
+    assert.match(lines[23] ?? '', /действует/);
+    assert.equal(lines[25], '    вклады: steps: decision');
+    assert.match(lines[26] ?? '', /действует/); // secret-providers
+    assert.equal(lines[28], '    вклады: secretProviders: env-file, keychain');
 
     // Семя дерева называет строки команд наравне со строками движка
     // (`resolveConfig`, `reservedRowIds`) — они стоят в дереве раньше явных
     // строк ключа `plugins`, и применяются успешно: отказавшая явная строка
     // ещё не встретилась.
-    let cursor = 26;
-    let place = 10;
+    let cursor = 29;
+    let place = 11;
     for (const row of COMMAND_ROWS) {
       cursor = assertCommandRowLines(lines, cursor, place, row.command.name);
       place += 1;

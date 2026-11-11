@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 
 import { EffortSchema, ModelTierSchema } from '../config/schema.js';
 import type { AgentSelectionConfig, StepAgents } from '../config/agentSelections.js';
-import { describeKnownAgents } from '../config/agentProfiles.js';
+import { DEFAULT_PROFILE, describeKnownAgents } from '../config/agentProfiles.js';
 import type { ModelTier } from '../config/modelTiers.js';
 import type { AgentPolicy } from '../config/schema.js';
 import {
@@ -113,7 +113,10 @@ import type {
   UsesOrigin,
   Workspace,
   PipelinePublication,
+  ReviewParticipant,
 } from './model.js';
+import { AGGREGATOR_ID } from './model.js';
+import { resolveReviewStrategy, type StrategyChoice } from './reviewStrategy.js';
 
 /**
  * Пространства, чьи значения известны только в прогоне. Экспортировано для
@@ -1400,7 +1403,15 @@ type StepParseResult = {
   readonly modelOrigin?: ModelOrigin;
   readonly effortOrigin?: EffortOrigin;
   readonly agentOrigin?: AgentOrigin;
+  /** Происхождение выбора участников шага `review` по `id` участника. */
+  readonly participantOrigins?: ReadonlyMap<string, ParticipantOrigins>;
 };
+
+interface ParticipantOrigins {
+  readonly agentOrigin: AgentOrigin;
+  readonly modelOrigin: ModelOrigin;
+  readonly effortOrigin: EffortOrigin;
+}
 
 /**
  * Итог по записям пользователя за раскрытие: ключ записи → поля, которые
@@ -1604,11 +1615,15 @@ function parseScriptStep(raw: RawStep, ctx: BuiltinStepParseContext): StepParseR
  * настоящий, а не позиция «последнего» в списке видов.
  */
 function isAgentStepRaw(raw: Record<string, unknown>): boolean {
-  return 'prompt' in raw;
+  // `prompt` объявляет и шаг `review`: различает их ключ `review`, которого у
+  // агентского шага нет, — тем же приёмом, каким `uses` отличается от
+  // `script`. Без этой оговорки снятая строка `step-review` отдала бы шаг
+  // `review:` агентскому виду, а не отказу о виде вне состава.
+  return 'prompt' in raw && !('review' in raw);
 }
 
 function parseAgentStep(raw: RawStep, ctx: BuiltinStepParseContext): StepParseResult {
-  if (!('prompt' in raw)) throw new Error('parseAgentStep: раскрытие вызвано на шаге без ключа prompt');
+  if (!('prompt' in raw) || 'review' in raw) throw new Error('parseAgentStep: раскрытие вызвано на шаге без ключа prompt');
   const { common, scope, substitutions, at, declaringFile, config, defaults } = ctx;
   const promptKey = `${at}.prompt`;
   const prompt = readPrompt(raw.prompt, declaringFile, scope, promptKey);
@@ -1675,6 +1690,107 @@ function parseAgentStep(raw: RawStep, ctx: BuiltinStepParseContext): StepParseRe
     modelOrigin,
     effortOrigin,
     agentOrigin,
+  };
+}
+
+/** Узнать шаг `review` среди уже провалидированных документом (`toStep`). */
+function isReviewStepRaw(raw: Record<string, unknown>): boolean {
+  return 'review' in raw;
+}
+
+/**
+ * Шаг `review` (`review-strategies`, design.md, решения 2, 3 и 8): стратегия
+ * разрешается по слоям, участники раскрываются в агентов тем же
+ * `resolveAgentChoice`, что агентский шаг, — слой стратегии на месте слоя
+ * «шаг», локальные профили стратегии поверх профилей настроек. Промах
+ * стратегии — не исключение, а `unresolved` шага: линт называет все промахи за
+ * проход, прогон отказывает шагу названно.
+ */
+function parseReviewStep(raw: RawStep, ctx: BuiltinStepParseContext): StepParseResult {
+  if (!('review' in raw)) throw new Error('parseReviewStep: раскрытие вызвано на шаге без ключа review');
+  const { common, scope, substitutions, at, declaringFile, config, defaults, stepRoots } = ctx;
+  const promptKey = `${at}.prompt`;
+  const prompt = readPrompt(raw.prompt, declaringFile, scope, promptKey);
+  recordPromptSubstitutions(substitutions, promptKey, prompt.substitutions);
+
+  const base = {
+    ...common,
+    kind: 'review' as const,
+    prompt: prompt.text,
+    ...(prompt.source === undefined ? {} : { promptSource: prompt.source }),
+    outputSchemaPath: resolveSchemaPath(raw.output_schema, declaringFile, `${at}.output_schema`),
+    ...(raw.permissions !== undefined
+      ? { permissions: toPermissions(raw.permissions) }
+      : defaults.permissions === undefined
+        ? {}
+        : { permissions: defaults.permissions }),
+  };
+
+  const resolution = resolveReviewStrategy(
+    raw.review,
+    declaringFile,
+    { project: stepRoots.project, home: stepRoots.home },
+    Object.keys(config.backends),
+  );
+  if ('unresolved' in resolution) {
+    return {
+      step: { ...base, strategy: resolution.origin, mode: 'independent', reviewers: [], unresolved: resolution.unresolved },
+    };
+  }
+  const { strategy } = resolution;
+  // Локальные профили видны только участникам этой стратегии: поверх профилей
+  // настроек, одноимённый перекрывают (design.md, решение 1).
+  const strategyConfig: Config = { ...config, agents: { ...config.agents, ...strategy.profiles } };
+  const origins = new Map<string, ParticipantOrigins>();
+  const participant = (id: string, entryKey: string, choice: StrategyChoice): ReviewParticipant => {
+    const stepEntry = Object.hasOwn(defaults.stepEntries ?? {}, entryKey) ? defaults.stepEntries?.[entryKey] : undefined;
+    const resolved = resolveAgentChoice({
+      config: strategyConfig,
+      step: {
+        // Участник без `agent` — профиль `default` с его собственными
+        // `model`/`model_tier`/`effort` (design.md, решение 1).
+        agent: choice.agent ?? DEFAULT_PROFILE,
+        model: choice.model,
+        tier: choice.tier,
+        effort: choice.effort,
+      },
+      doc: defaults.document,
+      pipelineEntry: defaults.pipelineEntry,
+      stepEntry,
+    });
+    recordEntryUsage(defaults.entryUsage, config, {
+      pipeline: defaults.pipelineEntry === undefined ? undefined : defaults.entryKeys.pipeline,
+      step: stepEntry === undefined ? undefined : `${defaults.entryKeys.stepPrefix}.${entryKey}`,
+    }, resolved);
+    origins.set(id, { agentOrigin: resolved.agentOrigin, modelOrigin: resolved.modelOrigin, effortOrigin: resolved.effortOrigin });
+    const { profile } = resolved;
+    const local = profile !== undefined && Object.hasOwn(strategy.profiles, profile.name);
+    const profileContext = profile === undefined
+      ? []
+      : toContext(profile.context, local ? `profiles.${profile.name}.context` : `agents.${profile.name}.context`);
+    return {
+      id,
+      agent: resolved.agent,
+      ...(resolved.model === undefined ? {} : { model: resolved.model }),
+      ...(resolved.effort === undefined ? {} : { effort: resolved.effort }),
+      ...(profile === undefined ? {} : { profile: profile.name }),
+      ...(local ? { localProfile: true as const } : {}),
+      ...(profileContext.length === 0 ? {} : { profileContext, ...profileContextFingerprintOf(profileContext) }),
+    };
+  };
+
+  const reviewers = strategy.reviewers.map((reviewer) => ({
+    ...participant(reviewer.id, `${raw.id}/${reviewer.id}`, reviewer),
+    ...(reviewer.focus === undefined ? {} : { focus: reviewer.focus }),
+  }));
+  const aggregator = {
+    ...participant(AGGREGATOR_ID, raw.id, strategy.aggregator),
+    ...(strategy.aggregator.prompt === undefined ? {} : { prompt: strategy.aggregator.prompt }),
+  };
+
+  return {
+    step: { ...base, strategy: strategy.origin, mode: strategy.mode, reviewers, aggregator },
+    participantOrigins: origins,
   };
 }
 
@@ -2133,6 +2249,11 @@ export const AGENT_STEP_KIND: NativeStepKind = {
   title: 'Агент',
   native: { test: isAgentStepRaw, parse: parseAgentStep },
 };
+export const REVIEW_STEP_KIND: NativeStepKind = {
+  name: 'review',
+  title: 'Ревью',
+  native: { test: isReviewStepRaw, parse: parseReviewStep },
+};
 
 /**
  * Те же четыре формы в каноническом порядке строк дефолта (`src/parts/rows.ts`,
@@ -2148,6 +2269,7 @@ const BUILTIN_STEP_KINDS_IN_ROW_ORDER: readonly NativeStepKind[] = [
   USES_STEP_KIND,
   SCRIPT_STEP_KIND,
   AGENT_STEP_KIND,
+  REVIEW_STEP_KIND,
 ];
 
 /**
@@ -2703,6 +2825,13 @@ export function expandPipeline(options: ExpandOptions): ExpandedPipeline {
         if (expanded.agentOrigin !== undefined) {
           agentOrigins.set(`${id}/${expanded.step.id}`, expanded.agentOrigin);
         }
+        // Участник шага `review` — ключом `<работа>/<шаг>/<участник>`.
+        for (const [participant, origins] of expanded.participantOrigins ?? []) {
+          const key = `${id}/${expanded.step.id}/${participant}`;
+          agentOrigins.set(key, origins.agentOrigin);
+          modelOrigins.set(key, origins.modelOrigin);
+          effortOrigins.set(key, origins.effortOrigin);
+        }
         return expanded.step;
       }),
     });
@@ -2877,10 +3006,21 @@ function collectUnusedAgentEntries(
         out.push({ key, kind: 'step_agents', files, reason: { kind: 'no_job' } });
         continue;
       }
-      const found = matched.flatMap((job) => job.steps.filter((step) => step.id === stepKey));
+      // `<шаг>/<ревьюер>` адресует участника шага `review` (`review-strategies`,
+      // design.md, решение 8): запись к шагу иного вида или к ревьюеру,
+      // которого в стратегии нет, — тоже запись без действия, а не ошибка.
+      const [stepId = stepKey, reviewer] = stepKey.split('/', 2);
+      const found = matched.flatMap((job) => job.steps.filter((step) => step.id === stepId));
       if (found.length === 0) {
         out.push({ key, kind: 'step_agents', files, reason: { kind: 'no_step' } });
-      } else if (!found.some((step) => step.kind === 'agent')) {
+      } else if (reviewer !== undefined && !found.some((step) => step.kind === 'review')) {
+        out.push({ key, kind: 'step_agents', files, reason: { kind: 'not_review' } });
+      } else if (
+        reviewer !== undefined &&
+        !found.some((step) => step.kind === 'review' && step.reviewers.some((entry) => entry.id === reviewer))
+      ) {
+        out.push({ key, kind: 'step_agents', files, reason: { kind: 'no_reviewer' } });
+      } else if (!found.some((step) => step.kind === 'agent' || step.kind === 'review')) {
         out.push({ key, kind: 'step_agents', files, reason: { kind: 'not_agent' } });
       } else {
         out.push({ key, kind: 'step_agents', files, reason: lost(key) });

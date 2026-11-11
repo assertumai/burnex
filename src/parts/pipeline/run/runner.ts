@@ -37,6 +37,9 @@ import { assembleContext, type UpstreamOutput } from '../domain/context/assemble
 import { resolveLate, type JobScopeEntry, type LateWithheld } from '../document/late.js';
 import { ExitCode, BurnexError, isBurnexError, type ExitCodeValue } from '../../../kernel/errors.js';
 import { createSessionRegistry, executeAgentStep } from './exec/agentStep.js';
+import { executeReviewStep } from './exec/reviewStep.js';
+import { agentCallsOf } from '../steps/review/participants.js';
+import { describeStrategyUnresolved } from '../document/reviewStrategy.js';
 import { buildStepEnv, injectedVariables, type EnvLayers } from './exec/env.js';
 import { validateEnvOverrides } from './envOverrides.js';
 import { assertShadowDeclarations, describeBuiltinAction, recordShadowAction } from './shadow.js';
@@ -88,6 +91,7 @@ import { jobLockHash, serializeLock } from '../document/lock.js';
 import { describeScriptUnresolved } from '../document/expand.js';
 import type {
   AgentStep,
+  ReviewStep,
   ContextEntry,
   EffortOrigin,
   ExpandedPipeline,
@@ -1133,6 +1137,24 @@ export interface RunContext extends RunOptions {
  * деревьев и, возможно, после сорока минут чужой работы. Проверка стоит
  * ничего и делается там же, где остальные предстартовые.
  */
+/**
+ * Агентские вызовы прогона: агентские шаги и участники шагов `review`. Адрес
+ * — `<работа>/<шаг>`, у участника — `<работа>/<шаг>/<участник>`: им же
+ * названы происхождения выбора в раскрытом пайплайне.
+ */
+function agentCallsIn(pipeline: Pipeline): { job: Job; step: Step; call: AgentStep; address: string }[] {
+  return pipeline.jobs.flatMap((job) =>
+    job.steps.flatMap((step) =>
+      agentCallsOf(step).map(({ id, call }) => ({
+        job,
+        step,
+        call,
+        address: step.kind === 'review' ? `${job.id}/${step.id}/${id}` : `${job.id}/${step.id}`,
+      })),
+    ),
+  );
+}
+
 function requireAdapters(context: RunContext): void {
   const needed = backendsInUse(context.expanded.pipeline, context.config.defaults.agent);
 
@@ -1144,7 +1166,7 @@ function warnAboutDegradedBackends(context: RunContext): void {
   const needed = new Set(
     pipeline.jobs
       .filter((job) => job.session === 'shared')
-      .flatMap((job) => job.steps.filter((step) => step.kind === 'agent').map((step) => step.agent)),
+      .flatMap((job) => job.steps.flatMap((step) => agentCallsOf(step).map(({ call }) => call.agent))),
   );
 
   for (const name of needed) {
@@ -1192,13 +1214,13 @@ function warnAboutUnpricedCalls(context: RunContext): void {
     });
   };
 
+  for (const { job, step, call } of agentCallsIn(pipeline)) {
+    for (let attempt = 1; attempt <= call.attempts.max; attempt += 1) {
+      check(job, step, call.agent, planAttempt(attempt, call.attempts).model ?? call.model, false);
+    }
+  }
   for (const job of pipeline.jobs) {
     for (const step of job.steps) {
-      if (step.kind === 'agent') {
-        for (let attempt = 1; attempt <= step.attempts.max; attempt += 1) {
-          check(job, step, step.agent, planAttempt(attempt, step.attempts).model ?? step.model, false);
-        }
-      }
       for (const predicate of step.expect ?? []) {
         if (predicate.kind !== 'judge') continue;
         check(job, step, predicate.agent ?? context.config.defaults.agent, predicate.model, true);
@@ -1215,26 +1237,23 @@ function warnAboutUnpricedCalls(context: RunContext): void {
  * бэкенде объявили, возможность — то, что он умеет, и расходиться они могут.
  */
 function requireStrictPermissionsSupport(context: RunContext): void {
-  for (const job of context.expanded.pipeline.jobs) {
-    for (const step of job.steps) {
-      if (step.kind !== 'agent') continue;
-      const permissions = effectivePermissions(
-        step.permissions,
-        context.config.backends[step.agent]?.permissions,
-      );
-      if (permissions?.enforce !== 'strict') continue;
-      // Codex временно принимает, но не применяет allow/deny/enforce, чтобы
-      // переносимые pipeline могли выбирать его через конфигурацию.
-      if (step.agent === 'codex') continue;
-      if (adapterOf(step.agent, context).capabilities.strictPermissions) continue;
-      throw new BurnexError(
-        `Бэкенд ${step.agent} не умеет применять enforce: strict, объявленный у шага ${job.id}/${step.id}`,
-        {
-          file: job.source,
-          hint: 'Снимите enforce: strict либо переведите шаг на бэкенд, объявляющий эту возможность',
-        },
-      );
-    }
+  for (const { job, call: step, address } of agentCallsIn(context.expanded.pipeline)) {
+    const permissions = effectivePermissions(
+      step.permissions,
+      context.config.backends[step.agent]?.permissions,
+    );
+    if (permissions?.enforce !== 'strict') continue;
+    // Codex временно принимает, но не применяет allow/deny/enforce, чтобы
+    // переносимые pipeline могли выбирать его через конфигурацию.
+    if (step.agent === 'codex') continue;
+    if (adapterOf(step.agent, context).capabilities.strictPermissions) continue;
+    throw new BurnexError(
+      `Бэкенд ${step.agent} не умеет применять enforce: strict, объявленный у шага ${address}`,
+      {
+        file: job.source,
+        hint: 'Снимите enforce: strict либо переведите шаг на бэкенд, объявляющий эту возможность',
+      },
+    );
   }
 }
 
@@ -1270,18 +1289,16 @@ function requireMcpSupport(context: RunContext): void {
  * лишь у потребителя вывода дальше по графу.
  */
 function requireStructuredOutputSupport(context: RunContext): void {
-  for (const job of context.expanded.pipeline.jobs) {
-    for (const step of job.steps) {
-      if (step.kind !== 'agent' || step.outputSchemaPath === undefined) continue;
-      if (adapterOf(step.agent, context).capabilities.structuredOutput) continue;
-      throw new BurnexError(
-        `Бэкенд ${step.agent} не поддерживает структурированный вывод, нужный для output_schema шага ${job.id}/${step.id}`,
-        {
-          file: job.source,
-          hint: `Включите backends.${step.agent}.structured_output в конфигурации, если бэкенд это умеет, либо снимите output_schema`,
-        },
-      );
-    }
+  for (const { job, call: step, address } of agentCallsIn(context.expanded.pipeline)) {
+    if (step.outputSchemaPath === undefined) continue;
+    if (adapterOf(step.agent, context).capabilities.structuredOutput) continue;
+    throw new BurnexError(
+      `Бэкенд ${step.agent} не поддерживает структурированный вывод, нужный для output_schema шага ${address}`,
+      {
+        file: job.source,
+        hint: `Включите backends.${step.agent}.structured_output в конфигурации, если бэкенд это умеет, либо снимите output_schema`,
+      },
+    );
   }
   // Судья по той же причине: вердикт принимается только структурой
   // { pass, reason }, и без возможности он провалился бы уже после того, как
@@ -1315,29 +1332,27 @@ function requireStructuredOutputSupport(context: RunContext): void {
  * раскрытием) считается документом: громкий отказ лучше тихой потери.
  */
 function requireEffortSupport(context: RunContext): void {
-  for (const job of context.expanded.pipeline.jobs) {
-    for (const step of job.steps) {
-      if (step.kind !== 'agent' || step.effort === undefined) continue;
-      if (adapterOf(step.agent, context).capabilities.effort === true) continue;
-      const origin = context.expanded.effortOrigins.get(`${job.id}/${step.id}`);
-      const source = origin === undefined ? undefined : settingsSourceOf(origin);
-      if (source !== undefined) {
-        context.journal.event({
-          kind: 'backend.degraded',
-          backend: step.agent,
-          capability: 'effort',
-          detail: `${job.id}/${step.id}: effort ${step.effort} из ${source} не передаётся`,
-        });
-        continue;
-      }
-      throw new BurnexError(
-        `Бэкенд ${step.agent} не умеет применять effort, объявленный у шага ${job.id}/${step.id}`,
-        {
-          file: job.source,
-          hint: 'Снимите effort либо переведите шаг на бэкенд, объявляющий эту возможность',
-        },
-      );
+  for (const { job, call: step, address } of agentCallsIn(context.expanded.pipeline)) {
+    if (step.effort === undefined) continue;
+    if (adapterOf(step.agent, context).capabilities.effort === true) continue;
+    const origin = context.expanded.effortOrigins.get(address);
+    const source = origin === undefined ? undefined : settingsSourceOf(origin);
+    if (source !== undefined) {
+      context.journal.event({
+        kind: 'backend.degraded',
+        backend: step.agent,
+        capability: 'effort',
+        detail: `${address}: effort ${step.effort} из ${source} не передаётся`,
+      });
+      continue;
     }
+    throw new BurnexError(
+      `Бэкенд ${step.agent} не умеет применять effort, объявленный у шага ${address}`,
+      {
+        file: job.source,
+        hint: 'Снимите effort либо переведите шаг на бэкенд, объявляющий эту возможность',
+      },
+    );
   }
 }
 
@@ -2555,6 +2570,7 @@ async function runJobSteps(
       if (dataViolation !== undefined) return { status: 'failed', reason: dataViolation, terminal: true };
       if (
         (step.kind === 'agent' ||
+          step.kind === 'review' ||
           (step.kind === 'run' && step.outputSchemaPath !== undefined) ||
           step.kind === 'script' ||
           step.kind === 'plugin') &&
@@ -2684,8 +2700,10 @@ async function runJobSteps(
     const outcome: StepOutcome =
       exceeded !== undefined
         ? { status: 'budget_exceeded', reason: describeExceeded(exceeded), attempts: [], results: [], exceeded }
-        : context.mode === 'shadow' && step.kind !== 'plugin' && step.external === true
+        : context.mode === 'shadow' && step.kind !== 'plugin' && step.kind !== 'review' && step.external === true
           ? runShadowStep(step, job, context, stepDirPath)
+          : step.kind === 'review'
+          ? await runReviewStep(step, job, context, stepDirPath, sessionKey, jobContextSent, budgetScopes, changedPaths)
           : step.kind === 'run' || step.kind === 'script'
           ? await runCommandStep(
               step,
@@ -2846,6 +2864,8 @@ async function runJobSteps(
 
     if (
       (step.kind === 'agent' ||
+        // Выход шага `review` — вердикт агрегатора (`review-strategies`).
+        step.kind === 'review' ||
         (step.kind === 'run' && step.outputSchemaPath !== undefined) ||
         step.kind === 'script' ||
         // Структурированный выход шага плагинного вида — то, что вернул
@@ -3543,6 +3563,12 @@ async function runAgentStep(
   jobContextSent: Set<string>,
   budgetScopes: () => BudgetScope[],
   changedPaths: () => readonly string[] | undefined,
+  /**
+   * Участник шага `review`, исполняемый этим вызовом (`review-strategies`):
+   * его расход ложится отдельной записью под тот же шаг — потолок шага общий,
+   * сводка разложена по участникам.
+   */
+  participant?: string,
 ): Promise<StepOutcome> {
   const { journal, config } = context;
   const { pipeline } = context.expanded;
@@ -3793,7 +3819,7 @@ async function runAgentStep(
           },
           onUsage: (usage) => {
             attemptUsage = sumUsage(attemptUsage, usage);
-            context.usage.record(job.id, step.id, plan.attempt, attemptUsage);
+            context.usage.record(job.id, step.id, plan.attempt, attemptUsage, participant);
             const found = context.usage.check(budgetScopes());
             exceeded ??= found;
             abort.trigger(found);
@@ -3805,7 +3831,7 @@ async function runAgentStep(
       },
       ...(context.priceCatalog === undefined ? {} : { priceCatalog: context.priceCatalog }),
       onUsage: (current, attempt) => {
-        context.usage.record(job.id, step.id, attempt, current);
+        context.usage.record(job.id, step.id, attempt, current, participant);
         const found = context.usage.check(budgetScopes(), current);
         exceeded ??= found;
         abort.trigger(found);
@@ -3919,7 +3945,7 @@ async function runAgentStep(
         ...sessionField,
       };
     }
-    context.usage.sealStep(job.id, step.id);
+    context.usage.sealStep(job.id, step.id, participant);
     const waited = await waitForReset(abort.waitTrigger, context, { job: job.id, step: step.id });
     if (waited.kind === 'resumed') continue;
     if (waited.kind === 'stopped') {
@@ -3963,9 +3989,59 @@ async function runAgentStep(
   }
 }
 
+/**
+ * Шаг `review` (`review-strategies`): участники исполняются как агентские
+ * шаги этим же `runAgentStep` — каждый в своём каталоге журнала и своей
+ * сессии `<шаг>/<участник>`, с расходом под своим именем.
+ */
+async function runReviewStep(
+  step: ReviewStep,
+  job: Job,
+  context: RunContext,
+  stepDirPath: string,
+  sessionKey: (agent: string, alias: string) => string,
+  jobContextSent: Set<string>,
+  budgetScopes: () => BudgetScope[],
+  changedPaths: () => readonly string[] | undefined,
+): Promise<StepOutcome> {
+  if (step.unresolved !== undefined || step.aggregator === undefined) {
+    return {
+      status: 'failed',
+      reason: step.unresolved === undefined ? 'стратегия ревью не разрешена' : describeStrategyUnresolved(step.unresolved),
+      attempts: [],
+      results: [],
+    };
+  }
+  // Сессии участников живут только внутри шага: повтор шага в следующем
+  // проходе цикла начинает их заново, с полным контекстом.
+  for (const { call } of agentCallsOf(step)) {
+    const key = sessionKey(call.agent, call.session);
+    context.sessions.unseed(key);
+    jobContextSent.delete(key);
+    for (const sent of [...context.pipelineContextSent]) {
+      if (sent === key || sent.startsWith(`${key}\0`)) context.pipelineContextSent.delete(sent);
+    }
+  }
+  return executeReviewStep<StepOutcome>({
+    step,
+    job: job.id,
+    stepDir: stepDirPath,
+    journal: context.journal,
+    concurrency: context.config.limits.concurrency,
+    runParticipant: (participant, call, dir) =>
+      runAgentStep(call, job, context, dir, context.sessions, sessionKey, jobContextSent, budgetScopes, changedPaths, participant.id),
+    originOf: (participant) => {
+      const key = `${job.id}/${step.id}/${participant}`;
+      const agent = context.expanded.agentOrigins.get(key);
+      if (agent === undefined) return undefined;
+      return { agent, model: context.expanded.modelOrigins.get(key), effort: context.expanded.effortOrigins.get(key) };
+    },
+  });
+}
+
 /** Задание шага без блока контекста — вход судьи на командном или плагинном шаге. */
 export function describeStepTask(step: Step, registry: Registry): string {
-  if (step.kind === 'agent') return step.prompt;
+  if (step.kind === 'agent' || step.kind === 'review') return step.prompt;
   if (step.kind === 'script') return (step.resolved?.argv ?? [step.path, ...step.args]).join(' ');
   if (step.kind === 'plugin') {
     const contribution = registry.steps.get(step.name);

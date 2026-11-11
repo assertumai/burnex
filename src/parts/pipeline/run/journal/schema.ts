@@ -264,7 +264,7 @@ export const StepRecordSchema = z
   .object({
     id: z.string(),
     index: z.number().int().positive(),
-    kind: z.enum(['agent', 'run', 'script', 'plugin']),
+    kind: z.enum(['agent', 'run', 'script', 'plugin', 'review']),
     key: z.string(),
     status: StatusValueSchema,
     reason: z.string().optional(),
@@ -675,6 +675,8 @@ export const UsageAttemptReportSchema = z
     attempt: z.number().int().positive(),
     /** Попытка работы, в которой исполнена эта попытка шага. Есть только у работы с `attempts.max > 1`. */
     job_attempt: z.number().int().positive().optional(),
+    /** Участник шага `review`, чья это попытка: `id` ревьюера либо `aggregator`. */
+    participant: z.string().optional(),
     backend: z.string(),
     model: z.string().optional(),
     billable_tokens: z.number(),
@@ -739,6 +741,21 @@ export const UsageReportSchema = z
                 // этого поля не несут вовсе: величина теряет смысл ориентира
                 // выше шага.
                 peak_prefix_tokens: z.number().optional(),
+                // Расход шага `review` по участникам (`review-strategies`):
+                // ревьюеры по `id` и `aggregator`. Сумма — расход шага.
+                participants: z
+                  .record(
+                    z.string(),
+                    z
+                      .object({
+                        billable_tokens: z.number(),
+                        wallclock_ms: z.number(),
+                        cost_usd: z.number().optional(),
+                        cost_source: CostSourceSchema.optional(),
+                      })
+                      .strict(),
+                  )
+                  .optional(),
                 // Прежняя форма сводки хранила число попыток. Разбивки в ней
                 // нет и взять её неоткуда, но остальная сводка старого прогона
                 // остаётся годной: терять её целиком ради поля, которого тогда
@@ -869,6 +886,11 @@ export const EventSchema = z.discriminatedUnion('kind', [
   z.object({ ...eventBase, kind: z.literal('step.started'), job: z.string(), step: z.string(), attempt: z.number().int().positive() }).strict(),
   z.object({ ...eventBase, kind: z.literal('step.finished'), job: z.string(), step: z.string(), attempt: z.number().int().positive(), status: StatusValueSchema, reason: z.string().optional() }).strict(),
   z.object({ ...eventBase, kind: z.literal('step.stalled'), job: z.string(), step: z.string(), silent_ms: z.number() }).strict(),
+  // Участник шага `review` (`review-strategies`, design.md, решение 6): ревьюер
+  // по своему `id` либо `aggregator`. Исход — статус участника; провал
+  // ревьюера шага не роняет, и `reason` называет то, что получит агрегатор.
+  z.object({ ...eventBase, kind: z.literal('review.participant.started'), job: z.string(), step: z.string(), participant: z.string(), agent: z.string(), model: z.string().optional() }).strict(),
+  z.object({ ...eventBase, kind: z.literal('review.participant.finished'), job: z.string(), step: z.string(), participant: z.string(), status: StatusValueSchema, reason: z.string().optional() }).strict(),
   // Внешнее действие шага записано, а не совершено (`shadow-run-mode`): `n` —
   // сквозной номер действий шага, `path` — файл `action-<n>.json`. Достаточно,
   // чтобы перечислить действия, не читая файлов.

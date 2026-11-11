@@ -1,0 +1,25 @@
+{
+  "title": "burnex review findings",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "summary": { "type": "string" },
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "severity": { "type": "string", "enum": ["critical", "major", "minor", "info"] },
+          "title": { "type": "string" },
+          "location": { "type": ["string", "null"] },
+          "detail": { "type": "string" },
+          "suggestion": { "type": ["string", "null"] }
+        },
+        "required": ["severity", "title", "location", "detail", "suggestion"],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": ["summary", "findings"],
+  "additionalProperties": false
+}

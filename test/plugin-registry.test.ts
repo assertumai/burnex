@@ -203,7 +203,7 @@ describe('plugin-registry: имя вида шага занято ключом д
       () => applyDeclarativePlugin(kernel, { name: 'самозванец', steps: [fakeStepKind('prompt')] }, '/м.js', DECLARATIVE_CONTRIBUTION_FIELDS),
       (error: unknown) => {
         assert.ok(error instanceof BurnexError);
-        assert.equal(error.message, 'Имя вида шага prompt занято ключом встроенного вида шага agent');
+        assert.equal(error.message, 'Имя вида шага prompt занято ключом встроенного вида шага agent, review');
         assert.equal(
           error.hint,
           'Выберите другое имя: ключи встроенных видов не могут стать именем плагинного вида шага',
@@ -275,7 +275,7 @@ describe('plugin-registry: снимок дефолтного дерева', () =
     // Порядок — регистрации, не алфавитный, и записан он теперь только в
     // перечне строк (`src/parts/rows.ts`, `BUILTIN_ROWS`): строки видов шага
     // идут в нём после `backend-claude` — run, uses, script, agent, decision.
-    assert.deepEqual([...kernel.ctx.steps.contributions.keys()], ['run', 'uses', 'script', 'agent', 'decision']);
+    assert.deepEqual([...kernel.ctx.steps.contributions.keys()], ['run', 'uses', 'script', 'agent', 'review', 'decision']);
     // Встроенные предикаты — вклады сервиса `predicates`, внесённые строкой
     // (`builtin-predicates-as-row`), а не зарезервированные без содержания
     // имена: порядок — порядок их перечисления в `src/parts/pipeline/expect/row.ts`,
@@ -302,7 +302,7 @@ describe('plugin-registry: снимок дефолтного дерева', () =
   it('владелец каждого вида шага — «встроенный»', () => {
     const registry = builtinRegistry();
 
-    for (const name of ['run', 'uses', 'script', 'agent', 'decision']) {
+    for (const name of ['run', 'uses', 'script', 'agent', 'review', 'decision']) {
       assert.equal(contributionOwner(registry, 'steps', name), 'встроенный');
     }
   });
