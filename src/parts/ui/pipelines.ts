@@ -15,7 +15,7 @@ import type { BuiltinRow, LoadOptions } from '../../kernel/load.js';
 import type { Kernel } from '../../kernel/kernel.js';
 import { kernelFromRegistry, registryFromKernel, type Registry } from '../../kernel/registry.js';
 import type { TreeRow } from '../../kernel/tree/tree.js';
-import type { AgentOrigin, EffortOrigin, Job, ModelOrigin, Pipeline, UnusedAgentEntry } from '../pipeline/document/model.js';
+import type { AgentOrigin, EffortOrigin, Job, ModelOrigin, Pipeline, ReviewStrategyOrigin, UnusedAgentEntry } from '../pipeline/document/model.js';
 import type { AgentSelectionConfig } from '../pipeline/config/agentSelections.js';
 import type { AgentPolicy } from '../pipeline/config/schema.js';
 import { stepsMissingExternal } from '../pipeline/run/shadow.js';
@@ -128,6 +128,19 @@ export interface PipelineStepView {
    * не пустая карточка и не «неизвестно» (design.md, решение 11).
    */
   readonly pluginUnknownReason?: string;
+  /**
+   * Стратегия шага `review:` — как написана и куда разрешилась: по пути файла
+   * экран стратегий находит шаги, которые её используют.
+   */
+  readonly reviewStrategy?: ReviewStrategyView;
+}
+
+/** Ссылка шага на стратегию ревью без отпечатка: он для ключа шага, не для витрины. */
+export type ReviewStrategyView = Omit<ReviewStrategyOrigin, 'fingerprint'>;
+
+function reviewStrategyView(origin: ReviewStrategyOrigin): ReviewStrategyView {
+  const { fingerprint: _fingerprint, ...view } = origin;
+  return view;
 }
 
 export interface PipelineJobView {
@@ -415,6 +428,7 @@ function toJobView(job: Job, pipelineName: string | undefined, ctx: ViewContext)
         ...(step.kind === 'script' && step.uses?.layer !== undefined ? { usesLayer: step.uses.layer } : {}),
         ...(step.kind === 'script' && step.uses?.params !== undefined ? { usesParams: step.uses.params } : {}),
         ...(step.kind === 'plugin' ? pluginStepView(step, ctx.registry) : {}),
+        ...(step.kind === 'review' ? { reviewStrategy: reviewStrategyView(step.strategy) } : {}),
       };
     }),
   };
@@ -923,53 +937,72 @@ export async function buildPipelines(
   for (const project of listProjects(runsRoot)) {
     // Проект, чей путь неизвестен, обходить негде: в указателе его нет.
     if (project.path === undefined || !existsSync(project.path)) continue;
-    const entries = listPipelineEntries(project.path, {
-      globalConfigDir: homeRoot(options.home ?? homedir()),
-    });
-    if (entries.length === 0) continue;
-
-    // Нечитаемая конфигурация и отказ загрузки плагина показываются одной
-    // веткой: с объяснением. Молча раскрыть проект чужой конфигурацией или
-    // пропустить плагин значило бы показать устройство, которого у прогона в
-    // этом проекте не будет.
-    let forProject: Config | undefined;
-    let registry: Registry | undefined;
-    let modelConfigFile: string | undefined;
-    let effortConfigFile: string | undefined;
-    let agentPolicyFile = '';
-    let failure: Failure | undefined;
-    try {
-      const overrides = await projectSection(project.path, options.home, options.kernelCache);
-      forProject = withProjectSection(config, overrides);
-      registry = overrides.registry;
-      modelConfigFile = overrides.modelConfigFile;
-      effortConfigFile = overrides.effortConfigFile;
-      agentPolicyFile = overrides.agentPolicyFile;
-      for (const profile of Object.values(overrides.agents)) {
-        if (profile.file === overrides.globalConfigFile) continue;
-        projectProfiles.push({ projectKey: project.key, projectPath: project.path, ...profile });
-      }
-    } catch (error) {
-      failure = toFailure(error, project.path);
-    }
-
-    for (const entry of entries) {
-      pipelines.push(
-        failure !== undefined || forProject === undefined || registry === undefined
-          ? errorView(
-              project.key,
-              project.path,
-              entry.address ?? relative(project.path, entry.path).replace(/\\/g, '/'),
-              failure ?? { error: 'Project configuration cannot be read' },
-              originOf(entry),
-            )
-          : readPipeline(
-              project.key, project.path, entry, forProject, registry,
-              { modelConfigFile, effortConfigFile, agentPolicyFile },
-            ),
-      );
-    }
+    const found = await projectPipelines(project.key, project.path, config, options);
+    pipelines.push(...found.pipelines);
+    projectProfiles.push(...found.projectProfiles);
   }
 
   return { pipelines, projectProfiles, generatedAt: (options.now ?? new Date()).toISOString() };
+}
+
+/**
+ * Раскрытые пайплайны одного проекта и его проектные профили. Тем же обходом
+ * экран стратегий ревью ищет шаги `review:` проекта, в котором поднят демон,
+ * — даже если прогонов у проекта ещё не было и в указателе его нет.
+ */
+export async function projectPipelines(
+  projectKey: string,
+  projectPath: string,
+  config: Config,
+  options: BuildPipelinesOptions = {},
+): Promise<Pick<PipelinesOverview, 'pipelines' | 'projectProfiles'>> {
+  const pipelines: PipelineView[] = [];
+  const projectProfiles: ProjectProfileView[] = [];
+  const entries = listPipelineEntries(projectPath, {
+    globalConfigDir: homeRoot(options.home ?? homedir()),
+  });
+  if (entries.length === 0) return { pipelines, projectProfiles };
+
+  // Нечитаемая конфигурация и отказ загрузки плагина показываются одной
+  // веткой: с объяснением. Молча раскрыть проект чужой конфигурацией или
+  // пропустить плагин значило бы показать устройство, которого у прогона в
+  // этом проекте не будет.
+  let forProject: Config | undefined;
+  let registry: Registry | undefined;
+  let modelConfigFile: string | undefined;
+  let effortConfigFile: string | undefined;
+  let agentPolicyFile = '';
+  let failure: Failure | undefined;
+  try {
+    const overrides = await projectSection(projectPath, options.home, options.kernelCache);
+    forProject = withProjectSection(config, overrides);
+    registry = overrides.registry;
+    modelConfigFile = overrides.modelConfigFile;
+    effortConfigFile = overrides.effortConfigFile;
+    agentPolicyFile = overrides.agentPolicyFile;
+    for (const profile of Object.values(overrides.agents)) {
+      if (profile.file === overrides.globalConfigFile) continue;
+      projectProfiles.push({ projectKey, projectPath, ...profile });
+    }
+  } catch (error) {
+    failure = toFailure(error, projectPath);
+  }
+
+  for (const entry of entries) {
+    pipelines.push(
+      failure !== undefined || forProject === undefined || registry === undefined
+        ? errorView(
+            projectKey,
+            projectPath,
+            entry.address ?? relative(projectPath, entry.path).replace(/\\/g, '/'),
+            failure ?? { error: 'Project configuration cannot be read' },
+            originOf(entry),
+          )
+        : readPipeline(
+            projectKey, projectPath, entry, forProject, registry,
+            { modelConfigFile, effortConfigFile, agentPolicyFile },
+          ),
+    );
+  }
+  return { pipelines, projectProfiles };
 }

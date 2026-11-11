@@ -1,6 +1,7 @@
 import type { JSX, ReactNode } from 'react';
 
 import { declaration as agentsDeclaration } from '../../../src/parts/ui/screens/agents/declaration.ts';
+import { declaration as reviewStrategiesDeclaration } from '../../../src/parts/ui/screens/review-strategies/declaration.ts';
 import { declaration as backlogDeclaration } from '../../../src/parts/ui/screens/backlog/declaration.ts';
 import { declaration as cleanupDeclaration } from '../../../src/parts/ui/screens/cleanup/declaration.ts';
 import { declaration as decisionsDeclaration } from '../../../src/parts/ui/screens/decisions/declaration.ts';
@@ -164,6 +165,11 @@ export const SECTIONS: readonly SectionGroup[] = [
         target: screenTarget(agentsDeclaration.id),
         title: agentsDeclaration.title,
         description: 'Who runs the agent steps and with which model: defaults, backends, tiers and per-pipeline policy.',
+      },
+      {
+        target: screenTarget(reviewStrategiesDeclaration.id),
+        title: reviewStrategiesDeclaration.title,
+        description: 'Who reviews a review: step, with which agent and how the verdict is reached; project and personal strategies.',
       },
       {
         target: screenTarget(secretsDeclaration.id),

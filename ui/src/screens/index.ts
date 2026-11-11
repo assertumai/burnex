@@ -8,6 +8,7 @@ import home from './home';
 import packages from './packages';
 import pipelines from './pipelines';
 import proposals from './proposals';
+import reviewStrategies from './review-strategies';
 import routes from './routes';
 import run from './run';
 import runs from './runs';
@@ -40,6 +41,7 @@ export const BUILTIN_SCREENS: Readonly<Record<string, ScreenPlugin>> = {
   'screen-usage': usage,
   'screen-cleanup': cleanup,
   'screen-agents': agents,
+  'screen-review-strategies': reviewStrategies,
   'screen-secrets': secrets,
   'screen-schedule': schedule,
   'screen-system': system,
