@@ -374,6 +374,43 @@ async function restoreToAnchor(options: OpenTreeOptions, nestedRepos: readonly s
 }
 
 /**
+ * Привести перенятый каталог к исходному состоянию нового прогона, не трогая
+ * игнорируемое (`named-workspace-trees`, решение 9): отслеживаемое — к
+ * коммиту начала прогона (`worktree`) либо к каталогу запуска (`copy`), новое
+ * неигнорируемое снимается. Поверх возобновление возвращает пути
+ * переиспользованных шагов по якорю — так правка, закоммиченная
+ * пользователем перед возобновлением, видна, а `node_modules` и сборка
+ * остаются на месте.
+ */
+export function resetToInitial(options: {
+  readonly mode: 'worktree' | 'copy';
+  readonly dir: TreeDir;
+  readonly cwd: string;
+  readonly sourceCommits?: Readonly<Record<string, string>>;
+}): void {
+  const { mode, dir, cwd } = options;
+  if (mode === 'worktree') {
+    // Части раньше корня не нужны: `reset` корня гитлинки не трогает, а
+    // каталоги частей корень игнорирует или держит гитлинком.
+    const parts = (dir.nested ?? []).map((part) => part.dir);
+    for (const relDir of ['.', ...parts]) {
+      const at = join(dir.dir, relDir);
+      git(at, ['reset', '--quiet', '--hard', options.sourceCommits?.[relDir] ?? 'HEAD']);
+      // Корень не снимает каталоги частей: это чужие рабочие деревья.
+      const keep = relDir === '.' ? parts.map((part) => `--exclude=/${part}`) : [];
+      git(at, ['clean', '-fdq', ...keep]);
+    }
+    return;
+  }
+  for (const relativePath of visibleFiles(dir.dir)) rmSync(join(dir.dir, relativePath), { force: true });
+  for (const relativePath of visibleFiles(cwd)) {
+    const to = join(dir.dir, relativePath);
+    mkdirSync(dirname(to), { recursive: true, mode: 0o700 });
+    cpSync(join(cwd, relativePath), to, { preserveTimestamps: true, mode: constants.COPYFILE_FICLONE });
+  }
+}
+
+/**
  * Снять каталог дерева: части в обратном каноническом порядке, затем корень.
  * Возвращает отказы снятия учётных записей — вызывающий решает, отказ это
  * подготовки или учётная запись в журнал.

@@ -5,7 +5,8 @@ import { overallStatus, schedule, type JobOutcome } from '../src/parts/pipeline/
 import { buildGraph } from '../src/parts/pipeline/domain/graph.js';
 import { expandPipeline } from '../src/parts/pipeline/document/expand.js';
 import { makeProject } from './helpers.js';
-import type { Pipeline } from '../src/parts/pipeline/document/model.js';
+import type { Job, Pipeline } from '../src/parts/pipeline/document/model.js';
+import { sharedTreeOf } from '../src/parts/pipeline/run/trees.js';
 
 function pipelineOf(yaml: string, inputs?: Record<string, string>): Pipeline {
   const project = makeProject({ 'burnex.yml': yaml });
@@ -80,6 +81,7 @@ async function trace(
     readonly outcomes?: Readonly<Record<string, JobOutcome>>;
     readonly signal?: AbortSignal;
     readonly onStarted?: (id: string) => void;
+    readonly treeOf?: (job: Job) => string | undefined;
   } = {},
 ): Promise<Traced> {
   const started: string[] = [];
@@ -91,6 +93,7 @@ async function trace(
     pipeline,
     ...(options.concurrency === undefined ? {} : { concurrency: options.concurrency }),
     ...(options.signal === undefined ? {} : { signal: options.signal }),
+    ...(options.treeOf === undefined ? {} : { treeOf: options.treeOf }),
     execute: async (job) => {
       started.push(job.id);
       running += 1;
@@ -1287,5 +1290,77 @@ jobs:
     assert.deepEqual(run.result.loops, []);
     assert.deepEqual(run.calls, ['a', 'b']);
     assert.deepEqual(run.settledCalls, ['a', 'b']);
+  });
+});
+
+describe('named-workspace-trees: работы одного дерева исполняются по одной', () => {
+  // Сценарий: «Сериализация независимых работ»
+  it('независимые работы дерева по умолчанию идут по очереди при concurrency: 2', async () => {
+    const pipeline = pipelineOf(`
+kind: pipeline
+workspace: { mode: worktree }
+jobs:
+  a: { steps: [${STEP}] }
+  b: { steps: [${STEP}] }
+`);
+    const first = gate();
+    const traced = trace(pipeline, { concurrency: 2, hold: { a: first.promise }, treeOf: sharedTreeOf });
+    await tick();
+    await tick();
+    first.open();
+    const result = await traced;
+    assert.equal(result.peak, 1, 'b ждёт, пока дерево занято a');
+    assert.deepEqual(result.started, ['a', 'b']);
+    assert.deepEqual(result.finished, ['a', 'b']);
+  });
+
+  // Сценарий: «Параллельность разных деревьев»
+  it('работы разных деревьев идут одновременно', async () => {
+    const pipeline = pipelineOf(`
+kind: pipeline
+workspace: { mode: worktree, trees: [x, y] }
+jobs:
+  a: { workspace: { tree: x }, steps: [${STEP}] }
+  b: { workspace: { tree: y }, steps: [${STEP}] }
+`);
+    const first = gate();
+    const traced = trace(pipeline, { concurrency: 2, hold: { a: first.promise }, treeOf: sharedTreeOf });
+    await tick();
+    await tick();
+    first.open();
+    const result = await traced;
+    assert.equal(result.peak, 2);
+    assert.deepEqual(result.finished, ['b', 'a']);
+  });
+
+  it('при scope: job параллельность как прежде', async () => {
+    const pipeline = pipelineOf(`
+kind: pipeline
+workspace: { mode: copy, scope: job }
+jobs:
+  a: { steps: [${STEP}] }
+  b: { steps: [${STEP}] }
+`);
+    const first = gate();
+    const traced = trace(pipeline, { concurrency: 2, hold: { a: first.promise }, treeOf: sharedTreeOf });
+    await tick();
+    await tick();
+    first.open();
+    const result = await traced;
+    assert.equal(result.peak, 2);
+  });
+
+  it('из ждущих дерева первой идёт объявленная раньше', async () => {
+    const pipeline = pipelineOf(`
+kind: pipeline
+workspace: { mode: worktree }
+jobs:
+  a: { steps: [${STEP}] }
+  c: { needs: [a], steps: [${STEP}] }
+  b: { steps: [${STEP}] }
+`);
+    const result = await trace(pipeline, { concurrency: 3, treeOf: sharedTreeOf });
+    assert.equal(result.peak, 1);
+    assert.deepEqual(result.started, ['a', 'c', 'b']);
   });
 });

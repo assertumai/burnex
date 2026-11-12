@@ -866,3 +866,47 @@ describe('review-defend: форк в адаптерах и исполнении 
     assert.deepEqual(check.properties.responses.items.then, { properties: { severity: { type: 'string', enum: ['critical', 'major', 'minor', 'info'] } } });
   });
 });
+
+describe('named-workspace-trees: форк защитника только из дерева имплементатора', () => {
+  const withTrees = (body: string, buildTree?: string): string =>
+    body
+      .replace('name: p\n', 'name: p\nworkspace: { mode: worktree, trees: [main, b] }\n')
+      .replace(/ {2}other:\n[\s\S]*?(?= {2}review:)/, `  docs:\n    needs: [build]\n    steps: [{ id: c, run: [node, -e, ""] }]\n`)
+      .replace('  build:\n', `  build:\n${buildTree === undefined ? '' : `    workspace: { tree: ${buildTree} }\n`}`);
+  const backends = () => ({ impl: implementer(), 'rev-0': reviewer('security'), 'rev-1': reviewer('tests'), agg: verdict(), def: defender() });
+
+  it('из той же работы в worktree: форк', async () => {
+    const project = defendRepo();
+    writeFileSync(project.path('burnex.yml'), readFileSync(project.path('burnex.yml'), 'utf8').replace('name: p\n', 'name: p\nworkspace: { mode: worktree }\n'));
+    gitCommit(project.root, 'worktree');
+    const result = await run(project, backends());
+    assert.equal(result.status, 'success');
+    assert.equal(defenseOf(result).lines[0]?.mode, 'fork');
+  });
+
+  // Сценарий: «Имплементатор в том же дереве другой работы» — у build два
+  // потомка, а каталог всё равно один.
+  it('из другой работы того же дерева при развилке: форк, каталог один', async () => {
+    const project = defendRepo({ body: withTrees(CROSS_JOB('build.implement')) });
+    const result = await run(project, backends());
+    assert.equal(result.status, 'success');
+    const jobs = readStatus(result.journal.paths).jobs;
+    const path = (id: string) => jobs.find((job) => job.id === id)?.workspace?.path;
+    assert.equal(path('review'), path('build'));
+    assert.equal(path('docs'), path('build'));
+    assert.deepEqual(defenseOf(result).lines[0], { kind: 'defender', mode: 'fork', implementer: 'build.implement', agent: 'impl' });
+  });
+
+  // Сценарий: «Имплементатор в другом дереве»
+  it('из другого дерева: свежий защитник с причиной other_tree, линт предупреждает', async () => {
+    const project = defendRepo({ body: withTrees(CROSS_JOB('build.implement'), 'b') });
+    const expanded = expandPipeline({ pipelinePath: project.path('burnex.yml'), config: project.config });
+    const warning = lintPipeline(expanded, { config: project.config, cwd: project.root }).find((item) => item.at === 'jobs.review.steps.0.implementer');
+    assert.equal(warning?.severity, 'warning');
+    const all = backends();
+    const result = await run(project, all);
+    assert.equal(result.status, 'success');
+    assert.equal(all.impl.invocations.length, 1, 'имплементатор не форкается');
+    assert.deepEqual(defenseOf(result).lines[0], { kind: 'defender', mode: 'fresh', implementer: 'build.implement', agent: 'def', reason: 'other_tree' });
+  });
+});

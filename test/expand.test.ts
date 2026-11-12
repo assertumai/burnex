@@ -1825,7 +1825,7 @@ jobs:
       preserveLocalChanges: true,
       liveFiles: [{ path: 'backlog.md', writeback: 'always', commitOnSuccess: true }],
     });
-    assert.deepEqual(pipeline.jobs[0]!.workspace, { mode: 'worktree' });
+    assert.deepEqual(pipeline.jobs[0]!.workspace, { mode: 'worktree', tree: 'main' });
 
     const parsed = parseYaml(serializeLock(pipeline)) as {
       workspace: {

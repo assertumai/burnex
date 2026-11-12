@@ -43,7 +43,7 @@ import {
   stepDirName,
 } from '../src/parts/pipeline/run/journal/paths.js';
 import { isRunOrAncestor, runOwnerJudge } from '../src/parts/pipeline/run/journal/owner.js';
-import { AttemptRecordSchema, EventSchema, RunManifestSchema, RunStatusSchema, type RunStatus } from '../src/parts/pipeline/run/journal/schema.js';
+import { AttemptRecordSchema, EventSchema, JobRecordSchema, RunManifestSchema, RunStatusSchema, type RunStatus } from '../src/parts/pipeline/run/journal/schema.js';
 import { BurnexError } from '../src/kernel/errors.js';
 import { expandPipeline } from '../src/parts/pipeline/document/expand.js';
 import { runPipeline } from '../src/parts/pipeline/run/runner.js';
@@ -1071,20 +1071,24 @@ describe('run-journal: идентификатор процесса прогон�
   });
 });
 
-describe('dependent-job-workspace: источник наследования в журнале', () => {
-  async function runChain(): Promise<Awaited<ReturnType<typeof runPipeline>>> {
+describe('named-workspace-trees: дерево и засев в записи работы', () => {
+  async function runTrees(): Promise<Awaited<ReturnType<typeof runPipeline>>> {
     const project = makeProject({
       'burnex.yml': `
 version: 1
 kind: pipeline
-name: наследование
-workspace: { mode: worktree }
+name: деревья
+workspace: { mode: worktree, trees: [main, b] }
 jobs:
-  a:
+  build:
     steps: [{ id: c, run: [echo, a], expect: [{ exit_code: 0 }] }]
-  b:
-    needs: [a]
+  review:
+    needs: [build]
     steps: [{ id: c, run: [echo, b], expect: [{ exit_code: 0 }] }]
+  probe:
+    needs: [build]
+    workspace: { tree: b }
+    steps: [{ id: c, run: [echo, c], expect: [{ exit_code: 0 }] }]
 `,
     });
     gitInit(project);
@@ -1098,33 +1102,36 @@ jobs:
     });
   }
 
-  it('запись наследующей работы несёт источник и признак продолженного каталога', async () => {
-    const result = await runChain();
+  // Сценарии: «Работа дерева по умолчанию», «Голова именованного дерева»
+  it('работа дерева по умолчанию несёт tree и continued, голова дерева b — seed', async () => {
+    const result = await runTrees();
     const status = readStatus(result.journal.paths);
-    const b = status.jobs.find((job) => job.id === 'b');
-    assert.equal(b?.workspace?.inherited_from, 'a');
-    assert.equal(b?.workspace?.continued, true);
+    const review = status.jobs.find((job) => job.id === 'review');
+    assert.equal(review?.workspace?.tree, 'main');
+    assert.equal(review?.workspace?.continued, true);
+    assert.equal(review?.workspace?.seed, undefined);
+    const probe = status.jobs.find((job) => job.id === 'probe');
+    assert.equal(probe?.workspace?.tree, 'b');
+    assert.deepEqual(probe?.workspace?.seed, { from: 'build', by: 'copy' });
+    assert.equal(probe?.workspace?.continued, undefined);
   });
 
-  it('запись работы без наследования не несёт источника', async () => {
-    const result = await runChain();
-    const status = readStatus(result.journal.paths);
-    const a = status.jobs.find((job) => job.id === 'a');
-    assert.equal(a?.workspace?.inherited_from, undefined);
-    assert.equal(a?.workspace?.continued, undefined);
+  it('событие о засеве дерева есть в потоке', async () => {
+    const result = await runTrees();
+    const seeded = readEvents(result.journal.paths).find((event) => event.kind === 'workspace.seeded');
+    assert.deepEqual(seeded, { ...seeded, job: 'probe', tree: 'b', source: 'build', by: 'copy' });
   });
 
-  it('событие о наследовании дерева есть в потоке', async () => {
-    const result = await runChain();
-    const events = readEvents(result.journal.paths);
-    const inherited = events.find((event) => event.kind === 'workspace.inherited');
-    assert.ok(inherited !== undefined, 'событие workspace.inherited должно быть записано');
-    assert.deepEqual(inherited, {
-      ...inherited,
-      job: 'b',
-      source: 'a',
-      via: 'continue',
+  // Сценарий: «Прежняя запись»
+  it('запись прежнего формата без tree читается', () => {
+    const parsed = JobRecordSchema.parse({
+      id: 'b',
+      status: 'success',
+      steps: [],
+      workspace: { mode: 'worktree', path: '/runs/x/workspace/b', inherited_from: 'a', continued: true },
     });
+    assert.equal(parsed.workspace?.path, '/runs/x/workspace/b');
+    assert.equal(parsed.workspace?.tree, undefined);
   });
 });
 

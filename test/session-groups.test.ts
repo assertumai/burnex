@@ -252,9 +252,66 @@ jobs:
     );
   });
 
-  it('работа группы, заводящая своё рабочее дерево, отклоняется', () => {
-    const project = makeProject({
-      'burnex.yml': `
+  // Сценарий: «Группа в разных деревьях»
+  it('работы группы в разных деревьях отклоняются у workspace.tree', () => {
+    const project = makeProject({ 'burnex.yml': `
+kind: pipeline
+name: probe
+workspace: { mode: worktree, trees: [main, b] }
+jobs:
+  first:
+    session_group: g
+    steps:
+      - id: one
+        agent: claude
+        prompt: ok
+  second:
+    needs: [first]
+    session_group: g
+    workspace: { tree: b }
+    steps:
+      - id: two
+        agent: claude
+        prompt: ok
+` });
+    const found = lintPipeline(expandPipeline({ pipelinePath: project.path('burnex.yml'), config: project.config }), {
+      config: project.config,
+      cwd: project.root,
+    }).filter((item) => item.severity === 'error' && item.message.includes('разных деревьях'));
+    assert.deepEqual(found.map((item) => item.at), ['jobs.second.workspace.tree']);
+  });
+
+  // Сценарий: «Группа при каталоге на работу»
+  it('группа при scope: job отклоняется у session_group', () => {
+    const project = makeProject({ 'burnex.yml': `
+kind: pipeline
+name: probe
+workspace: { mode: worktree, scope: job }
+jobs:
+  first:
+    session_group: g
+    steps:
+      - id: one
+        agent: claude
+        prompt: ok
+  second:
+    needs: [first]
+    session_group: g
+    steps:
+      - id: two
+        agent: claude
+        prompt: ok
+` });
+    const found = lintPipeline(expandPipeline({ pipelinePath: project.path('burnex.yml'), config: project.config }), {
+      config: project.config,
+      cwd: project.root,
+    }).filter((item) => item.severity === 'error' && item.message.includes('scope: job'));
+    assert.deepEqual(found.map((item) => item.at), ['jobs.first.session_group', 'jobs.second.session_group']);
+  });
+
+  // Сценарий: «Группа в одном дереве»
+  it('группа в дереве по умолчанию ошибок о рабочем дереве не даёт', () => {
+    const project = makeProject({ 'burnex.yml': `
 kind: pipeline
 name: probe
 workspace: { mode: worktree }
@@ -268,18 +325,12 @@ jobs:
   second:
     needs: [first]
     session_group: g
-    workspace: { inherit: none }
     steps:
       - id: two
         agent: claude
         prompt: ok
-`,
-    });
-
-    assert.deepEqual(
-      errorsOf(project).filter((message) => message.includes('своё рабочее дерево')),
-      ['Работа second в группе сессий g заводит своё рабочее дерево'],
-    );
+` });
+    assert.deepEqual(errorsOf(project).filter((message) => /дерев/.test(message)), []);
   });
 
   it('разные режимы рабочего дерева внутри группы отклоняются', () => {

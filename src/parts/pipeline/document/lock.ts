@@ -3,7 +3,7 @@ import { writeFileSync } from 'node:fs';
 import { stringify } from 'yaml';
 
 import { formatDuration, formatTokens } from '../../../kernel/units.js';
-import { forStepHash, type Budget, type Job, type Loop, type Pipeline, type PipelinePublication, type ReviewParticipant, type Step, type Triggers, type Workspace } from './model.js';
+import { DEFAULT_TREE, forStepHash, type Budget, type Job, type Loop, type Pipeline, type PipelinePublication, type ReviewParticipant, type Step, type Triggers, type Workspace } from './model.js';
 import { normalizePackagePaths, portableForm, type PackagePathForm } from './packagePaths.js';
 
 /**
@@ -228,7 +228,7 @@ export function jobToPlain(job: Job): Record<string, unknown> {
     ...(job.display === undefined ? {} : { display: job.display }),
     session: job.session,
     ...(job.sessionGroup === undefined ? {} : { session_group: job.sessionGroup }),
-    workspace: job.workspace,
+    workspace: workspaceToPlain(job.workspace),
     ...(Object.keys(job.env).length === 0 ? {} : { env: job.env }),
     ...(job.context.length === 0 ? {} : { context: job.context }),
     context_upstream: job.contextUpstream,
@@ -302,7 +302,22 @@ export function serializeLock(pipeline: Pipeline): string {
  * тоже (`review-strategies`, решение 7).
  */
 function jobForHash(job: Job): Record<string, unknown> {
-  return { ...jobToPlain(job), steps: job.steps.map((step) => stepToPlain(forStepHash(step))) };
+  // Дерево — раскладка каталогов, а не определение работы: в ключ шага оно не
+  // входит (`named-workspace-trees`), и разведение работ по деревьям не
+  // лишает `resume` переиспользования.
+  const { tree: _tree, ...workspace } = job.workspace;
+  return { ...jobToPlain(job), workspace, steps: job.steps.map((step) => stepToPlain(forStepHash(step))) };
+}
+
+/**
+ * Рабочая директория работы в замке. Неявное дерево по умолчанию (`main` без
+ * объявленных `trees`) не пишется: замок пайплайна без объявлений деревьев
+ * сохраняет прежний состав.
+ */
+function workspaceToPlain(workspace: Job['workspace']): Job['workspace'] {
+  if (workspace.tree !== DEFAULT_TREE) return workspace;
+  const { tree: _tree, ...rest } = workspace;
+  return rest;
 }
 
 /**
@@ -319,7 +334,10 @@ function jobForHash(job: Job): Record<string, unknown> {
 export function jobLockHash(pipeline: Pipeline, job: Job, form: PackagePathForm = portableForm()): string {
   // Циклы не входят в общее: объявление цикла меняет ключи только его
   // участников, а работы вне цикла сохраняют записи шагов.
-  const { jobs: _jobs, loops: _loops, ...shared } = pipelineToPlain(pipeline);
+  const { jobs: _jobs, loops: _loops, ...plain } = pipelineToPlain(pipeline);
+  // Область и деревья пайплайна — та же раскладка, что и дерево работы.
+  const { scope: _scope, trees: _trees, ...workspace } = plain.workspace as Record<string, unknown>;
+  const shared = { ...plain, workspace };
   const loop = pipeline.loops.find((candidate) => candidate.jobs.includes(job.id));
   return createHash('sha256')
     .update(

@@ -2483,7 +2483,7 @@ describe('dependent-job-workspace: источник наследования р�
       makeProject({
         'burnex.yml': `
 kind: pipeline
-workspace: { mode: worktree }
+workspace: { mode: worktree, scope: job }
 budget: { tokens: 100k }
 jobs:
   a:
@@ -2505,7 +2505,7 @@ jobs:
       makeProject({
         'burnex.yml': `
 kind: pipeline
-workspace: { mode: worktree }
+workspace: { mode: worktree, scope: job }
 budget: { tokens: 100k }
 jobs:
   a:
@@ -2546,12 +2546,12 @@ jobs:
   });
 
   // Сценарий: «Несколько зависимостей без объявленного источника»
-  it('отклоняет несколько зависимостей в изолирующем режиме без inherit', () => {
+  it('отклоняет несколько зависимостей без inherit у работы, которой заводится каталог', () => {
     const diagnostics = lint(
       makeProject({
         'burnex.yml': `
 kind: pipeline
-workspace: { mode: worktree }
+workspace: { mode: worktree, scope: job }
 budget: { tokens: 100k }
 jobs:
   a:

@@ -484,12 +484,6 @@ export const RunManifestSchema = z
     pipeline_address: z.string().optional(),
     lock_hash: z.string(),
     project_root: z.string(),
-    /**
-     * Версия формата журнала. Нет у прогона прежнего формата (1); `2` —
-     * записи работ несут дерево и засев (`named-workspace-trees`), каталоги
-     * лежат в `workspace/trees/` и `workspace/jobs/`.
-     */
-    journal_format: z.number().int().positive().optional(),
     workspace: PipelineWorkspaceRecordSchema,
     /** Способ фиксации состояния дерева: определяется один раз на прогон. */
     anchor_kind: z.enum(['git', 'manifest', 'composite']).optional(),
@@ -1190,9 +1184,6 @@ export type EventInput = Omit<Event, 'ts' | 'seq'> extends never ? never : Distr
 type DistributiveOmit<T, K extends keyof never> = T extends unknown ? Omit<T, K> : never;
 
 export type RunManifest = z.infer<typeof RunManifestSchema>;
-
-/** Версия формата журнала, которую пишет этот движок (`journal_format` манифеста). */
-export const JOURNAL_FORMAT = 2;
 export type RunStatus = z.infer<typeof RunStatusSchema>;
 export type BudgetState = z.infer<typeof BudgetStateSchema>;
 export type BudgetExceededState = NonNullable<BudgetState['exceeded']>;

@@ -122,7 +122,6 @@ import type {
   StepRecord,
   Usage,
 } from './journal/schema.js';
-import { JOURNAL_FORMAT } from './journal/schema.js';
 import { sharedTreeOf, treeKey } from './trees.js';
 import { isRetryableJobOutcome, schedule, type JobOutcome, type LoopOutcome, type LoopPass } from './scheduler.js';
 
@@ -400,7 +399,6 @@ export async function runPipeline(options: RunOptions): Promise<RunResult> {
     ...(pipelineAddress === undefined ? {} : { pipeline_address: pipelineAddress }),
     lock_hash: lockHash,
     project_root: options.projectRoot,
-    journal_format: JOURNAL_FORMAT,
     workspace: workspaceRecord(pipeline.workspace),
     anchor_kind: anchorKind,
     // Список пишется всегда, включая пустой: «плагинов не было» и «версия
@@ -833,10 +831,10 @@ export async function runPipeline(options: RunOptions): Promise<RunResult> {
     carryOverRunDir(options.resume, journal);
     carryOverDecisions(options.resume, journal, carriedDecisions);
   }
-  // Дерево по умолчанию — до первой работы, от исходного состояния.
-  await trees.openDefault();
-
   writeStatus('running', true);
+  // Дерево по умолчанию — до первой работы, от исходного состояния. После
+  // первой записи состояния: снаружи прогон виден с первой же уступки цикла.
+  await trees.openDefault();
 
   /**
    * Область прогона: ресурсы, живущие столько же, сколько сам прогон.

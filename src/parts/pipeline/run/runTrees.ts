@@ -20,6 +20,7 @@ import {
 import {
   discardTreeDir,
   openTreeDir,
+  resetToInitial,
   treeDirPath,
   type PreparedWorkspace,
   type TreeDir,
@@ -310,7 +311,7 @@ export class RunTrees {
       return;
     }
 
-    if (restore?.anchor !== undefined) this.restore(key, restore.anchor);
+    if (restore !== undefined && (restore.anchor !== undefined || restore.reset === true)) this.restore(key, restore);
   }
 
   /**
@@ -320,7 +321,14 @@ export class RunTrees {
    * оно и есть то состояние, которое диалог оставил.
    */
   private resumeOf(key: string):
-    | { readonly runId: string; readonly adopt?: TreeDir; readonly anchor?: Anchor }
+    | {
+        readonly runId: string;
+        readonly adopt?: TreeDir;
+        readonly anchor?: Anchor;
+        readonly paths?: readonly string[];
+        /** Перенятый каталог приводится к исходному состоянию нового прогона. */
+        readonly reset?: boolean;
+      }
     | undefined {
     const resume = this.options.resume;
     if (resume === undefined || this.resumed.has(key)) return undefined;
@@ -336,25 +344,37 @@ export class RunTrees {
       };
     }
 
-    const last = [...resume.plan.restoreWorkspace].reverse().find((item) => members.has(item.job));
-    if (last === undefined) return undefined;
-    const previous = resume.source.status.jobs.find((record) => record.id === last.job)?.workspace;
+    const restores = resume.plan.restoreWorkspace.filter((item) => members.has(item.job));
+    const last = restores.at(-1);
+    // Каталог берётся из записи работы, чьё состояние возобновление
+    // продолжает, а без переиспользованных шагов — любой работы дерева:
+    // перенимается и он (вместе с зависимостями и сборкой), но приводится к
+    // исходному состоянию целиком.
+    const owner = last?.job ?? [...members].find((id) => resume.source.status.jobs.some((record) => record.id === id));
+    const previous = resume.source.status.jobs.find((record) => record.id === owner)?.workspace;
+    const adopt =
+      previous === undefined || previous.mode === 'cwd'
+        ? undefined
+        : { dir: previous.path, ...(previous.nested === undefined ? {} : { nested: previous.nested }) };
+    if (last === undefined && adopt === undefined) return undefined;
     return {
       runId,
-      anchor: last.anchor,
-      ...(previous === undefined || previous.mode === 'cwd'
+      ...(adopt === undefined ? {} : { adopt, reset: true }),
+      ...(last === undefined
         ? {}
-        : { adopt: { dir: previous.path, ...(previous.nested === undefined ? {} : { nested: previous.nested }) } }),
+        : { anchor: last.anchor, paths: [...new Set(restores.flatMap((item) => item.paths))].sort() }),
     };
   }
 
   /**
-   * Привести каталог дерева к якорю: отслеживаемое и новое приводится,
-   * игнорируемое остаётся на месте (вариант «а» решения 9). Недоступный
-   * якорь не отказ: переисполнить лишнее дороже, но это ровно то, что
-   * пользователь получил бы без возобновления.
+   * Привести каталог дерева к состоянию перед первым переисполнением:
+   * перенятый каталог — сначала к исходному состоянию нового прогона (без
+   * игнорируемого), затем пути, произведённые переиспользованными шагами
+   * дерева, — по якорю последнего из них. Игнорируемое остаётся (вариант «а»
+   * решения 9). Недоступный якорь не отказ: переисполнить лишнее дороже, но
+   * это ровно то, что пользователь получил бы без возобновления.
    */
-  private restore(key: string, anchor: Anchor): void {
+  private restore(key: string, plan: { readonly anchor?: Anchor; readonly paths?: readonly string[] }): void {
     const slot = this.slots.get(key);
     if (slot === undefined || 'failed' in slot) return;
     const { journal } = this.options;
@@ -368,8 +388,12 @@ export class RunTrees {
       ...(nested === undefined || slot.mode !== 'worktree' ? {} : { nested }),
     });
     try {
-      anchorer.restore(anchor);
-      journal.event({ kind: 'tree.restored', anchor: anchor.id, path: slot.dir.dir });
+      if (slot.adoptedFrom !== undefined) {
+        resetToInitial({ mode: slot.mode, dir: slot.dir, cwd: this.options.cwd, sourceCommits: this.options.sourceCommits });
+      }
+      if (plan.anchor === undefined) return;
+      anchorer.restorePaths(plan.anchor, plan.paths ?? []);
+      journal.event({ kind: 'tree.restored', anchor: plan.anchor.id, path: slot.dir.dir });
     } catch (error) {
       journal.event({
         kind: 'bookkeeping.failed',

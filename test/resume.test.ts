@@ -3774,3 +3774,73 @@ jobs:
     }
   });
 });
+
+describe('named-workspace-trees: возобновление восстанавливает дерево', () => {
+  const SHARED = `
+version: 1
+kind: pipeline
+name: общее-дерево
+workspace: { mode: worktree }
+jobs:
+  первая:
+    session: per_step
+    steps:
+      - id: пишет
+        run: [sh, -c, 'printf "от первой\\n" > плод.txt; mkdir -p .cache/первая']
+        expect: [{ exit_code: 0 }]
+  вторая:
+    needs: [первая]
+    session: per_step
+    steps:
+      - id: пишет
+        run: [sh, -c, 'printf "от второй\\n" > второй.txt; mkdir -p .cache/вторая']
+        expect: [{ exit_code: 0 }]
+  третья:
+    needs: [вторая]
+    session: per_step
+    steps:
+      - id: падает
+        run: [sh, -c, 'mkdir -p .cache/третья; test -f починено.txt']
+        expect: [{ exit_code: 0 }]
+`;
+
+  // Сценарий: «Возобновление в общем дереве»
+  it('каталог дерева перенят и приведён к якорю, игнорируемые следы поздних работ остаются', async () => {
+    const b = bed({ '.gitignore': '.cache/\n', 'burnex.yml': SHARED }, { git: true });
+    const first = await firstRun(b);
+    assert.equal(first.status, 'failed');
+    const sourceDir = readStatus(first.journal.paths).jobs.find((job) => job.id === 'первая')?.workspace?.path;
+    assert.ok(sourceDir !== undefined);
+
+    const second = await resume(b, first, 'первая');
+    const records = readStatus(second.journal.paths).jobs;
+    const dir = records.find((job) => job.id === 'первая')?.workspace;
+    assert.equal(dir?.path, sourceDir, 'каталог дерева перенят у исходного прогона');
+    assert.ok(dir?.adopted_from !== undefined);
+    for (const name of ['первая', 'вторая', 'третья']) {
+      assert.ok(existsSync(join(sourceDir, '.cache', name)), `игнорируемый след ${name} остался`);
+    }
+    // Переисполнение с первой работы видит исходное отслеживаемое состояние:
+    // правки исходного прогона сняты и сделаны заново.
+    assert.equal(readFileSync(join(sourceDir, 'плод.txt'), 'utf8'), 'от первой\n');
+    assert.equal(second.status, 'failed');
+  });
+
+  // Сценарий: «Каталог дерева удалён»
+  it('каталог дерева удалён: заводится заново и приводится к якорю последнего переиспользованного шага', async () => {
+    const b = bed({ '.gitignore': '.cache/\n', 'burnex.yml': SHARED }, { git: true });
+    const first = await firstRun(b);
+    assert.equal(first.status, 'failed');
+    const sourceDir = readStatus(first.journal.paths).jobs.find((job) => job.id === 'первая')?.workspace?.path as string;
+    execFileSync('git', ['-C', b.project.root, 'worktree', 'remove', '--force', sourceDir]);
+
+    const plan = planFor(b, first);
+    assert.equal(decisions(plan)['вторая/пишет'], 'reuse');
+    const second = await resume(b, first);
+    const dir = readStatus(second.journal.paths).jobs.find((job) => job.id === 'третья')?.workspace;
+    assert.notEqual(dir?.path, sourceDir);
+    assert.equal(dir?.adopted_from, undefined);
+    assert.equal(readFileSync(join(dir?.path as string, 'плод.txt'), 'utf8'), 'от первой\n');
+    assert.equal(readFileSync(join(dir?.path as string, 'второй.txt'), 'utf8'), 'от второй\n');
+  });
+});

@@ -90,6 +90,21 @@
         "path": {
           "type": "string"
         },
+        "scope": {
+          "type": "string",
+          "enum": [
+            "run",
+            "job"
+          ]
+        },
+        "trees": {
+          "minItems": 1,
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$"
+          }
+        },
         "source": {
           "type": "string",
           "const": "commit"
@@ -783,6 +798,10 @@
                   },
                   "inherit": {
                     "type": "string"
+                  },
+                  "tree": {
+                    "type": "string",
+                    "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$"
                   }
                 },
                 "additionalProperties": false
@@ -1111,6 +1130,10 @@
                   },
                   "inherit": {
                     "type": "string"
+                  },
+                  "tree": {
+                    "type": "string",
+                    "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$"
                   }
                 },
                 "additionalProperties": false

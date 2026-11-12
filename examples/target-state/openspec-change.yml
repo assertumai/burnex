@@ -16,7 +16,9 @@ inputs:
   skip_review: { type: bool, default: false }
 
 # cwd — результат остаётся в текущем дереве, возвращать нечего.
-# Для параллельного прогона нескольких работ ставь worktree и concurrency > 1.
+# Для параллельного прогона нескольких работ ставь worktree, concurrency > 1
+# и объяви деревья (workspace.trees + tree у работ) либо scope: job:
+# в одном дереве работы идут по очереди.
 workspace:
   mode: cwd
 
