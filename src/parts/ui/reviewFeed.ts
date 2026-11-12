@@ -1,13 +1,14 @@
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { basename, dirname, join, relative } from 'node:path';
+import { parse as parseYaml } from 'yaml';
 
 import { readLockJobs, type LockReview, type LockReviewParticipant } from '../pipeline/document/lockRead.js';
 import { AGGREGATOR_ID } from '../pipeline/document/model.js';
-import { DISCUSSION_FILE, participantDir, replyDir } from '../pipeline/run/exec/reviewStep.js';
 import { findStepDir, isRunAlive, listLoopPasses, readUsageSoft } from '../pipeline/run/journal/reader.js';
 import { runPaths, type RunPaths } from '../pipeline/run/journal/paths.js';
 import type { CostSource, StatusValue } from '../pipeline/run/journal/schema.js';
 import { readJournalJson } from './file.js';
+import { DEFENDER_ID, DEFENSE_FILE, DISCUSSION_FILE, participantDir, replyDir, threadTurnDir } from './reviewLayout.js';
 import type { JournalFileRef } from './snapshot.js';
 
 // Записи `discussion.ndjson` прежнего режима `discussion`: модуль движка с
@@ -44,19 +45,28 @@ type DiscussionRecord =
   | { readonly kind: 'outcome'; readonly consensus: false; readonly reason: NoConsensusReason };
 
 /**
- * Лента шага `review` для деталей прогона (`ui-review-discussion`).
+ * Лента шага `review` для деталей прогона (`review-defend`, design.md,
+ * решение 8).
  *
- * Строится из журнала шага, а не из потока бэкенда (design.md, Решение 1):
- * `discussion.ndjson` — реплики и исход, `participants/<id>/step.json` и
- * `rounds/<N>/step.json` — кто участвовал, чем и с каким исходом, их
- * `output.json` — находки независимого ревью и вердикт агрегатора. Порядок и
- * лимит реплик — из замка прогона: каталоги участников порядка не хранят, а
- * цвет участника задаётся его позицией в стратегии.
+ * Строится из журнала шага, а не из потока бэкенда: `defense.ndjson` —
+ * защитник, находки, реплики веток, закрытия и исход;
+ * `participants/<id>/step.json`, `participants/<id>/rounds/<r>/step.json` и
+ * `participants/defender/<ревьюер>/rounds/<r>/step.json` — кто участвовал,
+ * чем и с каким исходом; `output.json` — находки независимого ревью и вердикт
+ * агрегатора. Порядок участников и лимит раундов — из замка прогона: каталоги
+ * участников порядка не хранят, а цвет участника задаётся его позицией в
+ * стратегии.
+ *
+ * Журнал прежнего режима `discussion` не разбирается: от него остаются
+ * участники и вердикт (`legacy`).
  *
  * Чтение остаётся чтением: модуль ничего не пишет на диск. Ленту читает
  * опрос витрины раз в секунду, пока шаг идёт, поэтому отказ разбора любой
  * строки или файла даёт пропуск записи, а не исключение.
  */
+
+/** Раундов ветки по умолчанию — `defend.rounds` стратегии без значения. */
+export const DEFAULT_DEFEND_ROUNDS = 2;
 
 /** Расход участника. `null` — сводка ещё не записана либо не называет его. */
 export interface ReviewFeedUsage {
@@ -67,10 +77,12 @@ export interface ReviewFeedUsage {
   readonly wallclockMs: number;
 }
 
-/** Один вызов участника: находки, реплика раунда или вердикт. Открывается разобранным ходом. */
+/** Один вызов участника: находки, ответ раунда, ход защитника или вердикт. Открывается разобранным ходом. */
 export interface ReviewFeedSession {
-  /** Раунд реплики; нет — первый вызов (находки ревьюера, вердикт агрегатора). */
+  /** Раунд ветки; нет — первый вызов (находки ревьюера, вердикт агрегатора). */
   readonly round?: number;
+  /** Ветка ревьюера — только у ходов защитника. */
+  readonly thread?: string;
   readonly status?: StatusValue;
   readonly reason?: string;
   readonly running: boolean;
@@ -80,73 +92,88 @@ export interface ReviewFeedSession {
 
 export interface ReviewFeedParticipant {
   readonly id: string;
-  readonly role: 'reviewer' | 'aggregator';
+  readonly role: 'reviewer' | 'aggregator' | 'defender';
   readonly agent?: string;
   readonly model?: string;
   readonly focus?: string;
-  /** Позиция в стратегии: ревьюеры по порядку с нуля, агрегатор — следующий. */
+  /** Позиция в стратегии: ревьюеры по порядку с нуля, затем агрегатор, затем защитник. */
   readonly color: number;
-  /** Исход первого вызова: находки ревьюера либо вердикт агрегатора. */
+  /** Исход первого вызова: находки ревьюера либо вердикт агрегатора. У защитника нет. */
   readonly status?: StatusValue;
   readonly reason?: string;
   /** Участник исполняется прямо сейчас — его вызов начат и не записан. */
   readonly running: boolean;
-  /** Реплики обсуждения, отправленные ревьюером (раунды ≥ 1). */
-  readonly messages: number;
   readonly sessions: readonly ReviewFeedSession[];
   readonly usage: ReviewFeedUsage;
 }
 
-/** Предложение, на которое ссылается реплика: id, автор и краткое содержание. */
-export interface ReviewFeedQuote {
-  readonly id: string;
-  readonly by?: string;
-  readonly summary: string;
-}
+export type ReviewFindingStatus = 'open' | 'accepted' | 'withdrawn' | 'contested';
+export type DefenderStance = 'accept' | 'dispute' | 'clarify';
+export type RebuttalStance = 'maintain' | 'withdraw' | 'revise';
 
 export interface ReviewFinding {
+  /** Id находки `<ревьюер>.<n>` — в режиме `defend`. */
+  readonly id?: string;
+  /** Итоговая серьёзность: после пересмотра ревьюером — новая. */
   readonly severity?: string;
   readonly title?: string;
   readonly location?: string;
   readonly detail?: string;
   readonly suggestion?: string;
+  /** Статус защиты — в режиме `defend`; `open` — пока находка не закрыта. */
+  readonly status?: ReviewFindingStatus;
+  /** Заявленная серьёзность, когда итоговая от неё отличается. */
+  readonly revisedFrom?: string;
+}
+
+/** Кто защищает: форк сессии имплементатора или свежий агент с причиной. */
+export interface ReviewFeedDefender {
+  readonly mode: 'fork' | 'fresh';
+  readonly implementer?: string;
+  readonly agent?: string;
+  readonly model?: string;
+  /** `no_implementer`, `no_session` или `no_fork` — у свежего агента. */
+  readonly reason?: string;
+}
+
+/** Ответ реплики по одной находке. */
+export interface ReviewFeedResponse {
+  readonly finding: string;
+  readonly stance: DefenderStance | RebuttalStance;
+  readonly text: string;
+  /** Доказательство защитника. */
+  readonly evidence?: string;
+  /** Новая серьёзность у `revise`. */
+  readonly severity?: string;
 }
 
 export type ReviewFeedEntry =
+  | ({ readonly kind: 'defender' } & ReviewFeedDefender)
   | {
       /** Независимые находки ревьюера — первое его сообщение. */
       readonly kind: 'findings';
       readonly participant: string;
-      readonly messageId?: string;
-      readonly proposal?: string;
       readonly summary: string;
       readonly findings: readonly ReviewFinding[];
     }
   | {
-      readonly kind: 'message';
+      /** Реплика ветки: ход защитника либо ответ ревьюера. */
+      readonly kind: 'reply';
       readonly participant: string;
-      readonly messageId: string;
+      readonly side: 'defender' | 'reviewer';
+      /** Ветка — id ревьюера. */
+      readonly thread: string;
       readonly round: number;
-      readonly seq: number;
-      readonly stance: Stance;
+      readonly messageId: string;
       readonly text: string;
-      /** Порядковый номер реплики ревьюера — счётчик `n/лимит`. */
-      readonly count: number;
-      /** Предложение, которое реплика вносит (позиция «предлагает»). */
-      readonly proposal?: ReviewFeedQuote;
-      /** Предложение, с которым реплика соглашается или спорит. */
-      readonly target?: ReviewFeedQuote;
-      /** Реплики, на которые она отвечает. */
-      readonly replyTo?: readonly ReviewFeedQuote[];
-      /** Реплики нет: дважды не прошла схему. */
+      readonly responses: readonly ReviewFeedResponse[];
+      /** Ответа нет: дважды не прошёл схему. */
       readonly invalid?: true;
-      /** Реплики нет: вызов сорвался — таймаут, отказ или ненулевой код бэкенда. */
+      /** Ответа нет: вызов сорвался — таймаут, отказ бэкенда, неудачный форк. */
       readonly failure?: string;
     }
-  | { readonly kind: 'round'; readonly round: number }
   | { readonly kind: 'failure'; readonly participant: string; readonly reason: string }
-  | { readonly kind: 'outcome'; readonly consensus: true; readonly proposal: string }
-  | { readonly kind: 'outcome'; readonly consensus: false; readonly reason: NoConsensusReason }
+  | { readonly kind: 'outcome'; readonly accepted: number; readonly withdrawn: number; readonly contested: number }
   | {
       readonly kind: 'verdict';
       readonly participant: string;
@@ -159,27 +186,42 @@ export type ReviewFeedEntry =
       readonly output?: unknown;
     };
 
-export interface ReviewFeedProposal {
+/** Находка в боковой панели: статус и итоговая серьёзность. */
+export interface ReviewFeedFinding {
   readonly id: string;
   readonly by: string;
-  readonly round: number;
-  readonly summary: string;
-  /** Действующее, принято консенсусом либо без поддержки. */
-  readonly status: 'active' | 'accepted' | 'unsupported';
+  readonly title?: string;
+  readonly severity?: string;
+  readonly revisedFrom?: string;
+  readonly status: ReviewFindingStatus;
+}
+
+/** Ветка защиты ревьюера: прошедшие раунды из лимита. */
+export interface ReviewFeedThread {
+  readonly reviewer: string;
+  readonly rounds: number;
+  /** Все находки ветки закрыты. */
+  readonly settled: boolean;
 }
 
 export interface ReviewFeed {
-  readonly mode?: 'independent' | 'discussion';
-  /** Лимит реплик ревьюера — только у обсуждения. */
-  readonly maxMessages?: number;
+  readonly mode?: 'independent' | 'defend';
+  /** Лимит раундов ветки — только у `defend`. */
+  readonly rounds?: number;
+  readonly defender?: ReviewFeedDefender;
   readonly participants: readonly ReviewFeedParticipant[];
   readonly entries: readonly ReviewFeedEntry[];
-  readonly proposals: readonly ReviewFeedProposal[];
+  /** Находки защиты по порядку записи — только у `defend`. */
+  readonly findings: readonly ReviewFeedFinding[];
+  readonly threads: readonly ReviewFeedThread[];
   /**
-   * Журнал без ленты: шаг не в режиме `independent`, а `discussion.ndjson`
-   * нет. Показ — список участников и выход агрегатора.
+   * Журнал без ленты: шаг прежнего режима `discussion` либо режима, которого
+   * замок не называет, без журнала защиты. Показ — список участников и выход
+   * агрегатора.
    */
   readonly legacy: boolean;
+  /** Прежний режим, чей журнал лента не разбирает. */
+  readonly legacyMode?: 'discussion';
   /** Дописывать больше нечего: шаг записан, прогон не жив либо проход прошлый. */
   readonly done: boolean;
   /**
@@ -208,26 +250,33 @@ function summaryOf(content: unknown): string {
   return asString(asRecord(content)?.summary) ?? '';
 }
 
-function findingsOf(content: unknown): ReviewFinding[] {
+const FINDING_KEYS = ['severity', 'title', 'location', 'detail', 'suggestion'] as const;
+
+function findingOf(item: unknown): Record<string, string> | undefined {
+  const record = asRecord(item);
+  if (record === undefined) return undefined;
+  const finding: Record<string, string> = {};
+  for (const key of FINDING_KEYS) {
+    const value = asString(record[key]);
+    if (value !== undefined) finding[key] = value;
+  }
+  return finding;
+}
+
+function findingsOf(content: unknown): Record<string, string>[] {
   const list = asRecord(content)?.findings;
   if (!Array.isArray(list)) return [];
   return list.flatMap((item) => {
-    const record = asRecord(item);
-    if (record === undefined) return [];
-    const finding: Record<string, string> = {};
-    for (const key of ['severity', 'title', 'location', 'detail', 'suggestion'] as const) {
-      const value = asString(record[key]);
-      if (value !== undefined) finding[key] = value;
-    }
-    return [finding as ReviewFinding];
+    const finding = findingOf(item);
+    return finding === undefined ? [] : [finding];
   });
 }
 
 /**
- * Записи ленты по строкам. Строка, не разобранная как JSON, пропускается:
+ * Записи журнала по строкам. Строка, не разобранная как JSON, пропускается:
  * последняя может быть дописана не целиком, пока шаг идёт.
  */
-function readDiscussion(path: string): DiscussionRecord[] | undefined {
+function readNdjson(path: string): Record<string, unknown>[] | undefined {
   if (!existsSync(path)) return undefined;
   let text: string;
   try {
@@ -239,7 +288,7 @@ function readDiscussion(path: string): DiscussionRecord[] | undefined {
     if (line.trim() === '') return [];
     try {
       const record = asRecord(JSON.parse(line));
-      return record !== undefined && typeof record.kind === 'string' ? [record as unknown as DiscussionRecord] : [];
+      return record !== undefined && typeof record.kind === 'string' ? [record] : [];
     } catch {
       return [];
     }
@@ -252,7 +301,6 @@ interface CallRecord {
   readonly agent?: string;
   readonly model?: string;
   readonly focus?: string;
-  readonly role?: string;
   readonly wallclockMs: number;
 }
 
@@ -275,7 +323,6 @@ function readCall(dir: string): CallRecord | undefined {
   const agent = pick('agent');
   const model = pick('model');
   const focus = pick('focus');
-  const role = pick('role');
   return {
     wallclockMs,
     ...(status === undefined ? {} : { status }),
@@ -283,7 +330,6 @@ function readCall(dir: string): CallRecord | undefined {
     ...(agent === undefined ? {} : { agent }),
     ...(model === undefined ? {} : { model }),
     ...(focus === undefined ? {} : { focus }),
-    ...(role === undefined ? {} : { role }),
   };
 }
 
@@ -304,13 +350,22 @@ function listRounds(dir: string): number[] {
     .sort((a, b) => a - b);
 }
 
-/** Участники журнала, о которых замок не знает, — по каталогам, агрегатор последним. */
+function listDirs(dir: string): string[] {
+  if (!existsSync(dir)) return [];
+  try {
+    return readdirSync(dir, { withFileTypes: true })
+      .filter((entry) => entry.isDirectory())
+      .map((entry) => entry.name)
+      .sort();
+  } catch {
+    return [];
+  }
+}
+
+/** Участники журнала, о которых замок не знает, — по каталогам; агрегатор и защитник отдельно. */
 function journalParticipants(stepDir: string): LockReviewParticipant[] {
-  const root = join(stepDir, 'participants');
-  if (!existsSync(root)) return [];
-  return readdirSync(root)
-    .filter((name) => name !== AGGREGATOR_ID)
-    .sort()
+  return listDirs(join(stepDir, 'participants'))
+    .filter((name) => name !== AGGREGATOR_ID && name !== DEFENDER_ID)
     .map((id) => ({ id }));
 }
 
@@ -324,6 +379,25 @@ function lockReview(paths: RunPaths, jobId: string, stepId: string): LockReview 
   }
 }
 
+/**
+ * Лимит раундов ветки из записи стратегии в замке (`review.defend.rounds`).
+ * Общий разбор замка его не несёт, а лента — единственный, кому он нужен
+ * из записанного; нет значения — умолчание стратегии.
+ */
+function lockDefendRounds(paths: RunPaths, jobId: string, stepId: string): number {
+  try {
+    const jobs = asRecord(parseYaml(readFileSync(paths.lock, 'utf8')))?.jobs;
+    if (!Array.isArray(jobs)) return DEFAULT_DEFEND_ROUNDS;
+    const job = jobs.map(asRecord).find((entry) => entry?.id === jobId);
+    const steps = Array.isArray(job?.steps) ? job.steps : [];
+    const step = steps.map(asRecord).find((entry) => entry?.id === stepId);
+    const rounds = asRecord(asRecord(step?.review)?.defend)?.rounds;
+    return typeof rounds === 'number' && Number.isInteger(rounds) && rounds > 0 ? rounds : DEFAULT_DEFEND_ROUNDS;
+  } catch {
+    return DEFAULT_DEFEND_ROUNDS;
+  }
+}
+
 function reusedFromOf(stepDir: string): string | undefined {
   return asString(asRecord(readJournalJson(join(stepDir, 'step.json')))?.reused_from);
 }
@@ -333,7 +407,7 @@ const MAX_REUSE_HOPS = 32;
 
 /**
  * Откуда читать ленту переиспользованного шага: он в этом прогоне не
- * исполнялся, и его участники и `discussion.ndjson` остались в исходном
+ * исполнялся, и его участники и `defense.ndjson` остались в исходном
  * прогоне — а тот мог и сам переиспользовать шаг. Без `paths` исходного шага
  * уже нет: прогон удалён или его каталог не найти.
  */
@@ -355,6 +429,155 @@ function reusedSource(
     runId = next;
   }
   return { runId: first };
+}
+
+const FINDING_STATUSES: ReadonlySet<string> = new Set(['accepted', 'withdrawn', 'contested']);
+const STANCES: ReadonlySet<string> = new Set(['accept', 'dispute', 'clarify', 'maintain', 'withdraw', 'revise']);
+
+function defenderOf(record: Record<string, unknown> | undefined): ReviewFeedDefender | undefined {
+  if (record === undefined || (record.mode !== 'fork' && record.mode !== 'fresh')) return undefined;
+  const implementer = asString(record.implementer);
+  const agent = asString(record.agent);
+  const model = asString(record.model);
+  const reason = asString(record.reason);
+  return {
+    mode: record.mode,
+    ...(implementer === undefined ? {} : { implementer }),
+    ...(agent === undefined ? {} : { agent }),
+    ...(model === undefined ? {} : { model }),
+    ...(reason === undefined ? {} : { reason }),
+  };
+}
+
+function responsesOf(value: unknown): ReviewFeedResponse[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((item) => {
+    const record = asRecord(item);
+    const finding = asString(record?.finding);
+    const stance = asString(record?.stance);
+    if (record === undefined || finding === undefined || stance === undefined || !STANCES.has(stance)) return [];
+    const evidence = asString(record.evidence);
+    const severity = asString(record.severity);
+    return [
+      {
+        finding,
+        stance: stance as ReviewFeedResponse['stance'],
+        text: asString(record.text) ?? '',
+        ...(evidence === undefined || evidence === '' ? {} : { evidence }),
+        ...(severity === undefined ? {} : { severity }),
+      },
+    ];
+  });
+}
+
+function textOf(record: Record<string, unknown>): string {
+  if (!Array.isArray(record.parts)) return '';
+  return record.parts.flatMap((part) => {
+    const text = asString(asRecord(part)?.text);
+    return text === undefined ? [] : [text];
+  }).join('\n');
+}
+
+interface DefenseLog {
+  readonly defender?: ReviewFeedDefender;
+  /** Находки по порядку записи, с применёнными пересмотрами и закрытиями. */
+  readonly findings: readonly (ReviewFeedFinding & { readonly finding: Record<string, string> })[];
+  readonly replies: readonly Extract<ReviewFeedEntry, { kind: 'reply' }>[];
+  readonly outcome?: Extract<ReviewFeedEntry, { kind: 'outcome' }>;
+}
+
+/** Разбор `defense.ndjson`: статус находки — `open`, пока её не закрыла строка `settled`. */
+function readDefense(records: readonly Record<string, unknown>[]): DefenseLog {
+  let defender: ReviewFeedDefender | undefined;
+  const order: string[] = [];
+  const findings = new Map<string, { by: string; finding: Record<string, string>; declared?: string; severity?: string; status: ReviewFindingStatus }>();
+  const replies: Extract<ReviewFeedEntry, { kind: 'reply' }>[] = [];
+  let outcome: Extract<ReviewFeedEntry, { kind: 'outcome' }> | undefined;
+  for (const record of records) {
+    switch (record.kind) {
+      case 'defender':
+        defender = defenderOf(record) ?? defender;
+        break;
+      case 'finding': {
+        const id = asString(record.id);
+        const by = asString(record.by);
+        if (id === undefined || by === undefined || findings.has(id)) break;
+        const finding = findingOf(record) ?? {};
+        order.push(id);
+        findings.set(id, {
+          by,
+          finding,
+          status: 'open',
+          ...(finding.severity === undefined ? {} : { declared: finding.severity, severity: finding.severity }),
+        });
+        break;
+      }
+      case 'message': {
+        const from = asString(record.from);
+        const messageId = asString(record.messageId);
+        const thread = asString(record.thread);
+        const round = record.round;
+        if (from === undefined || messageId === undefined || thread === undefined || typeof round !== 'number') break;
+        const side = from === DEFENDER_ID ? 'defender' : 'reviewer';
+        const responses = responsesOf(record.responses);
+        // Пересмотр серьёзности ревьюером — до закрытия: `settled` несёт итог.
+        if (side === 'reviewer') {
+          for (const response of responses) {
+            const entry = findings.get(response.finding);
+            if (response.stance === 'revise' && response.severity !== undefined && entry !== undefined) entry.severity = response.severity;
+          }
+        }
+        const failure = asString(record.failure);
+        replies.push({
+          kind: 'reply',
+          participant: from,
+          side,
+          thread,
+          round,
+          messageId,
+          text: textOf(record),
+          responses,
+          ...(record.invalid === true ? { invalid: true as const } : {}),
+          ...(failure === undefined ? {} : { failure }),
+        });
+        break;
+      }
+      case 'settled': {
+        const entry = findings.get(asString(record.finding) ?? '');
+        const status = asString(record.status);
+        if (entry === undefined || status === undefined || !FINDING_STATUSES.has(status)) break;
+        entry.status = status as ReviewFindingStatus;
+        const severity = asString(record.severity);
+        if (severity !== undefined) entry.severity = severity;
+        break;
+      }
+      case 'outcome': {
+        const count = (key: string): number => (typeof record[key] === 'number' ? (record[key] as number) : 0);
+        outcome = { kind: 'outcome', accepted: count('accepted'), withdrawn: count('withdrawn'), contested: count('contested') };
+        break;
+      }
+      default:
+        break;
+    }
+  }
+  return {
+    ...(defender === undefined ? {} : { defender }),
+    findings: order.map((id) => {
+      const entry = findings.get(id)!;
+      const revised = entry.declared !== undefined && entry.severity !== undefined && entry.severity !== entry.declared;
+      return {
+        id,
+        by: entry.by,
+        status: entry.status,
+        finding: entry.finding,
+        ...(entry.finding.title === undefined ? {} : { title: entry.finding.title }),
+        ...(entry.severity === undefined ? {} : { severity: entry.severity }),
+        ...(revised ? { revisedFrom: entry.declared } : {}),
+      };
+    }),
+    replies,
+    ...(outcome === undefined ? {} : { outcome }),
+  };
 }
 
 export function readReviewFeed(
@@ -385,15 +608,31 @@ export function readReviewFeed(
       ? []
       : journalParticipants(stepDir);
   const aggregator = strategy?.aggregator ?? { id: AGGREGATOR_ID };
-  const mode = strategy?.mode === 'independent' || strategy?.mode === 'discussion' ? strategy.mode : undefined;
-  const records = stepDir === undefined ? undefined : readDiscussion(join(stepDir, DISCUSSION_FILE));
+  const records = stepDir === undefined ? undefined : readNdjson(join(stepDir, DEFENSE_FILE));
+  const legacyMode =
+    strategy?.mode === 'discussion' || (stepDir !== undefined && existsSync(join(stepDir, DISCUSSION_FILE)))
+      ? ('discussion' as const)
+      : undefined;
+  const mode =
+    legacyMode !== undefined
+      ? undefined
+      : strategy?.mode === 'independent' || strategy?.mode === 'defend'
+        ? strategy.mode
+        : records !== undefined
+          ? ('defend' as const)
+          : undefined;
+  const defense = mode === 'defend' ? readDefense(records ?? []) : undefined;
   const summary = readUsageSoft(reused?.paths ?? paths).summary;
   const usageOf = summary?.jobs[jobId]?.steps[stepId]?.participants ?? {};
-
-  const messages = (records ?? []).filter((record): record is MessageRecord => record.kind === 'message');
-  const proposalRecords = (records ?? []).filter((record): record is ProposalRecord => record.kind === 'proposal');
-  const proposalIndex = new Map(proposalRecords.map((record) => [record.id, record]));
-  const outcome = records?.find((record) => record.kind === 'outcome');
+  const usage = (id: string, wallclockMs: number): ReviewFeedUsage => {
+    const reported = usageOf[id];
+    return {
+      billableTokens: reported?.billable_tokens ?? null,
+      costUsd: reported?.cost_usd ?? null,
+      ...(reported?.cost_source === undefined ? {} : { costSource: reported.cost_source }),
+      wallclockMs: reported?.wallclock_ms ?? wallclockMs,
+    };
+  };
 
   const participants: ReviewFeedParticipant[] = [...reviewers, aggregator].map((declared, index) => {
     const role = index === reviewers.length ? 'aggregator' : 'reviewer';
@@ -429,7 +668,6 @@ export function readReviewFeed(
         });
       }
     }
-    const reported = usageOf[declared.id];
     const agent = declared.agent ?? first?.agent;
     const model = declared.model ?? first?.model;
     const focus = declared.focus ?? first?.focus;
@@ -443,104 +681,86 @@ export function readReviewFeed(
       ...(first?.status === undefined ? {} : { status: first.status }),
       ...(first?.reason === undefined ? {} : { reason: first.reason }),
       running,
-      messages: messages.filter((message) => message.from === declared.id && message.round > 0).length,
       sessions,
-      usage: {
-        billableTokens: reported?.billable_tokens ?? null,
-        costUsd: reported?.cost_usd ?? null,
-        ...(reported?.cost_source === undefined ? {} : { costSource: reported.cost_source }),
-        wallclockMs: reported?.wallclock_ms ?? wallclockMs,
-      },
+      usage: usage(declared.id, wallclockMs),
     };
   });
 
+  // Защитник — один участник на все ветки: его ходы лежат по ревьюерам, расход
+  // ведётся под `defender` (design.md, решение 7).
+  if (mode === 'defend') {
+    const sessions: ReviewFeedSession[] = [];
+    let wallclockMs = 0;
+    let running = false;
+    let seen: CallRecord | undefined;
+    if (stepDir !== undefined) {
+      const root = participantDir(stepDir, DEFENDER_ID);
+      const declaredOrder = reviewers.map((reviewer) => reviewer.id);
+      const threads = listDirs(root).sort((left, right) => {
+        const a = declaredOrder.indexOf(left);
+        const b = declaredOrder.indexOf(right);
+        return (a === -1 ? Infinity : a) - (b === -1 ? Infinity : b) || left.localeCompare(right);
+      });
+      for (const thread of threads) {
+        for (const round of listRounds(join(root, thread))) {
+          const callDir = threadTurnDir(stepDir, DEFENDER_ID, thread, round);
+          const call = readCall(callDir);
+          seen ??= call;
+          const callRunning = call === undefined && alive;
+          running ||= callRunning;
+          wallclockMs += call?.wallclockMs ?? 0;
+          const stdout = stdoutOf(join(callDir, 'stdout.log'));
+          sessions.push({
+            thread,
+            round,
+            running: callRunning,
+            ...(call?.status === undefined ? {} : { status: call.status }),
+            ...(call?.reason === undefined ? {} : { reason: call.reason }),
+            ...(stdout === undefined ? {} : { stdout }),
+          });
+        }
+      }
+    }
+    const agent = defense?.defender?.agent ?? seen?.agent;
+    const model = defense?.defender?.model ?? seen?.model;
+    // Перед агрегатором: в панели и списке участников защитник — между
+    // ревьюерами и вердиктом, как в ходе шага; цвет — следующий за агрегатором.
+    participants.splice(reviewers.length, 0, {
+      id: DEFENDER_ID,
+      role: 'defender',
+      ...(agent === undefined ? {} : { agent }),
+      ...(model === undefined ? {} : { model }),
+      color: reviewers.length + 1,
+      running,
+      sessions,
+      usage: usage(DEFENDER_ID, wallclockMs),
+    });
+  }
+
   const reviewerParticipants = participants.filter((participant) => participant.role === 'reviewer');
-  // Режим неизвестен (замка нет или он прежней формы) и ленты нет: ни
-  // находки, ни обсуждение восстановить не из чего.
-  const legacy = records === undefined && mode === undefined && done;
+  // Прежний режим либо режим неизвестен (замка нет или он прежней формы) и
+  // журнала защиты нет: ленту восстановить не из чего.
+  const legacy = legacyMode !== undefined || (mode === undefined && done);
   const entries: ReviewFeedEntry[] = [];
 
-  const quote = (id: string | undefined): ReviewFeedQuote | undefined => {
-    if (id === undefined) return undefined;
-    const proposal = proposalIndex.get(id);
-    return proposal === undefined
-      ? { id, summary: '' }
-      : { id, by: proposal.by, summary: summaryOf(proposal.content) };
-  };
-  const messageIndex = new Map(messages.map((message) => [message.messageId, message]));
-
   if (!legacy) {
-    if (records !== undefined) {
-      for (const message of messages.filter((entry) => entry.round === 0)) {
-        const proposal = message.proposal === undefined ? undefined : proposalIndex.get(message.proposal);
-        entries.push({
-          kind: 'findings',
-          participant: message.from,
-          messageId: message.messageId,
-          ...(message.proposal === undefined ? {} : { proposal: message.proposal }),
-          summary: proposal === undefined ? textOf(message) : summaryOf(proposal.content),
-          findings: proposal === undefined ? [] : findingsOf(proposal.content),
-        });
-      }
-    } else {
-      // Находки независимого ревью (и обсуждения, чей раунд 0 ещё идёт) — из
-      // выходов ревьюеров, в порядке стратегии.
-      for (const reviewer of reviewerParticipants) {
-        if (reviewer.status !== 'success' || stepDir === undefined) continue;
-        const output = readJournalJson(join(participantDir(stepDir, reviewer.id), 'output.json'));
-        if (output === undefined) continue;
-        entries.push({ kind: 'findings', participant: reviewer.id, summary: summaryOf(output), findings: findingsOf(output) });
-      }
-    }
-
-    // Ревьюер без находок — тем же правилом, что движок: отказ либо успех без выхода.
+    if (defense?.defender !== undefined) entries.push({ kind: 'defender', ...defense.defender });
     for (const reviewer of reviewerParticipants) {
-      if (reviewer.status === undefined || reviewer.running) continue;
-      const hasFindings = entries.some((entry) => entry.kind === 'findings' && entry.participant === reviewer.id);
-      if (hasFindings) continue;
-      entries.push({ kind: 'failure', participant: reviewer.id, reason: reviewer.reason ?? `status ${reviewer.status}` });
-    }
-
-    const counts = new Map<string, number>();
-    let round = 0;
-    for (const message of messages) {
-      if (message.round === 0) continue;
-      if (message.round !== round) {
-        round = message.round;
-        entries.push({ kind: 'round', round });
+      if (reviewer.running || reviewer.status === undefined) continue;
+      const output = reviewer.status === 'success' && stepDir !== undefined
+        ? readJournalJson(join(participantDir(stepDir, reviewer.id), 'output.json'))
+        : undefined;
+      if (output === undefined) {
+        // Ревьюер без находок — тем же правилом, что движок: отказ либо успех без выхода.
+        entries.push({ kind: 'failure', participant: reviewer.id, reason: reviewer.reason ?? `status ${reviewer.status}` });
+        continue;
       }
-      const count = (counts.get(message.from) ?? 0) + 1;
-      counts.set(message.from, count);
-      const proposal = quote(message.proposal);
-      const target = quote(message.target);
-      const replyTo = (message.replyTo ?? []).flatMap((id) => {
-        const replied = messageIndex.get(id);
-        return replied === undefined ? [] : [{ id, by: replied.from, summary: textOf(replied) }];
-      });
-      entries.push({
-        kind: 'message',
-        participant: message.from,
-        messageId: message.messageId,
-        round: message.round,
-        seq: message.seq,
-        stance: message.stance,
-        text: textOf(message),
-        count,
-        ...(proposal === undefined ? {} : { proposal }),
-        ...(target === undefined ? {} : { target }),
-        ...(replyTo.length === 0 ? {} : { replyTo }),
-        ...(message.invalid === true ? { invalid: true as const } : {}),
-        ...(message.failure === undefined ? {} : { failure: message.failure }),
-      });
+      entries.push({ kind: 'findings', participant: reviewer.id, summary: summaryOf(output), findings: reviewerFindings(reviewer.id, output, defense) });
+      for (const reply of defense?.replies ?? []) {
+        if (reply.thread === reviewer.id) entries.push(reply);
+      }
     }
-
-    if (outcome !== undefined && outcome.kind === 'outcome') {
-      entries.push(
-        outcome.consensus
-          ? { kind: 'outcome', consensus: true, proposal: outcome.proposal }
-          : { kind: 'outcome', consensus: false, reason: outcome.reason },
-      );
-    }
+    if (defense?.outcome !== undefined) entries.push(defense.outcome);
   }
 
   const judge = participants.find((participant) => participant.role === 'aggregator');
@@ -560,16 +780,52 @@ export function readReviewFeed(
     );
   }
 
+  const rounds = mode === 'defend' ? lockDefendRounds(paths, jobId, stepId) : undefined;
+  const findings: ReviewFeedFinding[] = (defense?.findings ?? []).map(({ finding: _finding, ...rest }) => rest);
+  const threads: ReviewFeedThread[] = mode === 'defend'
+    ? reviewerParticipants.flatMap((reviewer) => {
+        const own = findings.filter((finding) => finding.by === reviewer.id);
+        if (own.length === 0) return [];
+        const passed = Math.max(0, ...(defense?.replies ?? []).filter((reply) => reply.thread === reviewer.id).map((reply) => reply.round));
+        return [{ reviewer: reviewer.id, rounds: passed, settled: own.every((finding) => finding.status !== 'open') }];
+      })
+    : [];
+
   return {
     ...(mode === undefined ? {} : { mode }),
-    ...(mode === 'discussion' && strategy?.maxMessages !== undefined ? { maxMessages: strategy.maxMessages } : {}),
+    ...(rounds === undefined ? {} : { rounds }),
+    ...(defense?.defender === undefined ? {} : { defender: defense.defender }),
     participants,
     entries,
-    proposals: proposalStatuses(proposalRecords, outcome),
+    findings,
+    threads,
     legacy,
+    ...(legacyMode === undefined ? {} : { legacyMode }),
     done,
     ...(reused === undefined ? {} : { reusedFrom: { runId: reused.runId, available: stepDir !== undefined } }),
   };
+}
+
+/**
+ * Находки ревьюера для его сообщения. В режиме `defend` — из журнала защиты:
+ * id, итоговая серьёзность и статус. Пока строки находок ревьюера не
+ * записаны (защита ещё не началась), — из его выхода с id по порядку и
+ * статусом `open`, тем же правилом нумерации, что у движка.
+ */
+function reviewerFindings(reviewer: string, output: unknown, defense: DefenseLog | undefined): ReviewFinding[] {
+  const declared = findingsOf(output);
+  if (defense === undefined) return declared;
+  const logged = defense.findings.filter((finding) => finding.by === reviewer);
+  if (logged.length === 0) {
+    return declared.map((finding, index) => ({ ...finding, id: `${reviewer}.${index + 1}`, status: 'open' as const }));
+  }
+  return logged.map((entry) => ({
+    ...entry.finding,
+    id: entry.id,
+    status: entry.status,
+    ...(entry.severity === undefined ? {} : { severity: entry.severity }),
+    ...(entry.revisedFrom === undefined ? {} : { revisedFrom: entry.revisedFrom }),
+  }));
 }
 
 function verdictEntry(participant: string, status: StatusValue | undefined, reason: string | undefined, output: unknown): ReviewFeedEntry {
@@ -585,34 +841,4 @@ function verdictEntry(participant: string, status: StatusValue | undefined, reas
     ...(summary === undefined ? {} : { summary }),
     ...(output === undefined ? {} : { output }),
   };
-}
-
-function textOf(message: MessageRecord): string {
-  return message.parts.map((part) => part.text).join('\n');
-}
-
-/**
- * Статус предложения. Принято — названо исходом с консенсусом. Действующее —
- * последнее предложение своего автора, пока обсуждение не кончилось. Прочие —
- * без поддержки: их автор внёс новое, или обсуждение кончилось не на них.
- */
-function proposalStatuses(
-  proposals: readonly ProposalRecord[],
-  outcome: DiscussionRecord | undefined,
-): ReviewFeedProposal[] {
-  const latest = new Map<string, string>();
-  for (const proposal of proposals) latest.set(proposal.by, proposal.id);
-  const accepted = outcome?.kind === 'outcome' && outcome.consensus ? outcome.proposal : undefined;
-  return proposals.map((proposal) => ({
-    id: proposal.id,
-    by: proposal.by,
-    round: proposal.round,
-    summary: summaryOf(proposal.content),
-    status:
-      proposal.id === accepted
-        ? 'accepted'
-        : outcome === undefined && latest.get(proposal.by) === proposal.id
-          ? 'active'
-          : 'unsupported',
-  }));
 }

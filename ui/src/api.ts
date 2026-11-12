@@ -1221,9 +1221,10 @@ export async function fetchStepOutput(options: {
   readonly pass?: number;
   readonly stdoutOffset?: number;
   readonly stderrOffset?: number;
-  /** Участник шага `review` и раунд его реплики — вывод его вызова. */
+  /** Участник шага `review`, раунд его ответа и ветка хода защитника — вывод его вызова. */
   readonly participant?: string;
   readonly round?: number;
+  readonly thread?: string;
 }): Promise<StepOutputResult> {
   const query = new URLSearchParams({
     run: options.address,
@@ -1234,20 +1235,26 @@ export async function fetchStepOutput(options: {
   if (options.pass !== undefined) query.set('pass', String(options.pass));
   if (options.participant !== undefined) query.set('participant', options.participant);
   if (options.round !== undefined) query.set('round', String(options.round));
+  if (options.thread !== undefined) query.set('thread', options.thread);
   if (options.stdoutOffset !== undefined) query.set('stdoutOffset', String(options.stdoutOffset));
   if (options.stderrOffset !== undefined) query.set('stderrOffset', String(options.stderrOffset));
   return json<StepOutputResult>(await fetch(`/api/step-output?${query.toString()}`));
 }
 
 /**
- * Лента шага `review` (`ui-review-discussion`): зеркало `ReviewFeed`
- * (`src/parts/ui/reviewFeed.ts`) и ответа `GET /api/review-feed`.
+ * Лента шага `review` (`review-defend`, design.md, решение 8): зеркало
+ * `ReviewFeed` (`src/parts/ui/reviewFeed.ts`) и ответа `GET /api/review-feed`.
  */
-export type ReviewStance = 'propose' | 'agree' | 'disagree';
-export type NoConsensusReason = 'limit' | 'stalled' | 'budget' | 'participants';
+export type ReviewFindingStatus = 'open' | 'accepted' | 'withdrawn' | 'contested';
+/** Позиция защитника по находке. */
+export type DefenderStance = 'accept' | 'dispute' | 'clarify';
+/** Позиция ревьюера в ответ защитнику. */
+export type RebuttalStance = 'maintain' | 'withdraw' | 'revise';
 
 export interface ReviewFeedSession {
   readonly round?: number;
+  /** Ветка ревьюера — у ходов защитника. */
+  readonly thread?: string;
   readonly status?: StatusValue;
   readonly reason?: string;
   readonly running: boolean;
@@ -1256,7 +1263,7 @@ export interface ReviewFeedSession {
 
 export interface ReviewFeedParticipant {
   readonly id: string;
-  readonly role: 'reviewer' | 'aggregator';
+  readonly role: 'reviewer' | 'aggregator' | 'defender';
   readonly agent?: string;
   readonly model?: string;
   readonly focus?: string;
@@ -1264,7 +1271,6 @@ export interface ReviewFeedParticipant {
   readonly status?: StatusValue;
   readonly reason?: string;
   readonly running: boolean;
-  readonly messages: number;
   readonly sessions: readonly ReviewFeedSession[];
   readonly usage: {
     readonly billableTokens: number | null;
@@ -1274,48 +1280,56 @@ export interface ReviewFeedParticipant {
   };
 }
 
-export interface ReviewFeedQuote {
-  readonly id: string;
-  readonly by?: string;
-  readonly summary: string;
-}
-
 export interface ReviewFinding {
+  readonly id?: string;
   readonly severity?: string;
   readonly title?: string;
   readonly location?: string;
   readonly detail?: string;
   readonly suggestion?: string;
+  readonly status?: ReviewFindingStatus;
+  /** Заявленная серьёзность, когда итоговая от неё отличается. */
+  readonly revisedFrom?: string;
+}
+
+export interface ReviewFeedDefender {
+  readonly mode: 'fork' | 'fresh';
+  readonly implementer?: string;
+  readonly agent?: string;
+  readonly model?: string;
+  readonly reason?: string;
+}
+
+export interface ReviewFeedResponse {
+  readonly finding: string;
+  readonly stance: DefenderStance | RebuttalStance;
+  readonly text: string;
+  readonly evidence?: string;
+  readonly severity?: string;
 }
 
 export type ReviewFeedEntry =
+  | ({ readonly kind: 'defender' } & ReviewFeedDefender)
   | {
       readonly kind: 'findings';
       readonly participant: string;
-      readonly messageId?: string;
-      readonly proposal?: string;
       readonly summary: string;
       readonly findings: readonly ReviewFinding[];
     }
   | {
-      readonly kind: 'message';
+      readonly kind: 'reply';
       readonly participant: string;
-      readonly messageId: string;
+      readonly side: 'defender' | 'reviewer';
+      readonly thread: string;
       readonly round: number;
-      readonly seq: number;
-      readonly stance: ReviewStance;
+      readonly messageId: string;
       readonly text: string;
-      readonly count: number;
-      readonly proposal?: ReviewFeedQuote;
-      readonly target?: ReviewFeedQuote;
-      readonly replyTo?: readonly ReviewFeedQuote[];
+      readonly responses: readonly ReviewFeedResponse[];
       readonly invalid?: true;
       readonly failure?: string;
     }
-  | { readonly kind: 'round'; readonly round: number }
   | { readonly kind: 'failure'; readonly participant: string; readonly reason: string }
-  | { readonly kind: 'outcome'; readonly consensus: true; readonly proposal: string }
-  | { readonly kind: 'outcome'; readonly consensus: false; readonly reason: NoConsensusReason }
+  | { readonly kind: 'outcome'; readonly accepted: number; readonly withdrawn: number; readonly contested: number }
   | {
       readonly kind: 'verdict';
       readonly participant: string;
@@ -1326,21 +1340,33 @@ export type ReviewFeedEntry =
       readonly output?: unknown;
     };
 
-export interface ReviewFeedProposal {
+export interface ReviewFeedFinding {
   readonly id: string;
   readonly by: string;
-  readonly round: number;
-  readonly summary: string;
-  readonly status: 'active' | 'accepted' | 'unsupported';
+  readonly title?: string;
+  readonly severity?: string;
+  readonly revisedFrom?: string;
+  readonly status: ReviewFindingStatus;
+}
+
+export interface ReviewFeedThread {
+  readonly reviewer: string;
+  readonly rounds: number;
+  readonly settled: boolean;
 }
 
 export interface ReviewFeed {
-  readonly mode?: 'independent' | 'discussion';
-  readonly maxMessages?: number;
+  readonly mode?: 'independent' | 'defend';
+  /** Лимит раундов ветки — у `defend`. */
+  readonly rounds?: number;
+  readonly defender?: ReviewFeedDefender;
   readonly participants: readonly ReviewFeedParticipant[];
   readonly entries: readonly ReviewFeedEntry[];
-  readonly proposals: readonly ReviewFeedProposal[];
+  readonly findings: readonly ReviewFeedFinding[];
+  readonly threads: readonly ReviewFeedThread[];
   readonly legacy: boolean;
+  /** Прежний режим, чей журнал лента не разбирает. */
+  readonly legacyMode?: 'discussion';
   readonly done: boolean;
   /** Шаг переиспользован: лента из исходного прогона, `available: false` — его больше нет. */
   readonly reusedFrom?: { readonly runId: string; readonly available: boolean };

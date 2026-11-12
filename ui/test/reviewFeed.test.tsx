@@ -6,75 +6,130 @@ import { afterEach, describe, it } from 'node:test';
 import type { Context } from 'cordis';
 import { renderToStaticMarkup } from 'react-dom/server';
 
-import { COLLAPSE_AFTER, ReviewFeedView, groupEntries, initials, type ReviewSelection } from '../src/components/ReviewFeed';
+import { ReviewFeedView, defenderLine, initials, runningLabels, stanceLabel, type ReviewSelection } from '../src/components/ReviewFeed';
 import { fetchReviewFeed, fetchStepOutput, type ReviewFeed, type ReviewFeedEntry, type ReviewFeedParticipant } from '../src/api';
 import { bindRouterKernel } from '../src/router';
 
 /**
- * Лента шага `review` (`ui-review-discussion`, задача 2.4) — по сценариям
- * спеки. Щелчка в тестах нет: разметка проверяется статическим рендером
- * готовой модели, выбор участника — начальным `selected`, живое дополнение —
- * рендером модели следующего опроса и запросом `GET /api/review-feed`.
+ * Лента шага `review` (`review-defend`, задача 4.4) — по сценариям спеки
+ * `ui-dashboard`. Щелчка в тестах нет: разметка проверяется статическим
+ * рендером готовой модели, выбор участника — начальным `selected`, живое
+ * дополнение — рендером модели следующего опроса и запросом
+ * `GET /api/review-feed`.
  */
 
 // Ссылка на исходный прогон (`TargetLink`) читает таблицу маршрутов ядра; без
 // совпавшего маршрута она рисует текст с причиной — для рендера этого хватает.
 bindRouterKernel({ routes: { get: () => ({ table: [] }) } } as unknown as Context);
 
-function participant(id: string, color: number, overrides: Partial<ReviewFeedParticipant> = {}): ReviewFeedParticipant {
-  return {
+function participant(id: string, color: number, overrides: Partial<ReviewFeedParticipant> = {}, withoutStatus = false): ReviewFeedParticipant {
+  const made: ReviewFeedParticipant = {
     id,
-    role: id === 'aggregator' ? 'aggregator' : 'reviewer',
+    role: id === 'aggregator' ? 'aggregator' : id === 'defender' ? 'defender' : 'reviewer',
     agent: color % 2 === 0 ? 'codex' : 'claude',
     model: `m${color}`,
     color,
     status: 'success',
     running: false,
-    messages: 0,
     sessions: [{ running: false, status: 'success', stdout: { name: 'stdout.log', path: `jobs/review/steps/01-check/participants/${id}/stdout.log`, bytes: 10 } }],
     usage: { billableTokens: 1200, costUsd: 0.5, costSource: 'reported', wallclockMs: 5000 },
     ...overrides,
   };
+  if (!withoutStatus) return made;
+  const { status: _status, ...rest } = made;
+  return rest;
 }
 
-const PARTICIPANTS = [
-  participant('security', 0, { messages: 2 }),
-  participant('tests', 1, { messages: 1 }),
-  participant('style', 2, { messages: 1 }),
-  participant('aggregator', 3),
-];
+const DEFENDER = participant('defender', 4, {
+  agent: 'claude',
+  model: 'opus',
+  sessions: [
+    { thread: 'security', round: 1, running: false, status: 'success', stdout: { name: 'stdout.log', path: 'jobs/review/steps/01-check/participants/defender/security/rounds/1/stdout.log', bytes: 7 } },
+    { thread: 'security', round: 2, running: false, status: 'success' },
+    { thread: 'tests', round: 1, running: false, status: 'success' },
+  ],
+  usage: { billableTokens: 9000, costUsd: 2, costSource: 'reported', wallclockMs: 20_000 },
+}, true);
 
-function findings(id: string, messageId: string, proposal: string): ReviewFeedEntry {
-  return {
-    kind: 'findings',
-    participant: id,
-    messageId,
-    proposal,
-    summary: `${id} summary`,
-    findings: [{ severity: 'critical', title: `${id} finding`, location: 'a.ts:1' }],
-  };
-}
+const PARTICIPANTS = [participant('security', 0), participant('tests', 1), participant('style', 2), DEFENDER, participant('aggregator', 3)];
 
-const CONSENSUS: ReviewFeed = {
-  mode: 'discussion',
-  maxMessages: 2,
+const VERDICT: ReviewFeedEntry = {
+  kind: 'verdict',
+  participant: 'aggregator',
+  status: 'success',
+  verdict: 'request_changes',
+  summary: 'fix the injection',
+  output: { verdict: 'request_changes' },
+};
+
+const DEFEND: ReviewFeed = {
+  mode: 'defend',
+  rounds: 2,
+  defender: { mode: 'fork', implementer: 'build.implement', agent: 'claude', model: 'opus' },
   participants: PARTICIPANTS,
   entries: [
-    findings('security', 'm1', 'p1'),
-    findings('tests', 'm2', 'p2'),
-    findings('style', 'm3', 'p3'),
-    { kind: 'round', round: 1 },
-    { kind: 'message', participant: 'security', messageId: 'm4', round: 1, seq: 1, stance: 'agree', text: 'agree with tests', count: 1, target: { id: 'p2', by: 'tests', summary: 'tests summary' } },
-    { kind: 'message', participant: 'tests', messageId: 'm5', round: 1, seq: 2, stance: 'disagree', text: 'no', count: 1, target: { id: 'p3', by: 'style', summary: 'style summary' } },
-    { kind: 'message', participant: 'style', messageId: 'm6', round: 1, seq: 3, stance: 'propose', text: 'new one', count: 1, proposal: { id: 'p4', by: 'style', summary: 'merged' } },
-    { kind: 'round', round: 2 },
-    { kind: 'message', participant: 'security', messageId: 'm7', round: 2, seq: 1, stance: 'agree', text: 'still', count: 2, target: { id: 'p2', by: 'tests', summary: 'tests summary' } },
-    { kind: 'outcome', consensus: true, proposal: 'p2' },
-    { kind: 'verdict', participant: 'aggregator', status: 'success', verdict: 'request_changes', summary: 'fix the injection', output: { verdict: 'request_changes' } },
+    { kind: 'defender', mode: 'fork', implementer: 'build.implement', agent: 'claude', model: 'opus' },
+    {
+      kind: 'findings',
+      participant: 'security',
+      summary: 'security summary',
+      findings: [
+        { id: 'security.1', severity: 'critical', title: 'SQL injection', location: 'src/db.ts:10', status: 'contested' },
+        { id: 'security.2', severity: 'major', title: 'token in logs', status: 'accepted' },
+        { id: 'security.3', severity: 'major', revisedFrom: 'critical', title: 'weak hash', status: 'accepted' },
+      ],
+    },
+    {
+      kind: 'reply',
+      participant: 'defender',
+      side: 'defender',
+      thread: 'security',
+      round: 1,
+      messageId: 'm1',
+      text: 'Most of it holds.',
+      responses: [
+        { finding: 'security.1', stance: 'dispute', text: 'the input is escaped', evidence: 'src/db.ts:42 escape(input)' },
+        { finding: 'security.2', stance: 'accept', text: 'right' },
+        { finding: 'security.3', stance: 'clarify', text: 'legacy hashes only' },
+      ],
+    },
+    {
+      kind: 'reply',
+      participant: 'security',
+      side: 'reviewer',
+      thread: 'security',
+      round: 1,
+      messageId: 'm2',
+      text: '',
+      responses: [
+        { finding: 'security.1', stance: 'maintain', text: 'not on every path' },
+        { finding: 'security.3', stance: 'revise', text: 'major then', severity: 'major' },
+      ],
+    },
+    {
+      kind: 'findings',
+      participant: 'tests',
+      summary: 'tests summary',
+      findings: [
+        { id: 'tests.1', severity: 'minor', title: 'no edge case', status: 'withdrawn' },
+        { id: 'tests.2', severity: 'major', title: 'flaky', status: 'accepted' },
+      ],
+    },
+    { kind: 'reply', participant: 'defender', side: 'defender', thread: 'tests', round: 1, messageId: 'm3', text: '', responses: [], failure: 'fork failed' },
+    { kind: 'failure', participant: 'style', reason: 'timeout' },
+    { kind: 'outcome', accepted: 3, withdrawn: 1, contested: 1 },
+    VERDICT,
   ],
-  proposals: [
-    { id: 'p1', by: 'security', round: 0, summary: 's', status: 'unsupported' },
-    { id: 'p2', by: 'tests', round: 0, summary: 't', status: 'accepted' },
+  findings: [
+    { id: 'security.1', by: 'security', title: 'SQL injection', severity: 'critical', status: 'contested' },
+    { id: 'security.2', by: 'security', title: 'token in logs', severity: 'major', status: 'accepted' },
+    { id: 'security.3', by: 'security', title: 'weak hash', severity: 'major', revisedFrom: 'critical', status: 'accepted' },
+    { id: 'tests.1', by: 'tests', title: 'no edge case', severity: 'minor', status: 'withdrawn' },
+    { id: 'tests.2', by: 'tests', title: 'flaky', severity: 'major', status: 'accepted' },
+  ],
+  threads: [
+    { reviewer: 'security', rounds: 2, settled: true },
+    { reviewer: 'tests', rounds: 1, settled: true },
   ],
   legacy: false,
   done: true,
@@ -95,163 +150,224 @@ function render(feed: ReviewFeed, selected?: ReviewSelection): string {
 }
 
 function text(html: string): string {
-  return html.replace(/<[^>]+>/g, ' ').replace(/&#x27;/g, "'").replace(/\s+/g, ' ');
+  return html
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&#x27;/g, "'")
+    .replace(/&gt;/g, '>')
+    .replace(/\s+/g, ' ');
 }
 
-describe('ui-review-discussion: лента обсуждения', () => {
-  it('обсуждение с консенсусом: находки трёх ревьюеров, позиции текстом, цитаты, исход и вердикт последним', () => {
-    const html = render(CONSENSUS);
+/** Разметка ленты без боковой панели. */
+function log(html: string): string {
+  return html.split('<aside')[0] ?? '';
+}
+
+describe('review-defend: лента защиты', () => {
+  it('защитник-форк: первая строка ленты называет форк, шаг имплементатора, агента и модель', () => {
+    const html = render(DEFEND);
+    const first = /<ol class="review-log"[^>]*><li class="review-system">([^<]*)<\/li>/.exec(html)?.[1];
+    assert.equal(first, 'Defender: fork of the build.implement session · claude · opus');
+  });
+
+  it('свежий защитник называет агента и причину', () => {
+    assert.equal(defenderLine({ mode: 'fresh', agent: 'claude', reason: 'no_session' }), 'Defender: fresh agent claude — the implementer step recorded no session');
+    assert.equal(defenderLine({ mode: 'fresh', agent: 'codex', model: 'gpt', reason: 'no_fork' }), "Defender: fresh agent codex · gpt — the implementer's agent cannot fork sessions");
+    assert.equal(defenderLine({ mode: 'fresh', agent: 'claude', reason: 'no_implementer' }), 'Defender: fresh agent claude — the step names no implementer');
+  });
+
+  it('ветка со спором: карточка security.1 contested, реплика защитника disputes с доказательством, ревьюера — maintains', () => {
+    const plain = text(log(render(DEFEND)));
+    assert.match(plain, /security\.1 contested critical SQL injection · src\/db\.ts:10/);
+    assert.match(plain, /security\.1 disputes the input is escaped evidence src\/db\.ts:42 escape\(input\)/);
+    assert.match(plain, /security\.1 maintains not on every path/);
+    assert.match(plain, /security\.2 accepts right/);
+    assert.match(plain, /security\.3 clarifies legacy hashes only/);
+    // Реплики ветки — под находками своего ревьюера, до находок следующего.
+    assert.ok(plain.indexOf('the input is escaped') > plain.indexOf('SQL injection'));
+    assert.ok(plain.indexOf('not on every path') < plain.indexOf('tests summary'));
+  });
+
+  it('пересмотр серьёзности: метка revises → major и серьёзность с отметкой прежней', () => {
+    const plain = text(log(render(DEFEND)));
+    assert.match(plain, /security\.3 revises → major major then/);
+    assert.match(plain, /security\.3 accepted major \(revised from critical\) weak hash/);
+    assert.equal(stanceLabel({ stance: 'revise', severity: 'minor' }), 'revises → minor');
+    assert.equal(stanceLabel({ stance: 'withdraw' }), 'withdraws');
+  });
+
+  it('защитник стоит на противоположной стороне: его реплики и вердикт — own, ревьюеры — нет', () => {
+    const html = log(render(DEFEND));
+    assert.match(html, /<li class="review-message review-thread own"><article class="review-bubble participant-c4">/);
+    assert.match(html, /<li class="review-message review-thread"><button[^>]*review-avatar participant-c0/);
+    assert.match(html, /<li class="review-message own"><article class="review-bubble participant-c3">/, 'вердикт — на стороне защитника');
     const plain = text(html);
-    for (const id of ['security', 'tests', 'style']) assert.match(plain, new RegExp(`${id} finding`));
-    assert.match(plain, /Round 1/);
-    assert.match(plain, /Round 2/);
-    assert.match(plain, /agrees/);
-    assert.match(plain, /disagrees/);
-    assert.match(plain, /proposes/);
-    assert.match(plain, /agrees with p2 · tests tests summary/);
-    assert.match(plain, /new proposal p4 · style merged/);
-    assert.match(plain, /Consensus on proposal p2/);
-    assert.match(plain, /2\/2/, 'счётчик реплик n/лимит');
-    assert.ok(plain.lastIndexOf('fix the injection') > plain.lastIndexOf('Consensus on proposal p2'), 'вердикт — после исхода');
-    assert.match(html, /class="review-message own"/, 'вердикт выровнен на свою сторону');
-    // Аватары: инициалы и цвет по позиции в стратегии, подпись агента и модели.
+    assert.ok(plain.lastIndexOf('fix the injection') > plain.lastIndexOf('Defense finished'), 'вердикт — последним');
+    assert.match(plain, /Defense finished: 3 accepted · 1 withdrawn · 1 contested/);
+    assert.match(plain, /round 1\/2/, 'раунд реплики из лимита');
+  });
+
+  it('невалидная и упавшая реплики помечены', () => {
+    const plain = text(log(render(DEFEND)));
+    assert.match(plain, /reply failed: fork failed/);
+    const invalid = text(
+      render({
+        ...DEFEND,
+        entries: [{ kind: 'reply', participant: 'defender', side: 'defender', thread: 'security', round: 1, messageId: 'm1', text: '', responses: [], invalid: true }],
+      }),
+    );
+    assert.match(invalid, /reply failed the schema check/);
+  });
+
+  it('ревьюер без находок — системной строкой с причиной; пустой список — «No findings»', () => {
+    const plain = text(log(render(DEFEND)));
+    assert.match(plain, /Reviewer style gave no findings: timeout/);
+    const empty = text(log(render({ ...DEFEND, entries: [{ kind: 'findings', participant: 'style', summary: '', findings: [] }] })));
+    assert.match(empty, /No findings\./);
+  });
+
+  it('аватары: инициалы, цвет по позиции, подпись агента и модели', () => {
+    const html = render(DEFEND);
     assert.match(html, /review-avatar participant-c0[^>]*>SE</);
-    assert.match(html, /review-avatar participant-c1[^>]*>TE</);
-    assert.match(plain, /codex · m0/);
+    assert.match(html, /review-avatar participant-c4[^>]*>DE</);
+    const plain = text(html);
+    assert.match(plain, /security reviewer codex · m0/);
+    assert.match(plain, /defender defender claude · opus/);
   });
 
   it('лента — обновляемый журнал для вспомогательных технологий, пока шаг идёт', () => {
-    assert.match(render({ ...CONSENSUS, done: false }), /role="log" aria-live="polite"/);
-    assert.match(render(CONSENSUS), /role="log" aria-live="off"/);
+    assert.match(render({ ...DEFEND, done: false }), /role="log" aria-live="polite"/);
+    assert.match(render(DEFEND), /role="log" aria-live="off"/);
+  });
+});
+
+describe('review-defend: боковая панель', () => {
+  it('итог защиты: пять находок со статусами и итоговой серьёзностью', () => {
+    const side = text(render(DEFEND).split('<aside')[1] ?? '');
+    assert.match(side, /Findings security\.1 contested critical security\.2 accepted major security\.3 accepted major \(revised from critical\) tests\.1 withdrawn minor tests\.2 accepted major/);
+    assert.equal(side.match(/ accepted /g)?.length, 3);
+    assert.equal(side.match(/ withdrawn /g)?.length, 1);
+    assert.equal(side.match(/ contested /g)?.length, 1);
   });
 
-  it('ревьюер без находок и исход без консенсуса — системными строками с причиной', () => {
-    const plain = text(
-      render({
-        ...CONSENSUS,
-        entries: [
-          findings('security', 'm1', 'p1'),
-          { kind: 'failure', participant: 'tests', reason: 'timeout' },
-          { kind: 'outcome', consensus: false, reason: 'limit' },
-        ],
-      }),
-    );
-    assert.match(plain, /Reviewer tests gave no findings: timeout/);
-    assert.match(plain, /No consensus: message limit exhausted/);
-  });
-
-  it('невалидная реплика помечена', () => {
-    const plain = text(
-      render({
-        ...CONSENSUS,
-        entries: [{ kind: 'message', participant: 'tests', messageId: 'm2', round: 1, seq: 1, stance: 'disagree', text: '', count: 1, invalid: true }],
-      }),
-    );
-    assert.match(plain, /reply failed the schema check/);
-  });
-
-  it('реплика, сорванная сбоем, помечена причиной, а не схемой', () => {
-    const plain = text(
-      render({
-        ...CONSENSUS,
-        entries: [
-          { kind: 'message', participant: 'tests', messageId: 'm2', round: 1, seq: 1, stance: 'disagree', text: '', count: 1, failure: 'timeout' },
-        ],
-      }),
-    );
-    assert.match(plain, /reply failed: timeout/);
-    assert.doesNotMatch(plain, /schema check/);
-  });
-
-  it('переиспользованный шаг называет исходный прогон; без него — вердикт вместо «No messages yet»', () => {
-    const available = text(render({ ...CONSENSUS, reusedFrom: { runId: 'run-0', available: true } }));
-    assert.match(available, /Reused from run run-0/);
-    assert.match(available, /security summary/);
-
-    const verdict = CONSENSUS.entries.at(-1) as ReviewFeedEntry;
-    const gone = text(
-      render({ ...CONSENSUS, participants: PARTICIPANTS.map((entry) => ({ ...entry, sessions: [] })), entries: [verdict], proposals: [], reusedFrom: { runId: 'run-0', available: false } }),
-    );
-    assert.match(gone, /Reused from run run-0/);
-    assert.match(gone, /no longer available/);
-    assert.doesNotMatch(gone, /No messages yet/);
-  });
-
-  it('режим independent: находки и вердикт без раундов и без блока лимита', () => {
-    const html = render({
-      mode: 'independent',
-      participants: PARTICIPANTS,
-      entries: [findings('security', 'm1', 'p1'), findings('tests', 'm2', 'p2'), CONSENSUS.entries.at(-1) as ReviewFeedEntry],
-      proposals: [],
-      legacy: false,
-      done: true,
-    });
-    const plain = text(html);
-    assert.doesNotMatch(plain, /Round/);
-    assert.doesNotMatch(plain, /Message limit/);
-    assert.match(plain, /security finding/);
-    assert.match(plain, /fix the injection/);
-  });
-
-  it('боковая панель: исчерпанный лимит, предложения со статусом, расход по участникам и шагу', () => {
-    const html = render(CONSENSUS);
-    assert.match(html, /<li class="exhausted"><span class="review-name participant-c0">security<\/span> <span class="mono">2\/2<\/span><span class="kind"> · exhausted/);
-    const plain = text(html);
-    assert.match(plain, /tests 1\/2/);
-    assert.match(plain, /p2 by tests accepted by consensus/);
-    assert.match(plain, /p1 by security no support/);
-    assert.match(plain, /security 1\.2k · 5s/);
-    assert.match(plain, /step 3\.6k · 15s/);
+  it('раунды веток r/rounds и расход по участникам, включая defender, и по шагу', () => {
+    const side = text(render(DEFEND).split('<aside')[1] ?? '');
+    assert.match(side, /Rounds security 2\/2 · settled tests 1\/2 · settled/);
+    assert.match(side, /defender 9k · 20s/);
+    assert.match(side, /security 1\.2k · 5s/);
+    assert.match(side, /step 3\.6k · 15s/);
   });
 
   it('на узкой ширине панель уходит под ленту', () => {
     const css = readFileSync(join(process.cwd(), 'ui', 'src', 'components', 'reviewFeed.css'), 'utf8');
     assert.match(css, /@media \(max-width: \d+px\) \{\s*\.review-feed \{ grid-template-columns: minmax\(0, 1fr\); \}/);
   });
+});
 
-  it('выбор сообщения ревьюера открывает разобранный ход его сессии со ссылкой на stdout.log', () => {
-    const html = render(CONSENSUS, { participant: 'security', round: 1 });
+describe('review-defend: ход участника и живое обновление', () => {
+  it('выбор реплики защитника открывает ход его ветки со ссылкой на stdout.log', () => {
+    const html = render(DEFEND, { participant: 'defender', thread: 'security', round: 1 });
     const plain = text(html);
-    assert.match(plain, /Turn of security · round 1/);
+    assert.match(plain, /Turn of defender · on security · round 1/);
+    assert.match(plain, /raw stdout\.log · 7 B/, 'сырой поток именно этого хода ветки');
     assert.match(plain, /step output ▾/, 'тот же StepOutput агентского шага, раскрытый');
-    assert.match(html, /aria-label="Turn of security"/);
-    const first = render({ ...CONSENSUS, participants: [participant('security', 0, { sessions: [{ running: false, stdout: { name: 'stdout.log', path: 'p/security/stdout.log', bytes: 3 } }] })] }, { participant: 'security' });
-    assert.match(text(first), /raw .*stdout\.log/);
-    assert.match(render(CONSENSUS), /aria-label="Open the turn of security"/, 'аватар — кнопка хода участника');
+    assert.match(html, /aria-label="Turn of defender"/);
   });
 
-  it('новая реплика по ходу появляется в ленте следующего опроса, идущий участник назван', () => {
-    const before = { ...CONSENSUS, entries: CONSENSUS.entries.slice(0, 4), done: false, participants: [participant('security', 0, { running: true, sessions: [{ running: false }, { round: 1, running: true }] }), ...PARTICIPANTS.slice(1)] };
-    assert.match(text(render(before)), /security is replying in round 1…/);
-    assert.doesNotMatch(text(render(before)), /agree with tests/);
-    const after = { ...before, entries: CONSENSUS.entries.slice(0, 5) };
-    assert.match(text(render(after)), /agree with tests/);
+  it('выбор сообщения ревьюера открывает его первый ход; аватар — кнопка хода', () => {
+    const plain = text(render(DEFEND, { participant: 'security' }));
+    assert.match(plain, /Turn of security/);
+    assert.match(plain, /raw stdout\.log · 10 B/);
+    assert.match(render(DEFEND), /aria-label="Open the turn of defender"/);
   });
 
-  it('журнал без ленты — список участников и выход агрегатора', () => {
-    const plain = text(render({ participants: PARTICIPANTS, entries: [CONSENSUS.entries.at(-1) as ReviewFeedEntry], proposals: [], legacy: true, done: true }));
-    assert.match(plain, /no discussion record/);
+  it('новая реплика по ходу появляется со следующим опросом, статусы закрытых ею находок меняются', () => {
+    const findings = DEFEND.entries[1] as Extract<ReviewFeedEntry, { kind: 'findings' }>;
+    const open: ReviewFeedEntry = { ...findings, findings: findings.findings.map((entry) => ({ ...entry, status: 'open' as const })) };
+    const running = { ...DEFENDER, running: true, sessions: [{ thread: 'security', round: 1, running: true }] };
+    const before: ReviewFeed = {
+      ...DEFEND,
+      done: false,
+      participants: [participant('security', 0), running, participant('aggregator', 3, {}, true)],
+      entries: [DEFEND.entries[0]!, open],
+      findings: DEFEND.findings.slice(0, 3).map((entry) => ({ ...entry, status: 'open' as const })),
+      threads: [{ reviewer: 'security', rounds: 0, settled: false }],
+    };
+    const was = text(render(before));
+    assert.match(was, /defender is answering security in round 1…/);
+    assert.doesNotMatch(was, /the input is escaped/);
+    assert.match(was, /security\.2 open/);
+
+    const settled = { ...findings, findings: findings.findings.map((entry) => ({ ...entry, status: entry.id === 'security.2' ? ('accepted' as const) : ('open' as const) })) };
+    const after: ReviewFeed = {
+      ...before,
+      participants: [participant('security', 0), DEFENDER, participant('aggregator', 3, {}, true)],
+      entries: [DEFEND.entries[0]!, settled, DEFEND.entries[2]!],
+    };
+    const now = text(log(render(after)));
+    assert.match(now, /the input is escaped/);
+    assert.match(now, /security\.2 accepted/);
+  });
+
+  it('параллельные ветки — по строке на идущий ход', () => {
+    const labels = runningLabels([
+      { ...DEFENDER, running: true, sessions: [{ thread: 'security', round: 2, running: true }, { thread: 'tests', round: 1, running: true }] },
+      participant('tests', 1, { running: true, sessions: [{ running: false }, { round: 1, running: true }] }),
+    ]);
+    assert.deepEqual(labels, [
+      'defender is answering security in round 2…',
+      'defender is answering tests in round 1…',
+      'tests is answering the defender in round 1…',
+    ]);
+  });
+});
+
+describe('review-defend: прежние режимы', () => {
+  it('режим independent: находки и вердикт без панели находок и раундов', () => {
+    const html = render({
+      mode: 'independent',
+      participants: [participant('security', 0), participant('tests', 1), participant('aggregator', 2)],
+      entries: [
+        { kind: 'findings', participant: 'security', summary: 's', findings: [{ severity: 'critical', title: 'security finding', location: 'a.ts:1' }] },
+        { kind: 'findings', participant: 'tests', summary: 't', findings: [{ severity: 'minor', title: 'tests finding' }] },
+        VERDICT,
+      ],
+      findings: [],
+      threads: [],
+      legacy: false,
+      done: true,
+    });
+    const plain = text(html);
+    assert.match(plain, /security finding/);
+    assert.match(plain, /tests finding/);
+    assert.match(plain, /fix the injection/);
+    assert.doesNotMatch(plain, /Defender|Rounds|Findings|round \d/);
+    assert.doesNotMatch(plain, / open | contested /);
+  });
+
+  it('журнал прежнего режима discussion — список участников и выход агрегатора', () => {
+    const plain = text(
+      render({ participants: [participant('security', 0), participant('aggregator', 1)], entries: [VERDICT], findings: [], threads: [], legacy: true, legacyMode: 'discussion', done: true }),
+    );
+    assert.match(plain, /retired discussion mode/);
     assert.match(plain, /security reviewer codex · m0 success/);
     assert.match(plain, /fix the injection/);
   });
 
-  it('длинная лента сворачивает раунды, кроме последнего', () => {
-    const entries: ReviewFeedEntry[] = [findings('security', 'm0', 'p1')];
-    let id = 1;
-    for (let round = 1; round <= 4; round += 1) {
-      entries.push({ kind: 'round', round });
-      for (let seq = 1; seq <= 8; seq += 1) {
-        entries.push({ kind: 'message', participant: 'security', messageId: `m${id}`, round, seq, stance: 'agree', text: `t${id}`, count: 1 });
-        id += 1;
-      }
-    }
-    entries.push({ kind: 'outcome', consensus: false, reason: 'limit' });
-    assert.ok(id - 1 > COLLAPSE_AFTER);
-    const groups = groupEntries(entries);
-    assert.deepEqual(groups.map((group) => [group.round, group.collapsed]), [[0, false], [1, true], [2, true], [3, true], [4, false], [-1, false]]);
-    const html = render({ ...CONSENSUS, entries });
-    assert.equal(html.match(/<details><summary class="review-system">/g)?.length, 3);
-    assert.deepEqual(groupEntries(CONSENSUS.entries).map((group) => group.collapsed), [false, false, false, false]);
+  it('журнал без записи режима — тот же показ с общей пометкой', () => {
+    const plain = text(render({ participants: [participant('security', 0)], entries: [VERDICT], findings: [], threads: [], legacy: true, done: true }));
+    assert.match(plain, /no review record/);
+  });
+
+  it('переиспользованный шаг называет исходный прогон; без него — вердикт вместо «No messages yet»', () => {
+    const available = text(render({ ...DEFEND, reusedFrom: { runId: 'run-0', available: true } }));
+    assert.match(available, /Reused from run run-0/);
+    assert.match(available, /security summary/);
+
+    const gone = text(
+      render({ ...DEFEND, participants: PARTICIPANTS.map((entry) => ({ ...entry, sessions: [] })), entries: [VERDICT], findings: [], threads: [], reusedFrom: { runId: 'run-0', available: false } }),
+    );
+    assert.match(gone, /no longer available/);
+    assert.doesNotMatch(gone, /No messages yet/);
   });
 
   it('инициалы аватара', () => {
@@ -260,7 +376,7 @@ describe('ui-review-discussion: лента обсуждения', () => {
   });
 });
 
-describe('ui-review-discussion: запросы ленты и хода участника', () => {
+describe('review-defend: запросы ленты и хода участника', () => {
   const realFetch = globalThis.fetch;
   afterEach(() => {
     globalThis.fetch = realFetch;
@@ -276,19 +392,20 @@ describe('ui-review-discussion: запросы ленты и хода участ
   }
 
   it('лента спрашивается по адресу шага и проходу', async () => {
-    const urls = stubFetch(CONSENSUS);
+    const urls = stubFetch(DEFEND);
     const feed = await fetchReviewFeed({ address: 'proj/run-1', jobId: 'review', stepId: 'check', pass: 2 });
-    assert.equal(feed.entries.length, CONSENSUS.entries.length);
+    assert.equal(feed.entries.length, DEFEND.entries.length);
     const url = new URL(urls[0] ?? '', 'http://x');
     assert.equal(url.pathname, '/api/review-feed');
     assert.deepEqual(Object.fromEntries(url.searchParams), { run: 'proj/run-1', job: 'review', step: 'check', pass: '2' });
   });
 
-  it('ход участника спрашивается выводом шага с участником и раундом', async () => {
+  it('ход защитника спрашивается выводом шага с участником, веткой и раундом', async () => {
     const urls = stubFetch({ attempts: [], done: true });
-    await fetchStepOutput({ address: 'proj/run-1', jobId: 'review', stepId: 'check', participant: 'security', round: 2, stdoutOffset: 0 });
+    await fetchStepOutput({ address: 'proj/run-1', jobId: 'review', stepId: 'check', participant: 'defender', thread: 'security', round: 2, stdoutOffset: 0 });
     const query = new URL(urls[0] ?? '', 'http://x').searchParams;
-    assert.equal(query.get('participant'), 'security');
+    assert.equal(query.get('participant'), 'defender');
+    assert.equal(query.get('thread'), 'security');
     assert.equal(query.get('round'), '2');
   });
 });

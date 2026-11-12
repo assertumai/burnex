@@ -1,6 +1,6 @@
 /*
- * Лента шага `review` (`ui-review-discussion`): переписка слева, панель
- * сводки справа; на узкой ширине панель уходит под ленту.
+ * Лента шага `review` (`review-defend`): переписка слева, панель сводки
+ * справа; на узкой ширине панель уходит под ленту.
  */
 
 .review-feed {
@@ -21,7 +21,7 @@
 .participant-c4 { --participant: var(--participant-4); }
 .participant-c5 { --participant: var(--participant-5); }
 
-.review-log, .review-log-inner, .review-participants {
+.review-log, .review-participants {
   list-style: none;
   margin: 0;
   padding: 0;
@@ -71,24 +71,15 @@
 
 .review-text { margin: .35rem 0 0; white-space: pre-wrap; overflow-wrap: anywhere; }
 
-.review-quote {
-  margin: .35rem 0 0;
-  padding: .2rem .5rem;
-  border-left: 2px solid var(--muted-foreground);
-  background: var(--muted);
-  border-radius: 0 calc(var(--radius) / 2) calc(var(--radius) / 2) 0;
-  display: flex;
-  flex-direction: column;
-}
-.review-quote-text {
-  font-size: .82rem;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-}
-
 .review-findings { margin: .35rem 0 0; padding-left: 1.1rem; font-size: .85rem; }
+.review-finding + .review-finding { margin-top: .15rem; }
+
+/* Реплики ветки защиты — под находками своего ревьюера, с отступом. */
+.review-thread { margin-left: 2.5rem; }
+.review-thread.own { margin-left: 0; }
+.review-responses { margin: .35rem 0 0; padding-left: 0; list-style: none; font-size: .85rem; display: flex; flex-direction: column; gap: .25rem; }
+.review-response-text { overflow-wrap: anywhere; }
+.review-evidence { display: block; margin-top: .1rem; padding-left: .5rem; border-left: 2px solid var(--muted-foreground); overflow-wrap: anywhere; }
 
 .review-system {
   align-self: center;
@@ -100,9 +91,6 @@
   background: var(--muted);
 }
 .review-typing { font-style: italic; }
-.review-round-collapsed { align-self: stretch; text-align: center; }
-.review-round-collapsed summary { display: inline-block; cursor: pointer; }
-.review-round-collapsed .review-log-inner { margin-top: .55rem; text-align: left; }
 
 .review-turn { margin-top: .8rem; padding-top: .6rem; border-top: 1px solid var(--border); }
 .review-legacy { margin-bottom: .6rem; }
@@ -110,5 +98,5 @@
 .review-side { font-size: .85rem; display: flex; flex-direction: column; gap: .8rem; }
 .review-side h4 { margin: 0 0 .3rem; font-size: .8rem; text-transform: uppercase; letter-spacing: .04em; color: var(--muted-foreground); }
 .review-side ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: .25rem; }
-.review-side .exhausted { opacity: .55; }
+.review-side .settled { opacity: .7; }
 .review-side .review-total { border-top: 1px solid var(--border); padding-top: .25rem; }

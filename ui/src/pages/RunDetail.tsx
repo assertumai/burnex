@@ -228,7 +228,7 @@ function Step({
       )}
 
       {/*
-        Шаг `review` — лентой обсуждения (`ui-review-discussion`): своего
+        Шаг `review` — лентой ревью (`review-defend`): своего
         вывода у него нет, ходы участников открываются из ленты.
       */}
       {step.kind === 'review' ? (
