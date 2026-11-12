@@ -328,7 +328,7 @@ describe('ui-plugins: отказ своему экземпляру общего 
 /** Сервер с закрытием, зарегистрированным сразу — тем же приёмом, что `test/ui-server.test.ts`. */
 async function startServer(
   t: TestContext,
-  options: { runsRoot: string; home: string; watcher?: Watcher; widgetCompiler?: WidgetCompiler; kernelCache?: KernelCache },
+  options: { runsRoot: string; home: string; watcher?: Watcher; widgetCompiler?: WidgetCompiler; kernelCache?: KernelCache; dashboardFile?: string },
 ): Promise<UiServer> {
   const server = await createUiServer({ ...options, port: 0 });
   t.after(() => server.close());
@@ -532,7 +532,7 @@ describe('ui-plugins: событие plugins потока /api/events', () => {
     writePluginDir(home, 'demo', { browser: 'index.tsx' }, { 'index.tsx': SIMPLE_HALF });
     const watcher = createWatcher({ runsRoot, home, intervalMs: 10_000 });
     t.after(() => watcher.dispose());
-    const server = await startServer(t, { runsRoot, home, watcher });
+    const server = await startServer(t, { runsRoot, home, watcher, dashboardFile: join(runsRoot, 'нет', 'index.html') });
 
     const stream = openStream(t, server, '/api/events');
     await settle();

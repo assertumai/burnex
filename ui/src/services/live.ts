@@ -66,6 +66,12 @@ export interface LiveSnapshot {
    * прямой источник данных для дифа.
    */
   readonly proposals: ProposalsStreamEvent | undefined;
+  /**
+   * Отпечаток страницы, которую демон отдаёт сейчас, — событие `build`
+   * потока (`src/parts/ui/shell/row.ts`). Расхождение с отпечатком своей
+   * страницы каркас показывает плашкой перезагрузки (`ui/src/plugins/shell.tsx`).
+   */
+  readonly build: string | undefined;
 }
 
 /** Поверхность `EventSource`, которой пользуется сервис — минимум, достаточный для проверки без браузера. */
@@ -90,6 +96,7 @@ const INITIAL_SNAPSHOT: LiveSnapshot = {
   routes: undefined,
   screens: undefined,
   proposals: undefined,
+  build: undefined,
 };
 
 export class LiveService extends Service {
@@ -171,6 +178,10 @@ export class LiveService extends Service {
       });
       source.addEventListener('proposals', (event) => {
         this.patch({ state: 'live', proposals: JSON.parse(event.data) as ProposalsStreamEvent });
+      });
+      source.addEventListener('build', (event) => {
+        const parsed = JSON.parse(event.data) as { readonly build: string };
+        this.patch({ state: 'live', build: parsed.build });
       });
       source.addEventListener('error', () => this.patch({ state: 'offline' }));
 

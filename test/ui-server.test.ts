@@ -279,6 +279,25 @@ function ensureDashboard(t: TestContext): string {
 }
 
 /**
+ * Страница — собранный файл с отпечатком сборки в `<head>`: по нему открытая
+ * вкладка узнаёт, что демон перезапущен на другой сборке. Без отпечатка
+ * страница обязана совпасть с файлом байт в байт.
+ */
+function withoutBuildMeta(body: string): string {
+  const meta = /<meta name="burnex-build" content="[0-9a-f]{16}">/.exec(body);
+  assert.ok(meta !== null, 'страница должна нести отпечаток сборки');
+  return body.replace(meta[0], '');
+}
+
+/** Собственная страница проверки — отпечаток сборки не зависит от того, собран ли фронт на машине. */
+function dashboardCopy(dir: string, body = '<!doctype html><html><head><title>burnex</title></head><body></body></html>\n'): string {
+  const path = join(dir, 'витрина', 'index.html');
+  mkdirSync(dirname(path), { recursive: true });
+  writeFileSync(path, body);
+  return path;
+}
+
+/**
  * Отсутствие собранной витрины проверяется на файле, которого нет, а не
  * удалением настоящего артефакта: демон принимает путь страницы параметром
  * (`dashboardFile`). Поэтому сценарий не зависит ни от порядка блоков в файле
@@ -318,6 +337,37 @@ describe('ui-dashboard: витрина не собрана', () => {
   });
 });
 
+describe('ui-dashboard: отпечаток сборки страницы', () => {
+  it('поток шлёт отпечаток той страницы, что отдаёт демон; другая сборка — другой отпечаток', async (t) => {
+    const { runsRoot } = makeJournalBed();
+    const first = await startServer(t, { runsRoot, dashboardFile: dashboardCopy(join(runsRoot, 'a')) });
+    const second = await startServer(t, {
+      runsRoot,
+      dashboardFile: dashboardCopy(join(runsRoot, 'b'), '<!doctype html><html><head></head><body>новая сборка</body></html>\n'),
+    });
+
+    const page = await fetchPath(first, '/');
+    const firstStream = openStream(t, first, '/api/events');
+    const secondStream = openStream(t, second, '/api/events');
+    await settle();
+
+    const buildOf = (stream: Stream): unknown => stream.events.find((event) => event.event === 'build')?.data.build;
+    assert.equal(/content="([0-9a-f]{16})"/.exec(page.body)?.[1], buildOf(firstStream));
+    assert.notEqual(buildOf(firstStream), buildOf(secondStream));
+  });
+
+  it('несобранная витрина события build не шлёт', async (t) => {
+    const { runsRoot } = makeJournalBed();
+    const server = await startServer(t, { runsRoot, dashboardFile: join(runsRoot, 'нет', 'index.html') });
+
+    const stream = openStream(t, server, '/api/events');
+    await settle();
+
+    assert.ok(stream.events.length > 0);
+    assert.equal(stream.events.some((event) => event.event === 'build'), false);
+  });
+});
+
 describe('ui-dashboard: HTTP-витрина', () => {
   it('отдаёт страницу и обзор, слушая только петлю', async (t) => {
     const { runsRoot, projectRoot } = makeJournalBed();
@@ -327,7 +377,7 @@ describe('ui-dashboard: HTTP-витрина', () => {
 
     const page = await fetchPath(server, '/');
     assert.equal(page.code, 200);
-    assert.equal(page.body, readFileSync(dashboard, 'utf8'));
+    assert.equal(withoutBuildMeta(page.body), readFileSync(dashboard, 'utf8'));
 
     const overview = await fetchJson(server, '/api/overview');
     assert.equal(overview.code, 200);
@@ -382,7 +432,7 @@ describe('ui-dashboard: HTTP-витрина', () => {
 
     const page = await fetchPath(server, runHref(key, 'a'));
     assert.equal(page.code, 200);
-    assert.equal(page.body, readFileSync(dashboard, 'utf8'));
+    assert.equal(withoutBuildMeta(page.body), readFileSync(dashboard, 'utf8'));
   });
 
   // Требование ui-daemon: отсутствие маршрута под /api/ — ошибка, а не страница.
@@ -517,19 +567,21 @@ describe('ui-dashboard: HTTP-витрина', () => {
   it('присылает по SSE начальный обзор и обновление после нового прогона', async (t) => {
     const { runsRoot, projectRoot } = makeJournalBed();
     const watcher = startWatcher(t, runsRoot, 20);
-    const server = await startServer(t, { runsRoot, watcher });
+    const server = await startServer(t, { runsRoot, watcher, dashboardFile: dashboardCopy(runsRoot) });
 
     const stream = openStream(t, server, '/api/events');
     await settle();
 
-    // Каждый кадр несёт обзор, очередь улучшений, состав виджетов, очередь
+    // Соединение открывает отпечаток страницы демона — он один на запуск.
+    // Дальше каждый кадр несёт обзор, очередь улучшений, состав виджетов, очередь
     // предложений, таблицу маршрутов, состав дашбордов, состав плагинов и
     // состав экранов — тем же потоком, той же подпиской.
     assert.deepEqual(
       stream.events.map((event) => event.event),
-      ['overview', 'backlog', 'widgets', 'proposals', 'routes', 'dashboards', 'plugins', 'screens'],
+      ['build', 'overview', 'backlog', 'widgets', 'proposals', 'routes', 'dashboards', 'plugins', 'screens'],
     );
-    assert.deepEqual(pick(stream.events[0]?.data, 'projects'), []);
+    assert.match(String(pick(stream.events[0]?.data, 'build')), /^[0-9a-f]{16}$/);
+    assert.deepEqual(pick(stream.events[1]?.data, 'projects'), []);
 
     seedRun(runsRoot, projectRoot, { runId: 'новый' });
     await settle(300);
@@ -543,7 +595,7 @@ describe('ui-dashboard: HTTP-витрина', () => {
     const { runsRoot, projectRoot } = makeJournalBed();
     seedRun(runsRoot, projectRoot, { runId: 'a' });
     const key = projectKey(projectRoot);
-    const server = await startServer(t, { runsRoot });
+    const server = await startServer(t, { runsRoot, dashboardFile: join(runsRoot, 'нет', 'index.html') });
 
     const stream = openStream(t, server, `/api/events?run=${address(key, 'a')}`);
     await settle();
@@ -1142,7 +1194,7 @@ describe('ui-dashboard: маршрут и поток очереди', () => {
 
     const page = await fetchPath(server, '/backlog');
     assert.equal(page.code, 200);
-    assert.equal(page.body, readFileSync(dashboard, 'utf8'));
+    assert.equal(withoutBuildMeta(page.body), readFileSync(dashboard, 'utf8'));
   });
 
   // Сценарий: «Статус пункта меняется на лету»
@@ -1153,7 +1205,9 @@ describe('ui-dashboard: маршрут и поток очереди', () => {
     // с очередью вовсе.
     const { runsRoot, projectRoot } = makeJournalBed();
     const watcher = startWatcher(t, runsRoot, 20);
-    const server = await startServer(t, { runsRoot, watcher });
+    // Без собранной страницы — без события `build`: проверке нужен только
+    // порядок событий состава.
+    const server = await startServer(t, { runsRoot, watcher, dashboardFile: join(runsRoot, 'нет', 'index.html') });
 
     const stream = openStream(t, server, '/api/events');
     await settle();
@@ -4588,7 +4642,7 @@ describe('ui-dashboard: событие widgets в потоке /api/events', () 
     const { runsRoot, projectRoot } = makeJournalBed();
     seedRun(runsRoot, projectRoot, { runId: 'a' });
     const watcher = startWatcher(t, runsRoot, 10_000);
-    const server = await startServer(t, { runsRoot, watcher });
+    const server = await startServer(t, { runsRoot, watcher, dashboardFile: join(runsRoot, 'нет', 'index.html') });
 
     const stream = openStream(t, server, '/api/events');
     await settle();

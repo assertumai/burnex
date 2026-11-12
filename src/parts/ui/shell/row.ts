@@ -154,6 +154,10 @@ function handleEvents(req: IncomingMessage, res: ServerResponse, env: RequestEnv
     if (snapshot !== undefined) send('run', snapshot);
   };
 
+  // Отпечаток страницы — один раз на соединение: в пределах запуска демона он
+  // неизменен, а вкладка после перезапуска демона переподключается и получает
+  // отпечаток новой страницы (`ui/src/plugins/shell.tsx`, плашка перезагрузки).
+  if (env.dashboardBuild !== undefined) send('build', { build: env.dashboardBuild });
   push();
   const unsubscribe = env.watcher.subscribe(push);
 

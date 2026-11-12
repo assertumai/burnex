@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
@@ -29,21 +30,46 @@ export function dashboardPath(): string {
  * страницу, но проверки поднимают серверы с разными файлами витрины, и общая
  * ячейка выдавала бы одному из них чужую разметку.
  */
-const cached = new Map<string, string>();
+const cached = new Map<string, DashboardPage>();
+
+/**
+ * Имя `<meta>`, которым страница несёт отпечаток своей сборки. Та же строка
+ * читается каркасом витрины (`ui/src/plugins/shell.tsx`): вкладка, открытая
+ * до перезапуска демона на другой сборке, сравнивает свой отпечаток с
+ * событием `build` потока и предлагает перезагрузку — иначе новые маршруты и
+ * экраны приходят ей потоком, а их браузерных половин в её бандле нет.
+ */
+export const BUILD_META = 'burnex-build';
+
+export interface DashboardPage {
+  /** Разметка с `<meta name="burnex-build">` в `<head>`. */
+  readonly html: string;
+  /** Отпечаток собранного файла: первые 16 знаков sha256 его содержимого. */
+  readonly build: string;
+}
 
 /**
  * Разметка витрины. `undefined` — витрина не собрана: единственный внятный
  * ответ на это — сказать, какой командой её собрать, а не отдать пустую
  * страницу и оставить пользователя гадать.
  */
-export function dashboardHtml(file: string = dashboardPath()): string | undefined {
+export function dashboardPage(file: string = dashboardPath()): DashboardPage | undefined {
   const hit = cached.get(file);
   if (hit !== undefined) return hit;
+  let source: string;
   try {
-    const html = readFileSync(file, 'utf8');
-    cached.set(file, html);
-    return html;
+    source = readFileSync(file, 'utf8');
   } catch {
     return undefined;
   }
+  const build = createHash('sha256').update(source).digest('hex').slice(0, 16);
+  const meta = `<meta name="${BUILD_META}" content="${build}">`;
+  // В `<head>`, а без него — сразу за `<!doctype>`: разметка до него
+  // перевела бы страницу в режим совместимости.
+  const anchor = /<head[^>]*>/i.exec(source) ?? /<!doctype[^>]*>/i.exec(source);
+  const at = anchor === null ? 0 : anchor.index + anchor[0].length;
+  const html = `${source.slice(0, at)}${meta}${source.slice(at)}`;
+  const page = { html, build };
+  cached.set(file, page);
+  return page;
 }

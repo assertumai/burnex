@@ -54,6 +54,12 @@ export interface RequestEnv {
    */
   readonly screens: ReadonlyMap<string, ActiveScreen>;
   readonly buildError: string | undefined;
+  /**
+   * Отпечаток страницы, которую отдаёт демон (`../daemon/assets.ts`), —
+   * `undefined`, если витрина не собрана. Поток событий шлёт его событием
+   * `build`: вкладка со страницей другой сборки предлагает перезагрузку.
+   */
+  readonly dashboardBuild: string | undefined;
   /** Корень проекта, в котором поднят демон — `undefined`, если он его не знает (`ui-daemon`). Проектный слой файла маршрутов ищется от него. */
   readonly projectRoot: string | undefined;
   /**

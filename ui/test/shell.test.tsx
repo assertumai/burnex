@@ -8,7 +8,7 @@ import type { Fiber } from 'cordis';
 
 import { createBrowserKernel, KernelContext, ROOT, type BrowserKernel } from '../src/kernel';
 import { KernelFrame, Slot } from '../src/slots.tsx';
-import shellPlugin, { NAV, SCREEN } from '../src/plugins/shell.tsx';
+import shellPlugin, { NAV, pageBuild, ReloadBar, SCREEN } from '../src/plugins/shell.tsx';
 import { bindRouterKernel } from '../src/router';
 import { fakeEventSources } from './support/live';
 import type { Overview, BacklogOverview, WidgetsOverview, RunSnapshot } from '../src/api';
@@ -237,5 +237,46 @@ describe('shell: настоящий каркас на настоящем ядр�
     } finally {
       restore();
     }
+  });
+});
+
+describe('shell: плашка перезагрузки после обновления демона', () => {
+  it('появляется, только когда отпечаток страницы расходится с отпечатком демона', () => {
+    const shown = renderToStaticMarkup(<ReloadBar page="aaaa" daemon="bbbb" />);
+    assert.match(shown, /The dashboard was updated/);
+    assert.match(shown, /Reload/);
+
+    assert.equal(renderToStaticMarkup(<ReloadBar page="aaaa" daemon="aaaa" />), '');
+    // Страница не от демона (дев-сервер Vite) и демон, ещё не приславший отпечаток, — сравнивать не с чем.
+    assert.equal(renderToStaticMarkup(<ReloadBar page={undefined} daemon="bbbb" />), '');
+    assert.equal(renderToStaticMarkup(<ReloadBar page="aaaa" daemon={undefined} />), '');
+  });
+
+  it('кнопка перезагружает страницу', () => {
+    let reloaded = 0;
+    const element = ReloadBar({ page: 'aaaa', daemon: 'bbbb', reload: () => reloaded++ }) as ReactElement<{
+      readonly children: readonly unknown[];
+    }>;
+    const button = element.props.children.find(
+      (child): child is ReactElement<{ onClick: () => void }> =>
+        typeof child === 'object' && child !== null && 'props' in child && typeof (child as ReactElement<{ onClick?: unknown }>).props.onClick === 'function',
+    );
+    button?.props.onClick();
+    assert.equal(reloaded, 1);
+  });
+
+  it('pageBuild читает отпечаток из meta страницы', () => {
+    const globals = globalThis as Record<string, unknown>;
+    const previous = globals['document'];
+    globals['document'] = {
+      querySelector: (selector: string) =>
+        selector === 'meta[name="burnex-build"]' ? { getAttribute: (name: string) => (name === 'content' ? 'cafe' : null) } : null,
+    };
+    try {
+      assert.equal(pageBuild(), 'cafe');
+    } finally {
+      globals['document'] = previous;
+    }
+    assert.equal(pageBuild(), undefined);
   });
 });

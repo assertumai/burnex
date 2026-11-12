@@ -6,7 +6,7 @@ import { KernelContext, ROOT } from '../kernel';
 import { HOME_ROUTES_FILE, RoutesListing } from '../pages/Routes';
 import { useRoute, useRoutes, useScreens } from '../router';
 import { Slot } from '../slots.tsx';
-import { Alert } from '@burnex/ui';
+import { Alert, Button } from '@burnex/ui';
 import { WidgetHost } from '../widgetHost';
 import { GenericNavItem } from './navItem';
 import {
@@ -80,6 +80,43 @@ const LIVE_LABEL = {
   live: 'live updates',
   offline: 'daemon unreachable',
 } as const;
+
+/**
+ * Отпечаток сборки этой страницы — `<meta name="burnex-build">`, который
+ * демон вставляет в отдаваемую разметку (`src/parts/ui/daemon/assets.ts`,
+ * `BUILD_META`). `undefined` вне браузера и под дев-сервером Vite: страницу
+ * там отдаёт не демон, и сравнивать не с чем.
+ */
+export function pageBuild(): string | undefined {
+  if (typeof document === 'undefined') return undefined;
+  return document.querySelector('meta[name="burnex-build"]')?.getAttribute('content') ?? undefined;
+}
+
+/**
+ * Плашка перезагрузки: демон перезапущен на другой сборке витрины, а вкладка
+ * держит прежний бандл. Новые маршруты и экраны приходят ей потоком, а их
+ * браузерных половин в старом бандле нет — без перезагрузки экран покажет
+ * «browser half is unavailable».
+ */
+export function ReloadBar({
+  page,
+  daemon,
+  reload = () => window.location.reload(),
+}: {
+  readonly page: string | undefined;
+  readonly daemon: string | undefined;
+  readonly reload?: () => void;
+}): JSX.Element | null {
+  if (page === undefined || daemon === undefined || page === daemon) return null;
+  return (
+    <Alert variant="warning" className="reload-bar">
+      The dashboard was updated. Reload to get the new version.{' '}
+      <Button size="sm" onClick={reload}>
+        Reload
+      </Button>
+    </Alert>
+  );
+}
 
 /** Причина, по которой цель маршрута не показана, — общий вид для обоих встроенных видов цели (design.md, Решение 5). */
 function MissingTarget({ reason }: { readonly reason: string }): JSX.Element {
@@ -279,6 +316,7 @@ function Shell(): JSX.Element {
       </nav>
 
       <main className="content">
+        <ReloadBar page={pageBuild()} daemon={live.build} />
         {screensBuildError === undefined ? null : <BuildErrorBar label="Screen composition" reason={screensBuildError} />}
         {routesSnapshot.buildError === undefined ? null : (
           <BuildErrorBar label="Route table" reason={routesSnapshot.buildError} />

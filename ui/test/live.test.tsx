@@ -40,6 +40,18 @@ describe('live: события доходят до данных', () => {
     assert.equal(ctx.live.get().state, 'offline');
   });
 
+  it('build несёт отпечаток страницы демона; переподключение к новой сборке его меняет', () => {
+    const ctx = new Context();
+    const { factory, sources } = fakeFactory();
+    new LiveService(ctx, factory);
+    assert.equal(ctx.live.get().build, undefined);
+
+    sources[0]!.emit('build', { build: 'aaaa' });
+    assert.equal(ctx.live.get().build, 'aaaa');
+    sources[0]!.emit('build', { build: 'bbbb' });
+    assert.equal(ctx.live.get().build, 'bbbb');
+  });
+
   it('подписчики уведомляются при изменении данных', () => {
     const ctx = new Context();
     const { factory, sources } = fakeFactory();

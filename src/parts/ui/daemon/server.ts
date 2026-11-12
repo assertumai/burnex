@@ -7,7 +7,7 @@ import { listProjects } from '../../pipeline/run/journal/reader.js';
 import { backfillUsageStore } from '../../pipeline/run/journal/usageStore.js';
 import { pruneOrphanProjects } from '../../pipeline/run/cleanup.js';
 import type { Config } from '../../pipeline/config/resolve.js';
-import { dashboardHtml } from './assets.js';
+import { dashboardPage } from './assets.js';
 import { sendJson } from './http.js';
 import { currentDaemonKernel } from './kernel.js';
 import {
@@ -373,15 +373,15 @@ async function handlePluginRequest(
 
 /** Страница витрины. Любой не-API адрес ведёт на неё: маршруты разбирает клиент. */
 function handlePage(res: ServerResponse, dashboardFile: string | undefined): void {
-  const html = dashboardFile === undefined ? dashboardHtml() : dashboardHtml(dashboardFile);
-  if (html === undefined) {
+  const page = dashboardFile === undefined ? dashboardPage() : dashboardPage(dashboardFile);
+  if (page === undefined) {
     res.writeHead(503, { 'content-type': 'text/plain; charset=utf-8' });
     res.end('The dashboard is not built. Run npm run build:ui.\n');
     return;
   }
 
   res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' });
-  res.end(html);
+  res.end(page.html);
 }
 
 export function createUiServer(options: UiServerOptions): Promise<UiServer> {
@@ -495,6 +495,7 @@ export function createUiServer(options: UiServerOptions): Promise<UiServer> {
       kernelCache,
       screens: daemon.screens,
       buildError: daemon.buildError,
+      dashboardBuild: (dashboardFile === undefined ? dashboardPage() : dashboardPage(dashboardFile))?.build,
       projectRoot: options.projectRoot,
       activePlugins,
       activeScreens,
