@@ -132,6 +132,7 @@ export function StepOutput({
   pass,
   participant,
   round,
+  thread,
   defaultOpen = false,
 }: {
   readonly address: string;
@@ -149,12 +150,13 @@ export function StepOutput({
    */
   readonly kind: 'agent' | 'run' | 'script' | 'plugin' | 'review';
   /**
-   * Вызов участника шага `review` (`ui-review-discussion`): его ход
-   * разбирается тем же представлением, что и агентский шаг; `round` — реплика
-   * этого раунда обсуждения.
+   * Вызов участника шага `review` (`review-defend`): его ход разбирается тем
+   * же представлением, что и агентский шаг; `round` — ответ этого раунда,
+   * `thread` с `round` — ход защитника в ветке ревьюера.
    */
   readonly participant?: string;
   readonly round?: number;
+  readonly thread?: string;
   /** Раскрыть сразу — ход участника открывают выбором, второй щелчок лишний. */
   readonly defaultOpen?: boolean;
 }): JSX.Element {
@@ -200,6 +202,7 @@ export function StepOutput({
         ...(pass === undefined ? {} : { pass }),
         ...(participant === undefined ? {} : { participant }),
         ...(round === undefined ? {} : { round }),
+        ...(thread === undefined ? {} : { thread }),
         stdoutOffset: offsetsRef.current.stdout,
         ...(kind !== 'agent' ? { stderrOffset: offsetsRef.current.stderr } : {}),
       });
@@ -287,7 +290,7 @@ export function StepOutput({
       alive = false;
       clearTimeout(timer);
     };
-  }, [open, done, attempt, address, jobId, stepId, kind, pass, participant, round]);
+  }, [open, done, attempt, address, jobId, stepId, kind, pass, participant, round, thread]);
 
   return (
     <div className="step-output">

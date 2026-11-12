@@ -3,13 +3,14 @@ import { useEffect, useRef, useState, type JSX, type ReactNode } from 'react';
 import { Alert, AlertDescription, Badge, Button, EmptyState, type BadgeVariant } from '@burnex/ui';
 import {
   fetchReviewFeed,
-  type NoConsensusReason,
   type ReviewFeed,
+  type ReviewFeedDefender,
   type ReviewFeedEntry,
   type ReviewFeedParticipant,
-  type ReviewFeedProposal,
-  type ReviewFeedQuote,
-  type ReviewStance,
+  type ReviewFeedResponse,
+  type ReviewFeedSession,
+  type ReviewFinding,
+  type ReviewFindingStatus,
   type UsageSnapshot,
 } from '../api';
 import { fmtDuration, fmtTokens } from '../format';
@@ -21,44 +22,44 @@ import { StepOutput } from './StepOutput';
 import './reviewFeed.css';
 
 /**
- * Шаг `review` лентой обсуждения, как переписка в мессенджере
- * (`ui-review-discussion`): ревьюеры слева, вердикт агрегатора справа —
- * «наша сторона», выносящая итог (design.md, Решение 2). Рядом — панель
- * лимита реплик, предложений и расхода (Решение 3).
+ * Шаг `review` лентой, как переписка в мессенджере (`review-defend`,
+ * design.md, решение 8): ревьюеры слева со своими находками, под находками —
+ * ветка защиты; защитник и вердикт агрегатора — справа, на противоположной
+ * стороне. Рядом — панель находок со статусами, раундов веток и расхода.
  *
  * Данные — модель ленты, собранная демоном из журнала шага
  * (`GET /api/review-feed`). Пока шаг идёт, она перечитывается раз в секунду —
  * тем же приёмом, что вывод шага в `StepOutput`, — и лента дополняется без
- * перезагрузки страницы.
+ * перезагрузки страницы: новые реплики и закрытия находок приходят со
+ * следующим опросом.
  */
 
 const POLL_MS = 1000;
 
-/** Сколько реплик лента показывает развёрнутыми целиком; сверх — раунды, кроме последнего, свёрнуты. */
-export const COLLAPSE_AFTER = 30;
-
 /** Цветов участников в палитре витрины (`--participant-*` в `styles.css`). */
 const PALETTE_SIZE = 6;
 
-const STANCE: Readonly<Record<ReviewStance, { readonly label: string; readonly variant: BadgeVariant }>> = {
-  propose: { label: 'proposes', variant: 'secondary' },
-  agree: { label: 'agrees', variant: 'success' },
-  disagree: { label: 'disagrees', variant: 'destructive' },
+const STATUS: Readonly<Record<ReviewFindingStatus, { readonly label: string; readonly variant: BadgeVariant }>> = {
+  open: { label: 'open', variant: 'running' },
+  accepted: { label: 'accepted', variant: 'success' },
+  withdrawn: { label: 'withdrawn', variant: 'secondary' },
+  contested: { label: 'contested', variant: 'destructive' },
 };
 
-const NO_CONSENSUS: Readonly<Record<NoConsensusReason, string>> = {
-  limit: 'message limit exhausted',
-  stalled: 'positions stopped changing',
-  budget: 'step budget exhausted',
-  participants: 'only one reviewer gave findings',
+const STANCE: Readonly<Record<ReviewFeedResponse['stance'], { readonly label: string; readonly variant: BadgeVariant }>> = {
+  accept: { label: 'accepts', variant: 'success' },
+  dispute: { label: 'disputes', variant: 'destructive' },
+  clarify: { label: 'clarifies', variant: 'secondary' },
+  maintain: { label: 'maintains', variant: 'destructive' },
+  withdraw: { label: 'withdraws', variant: 'success' },
+  revise: { label: 'revises', variant: 'secondary' },
 };
 
-const PROPOSAL_STATUS: Readonly<
-  Record<ReviewFeedProposal['status'], { readonly label: string; readonly variant: BadgeVariant }>
-> = {
-  active: { label: 'active', variant: 'secondary' },
-  accepted: { label: 'accepted by consensus', variant: 'success' },
-  unsupported: { label: 'no support', variant: 'outline' },
+/** Почему защищает свежий агент — значения `reason` (design.md, решение 3). */
+const FRESH_REASON: Readonly<Record<string, string>> = {
+  no_implementer: 'the step names no implementer',
+  no_session: 'the implementer step recorded no session',
+  no_fork: "the implementer's agent cannot fork sessions",
 };
 
 /** Инициалы аватара: первые буквы двух слов id, иначе первые две буквы. */
@@ -72,19 +73,41 @@ function colorClass(participant: ReviewFeedParticipant | undefined): string {
   return `participant-c${(participant?.color ?? 0) % PALETTE_SIZE}`;
 }
 
-/** Выбранный вызов участника: `round` — реплика раунда, без него — первый вызов. */
+/**
+ * Выбранный вызов участника: без `round` — первый вызов, с `round` — ответ
+ * этого раунда, с `thread` и `round` — ход защитника в ветке ревьюера.
+ */
 export interface ReviewSelection {
   readonly participant: string;
   readonly round?: number;
+  readonly thread?: string;
+}
+
+/** Метка позиции ответа: `revises → major` несёт новую серьёзность. */
+export function stanceLabel(response: Pick<ReviewFeedResponse, 'stance' | 'severity'>): string {
+  const label = STANCE[response.stance].label;
+  return response.stance === 'revise' && response.severity !== undefined ? `${label} → ${response.severity}` : label;
+}
+
+/** Строка о защитнике: форк сессии имплементатора либо свежий агент с причиной. */
+export function defenderLine(defender: ReviewFeedDefender): string {
+  const agent = [defender.agent, defender.model].filter((part) => part !== undefined).join(' · ');
+  if (defender.mode === 'fork') {
+    return `Defender: fork of the ${defender.implementer ?? 'implementer'} session${agent === '' ? '' : ` · ${agent}`}`;
+  }
+  const reason = defender.reason === undefined ? undefined : (FRESH_REASON[defender.reason] ?? defender.reason);
+  return `Defender: fresh agent${agent === '' ? '' : ` ${agent}`}${reason === undefined ? '' : ` — ${reason}`}`;
 }
 
 function Avatar({
   participant,
   id,
+  selection,
   onSelect,
 }: {
   readonly participant: ReviewFeedParticipant | undefined;
   readonly id: string;
+  readonly selection?: ReviewSelection;
   readonly onSelect: (selection: ReviewSelection) => void;
 }): JSX.Element {
   return (
@@ -93,7 +116,7 @@ function Avatar({
       className={`review-avatar ${colorClass(participant)}`}
       aria-label={`Open the turn of ${id}`}
       title={`Open the turn of ${id}`}
-      onClick={() => onSelect({ participant: id })}
+      onClick={() => onSelect(selection ?? { participant: id })}
     >
       {initials(id)}
     </button>
@@ -115,36 +138,60 @@ function Who({ participant, id }: { readonly participant: ReviewFeedParticipant 
   );
 }
 
-function Quote({ label, quote }: { readonly label: string; readonly quote: ReviewFeedQuote }): JSX.Element {
+function SystemLine({ children }: { readonly children: ReactNode }): JSX.Element {
+  return <li className="review-system">{children}</li>;
+}
+
+function Severity({ severity, revisedFrom }: { readonly severity: string | undefined; readonly revisedFrom?: string | undefined }): JSX.Element | null {
+  if (severity === undefined) return null;
   return (
-    <blockquote className="review-quote">
-      <span className="kind">
-        {label} {quote.id}
-        {quote.by === undefined ? '' : ` · ${quote.by}`}
-      </span>
-      {quote.summary === '' ? null : <span className="review-quote-text">{quote.summary}</span>}
-    </blockquote>
+    <Badge variant={severity === 'critical' ? 'destructive' : 'outline'} title={revisedFrom === undefined ? undefined : `revised from ${revisedFrom}`}>
+      {severity}
+      {revisedFrom === undefined ? '' : ` (revised from ${revisedFrom})`}
+    </Badge>
   );
 }
 
-function SystemLine({ children }: { readonly children: ReactNode }): JSX.Element {
-  return <li className="review-system">{children}</li>;
+function FindingCard({ finding }: { readonly finding: ReviewFinding }): JSX.Element {
+  return (
+    <li className="review-finding">
+      {finding.id === undefined ? null : <span className="mono">{finding.id}</span>}{' '}
+      {finding.status === undefined ? null : <Badge variant={STATUS[finding.status].variant}>{STATUS[finding.status].label}</Badge>}{' '}
+      <Severity severity={finding.severity} revisedFrom={finding.revisedFrom} /> <b>{finding.title}</b>
+      {finding.location === undefined ? null : <span className="kind"> · {finding.location}</span>}
+    </li>
+  );
+}
+
+function ResponseView({ response }: { readonly response: ReviewFeedResponse }): JSX.Element {
+  return (
+    <li className="review-response">
+      <span className="mono">{response.finding}</span>{' '}
+      <Badge variant={STANCE[response.stance].variant}>{stanceLabel(response)}</Badge>
+      {response.text === '' ? null : <span className="review-response-text"> {response.text}</span>}
+      {response.evidence === undefined ? null : (
+        <span className="review-evidence">
+          <span className="kind">evidence</span> <code>{response.evidence}</code>
+        </span>
+      )}
+    </li>
+  );
 }
 
 function EntryView({
   entry,
   participants,
-  maxMessages,
+  rounds,
   onSelect,
 }: {
   readonly entry: ReviewFeedEntry;
   readonly participants: ReadonlyMap<string, ReviewFeedParticipant>;
-  readonly maxMessages: number | undefined;
+  readonly rounds: number | undefined;
   readonly onSelect: (selection: ReviewSelection) => void;
 }): JSX.Element {
   switch (entry.kind) {
-    case 'round':
-      return <SystemLine>Round {entry.round}</SystemLine>;
+    case 'defender':
+      return <SystemLine>{defenderLine(entry)}</SystemLine>;
     case 'failure':
       return (
         <SystemLine>
@@ -154,7 +201,7 @@ function EntryView({
     case 'outcome':
       return (
         <SystemLine>
-          {entry.consensus ? `Consensus on proposal ${entry.proposal}` : `No consensus: ${NO_CONSENSUS[entry.reason]}`}
+          Defense finished: {entry.accepted} accepted · {entry.withdrawn} withdrawn · {entry.contested} contested
         </SystemLine>
       );
     case 'findings': {
@@ -166,20 +213,15 @@ function EntryView({
             <header className="review-bubble-head">
               <Who participant={participant} id={entry.participant} />
               <Badge variant="secondary">findings</Badge>
-              {entry.proposal === undefined ? null : <span className="kind">proposal {entry.proposal}</span>}
               <OpenTurn selection={{ participant: entry.participant }} onSelect={onSelect} />
             </header>
             {entry.summary === '' ? null : <p className="review-text">{entry.summary}</p>}
-            {entry.findings.length === 0 ? null : (
+            {entry.findings.length === 0 ? (
+              <p className="review-text dim">No findings.</p>
+            ) : (
               <ul className="review-findings">
                 {entry.findings.map((finding, index) => (
-                  <li key={index}>
-                    {finding.severity === undefined ? null : (
-                      <Badge variant={finding.severity === 'critical' ? 'destructive' : 'outline'}>{finding.severity}</Badge>
-                    )}{' '}
-                    <b>{finding.title}</b>
-                    {finding.location === undefined ? null : <span className="kind"> · {finding.location}</span>}
-                  </li>
+                  <FindingCard key={finding.id ?? index} finding={finding} />
                 ))}
               </ul>
             )}
@@ -187,32 +229,37 @@ function EntryView({
         </li>
       );
     }
-    case 'message': {
+    case 'reply': {
       const participant = participants.get(entry.participant);
-      const stance = STANCE[entry.stance];
+      const defender = entry.side === 'defender';
+      const selection: ReviewSelection = defender
+        ? { participant: entry.participant, thread: entry.thread, round: entry.round }
+        : { participant: entry.participant, round: entry.round };
+      const avatar = <Avatar participant={participant} id={entry.participant} selection={selection} onSelect={onSelect} />;
       return (
-        <li className="review-message">
-          <Avatar participant={participant} id={entry.participant} onSelect={onSelect} />
+        <li className={`review-message review-thread${defender ? ' own' : ''}`}>
+          {defender ? null : avatar}
           <article className={`review-bubble ${colorClass(participant)}`}>
             <header className="review-bubble-head">
               <Who participant={participant} id={entry.participant} />
-              <Badge variant={stance.variant}>{stance.label}</Badge>
+              {defender ? <span className="kind">on {entry.thread}</span> : null}
               {entry.invalid === true ? <Badge variant="destructive">reply failed the schema check</Badge> : null}
               {entry.failure === undefined ? null : <Badge variant="destructive">reply failed: {entry.failure}</Badge>}
-              <span className="kind review-counter" title="reviewer's messages used of the limit">
-                {entry.count}/{maxMessages ?? '?'}
+              <span className="kind review-counter" title="round of this thread of the limit">
+                round {entry.round}/{rounds ?? '?'}
               </span>
-              <OpenTurn selection={{ participant: entry.participant, round: entry.round }} onSelect={onSelect} />
+              <OpenTurn selection={selection} onSelect={onSelect} />
             </header>
-            {entry.target === undefined ? null : (
-              <Quote label={entry.stance === 'agree' ? 'agrees with' : 'replies to'} quote={entry.target} />
-            )}
-            {entry.target !== undefined
-              ? null
-              : entry.replyTo?.map((reply) => <Quote key={reply.id} label="in reply to" quote={reply} />)}
             {entry.text === '' ? null : <p className="review-text">{entry.text}</p>}
-            {entry.proposal === undefined ? null : <Quote label="new proposal" quote={entry.proposal} />}
+            {entry.responses.length === 0 ? null : (
+              <ul className="review-responses">
+                {entry.responses.map((response) => (
+                  <ResponseView key={response.finding} response={response} />
+                ))}
+              </ul>
+            )}
           </article>
+          {defender ? avatar : null}
         </li>
       );
     }
@@ -258,44 +305,21 @@ function OpenTurn({
   );
 }
 
-/** Записи раунда — для сворачивания длинной ленты; раунд 0 — находки. */
-function roundOf(entry: ReviewFeedEntry, current: number): number {
-  return entry.kind === 'round' ? entry.round : current;
-}
-
-/**
- * Ленту делят на группы по раундам. Сворачиваются все раунды, кроме
- * последнего, когда реплик больше `COLLAPSE_AFTER` (design.md, «Риски»):
- * находки, системные строки исхода и вердикт остаются на виду.
- */
-export function groupEntries(entries: readonly ReviewFeedEntry[]): {
-  readonly round: number;
-  readonly entries: readonly ReviewFeedEntry[];
-  readonly collapsed: boolean;
-}[] {
-  const groups: { round: number; entries: ReviewFeedEntry[] }[] = [];
-  let round = 0;
-  for (const entry of entries) {
-    const next = entry.kind === 'outcome' || entry.kind === 'verdict' ? -1 : roundOf(entry, round);
-    round = next === -1 ? round : next;
-    const key = next === -1 ? -1 : round;
-    const last = groups.at(-1);
-    if (last !== undefined && last.round === key) last.entries.push(entry);
-    else groups.push({ round: key, entries: [entry] });
-  }
-  const messages = entries.filter((entry) => entry.kind === 'message').length;
-  const rounds = groups.filter((group) => group.round > 0).map((group) => group.round);
-  const lastRound = rounds.at(-1);
-  return groups.map((group) => ({
-    ...group,
-    collapsed: messages > COLLAPSE_AFTER && group.round > 0 && group.round !== lastRound,
-  }));
-}
-
-function runningLabel(participant: ReviewFeedParticipant): string {
+function sessionLabel(participant: ReviewFeedParticipant, session: ReviewFeedSession): string {
   if (participant.role === 'aggregator') return `${participant.id} is writing the verdict…`;
-  const round = participant.sessions.at(-1)?.round;
-  return round === undefined ? `${participant.id} is reviewing…` : `${participant.id} is replying in round ${round}…`;
+  if (session.thread !== undefined) return `${participant.id} is answering ${session.thread} in round ${session.round ?? '?'}…`;
+  return session.round === undefined
+    ? `${participant.id} is reviewing…`
+    : `${participant.id} is answering the defender in round ${session.round}…`;
+}
+
+/** Кто пишет прямо сейчас: по строке на начатый вызов — ветки защитника идут параллельно. */
+export function runningLabels(participants: readonly ReviewFeedParticipant[]): string[] {
+  return participants.flatMap((participant) => {
+    if (!participant.running) return [];
+    const sessions = participant.sessions.filter((session) => session.running);
+    return sessions.length === 0 ? [sessionLabel(participant, { running: true })] : sessions.map((session) => sessionLabel(participant, session));
+  });
 }
 
 function SidePanel({
@@ -307,38 +331,38 @@ function SidePanel({
   readonly stepUsage: UsageSnapshot | undefined;
   readonly asOf: string | undefined;
 }): JSX.Element {
-  const reviewers = feed.participants.filter((participant) => participant.role === 'reviewer');
   return (
-    <aside className="review-side" aria-label="Discussion summary">
-      {feed.mode !== 'discussion' || feed.maxMessages === undefined ? null : (
+    <aside className="review-side" aria-label="Review summary">
+      {feed.findings.length === 0 ? null : (
         <section>
-          <h4>Message limit</h4>
+          <h4>Findings</h4>
           <ul>
-            {reviewers.map((reviewer) => {
-              const exhausted = reviewer.messages >= (feed.maxMessages ?? 0);
-              return (
-                <li key={reviewer.id} className={exhausted ? 'exhausted' : undefined}>
-                  <span className={`review-name ${colorClass(reviewer)}`}>{reviewer.id}</span>{' '}
-                  <span className="mono">
-                    {reviewer.messages}/{feed.maxMessages}
-                  </span>
-                  {exhausted ? <span className="kind"> · exhausted</span> : null}
-                </li>
-              );
-            })}
+            {feed.findings.map((finding) => (
+              <li key={finding.id} title={finding.title}>
+                <span className="mono">{finding.id}</span>{' '}
+                <Badge variant={STATUS[finding.status].variant}>{STATUS[finding.status].label}</Badge>{' '}
+                <Severity severity={finding.severity} revisedFrom={finding.revisedFrom} />
+              </li>
+            ))}
           </ul>
         </section>
       )}
-      {feed.proposals.length === 0 ? null : (
+      {feed.threads.length === 0 ? null : (
         <section>
-          <h4>Proposals</h4>
+          <h4>Rounds</h4>
           <ul>
-            {feed.proposals.map((proposal) => (
-              <li key={proposal.id} title={proposal.summary}>
-                <span className="mono">{proposal.id}</span> <span className="kind">by {proposal.by}</span>{' '}
-                <Badge variant={PROPOSAL_STATUS[proposal.status].variant}>{PROPOSAL_STATUS[proposal.status].label}</Badge>
-              </li>
-            ))}
+            {feed.threads.map((thread) => {
+              const reviewer = feed.participants.find((participant) => participant.id === thread.reviewer);
+              return (
+                <li key={thread.reviewer} className={thread.settled ? 'settled' : undefined}>
+                  <span className={`review-name ${colorClass(reviewer)}`}>{thread.reviewer}</span>{' '}
+                  <span className="mono">
+                    {thread.rounds}/{feed.rounds ?? '?'}
+                  </span>
+                  {thread.settled ? <span className="kind"> · settled</span> : null}
+                </li>
+              );
+            })}
           </ul>
         </section>
       )}
@@ -369,6 +393,12 @@ function SidePanel({
   );
 }
 
+function selectionTitle(selection: ReviewSelection): string {
+  const thread = selection.thread === undefined ? '' : ` · on ${selection.thread}`;
+  const round = selection.round === undefined ? '' : ` · round ${selection.round}`;
+  return `Turn of ${selection.participant}${thread}${round}`;
+}
+
 function ParticipantTurn({
   address,
   jobId,
@@ -387,20 +417,17 @@ function ParticipantTurn({
   readonly onClose: () => void;
 }): JSX.Element {
   const participant = feed.participants.find((entry) => entry.id === selection.participant);
-  const session = participant?.sessions.find((entry) => entry.round === selection.round);
+  const session = participant?.sessions.find((entry) => entry.round === selection.round && entry.thread === selection.thread);
   // Ход открывается под лентой: выбранный у первых сообщений длинной ленты
   // иначе остался бы за краем экрана.
   const ref = useRef<HTMLElement>(null);
   useEffect(() => {
     ref.current?.scrollIntoView({ block: 'start' });
-  }, [selection.participant, selection.round]);
+  }, [selection.participant, selection.round, selection.thread]);
   return (
     <section ref={ref} className="review-turn" aria-label={`Turn of ${selection.participant}`}>
       <header className="review-bubble-head">
-        <b>
-          Turn of {selection.participant}
-          {selection.round === undefined ? '' : ` · round ${selection.round}`}
-        </b>
+        <b>{selectionTitle(selection)}</b>
         {session?.status === undefined ? null : <span className="kind">{session.status}</span>}
         <Button variant="outline" size="sm" onClick={onClose}>
           Close
@@ -413,18 +440,25 @@ function ParticipantTurn({
         </div>
       )}
       <StepOutput
-        key={`${selection.participant}/${selection.round ?? 0}`}
+        key={`${selection.participant}/${selection.thread ?? ''}/${selection.round ?? 0}`}
         address={address}
         jobId={jobId}
         stepId={stepId}
         kind="agent"
         participant={selection.participant}
         {...(selection.round === undefined ? {} : { round: selection.round })}
+        {...(selection.thread === undefined ? {} : { thread: selection.thread })}
         {...(pass === undefined ? {} : { pass })}
         defaultOpen
       />
     </section>
   );
+}
+
+function legacyNotice(feed: ReviewFeed): string {
+  return feed.legacyMode === 'discussion'
+    ? 'This step ran in the retired discussion mode — showing the participants and the aggregator output.'
+    : 'This step’s journal has no review record — showing the participants and the aggregator output.';
 }
 
 /** Лента по готовой модели — без сети: её рисуют и тесты статическим рендером. */
@@ -452,18 +486,7 @@ export function ReviewFeedView({
   readonly navigate?: (href: string) => void;
 }): JSX.Element {
   const participants = new Map(feed.participants.map((participant) => [participant.id, participant]));
-  const running = feed.participants.filter((participant) => participant.running);
-  const groups = groupEntries(feed.entries);
-
-  const render = (entry: ReviewFeedEntry, index: number): JSX.Element => (
-    <EntryView
-      key={`${entry.kind}-${'messageId' in entry && entry.messageId !== undefined ? entry.messageId : index}`}
-      entry={entry}
-      participants={participants}
-      maxMessages={feed.maxMessages}
-      onSelect={onSelect}
-    />
-  );
+  const running = runningLabels(feed.participants);
 
   return (
     <div className="review-feed">
@@ -473,9 +496,7 @@ export function ReviewFeedView({
         )}
         {feed.legacy ? (
           <Alert className="review-legacy">
-            <AlertDescription>
-              This step&apos;s journal has no discussion record — showing the participants and the aggregator output.
-            </AlertDescription>
+            <AlertDescription>{legacyNotice(feed)}</AlertDescription>
           </Alert>
         ) : null}
         {feed.legacy ? (
@@ -491,24 +512,19 @@ export function ReviewFeedView({
             ))}
           </ul>
         ) : null}
-        <ol className="review-log" role="log" aria-live={feed.done ? 'off' : 'polite'} aria-label="Review discussion">
-          {groups.map((group, index) =>
-            group.collapsed ? (
-              <li key={`group-${index}`} className="review-round-collapsed">
-                <details>
-                  <summary className="review-system">
-                    Round {group.round} — {group.entries.filter((entry) => entry.kind === 'message').length} messages
-                  </summary>
-                  <ol className="review-log-inner">{group.entries.map(render)}</ol>
-                </details>
-              </li>
-            ) : (
-              group.entries.map((entry, inner) => render(entry, index * 1000 + inner))
-            ),
-          )}
-          {running.map((participant) => (
-            <li key={`running-${participant.id}`} className="review-system review-typing">
-              {runningLabel(participant)}
+        <ol className="review-log" role="log" aria-live={feed.done ? 'off' : 'polite'} aria-label="Review feed">
+          {feed.entries.map((entry, index) => (
+            <EntryView
+              key={`${entry.kind}-${entry.kind === 'reply' ? entry.messageId : 'participant' in entry ? entry.participant : index}`}
+              entry={entry}
+              participants={participants}
+              rounds={feed.rounds}
+              onSelect={onSelect}
+            />
+          ))}
+          {running.map((label) => (
+            <li key={`running-${label}`} className="review-system review-typing">
+              {label}
             </li>
           ))}
         </ol>
@@ -556,7 +572,7 @@ function ReusedNotice({
           {runId}
         </TargetLink>
         {available
-          ? ' — the discussion is shown from that run.'
+          ? ' — the review is shown from that run.'
           : ' — that run is no longer available, so only the verdict is shown.'}
       </AlertDescription>
     </Alert>
@@ -587,7 +603,7 @@ export function ReviewFeedPanel({
 
   // Перевзводимый таймер, а не `setInterval`: следующий опрос — после ответа
   // на предыдущий, тем же приёмом, что `StepOutput`. Модель ленты ограничена
-  // лимитом реплик, и демон отдаёт её целиком, а не дописанным хвостом.
+  // числом раундов веток, и демон отдаёт её целиком, а не дописанным хвостом.
   useEffect(() => {
     let alive = true;
     let timer: ReturnType<typeof setTimeout> | undefined;

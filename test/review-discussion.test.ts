@@ -536,11 +536,10 @@ describe('review-discussion: переиспользование при возо�
     assert.equal(resumed.status, 'success');
     assert.equal(backends.agg.invocations.length, 1);
 
+    // Витрина `review-defend` журнал обсуждения не разбирает: участники и вердикт.
     const feed = readReviewFeed(resumed.journal.paths, 'review', 'review-diff');
-    assert.deepEqual(
-      feed?.entries.map((entry) => entry.kind),
-      ['findings', 'findings', 'round', 'message', 'message', 'outcome', 'verdict'],
-    );
+    assert.equal(feed?.legacyMode, 'discussion');
+    assert.deepEqual(feed?.entries.map((entry) => entry.kind), ['verdict']);
     assert.deepEqual(feed?.reusedFrom, { runId: source.journal.paths.runId, available: true });
     assert.deepEqual(feed?.participants.map((participant) => participant.status), ['success', 'success', 'success']);
 

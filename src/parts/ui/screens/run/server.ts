@@ -118,6 +118,12 @@ const handleStepOutput: ApiHandler = (req, res, env) => {
     sendJson(res, 400, { error: 'round must be a positive integer and needs participant' });
     return;
   }
+  // Ветка защитника — сегментом раскладки, только вместе с раундом.
+  const thread = url.searchParams.get('thread');
+  if (thread !== null && (!isSafeSegment(thread) || round === undefined)) {
+    sendJson(res, 400, { error: 'thread must be a single layout segment and needs participant and round' });
+    return;
+  }
 
   const stdoutOffset = readNonNegativeInt(url, 'stdoutOffset');
   const stderrOffset = readNonNegativeInt(url, 'stderrOffset');
@@ -135,6 +141,7 @@ const handleStepOutput: ApiHandler = (req, res, env) => {
         ...(pass === undefined ? {} : { pass }),
         ...(participant === null ? {} : { participant }),
         ...(round === undefined ? {} : { round }),
+        ...(thread === null ? {} : { thread }),
         ...(stdoutOffset === undefined ? {} : { stdoutOffset }),
         ...(stderrOffset === undefined ? {} : { stderrOffset }),
       }),
@@ -151,7 +158,7 @@ const handleStepOutput: ApiHandler = (req, res, env) => {
 };
 
 /**
- * Лента шага `review` (`ui-review-discussion`, design.md, Решение 1): модель,
+ * Лента шага `review` (`review-defend`, design.md, решение 8): модель,
  * собранная из журнала шага. Витрина опрашивает её, пока `done` не настал, —
  * тем же приёмом, что вывод шага.
  */

@@ -3,8 +3,8 @@ import { join } from 'node:path';
 
 import { findStepDir, isRunAlive, listLoopPasses } from '../pipeline/run/journal/reader.js';
 import { type RunPaths } from '../pipeline/run/journal/paths.js';
-import { participantDir, replyDir } from '../pipeline/run/exec/reviewStep.js';
 import { MAX_FILE_BYTES, trimPartialUtf8 } from './file.js';
+import { participantDir, replyDir, threadTurnDir } from './reviewLayout.js';
 
 /**
  * Вывод шага по логическому адресу: прогон, работа, шаг, попытка, смещение.
@@ -26,10 +26,12 @@ export interface StepOutputQuery {
   readonly pass?: number;
   /**
    * Участник шага `review`: вывод его вызова из `participants/<id>/`
-   * (`ui-review-discussion`). С `round` — реплика этого раунда обсуждения.
+   * (`review-defend`). С `round` — ответ этого раунда, с `thread` и `round` —
+   * ход защитника в ветке ревьюера `thread`.
    */
   readonly participant?: string;
   readonly round?: number;
+  readonly thread?: string;
 }
 
 export interface StreamChunk {
@@ -207,7 +209,9 @@ export function readStepOutput(
       ? stepDir
       : query.round === undefined
         ? participantDir(stepDir, query.participant)
-        : replyDir(stepDir, query.participant, query.round);
+        : query.thread === undefined
+          ? replyDir(stepDir, query.participant, query.round)
+          : threadTurnDir(stepDir, query.participant, query.thread, query.round);
   if (!existsSync(dir)) return empty();
 
   const attempts = listAttempts(dir);
