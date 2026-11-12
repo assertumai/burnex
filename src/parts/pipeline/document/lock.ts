@@ -276,7 +276,7 @@ export function pipelineToPlain(pipeline: Pipeline): Record<string, unknown> {
     ...(pipeline.triggers === undefined ? {} : { triggers: triggersToPlain(pipeline.triggers) }),
     // Работа, чья рабочая директория совпадает с пайплайновой, ссылается на
     // тот же объект: печать замка даёт ей якорь YAML, как и до деревьев.
-    jobs: pipeline.jobs.map((job) => sharingWorkspace(jobToPlain(job), pipeline.workspace)),
+    jobs: pipeline.jobs.map((job) => sharingWorkspace(job, jobToPlain(job), pipeline.workspace)),
     ...(pipeline.loops.length === 0 ? {} : { loops: pipeline.loops.map(loopToPlain) }),
   };
 }
@@ -311,7 +311,10 @@ function jobForHash(job: Job): Record<string, unknown> {
   return { ...jobToPlain(job), workspace, steps: job.steps.map((step) => stepToPlain(forStepHash(step))) };
 }
 
-function sharingWorkspace(plain: Record<string, unknown>, workspace: Workspace): Record<string, unknown> {
+function sharingWorkspace(job: Job, plain: Record<string, unknown>, workspace: Workspace): Record<string, unknown> {
+  // Только у работы дерева по умолчанию: её объект собран заново ради
+  // `tree`, а до деревьев она делила объект пайплайна.
+  if (job.workspace.tree !== DEFAULT_TREE) return plain;
   return JSON.stringify(plain.workspace) === JSON.stringify(workspace) ? { ...plain, workspace } : plain;
 }
 

@@ -2667,6 +2667,9 @@ export function expandPipeline(options: ExpandOptions): ExpandedPipeline {
         file: declaringFile,
         at: `${at}.workspace.tree`,
       });
+      // Работа без своего блока в режиме cwd делит объект пайплайна, как и
+      // до деревьев: замок печатает его одним якорем.
+      if (rawWorkspace === undefined && tree === undefined) return pipelineWorkspace;
       return {
         mode,
         ...(path === undefined ? {} : { path }),
