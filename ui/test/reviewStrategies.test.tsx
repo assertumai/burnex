@@ -22,7 +22,7 @@ import {
 import { bindRouterKernel } from '../src/router';
 
 /**
- * Экран «Review strategies» (`ui-review-strategies`). Как и прочие тесты
+ * Экран «Review strategies» (`ui-review-strategies`, режим `defend` — `review-defend`). Как и прочие тесты
  * витрины, без щелчков: решения формы — чистые функции, показ — статический
  * рендер. Разбор и отказ приходят от демона; страница показывает его текст у
  * поля по пути ключа.
@@ -138,17 +138,41 @@ describe('ui-review-strategies: черновик и документ', () => {
     assert.equal(strategyChanged(draft, undefined), true);
   });
 
-  it('режим обсуждения пишет mode и discussion.max_messages, независимый снимает блок', () => {
+  it('режим defend пишет mode, раунды и защитника; независимый снимает оба блока', () => {
     const draft = strategyDraftOf(PANEL_DOCUMENT);
-    const discussion = strategyDocumentOf({ ...draft, mode: 'discussion', maxMessages: 6 }, PANEL_DOCUMENT);
-    assert.equal(discussion.mode, 'discussion');
-    assert.deepEqual(discussion.discussion, { max_messages: 6 });
+    assert.equal(draft.rounds, 2, 'раунды по умолчанию');
+    // Переключение без правок: только mode — умолчание раундов в файл не дописывается.
+    const plain = strategyDocumentOf({ ...draft, mode: 'defend' }, PANEL_DOCUMENT);
+    assert.equal(plain.mode, 'defend');
+    assert.equal('defend' in plain, false);
+    assert.equal('defender' in plain, false);
 
-    const back = strategyDocumentOf(strategyDraftOf(discussion), discussion);
-    assert.deepEqual(back, discussion);
-    const independent = strategyDocumentOf({ ...strategyDraftOf(discussion), mode: 'independent' }, discussion);
+    const defend = strategyDocumentOf(
+      { ...draft, mode: 'defend', rounds: 3, defender: { ...draft.defender, agent: 'claude', tier: 'max', prompt: 'Защищай по коду' } },
+      PANEL_DOCUMENT,
+    );
+    assert.deepEqual(defend.defend, { rounds: 3 });
+    assert.deepEqual(defend.defender, { agent: 'claude', model_tier: 'max', prompt: 'Защищай по коду' });
+
+    const back = strategyDraftOf(defend);
+    assert.equal(back.mode, 'defend');
+    assert.equal(back.rounds, 3);
+    assert.equal(back.defender.prompt, 'Защищай по коду');
+    assert.deepEqual(strategyDocumentOf(back, defend), defend);
+    assert.equal(strategyChanged(back, defend), false);
+
+    const independent = strategyDocumentOf({ ...back, mode: 'independent' }, defend);
     assert.equal(independent.mode, 'independent');
-    assert.equal('discussion' in independent, false);
+    assert.equal('defend' in independent, false);
+    assert.equal('defender' in independent, false);
+  });
+
+  it('стратегия с mode: defend без блока раундов нетронута, раунды по умолчанию', () => {
+    const document = { ...PANEL_DOCUMENT, mode: 'defend' };
+    const draft = strategyDraftOf(document);
+    assert.equal(draft.rounds, 2);
+    assert.equal(strategyChanged(draft, document), false);
+    assert.deepEqual(strategyDocumentOf({ ...draft, rounds: 4 }, document).defend, { rounds: 4 });
   });
 
   it('правка focus меняет только этого ревьюера; file: остаётся ссылкой', () => {
@@ -176,27 +200,34 @@ describe('ui-review-strategies: черновик и документ', () => {
 });
 
 describe('ui-review-strategies: режим и схема хода', () => {
-  it('смена режима на обсуждение показывает лимит и меняет схему хода', () => {
+  it('переключатель Independent / Defend; в Defend — rounds со значением 2, блок защитника и схема хода', () => {
     const draft = strategyDraftOf(PANEL_DOCUMENT);
     const independent = editor(draft);
-    assert.doesNotMatch(independent, /max messages/);
+    assert.match(independent, /role="radio" aria-checked="true"[^>]*>Independent</);
+    assert.match(independent, />Defend</);
+    assert.doesNotMatch(independent, /Discussion|max messages/);
+    assert.doesNotMatch(independent, /id="strategy-rounds"/);
+    assert.doesNotMatch(independent, /strategy-defender/);
     assert.match(independent, /The aggregator consolidates the findings/);
 
-    const discussion = editor({ ...draft, mode: 'discussion', maxMessages: 7 });
-    assert.match(discussion, /id="strategy-max-messages"[^>]*min="1"[^>]*max="50"[^>]*value="7"/);
-    assert.match(discussion, /Discussion: ≤ 7 message\(s\) per reviewer/);
-    assert.match(discussion, /Consensus\?/);
-    assert.match(discussion, /no — the aggregator decides/);
+    const defend = editor({ ...draft, mode: 'defend' });
+    assert.match(defend, /role="radio" aria-checked="true"[^>]*>Defend</);
+    assert.match(defend, /id="strategy-rounds"[^>]*min="1"[^>]*max="5"[^>]*value="2"/);
+    assert.match(defend, /class="[^"]*strategy-defender[^"]*"/);
+    assert.match(defend, /id="defender-agent"/);
+    assert.match(defend, /id="defender-prompt"/);
+    assert.match(defend, /the defender is a fork of that session/);
+    assert.match(defend, /<li>Reviewers in parallel<\/li><li>Defend with implementer ≤ 2 rounds<\/li><li>Aggregator decides contested<\/li>/);
   });
 
-  it('схема хода зависит только от режима и лимита', () => {
+  it('схема хода зависит только от режима и раундов', () => {
     assert.deepEqual(courseSteps('independent', 5), ['Reviewers work in parallel', 'The aggregator consolidates the findings', 'Verdict']);
-    assert.equal(courseSteps('discussion', 3).length, 4);
+    assert.deepEqual(courseSteps('defend', 3), ['Reviewers in parallel', 'Defend with implementer ≤ 3 rounds', 'Aggregator decides contested']);
   });
 
   it('агрегатор — отдельная карточка с подписью роли; focus из file: показан путём', () => {
     const html = editor(strategyDraftOf(PANEL_DOCUMENT));
-    assert.match(html, /aggregator.*Consolidates the findings and gives the verdict; accepts the consensus when there is one/s);
+    assert.match(html, /aggregator.*Consolidates the findings and gives the verdict; in Defend mode decides the contested ones/s);
     assert.match(html, /\.\/architecture-focus\.md <span class="dim">\(file, relative to the strategy — edit it there\)/);
     assert.match(html, />Add reviewer</);
   });
@@ -213,11 +244,22 @@ describe('ui-review-strategies: ошибки разбора у полей', () =
     assert.doesNotMatch(html.split('id="reviewer-1-id"')[0]!, /повторный id/);
   });
 
-  it('отказ режима и лимита обсуждения показывается у переключателя режима', () => {
-    assert.equal(errorAt({ message: 'неизвестный ключ discussion', at: 'discussion' }, 'mode', 'discussion'), 'неизвестный ключ discussion');
-    assert.equal(errorAt({ message: 'вне диапазона', at: 'discussion.max_messages' }, 'mode', 'discussion'), 'вне диапазона');
+  it('отказ режима и раундов показывается у переключателя режима, отказ защитника — в его блоке', () => {
+    assert.equal(errorAt({ message: 'вне диапазона', at: 'defend.rounds' }, 'mode', 'defend'), 'вне диапазона');
     const html = editor(strategyDraftOf(PANEL_DOCUMENT), { message: 'неизвестный режим', at: 'mode' });
     assert.match(html, /Review mode.*?<span class="strategy-field-error" role="alert">неизвестный режим<\/span>/s);
+    const defender = editor({ ...strategyDraftOf(PANEL_DOCUMENT), mode: 'defend' }, { message: 'неизвестный агент', at: 'defender.agent' });
+    assert.match(defender, /id="defender-agent".*?<span class="strategy-field-error" role="alert">неизвестный агент<\/span>/s);
+  });
+
+  it('стратегия прежнего mode: discussion открывается ошибкой разбора у ключа mode', () => {
+    const legacy: StrategyView = {
+      name: 'old', layer: 'project', path: '/p/.burnex/review-strategies/old.yml', text: 'mode: discussion\n', usage: [],
+      error: { message: 'неизвестный режим: известны independent, defend (discussion заменён режимом defend)', at: 'mode' },
+    };
+    const html = view({ overview: overview([legacy]), selected: legacy, draft: undefined });
+    assert.match(html, /The file does not parse at mode/);
+    assert.match(html, /discussion заменён режимом defend/);
   });
 });
 
@@ -227,6 +269,8 @@ describe('ui-review-strategies: список, перекрытие, удален
     assert.match(html, /panel<\/span><span[^>]*>project<\/span>/);
     assert.match(html, /duo<\/span><span[^>]*>mine<\/span>/);
     assert.match(html, /2 reviewer\(s\) · independent/);
+    const defend = view({ overview: overview([{ ...PANEL, document: { ...PANEL_DOCUMENT, mode: 'defend' } }]) } as Partial<ReviewStrategiesViewProps>);
+    assert.match(defend, /2 reviewer\(s\) · defend/);
     assert.match(html, /class="shadowed".*shadowed by the project/s);
   });
 

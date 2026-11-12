@@ -44,11 +44,11 @@ import './reviewStrategies.css';
 
 export const PIPELINES_TARGET: RouteTarget = { kind: 'screen', id: 'screen-pipelines' };
 
-export type ReviewModeChoice = 'independent' | 'discussion';
+export type ReviewModeChoice = 'independent' | 'defend';
 
-/** Лимит реплик обсуждения — тот же диапазон, что у разбора `discussion.max_messages`. */
-export const MAX_MESSAGES_RANGE = { min: 1, max: 50 } as const;
-const DEFAULT_MAX_MESSAGES = 10;
+/** Раунды ветки защиты — тот же диапазон и умолчание, что у разбора `defend.rounds`. */
+export const ROUNDS_RANGE = { min: 1, max: 5 } as const;
+export const DEFAULT_ROUNDS = 2;
 
 export interface ParticipantDraft {
   /** Профиль или бэкенд; пусто — профиль `default`. */
@@ -69,12 +69,16 @@ export interface AggregatorDraft extends ParticipantDraft {
   readonly prompt: string;
 }
 
+/** Свежий защитник режима `defend`: тот же выбор агента, что у агрегатора, и промпт. */
+export type DefenderDraft = AggregatorDraft;
+
 export interface StrategyDraft {
   readonly name: string;
   readonly description: string;
   readonly mode: ReviewModeChoice;
-  readonly maxMessages: number;
+  readonly rounds: number;
   readonly aggregator: AggregatorDraft;
+  readonly defender: DefenderDraft;
   readonly reviewers: readonly ReviewerDraft[];
   readonly profiles: readonly ProfileDraft[];
 }
@@ -97,15 +101,20 @@ export function emptyReviewer(id = ''): ReviewerDraft {
   return { ...participantDraftOf(undefined), id, focus: '' };
 }
 
+function promptedDraftOf(raw: Raw | undefined): AggregatorDraft {
+  return { ...participantDraftOf(raw), prompt: text(raw?.prompt) };
+}
+
 export function strategyDraftOf(document: Raw): StrategyDraft {
-  const discussion = document.discussion as Raw | undefined;
+  const defend = document.defend as Raw | undefined;
   const profiles = (document.profiles ?? {}) as Readonly<Record<string, AgentProfileValue>>;
   return {
     name: text(document.name),
     description: text(document.description),
-    mode: document.mode === 'discussion' ? 'discussion' : 'independent',
-    maxMessages: typeof discussion?.max_messages === 'number' ? discussion.max_messages : DEFAULT_MAX_MESSAGES,
-    aggregator: { ...participantDraftOf(document.aggregator as Raw | undefined), prompt: text((document.aggregator as Raw | undefined)?.prompt) },
+    mode: document.mode === 'defend' ? 'defend' : 'independent',
+    rounds: typeof defend?.rounds === 'number' ? defend.rounds : DEFAULT_ROUNDS,
+    aggregator: promptedDraftOf(document.aggregator as Raw | undefined),
+    defender: promptedDraftOf(document.defender as Raw | undefined),
     reviewers: ((document.reviewers ?? []) as Raw[]).map((reviewer) => ({
       ...participantDraftOf(reviewer),
       id: text(reviewer.id),
@@ -120,8 +129,9 @@ export function emptyStrategyDraft(name = ''): StrategyDraft {
     name,
     description: '',
     mode: 'independent',
-    maxMessages: DEFAULT_MAX_MESSAGES,
-    aggregator: { ...participantDraftOf(undefined), prompt: '' },
+    rounds: DEFAULT_ROUNDS,
+    aggregator: promptedDraftOf(undefined),
+    defender: promptedDraftOf(undefined),
     reviewers: [emptyReviewer('reviewer')],
     profiles: [],
   };
@@ -138,6 +148,10 @@ function participantValue(draft: ParticipantDraft): Record<string, string> {
     ...(draft.modelKind === 'tier' && tier !== '' ? { model_tier: tier } : {}),
     ...(effort === '' ? {} : { effort }),
   };
+}
+
+function promptedValue(draft: AggregatorDraft): Record<string, string> {
+  return { ...participantValue(draft), ...(draft.prompt.trim() === '' ? {} : { prompt: draft.prompt }) };
 }
 
 /**
@@ -171,15 +185,24 @@ export function strategyDocumentOf(draft: StrategyDraft, original: Raw = {}): Re
     ...(reviewer.focus.trim() === '' ? {} : { focus: reviewer.focus }),
   }));
 
-  const aggregator = { ...participantValue(draft.aggregator), ...(draft.aggregator.prompt.trim() === '' ? {} : { prompt: draft.aggregator.prompt }) };
+  const aggregator = promptedValue(draft.aggregator);
   if (Object.keys(aggregator).length === 0) delete document.aggregator;
   else document.aggregator = aggregator;
 
   if (original.mode !== undefined || draft.mode !== 'independent') document.mode = draft.mode;
-  if (draft.mode === 'discussion') {
-    document.discussion = { ...((original.discussion ?? {}) as Raw), max_messages: draft.maxMessages };
+  // Блоки `defend` и `defender` при другом режиме разбор отклоняет: уходят
+  // вместе с режимом. Раунды по умолчанию в файл не дописываются, пока блока
+  // в нём не было, — нетронутая стратегия остаётся нетронутой.
+  if (draft.mode === 'defend') {
+    const defend = original.defend as Raw | undefined;
+    if (defend !== undefined || draft.rounds !== DEFAULT_ROUNDS) document.defend = { ...(defend ?? {}), rounds: draft.rounds };
+    else delete document.defend;
+    const defender = promptedValue(draft.defender);
+    if (Object.keys(defender).length === 0) delete document.defender;
+    else document.defender = defender;
   } else {
-    delete document.discussion;
+    delete document.defend;
+    delete document.defender;
   }
   return document;
 }
@@ -207,14 +230,9 @@ function sameValue(left: unknown, right: unknown): boolean {
 }
 
 /** Схема хода ревью — этапы выбранного режима. */
-export function courseSteps(mode: ReviewModeChoice, maxMessages: number): readonly string[] {
-  if (mode === 'discussion') {
-    return [
-      'Reviewers work in parallel',
-      `Discussion: ≤ ${maxMessages} message(s) per reviewer`,
-      'Consensus?',
-      'yes — the aggregator accepts it / no — the aggregator decides',
-    ];
+export function courseSteps(mode: ReviewModeChoice, rounds: number): readonly string[] {
+  if (mode === 'defend') {
+    return ['Reviewers in parallel', `Defend with implementer ≤ ${rounds} rounds`, 'Aggregator decides contested'];
   }
   return ['Reviewers work in parallel', 'The aggregator consolidates the findings', 'Verdict'];
 }
@@ -232,7 +250,7 @@ export function strategyRemovalConfirmation(strategy: Pick<StrategyView, 'name' 
 
 /**
  * Отказ относится к полю, если путь ключа — само поле или лежит внутри него.
- * Лимит обсуждения живёт рядом с режимом: `discussion.*` показывается там же.
+ * Раунды защиты живут рядом с режимом: `defend.*` показывается там же.
  */
 export function errorAt(problem: StrategyProblem | undefined, ...fields: readonly string[]): string | undefined {
   const at = problem?.at;
@@ -368,10 +386,10 @@ function TextOrFile({ id, label, value, problem, at, placeholder, onChange }: {
   );
 }
 
-export function CourseScheme({ mode, maxMessages }: { readonly mode: ReviewModeChoice; readonly maxMessages: number }): JSX.Element {
+export function CourseScheme({ mode, rounds }: { readonly mode: ReviewModeChoice; readonly rounds: number }): JSX.Element {
   return (
     <ol className="strategy-course" aria-label="How the review runs">
-      {courseSteps(mode, maxMessages).map((step) => <li key={step}>{step}</li>)}
+      {courseSteps(mode, rounds).map((step) => <li key={step}>{step}</li>)}
     </ol>
   );
 }
@@ -408,30 +426,54 @@ export function StrategyEditor({ draft, settings, strategy, problem, readOnly, n
         </CardHeader>
         <CardContent>
           <div className="strategy-segmented" role="radiogroup" aria-label="Review mode">
-            {(['independent', 'discussion'] as const).map((mode) => (
+            {(['independent', 'defend'] as const).map((mode) => (
               <button key={mode} type="button" role="radio" aria-checked={draft.mode === mode}
                 className={draft.mode === mode ? 'active' : undefined}
                 onClick={() => onChange({ ...draft, mode })}>
-                {mode === 'independent' ? 'Independent' : 'Discussion'}
+                {mode === 'independent' ? 'Independent' : 'Defend'}
               </button>
             ))}
           </div>
-          <FieldError message={errorAt(problem, 'mode', 'discussion')} />
-          {draft.mode === 'discussion' ? (
-            <Field label="max messages" htmlFor="strategy-max-messages">
+          <FieldError message={errorAt(problem, 'mode', 'defend')} />
+          {draft.mode === 'defend' ? (
+            <Field label="rounds" htmlFor="strategy-rounds">
               <div className="agent-field-row">
-                <input type="range" aria-label="max messages slider" min={MAX_MESSAGES_RANGE.min} max={MAX_MESSAGES_RANGE.max}
-                  value={draft.maxMessages} onChange={(event) => onChange({ ...draft, maxMessages: Number(event.target.value) })} />
-                <Input id="strategy-max-messages" type="number" className="mono strategy-number"
-                  min={MAX_MESSAGES_RANGE.min} max={MAX_MESSAGES_RANGE.max} value={draft.maxMessages}
-                  onChange={(event) => onChange({ ...draft, maxMessages: Number(event.target.value) })} />
+                <input type="range" aria-label="rounds slider" min={ROUNDS_RANGE.min} max={ROUNDS_RANGE.max}
+                  value={draft.rounds} onChange={(event) => onChange({ ...draft, rounds: Number(event.target.value) })} />
+                <Input id="strategy-rounds" type="number" className="mono strategy-number"
+                  min={ROUNDS_RANGE.min} max={ROUNDS_RANGE.max} value={draft.rounds}
+                  onChange={(event) => onChange({ ...draft, rounds: Number(event.target.value) })} />
               </div>
-              <span className="small dim">Messages each reviewer may send after the independent review.</span>
+              <span className="small dim">Rounds of defender answer and reviewer reply per reviewer; findings still open after them are contested.</span>
             </Field>
           ) : null}
-          <CourseScheme mode={draft.mode} maxMessages={draft.maxMessages} />
+          <CourseScheme mode={draft.mode} rounds={draft.rounds} />
         </CardContent>
       </Card>
+
+      {draft.mode === 'defend' ? (
+        <Card className="strategy-defender">
+          <CardHeader>
+            <div className="agent-card-head">
+              <CardTitle>defender</CardTitle>
+              <Badge variant="secondary">defends</Badge>
+            </div>
+            <CardDescription>
+              Answers each reviewer&apos;s findings on behalf of the implementation. When the <code>review:</code> step names
+              an <code>implementer</code> whose session can be forked, the defender is a fork of that session and these
+              settings are not used; otherwise a fresh agent with them defends.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <FieldError message={problem?.at === 'defender' ? problem.message : undefined} />
+            <ParticipantFields id="defender" draft={draft.defender} groups={groups} tiers={tiers} problem={problem} at="defender"
+              onChange={(next) => onChange({ ...draft, defender: { ...draft.defender, ...next } })} />
+            <TextOrFile id="defender-prompt" label="prompt" value={draft.defender.prompt} problem={problem} at="defender.prompt"
+              placeholder="How to defend the implementation — optional"
+              onChange={(prompt) => onChange({ ...draft, defender: { ...draft.defender, prompt } })} />
+          </CardContent>
+        </Card>
+      ) : null}
 
       <Card className="strategy-aggregator">
         <CardHeader>
@@ -439,7 +481,7 @@ export function StrategyEditor({ draft, settings, strategy, problem, readOnly, n
             <CardTitle>aggregator</CardTitle>
             <Badge variant="secondary">verdict</Badge>
           </div>
-          <CardDescription>Consolidates the findings and gives the verdict; accepts the consensus when there is one.</CardDescription>
+          <CardDescription>Consolidates the findings and gives the verdict; in Defend mode decides the contested ones.</CardDescription>
         </CardHeader>
         <CardContent>
           <FieldError message={problem?.at === 'aggregator' ? problem.message : undefined} />
@@ -553,7 +595,7 @@ export function StrategyList({ strategies, selected, onSelect }: {
       {strategies.map((strategy) => {
         const document = strategy.document;
         const reviewers = Array.isArray(document?.reviewers) ? document.reviewers.length : undefined;
-        const mode = document === undefined ? undefined : document.mode === 'discussion' ? 'discussion' : 'independent';
+        const mode = document === undefined ? undefined : document.mode === 'defend' ? 'defend' : 'independent';
         const active = selected?.layer === strategy.layer && selected.name === strategy.name;
         return (
           <li key={`${strategy.layer}/${strategy.name}`} className={strategy.shadowed === true ? 'shadowed' : undefined}>

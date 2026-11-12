@@ -15,7 +15,8 @@ import {
 import { tempDir } from './tmp.js';
 
 /**
- * Экран «Review strategies» (`ui-review-strategies`), серверная половина:
+ * Экран «Review strategies» (`ui-review-strategies`, режим `defend` —
+ * `review-defend`), серверная половина:
  * оба слоя тем же разрешением, что движок, отказ разбора с путём ключа до
  * записи, запись через `Document` с сохранением комментариев, использование
  * шагами `review:` раскрытых пайплайнов проекта.
@@ -144,29 +145,46 @@ describe('ui-review-strategies: запись', () => {
     assert.deepEqual(readdirSync(projectDir), ['panel.yml']);
   });
 
-  it('режим discussion с лимитом сохраняется, без лимита отклоняется у поля лимита', () => {
+  // Ждут движковую часть `review-defend` (задача 1.1): до неё разбор знает
+  // режим `discussion` и отклоняет `defend`.
+  it('режим defend с раундами и защитником сохраняется с комментариями файла; раунды вне 1–5 отклоняются', () => {
     const { home, projectRoot, projectDir } = bed();
-    writeFileSync(join(projectDir, 'panel.yml'), COMMENTED);
+    const path = join(projectDir, 'panel.yml');
+    writeFileSync(path, COMMENTED);
     const document = readReviewStrategies({ home, projectRoot, backendNames: BACKENDS }).strategies[0]!.document!;
     const save = (edited: Record<string, unknown>): string =>
       saveReviewStrategy({ layer: 'project', name: 'panel', document: edited }, { home, projectRoot, backendNames: BACKENDS });
 
     let rejected: StrategyRejected | undefined;
     try {
-      save({ ...document, mode: 'discussion' });
+      save({ ...document, mode: 'defend', defend: { rounds: 6 } });
     } catch (error) {
       if (!(error instanceof StrategyRejected)) throw error;
       rejected = error;
     }
-    assert.equal(rejected?.at, 'discussion.max_messages');
-    assert.equal(readFileSync(join(projectDir, 'panel.yml'), 'utf8'), COMMENTED);
+    assert.match(rejected?.at ?? '', /^defend/);
+    assert.equal(readFileSync(path, 'utf8'), COMMENTED);
 
-    save({ ...document, mode: 'discussion', discussion: { max_messages: 6 } });
+    save({ ...document, mode: 'defend', defend: { rounds: 3 }, defender: { agent: 'claude', prompt: 'Защищай по коду' } });
     const saved = readReviewStrategies({ home, projectRoot, backendNames: BACKENDS }).strategies[0]!;
     assert.equal(saved.error, undefined);
-    assert.equal(saved.document?.mode, 'discussion');
-    assert.deepEqual(saved.document?.discussion, { max_messages: 6 });
-    assert.match(readFileSync(join(projectDir, 'panel.yml'), 'utf8'), /# безопасность — на Codex/);
+    assert.equal(saved.document?.mode, 'defend');
+    assert.deepEqual(saved.document?.defend, { rounds: 3 });
+    assert.deepEqual(saved.document?.defender, { agent: 'claude', prompt: 'Защищай по коду' });
+    const text = readFileSync(path, 'utf8');
+    assert.match(text, /# безопасность — на Codex/);
+    assert.match(text, /mode: defend # пока единственный/);
+  });
+
+  it('стратегия прежнего режима discussion показывается с ошибкой разбора у ключа mode', () => {
+    const { home, projectRoot, projectDir } = bed();
+    writeFileSync(join(projectDir, 'old.yml'), strategy('old', 'mode: discussion\ndiscussion:\n  max_messages: 6\n'));
+
+    const [old] = readReviewStrategies({ home, projectRoot, backendNames: BACKENDS }).strategies;
+
+    assert.equal(old?.document, undefined);
+    assert.equal(old?.error?.at, 'mode');
+    assert.match(old?.error?.message ?? '', /defend/);
   });
 
   it('новая стратегия создаётся в выбранном слое с именем файла по name; занятое имя отклоняется', () => {
