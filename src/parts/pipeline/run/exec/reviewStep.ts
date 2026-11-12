@@ -96,12 +96,6 @@ export interface ReviewStepOptions<O extends ParticipantOutcome> {
 /** Ветки защиты в каталоге шага (`review-defend`, решение 7). */
 export const DEFENSE_FILE = 'defense.ndjson';
 
-/**
- * Лента прежнего режима `discussion` (`review-discussion`): движок её больше
- * не пишет, имя остаётся для чтения журналов прежних прогонов.
- */
-export const DISCUSSION_FILE = 'discussion.ndjson';
-
 /** Каталог участника внутри каталога шага. */
 export function participantDir(stepDir: string, participant: string): string {
   return join(stepDir, 'participants', participant);

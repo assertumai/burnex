@@ -71,11 +71,6 @@ export interface LockReviewParticipant {
  */
 export interface LockReview {
   readonly mode?: string;
-  /**
-   * Лимит реплик прежнего режима `discussion` — только у замков его
-   * прогонов: журналы до `review-defend` открываются по-прежнему.
-   */
-  readonly maxMessages?: number;
   /** Раунды защиты режима `defend`. */
   readonly rounds?: number;
   /** Имплементатор `<работа>.<шаг>`, как его записал замок. */
@@ -105,7 +100,6 @@ function reviewOf(record: Record<string, unknown>): LockReview | undefined {
   const strategy = asRecord(record.review);
   if (strategy === undefined) return undefined;
   const mode = asString(strategy.mode);
-  const maxMessages = asRecord(strategy.discussion)?.max_messages;
   const rounds = asRecord(strategy.defend)?.rounds;
   const implementer = asString(record.implementer);
   const defender = reviewParticipant(record.defender);
@@ -115,7 +109,6 @@ function reviewOf(record: Record<string, unknown>): LockReview | undefined {
   const aggregator = reviewParticipant(record.aggregator);
   return {
     ...(mode === undefined ? {} : { mode }),
-    ...(typeof maxMessages === 'number' ? { maxMessages } : {}),
     ...(typeof rounds === 'number' ? { rounds } : {}),
     ...(implementer === undefined ? {} : { implementer }),
     reviewers,

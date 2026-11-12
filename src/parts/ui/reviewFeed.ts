@@ -1,6 +1,5 @@
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { basename, dirname, join, relative } from 'node:path';
-import { parse as parseYaml } from 'yaml';
 
 import { readLockJobs, type LockReview, type LockReviewParticipant } from '../pipeline/document/lockRead.js';
 import { AGGREGATOR_ID } from '../pipeline/document/model.js';
@@ -10,39 +9,6 @@ import type { CostSource, StatusValue } from '../pipeline/run/journal/schema.js'
 import { readJournalJson } from './file.js';
 import { DEFENDER_ID, DEFENSE_FILE, DISCUSSION_FILE, participantDir, replyDir, threadTurnDir } from './reviewLayout.js';
 import type { JournalFileRef } from './snapshot.js';
-
-// Записи `discussion.ndjson` прежнего режима `discussion`: модуль движка с
-// ними удалён (`review-defend`, решение 1), а лента ещё читает журналы его
-// прогонов. Временная копия форм до переделки ленты под режим `defend`.
-type Stance = 'propose' | 'agree' | 'disagree';
-interface ProposalRecord {
-  readonly kind: 'proposal';
-  readonly id: string;
-  readonly by: string;
-  readonly round: number;
-  readonly content: unknown;
-}
-interface MessageRecord {
-  readonly kind: 'message';
-  readonly messageId: string;
-  readonly role: 'agent';
-  readonly from: string;
-  readonly round: number;
-  readonly seq: number;
-  readonly parts: readonly { readonly kind: 'text'; readonly text: string }[];
-  readonly stance: Stance;
-  readonly proposal?: string;
-  readonly target?: string;
-  readonly replyTo?: readonly string[];
-  readonly invalid?: true;
-  readonly failure?: string;
-}
-type NoConsensusReason = 'limit' | 'stalled' | 'budget' | 'participants';
-type DiscussionRecord =
-  | ProposalRecord
-  | MessageRecord
-  | { readonly kind: 'outcome'; readonly consensus: true; readonly proposal: string }
-  | { readonly kind: 'outcome'; readonly consensus: false; readonly reason: NoConsensusReason };
 
 /**
  * Лента шага `review` для деталей прогона (`review-defend`, design.md,
@@ -376,25 +342,6 @@ function lockReview(paths: RunPaths, jobId: string, stepId: string): LockReview 
       ?.steps.find((step) => step.id === stepId)?.review;
   } catch {
     return undefined;
-  }
-}
-
-/**
- * Лимит раундов ветки из записи стратегии в замке (`review.defend.rounds`).
- * Общий разбор замка его не несёт, а лента — единственный, кому он нужен
- * из записанного; нет значения — умолчание стратегии.
- */
-function lockDefendRounds(paths: RunPaths, jobId: string, stepId: string): number {
-  try {
-    const jobs = asRecord(parseYaml(readFileSync(paths.lock, 'utf8')))?.jobs;
-    if (!Array.isArray(jobs)) return DEFAULT_DEFEND_ROUNDS;
-    const job = jobs.map(asRecord).find((entry) => entry?.id === jobId);
-    const steps = Array.isArray(job?.steps) ? job.steps : [];
-    const step = steps.map(asRecord).find((entry) => entry?.id === stepId);
-    const rounds = asRecord(asRecord(step?.review)?.defend)?.rounds;
-    return typeof rounds === 'number' && Number.isInteger(rounds) && rounds > 0 ? rounds : DEFAULT_DEFEND_ROUNDS;
-  } catch {
-    return DEFAULT_DEFEND_ROUNDS;
   }
 }
 
@@ -780,7 +727,7 @@ export function readReviewFeed(
     );
   }
 
-  const rounds = mode === 'defend' ? lockDefendRounds(paths, jobId, stepId) : undefined;
+  const rounds = mode === 'defend' ? (strategy?.rounds ?? DEFAULT_DEFEND_ROUNDS) : undefined;
   const findings: ReviewFeedFinding[] = (defense?.findings ?? []).map(({ finding: _finding, ...rest }) => rest);
   const threads: ReviewFeedThread[] = mode === 'defend'
     ? reviewerParticipants.flatMap((reviewer) => {

@@ -272,6 +272,11 @@ function parseStrategy(text: string, backendNames: readonly string[]): RawReview
   }
   const parsed = ReviewStrategySchema.safeParse(document);
   if (!parsed.success) {
+    // Прежний `mode: discussion` приходит вместе со своим блоком
+    // `discussion`, и строгая схема первой назвала бы незнакомый ключ. Автору
+    // нужен отказ у `mode` с подсказкой о замене (`review-defend`, решение 1).
+    const mode = parsed.error.issues.find((issue) => issue.path.length === 1 && issue.path[0] === 'mode');
+    if (mode !== undefined) throw new StrategyError(mode.message, 'mode');
     const failure = describeSchemaFailure(parsed.error);
     throw new StrategyError(failure.message, failure.at);
   }
