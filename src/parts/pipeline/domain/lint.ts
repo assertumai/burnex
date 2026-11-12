@@ -1833,8 +1833,24 @@ function checkReviewStep(
       hint: `Стратегия найдена только в ${step.strategy.path ?? '~/.burnex/review-strategies/'}: на другой машине прогон её не найдёт — положите её в .burnex/review-strategies/ проекта`,
     });
   }
+  // Имплементатор нужен только защите (`review-defend`, решение 2): при
+  // другом режиме поле ничего бы не делало, а автор ждал бы защиты. Ссылку
+  // саму проверяет раскрытие — без графа работ её не разрешить.
+  if (step.implementer !== undefined && step.mode !== 'defend') {
+    push({
+      severity: 'error',
+      message: `Шаг ${job.id}/${step.id} называет имплементатора ${step.implementer.job}.${step.implementer.step}, а стратегия ${step.strategy.name ?? step.strategy.ref} — в режиме ${step.mode}`,
+      file: job.source,
+      at: `${at}.implementer`,
+      hint: 'implementer действует только при mode: defend стратегии: смените режим стратегии или уберите поле',
+    });
+  }
   const reported = new Set<string>();
-  for (const participant of [...step.reviewers, ...(step.aggregator === undefined ? [] : [step.aggregator])]) {
+  for (const participant of [
+    ...step.reviewers,
+    ...(step.aggregator === undefined ? [] : [step.aggregator]),
+    ...(step.defender === undefined ? [] : [step.defender]),
+  ]) {
     const name = participant.profile;
     if (participant.localProfile !== true || name === undefined || reported.has(name)) continue;
     const shadowed = options.config.agents[name];

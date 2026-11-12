@@ -887,29 +887,52 @@ export const EventSchema = z.discriminatedUnion('kind', [
   z.object({ ...eventBase, kind: z.literal('step.finished'), job: z.string(), step: z.string(), attempt: z.number().int().positive(), status: StatusValueSchema, reason: z.string().optional() }).strict(),
   z.object({ ...eventBase, kind: z.literal('step.stalled'), job: z.string(), step: z.string(), silent_ms: z.number() }).strict(),
   // Участник шага `review` (`review-strategies`, design.md, решение 6): ревьюер
-  // по своему `id` либо `aggregator`. Исход — статус участника; провал
-  // ревьюера шага не роняет, и `reason` называет то, что получит агрегатор.
-  // `round` — раунд обсуждения (`review-discussion`): реплика ревьюера в
-  // раунде N ≥ 1; у независимого ревью и агрегатора поля нет.
-  z.object({ ...eventBase, kind: z.literal('review.participant.started'), job: z.string(), step: z.string(), participant: z.string(), round: z.number().int().positive().optional(), agent: z.string(), model: z.string().optional() }).strict(),
-  z.object({ ...eventBase, kind: z.literal('review.participant.finished'), job: z.string(), step: z.string(), participant: z.string(), round: z.number().int().positive().optional(), status: StatusValueSchema, reason: z.string().optional() }).strict(),
-  // Обсуждение ревьюеров (`review-discussion`, решение 1): запись реплики в
-  // `discussion.ndjson` — событием по ходу шага, затем исход обсуждения.
-  // Раунд 0 — находки независимого ревью, первые предложения.
+  // по своему `id`, `aggregator` либо `defender`. Исход — статус участника;
+  // провал ревьюера шага не роняет, и `reason` называет то, что получит
+  // агрегатор. `round` — раунд защиты (`review-defend`, решение 7): ход
+  // ревьюера или защитника в раунде N ≥ 1; у независимого ревью и агрегатора
+  // поля нет. `thread` — ветка защиты, то есть ревьюер, чьи находки защищает
+  // `defender`; у прочих участников поля нет.
+  z.object({ ...eventBase, kind: z.literal('review.participant.started'), job: z.string(), step: z.string(), participant: z.string(), round: z.number().int().positive().optional(), thread: z.string().optional(), agent: z.string(), model: z.string().optional() }).strict(),
+  z.object({ ...eventBase, kind: z.literal('review.participant.finished'), job: z.string(), step: z.string(), participant: z.string(), round: z.number().int().positive().optional(), thread: z.string().optional(), status: StatusValueSchema, reason: z.string().optional() }).strict(),
+  // Выбор защитника режима `defend` (`review-defend`, решения 3 и 7): форк
+  // сессии имплементатора либо свежий агент с причиной.
+  z.object({
+    ...eventBase,
+    kind: z.literal('review.defender'),
+    job: z.string(),
+    step: z.string(),
+    mode: z.enum(['fork', 'fresh']),
+    implementer: z.string().optional(),
+    agent: z.string(),
+    model: z.string().optional(),
+    reason: z.enum(['no_implementer', 'no_session', 'no_fork']).optional(),
+  }).strict(),
+  // Реплика ветки защиты (`review-defend`, решение 7): запись в
+  // `defense.ndjson` — событием по ходу шага. `thread` — ветка (ревьюер).
+  // Прежний режим `discussion` (`review-discussion`) писал это событие с
+  // позицией `stance` и раундом 0: движок их больше не пишет, но схема их
+  // читает, чтобы прежние прогоны открывались.
   z.object({
     ...eventBase,
     kind: z.literal('review.message'),
     job: z.string(),
     step: z.string(),
     participant: z.string(),
+    thread: z.string().optional(),
     round: z.number().int().nonnegative(),
     message_id: z.string(),
-    stance: z.enum(['propose', 'agree', 'disagree']),
+    stance: z.enum(['propose', 'agree', 'disagree']).optional(),
     proposal: z.string().optional(),
     target: z.string().optional(),
     invalid: z.literal(true).optional(),
     failure: z.string().optional(),
   }).strict(),
+  // Закрытие находки (`review-defend`, решение 5): `accepted` — защитник
+  // принял, `withdrawn` — ревьюер снял, `contested` — открыта к концу ветки.
+  z.object({ ...eventBase, kind: z.literal('review.settled'), job: z.string(), step: z.string(), finding: z.string(), status: z.enum(['accepted', 'withdrawn', 'contested']) }).strict(),
+  z.object({ ...eventBase, kind: z.literal('review.defense.finished'), job: z.string(), step: z.string(), accepted: z.number().int().nonnegative(), withdrawn: z.number().int().nonnegative(), contested: z.number().int().nonnegative() }).strict(),
+  // Исход прежнего режима `discussion` — только для чтения старых журналов.
   z.object({ ...eventBase, kind: z.literal('review.consensus'), job: z.string(), step: z.string(), proposal: z.string() }).strict(),
   z.object({ ...eventBase, kind: z.literal('review.no_consensus'), job: z.string(), step: z.string(), reason: z.enum(['limit', 'stalled', 'budget', 'participants']) }).strict(),
   // Внешнее действие шага записано, а не совершено (`shadow-run-mode`): `n` —

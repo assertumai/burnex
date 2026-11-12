@@ -1,5 +1,5 @@
 import { packagedSchemaPath } from '../../domain/package-schema.js';
-import { AGGREGATOR_ID, type AgentStep, type ReviewParticipant, type ReviewStep, type Step } from '../../document/model.js';
+import { AGGREGATOR_ID, DEFENDER_ID, type AgentStep, type ReviewParticipant, type ReviewStep, type Step } from '../../document/model.js';
 
 /**
  * Участники шага `review` как агентские шаги (`review-strategies`, design.md,
@@ -128,7 +128,23 @@ export function aggregatorAgentStep(step: ReviewStep, prompt = step.prompt): Age
   };
 }
 
-/** Участник по `id`: ревьюер либо `aggregator`. */
+/**
+ * Заготовка вызова свежего защитника для проверок до исполнения: его агент,
+ * права шага и встроенная схема хода. Настоящие ходы ветки собирает
+ * исполнение (`steps/review/defend.ts`).
+ */
+function freshDefenderAgentStep(step: ReviewStep, defender: ReviewParticipant): AgentStep {
+  const schema = packagedSchemaPath('review-defense');
+  return {
+    ...participantStep(step, defender),
+    prompt: step.prompt,
+    outputSchemaPath: schema,
+    expect: [{ kind: 'schema', path: schema }],
+    attempts: { max: 2, escalation: [{ includeFailure: true }] },
+  };
+}
+
+/** Участник по `id`: ревьюер, `aggregator` либо `defender`. */
 export interface ParticipantCall {
   readonly id: string;
   readonly call: AgentStep;
@@ -136,8 +152,14 @@ export interface ParticipantCall {
 
 /**
  * Агентские вызовы шага: сам шаг `agent`, участники шага `review` (ревьюеры,
- * затем агрегатор), у остальных видов — ни одного. Шаг `review` без
- * разрешённой стратегии вызовов не имеет: он отказывает до исполнения.
+ * затем агрегатор, затем свежий защитник режима `defend`), у остальных видов
+ * — ни одного. Шаг `review` без разрешённой стратегии вызовов не имеет: он
+ * отказывает до исполнения.
+ *
+ * Свежий защитник входит всегда, хотя при форке исполняется агент
+ * имплементатора (`review-defend`, решение 3): форк или свежий — решает
+ * исполнение, а проверить до него бэкенд свежего обязаны и предстарт, и линт.
+ * Сам форк — агентский шаг имплементатора, его бэкенд проверен им.
  */
 export function agentCallsOf(step: Step): readonly ParticipantCall[] {
   if (step.kind === 'agent') return [{ id: step.id, call: step }];
@@ -145,5 +167,8 @@ export function agentCallsOf(step: Step): readonly ParticipantCall[] {
   return [
     ...step.reviewers.map((reviewer) => ({ id: reviewer.id, call: reviewerAgentStep(step, reviewer) })),
     { id: AGGREGATOR_ID, call: aggregatorAgentStep(step) },
+    ...(step.mode === 'defend' && step.defender !== undefined
+      ? [{ id: DEFENDER_ID, call: freshDefenderAgentStep(step, step.defender) }]
+      : []),
   ];
 }

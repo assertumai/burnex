@@ -45,6 +45,13 @@ export interface BackendCapabilities {
    * направление стоило бы попытки продолжения несуществующей у бэкенда нити.
    */
   readonly sessionIdSource: 'engine' | 'backend';
+  /**
+   * Умеет начать новую сессию форком существующей: новая помнит исходный
+   * диалог, исходная не меняется (`review-defend`, решение 4). Необязательное
+   * поле: отсутствие — «не умеет», и движок такому адаптеру `forkFrom` не
+   * передаёт; защитник ревью идёт свежим агентом с причиной `no_fork`.
+   */
+  readonly forkSessions?: boolean;
 }
 
 export interface AgentInvocation {
@@ -55,6 +62,14 @@ export interface AgentInvocation {
   readonly sessionId?: string;
   /** true — продолжить существующую сессию, false — начать с этим идентификатором. */
   readonly resumeSession: boolean;
+  /**
+   * Начать сессию форком сессии с этим идентификатором (`review-defend`,
+   * решение 4). Приходит только адаптеру с `forkSessions` и только пока
+   * сессия псевдонима не начата — то есть с `resumeSession: false`; новый
+   * идентификатор — `sessionId` (движок выдаёт сам) либо запись потока
+   * (бэкенд выдаёт сам).
+   */
+  readonly forkFrom?: string;
   readonly outputSchemaPath?: string;
   readonly permissions?: Permissions;
   /** Действующее для шага объявление MCP-серверов — своё либо унаследованное. */

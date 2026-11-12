@@ -1,0 +1,24 @@
+{
+  "title": "burnex review defense",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "text": { "type": "string" },
+    "responses": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "finding": { "type": "string" },
+          "stance": { "type": "string", "enum": ["accept", "dispute", "clarify"] },
+          "text": { "type": "string" },
+          "evidence": { "type": ["string", "null"] }
+        },
+        "required": ["finding", "stance", "text", "evidence"],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": ["text", "responses"],
+  "additionalProperties": false
+}

@@ -144,28 +144,31 @@ describe('ui-review-strategies: запись', () => {
     assert.deepEqual(readdirSync(projectDir), ['panel.yml']);
   });
 
-  it('режим discussion с лимитом сохраняется, без лимита отклоняется у поля лимита', () => {
+  it('режим defend с раундами сохраняется; прежний discussion и раунды вне диапазона отклоняются у своего поля', () => {
     const { home, projectRoot, projectDir } = bed();
     writeFileSync(join(projectDir, 'panel.yml'), COMMENTED);
     const document = readReviewStrategies({ home, projectRoot, backendNames: BACKENDS }).strategies[0]!.document!;
     const save = (edited: Record<string, unknown>): string =>
       saveReviewStrategy({ layer: 'project', name: 'panel', document: edited }, { home, projectRoot, backendNames: BACKENDS });
+    const rejectedAt = (edited: Record<string, unknown>): StrategyRejected | undefined => {
+      try {
+        save(edited);
+      } catch (error) {
+        if (!(error instanceof StrategyRejected)) throw error;
+        return error;
+      }
+      return undefined;
+    };
 
-    let rejected: StrategyRejected | undefined;
-    try {
-      save({ ...document, mode: 'discussion' });
-    } catch (error) {
-      if (!(error instanceof StrategyRejected)) throw error;
-      rejected = error;
-    }
-    assert.equal(rejected?.at, 'discussion.max_messages');
+    assert.equal(rejectedAt({ ...document, mode: 'discussion' })?.at, 'mode');
+    assert.equal(rejectedAt({ ...document, mode: 'defend', defend: { rounds: 9 } })?.at, 'defend.rounds');
     assert.equal(readFileSync(join(projectDir, 'panel.yml'), 'utf8'), COMMENTED);
 
-    save({ ...document, mode: 'discussion', discussion: { max_messages: 6 } });
+    save({ ...document, mode: 'defend', defend: { rounds: 3 }, defender: { agent: 'claude' } });
     const saved = readReviewStrategies({ home, projectRoot, backendNames: BACKENDS }).strategies[0]!;
     assert.equal(saved.error, undefined);
-    assert.equal(saved.document?.mode, 'discussion');
-    assert.deepEqual(saved.document?.discussion, { max_messages: 6 });
+    assert.equal(saved.document?.mode, 'defend');
+    assert.deepEqual(saved.document?.defend, { rounds: 3 });
     assert.match(readFileSync(join(projectDir, 'panel.yml'), 'utf8'), /# безопасность — на Codex/);
   });
 

@@ -64,6 +64,10 @@ export function createClaudeAdapter(config: BackendConfig): BackendAdapter {
       // Claude Code принимает `--session-id`: идентификатор заводит и
       // называет движок, не сам CLI.
       sessionIdSource: 'engine',
+      // `--resume <id> --fork-session --session-id <новый>` (проверено на
+      // Claude Code 2.1.312): форк помнит исходный диалог и получает
+      // выданный движком id; под той же настройкой, что сессии.
+      forkSessions: config.sessions,
     },
 
     launch(invocation: AgentInvocation): LaunchSpec {
@@ -74,7 +78,13 @@ export function createClaudeAdapter(config: BackendConfig): BackendAdapter {
       if (invocation.effort !== undefined) command.push('--effort', invocation.effort);
 
       if (invocation.sessionId !== undefined && config.sessions) {
-        command.push(invocation.resumeSession ? '--resume' : '--session-id', invocation.sessionId);
+        if (invocation.forkFrom !== undefined && !invocation.resumeSession) {
+          // Форк (`review-defend`, решение 4): исходная сессия не меняется,
+          // новая начинается с её диалогом под выданным идентификатором.
+          command.push('--resume', invocation.forkFrom, '--fork-session', '--session-id', invocation.sessionId);
+        } else {
+          command.push(invocation.resumeSession ? '--resume' : '--session-id', invocation.sessionId);
+        }
       }
 
       if (invocation.outputSchemaPath !== undefined && config.structuredOutput) {

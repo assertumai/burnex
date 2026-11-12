@@ -18,7 +18,7 @@ import {
   ProfileNameSchema,
   type RawAgentProfile,
 } from '../config/schema.js';
-import { AGGREGATOR_ID, REVIEW_MODES, type ReviewMode, type ReviewStrategyOrigin, type ReviewStrategyUnresolved } from './model.js';
+import { AGGREGATOR_ID, DEFAULT_DEFEND_ROUNDS, DEFENDER_ID, REVIEW_MODES, type ReviewMode, type ReviewStrategyOrigin, type ReviewStrategyUnresolved } from './model.js';
 
 /**
  * Стратегия ревью (`review-strategies`, design.md, решения 1 и 2): кто
@@ -53,6 +53,26 @@ const AggregatorSchema = z
   .refine((value) => value.model === undefined || value.model_tier === undefined, { message: BOTH_MODEL_FIELDS })
   .meta({ not: { required: ['model', 'model_tier'] } });
 
+const DefenderSchema = z
+  .object({ ...ParticipantChoiceShape, prompt: z.string().optional() })
+  .strict()
+  .refine((value) => value.model === undefined || value.model_tier === undefined, { message: BOTH_MODEL_FIELDS })
+  .meta({ not: { required: ['model', 'model_tier'] } });
+
+const ROUNDS_RANGE = 'rounds — целое число от 1 до 5';
+
+/**
+ * Режим стратегии. Прежний `discussion` (`review-discussion`) заменён
+ * режимом `defend` и отклоняется с подсказкой о замене (`review-defend`,
+ * решение 1): автор старой стратегии должен узнать, на что её перевести.
+ */
+const ModeSchema = z.enum(REVIEW_MODES, {
+  error: (issue) =>
+    issue.input === 'discussion'
+      ? `неизвестный режим: известны ${REVIEW_MODES.join(', ')} (discussion заменён режимом defend)`
+      : `неизвестный режим: известны ${REVIEW_MODES.join(', ')}`,
+});
+
 export const ReviewStrategySchema = z
   .object({
     version: z.literal(1),
@@ -62,58 +82,45 @@ export const ReviewStrategySchema = z
     profiles: z.record(ProfileNameSchema, AgentProfileSchema).optional(),
     reviewers: z.array(ReviewerSchema).min(1, 'стратегия объявляет хотя бы одного ревьюера'),
     aggregator: AggregatorSchema.optional(),
-    mode: z.enum(REVIEW_MODES, { error: () => `неизвестный режим: известны ${REVIEW_MODES.join(', ')}` }).optional(),
-    discussion: z
+    mode: ModeSchema.optional(),
+    defend: z
       .object({
-        max_messages: z
-          .number()
-          .int('max_messages — целое число')
-          .min(1, 'max_messages — от 1 до 50')
-          .max(50, 'max_messages — от 1 до 50'),
+        rounds: z.number().int(ROUNDS_RANGE).min(1, ROUNDS_RANGE).max(5, ROUNDS_RANGE).optional(),
       })
       .strict()
       .optional(),
+    defender: DefenderSchema.optional(),
   })
   .strict()
   .meta({
     // То же, что проверяет `superRefine` ниже, — для подсказок редактора.
-    if: { properties: { mode: { const: 'discussion' } }, required: ['mode'] },
-    then: { required: ['discussion'], properties: { reviewers: { minItems: 2 } } },
-    else: { not: { required: ['discussion'] } },
+    if: { properties: { mode: { const: 'defend' } }, required: ['mode'] },
+    then: {},
+    else: { not: { anyOf: [{ required: ['defend'] }, { required: ['defender'] }] } },
   })
   .superRefine((value, ctx) => {
-    // Режим `discussion` (`review-discussion`, решение 3): лимит реплик
-    // обязателен, блок при другом режиме — ошибка, а одному ревьюеру
-    // обсуждать не с кем.
-    if (value.mode === 'discussion') {
-      if (value.discussion === undefined) {
+    // Блоки режима `defend` при другом режиме ничего бы не делали — ошибка
+    // у ключа блока (`review-defend`, решение 1).
+    if (value.mode !== 'defend') {
+      for (const key of ['defend', 'defender'] as const) {
+        if (value[key] === undefined) continue;
         ctx.addIssue({
           code: 'custom',
-          path: ['discussion', 'max_messages'],
-          message: 'режим discussion требует лимит реплик discussion.max_messages (от 1 до 50)',
+          path: [key],
+          message: `блок ${key} действует только при mode: defend, а режим — ${value.mode ?? 'independent'}`,
         });
       }
-      if (value.reviewers.length < 2) {
-        ctx.addIssue({
-          code: 'custom',
-          path: ['reviewers'],
-          message: 'режиму discussion нужны хотя бы два ревьюера: одному обсуждать не с кем',
-        });
-      }
-    } else if (value.discussion !== undefined) {
-      ctx.addIssue({
-        code: 'custom',
-        path: ['discussion'],
-        message: `блок discussion действует только при mode: discussion, а режим — ${value.mode ?? 'independent'}`,
-      });
     }
     const seen = new Set<string>();
     for (const [index, reviewer] of value.reviewers.entries()) {
-      if (reviewer.id === AGGREGATOR_ID) {
+      if (reviewer.id === AGGREGATOR_ID || reviewer.id === DEFENDER_ID) {
         ctx.addIssue({
           code: 'custom',
           path: ['reviewers', index, 'id'],
-          message: `id ${AGGREGATOR_ID} занят агрегатором: каталог журнала и адрес step_agents у них общие`,
+          message:
+            reviewer.id === AGGREGATOR_ID
+              ? `id ${AGGREGATOR_ID} занят агрегатором: каталог журнала и адрес step_agents у них общие`
+              : `id ${DEFENDER_ID} занят защитником: каталог журнала, адрес step_agents и учёт расхода у них общие`,
         });
       }
       if (seen.has(reviewer.id)) {
@@ -142,15 +149,22 @@ export interface StrategyAggregator extends StrategyChoice {
   readonly prompt?: string;
 }
 
+/** Свежий защитник режима `defend`: выбор агента и дополнение к промпту. */
+export interface StrategyDefender extends StrategyChoice {
+  readonly prompt?: string;
+}
+
 /** Прочитанная и проверенная стратегия: тексты `file:` прочитаны, пути разрешены. */
 export interface ReviewStrategy {
   readonly origin: Required<Pick<ReviewStrategyOrigin, 'name' | 'layer' | 'path' | 'fingerprint'>> & ReviewStrategyOrigin;
   readonly mode: ReviewMode;
-  /** Лимит реплик ревьюера — только в режиме `discussion`. */
-  readonly maxMessages?: number;
+  /** Раунды защиты — только в режиме `defend` (по умолчанию 2). */
+  readonly rounds?: number;
   readonly reviewers: readonly StrategyReviewer[];
   /** Не объявлен — агрегатор исполняется профилем `default`. */
   readonly aggregator: StrategyAggregator;
+  /** Только в режиме `defend`; без блока `defender` — профиль `default`. */
+  readonly defender?: StrategyDefender;
   /** Локальные профили: видны только участникам этой стратегии. */
   readonly profiles: Readonly<Record<string, AgentProfile>>;
 }
@@ -371,6 +385,12 @@ function buildStrategy(
     ...choice(raw.aggregator ?? {}),
     ...(aggregatorPrompt === undefined ? {} : { prompt: aggregatorPrompt }),
   };
+  const defenderPrompt = readReference(raw.defender?.prompt, 'defender.prompt');
+  const defender: StrategyDefender = {
+    ...choice(raw.defender ?? {}),
+    ...(defenderPrompt === undefined ? {} : { prompt: defenderPrompt }),
+  };
+  const mode = raw.mode ?? 'independent';
 
   const hash = createHash('sha256').update(text).update('\0');
   for (const path of [...referenced].sort()) {
@@ -385,8 +405,8 @@ function buildStrategy(
 
   return {
     origin: { ...located, name: raw.name, fingerprint: `sha256:${hash.digest('hex')}` },
-    mode: raw.mode ?? 'independent',
-    ...(raw.discussion === undefined ? {} : { maxMessages: raw.discussion.max_messages }),
+    mode,
+    ...(mode === 'defend' ? { rounds: raw.defend?.rounds ?? DEFAULT_DEFEND_ROUNDS, defender } : {}),
     reviewers,
     aggregator,
     profiles,

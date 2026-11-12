@@ -264,22 +264,52 @@
       "type": "string",
       "enum": [
         "independent",
-        "discussion"
+        "defend"
       ]
     },
-    "discussion": {
+    "defend": {
       "type": "object",
       "properties": {
-        "max_messages": {
+        "rounds": {
           "type": "integer",
           "minimum": 1,
-          "maximum": 50
+          "maximum": 5
         }
       },
-      "required": [
-        "max_messages"
-      ],
       "additionalProperties": false
+    },
+    "defender": {
+      "type": "object",
+      "properties": {
+        "agent": {
+          "type": "string",
+          "minLength": 1
+        },
+        "model": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "\\S"
+        },
+        "model_tier": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_-]*$"
+        },
+        "effort": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "\\S"
+        },
+        "prompt": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "not": {
+        "required": [
+          "model",
+          "model_tier"
+        ]
+      }
     }
   },
   "required": [
@@ -292,27 +322,27 @@
   "if": {
     "properties": {
       "mode": {
-        "const": "discussion"
+        "const": "defend"
       }
     },
     "required": [
       "mode"
     ]
   },
-  "then": {
-    "required": [
-      "discussion"
-    ],
-    "properties": {
-      "reviewers": {
-        "minItems": 2
-      }
-    }
-  },
+  "then": {},
   "else": {
     "not": {
-      "required": [
-        "discussion"
+      "anyOf": [
+        {
+          "required": [
+            "defend"
+          ]
+        },
+        {
+          "required": [
+            "defender"
+          ]
+        }
       ]
     }
   }

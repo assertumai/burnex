@@ -7,15 +7,41 @@ import { DISCUSSION_FILE, participantDir, replyDir } from '../pipeline/run/exec/
 import { findStepDir, isRunAlive, listLoopPasses, readUsageSoft } from '../pipeline/run/journal/reader.js';
 import { runPaths, type RunPaths } from '../pipeline/run/journal/paths.js';
 import type { CostSource, StatusValue } from '../pipeline/run/journal/schema.js';
-import type {
-  DiscussionRecord,
-  MessageRecord,
-  NoConsensusReason,
-  ProposalRecord,
-  Stance,
-} from '../pipeline/steps/review/discussion.js';
 import { readJournalJson } from './file.js';
 import type { JournalFileRef } from './snapshot.js';
+
+// Записи `discussion.ndjson` прежнего режима `discussion`: модуль движка с
+// ними удалён (`review-defend`, решение 1), а лента ещё читает журналы его
+// прогонов. Временная копия форм до переделки ленты под режим `defend`.
+type Stance = 'propose' | 'agree' | 'disagree';
+interface ProposalRecord {
+  readonly kind: 'proposal';
+  readonly id: string;
+  readonly by: string;
+  readonly round: number;
+  readonly content: unknown;
+}
+interface MessageRecord {
+  readonly kind: 'message';
+  readonly messageId: string;
+  readonly role: 'agent';
+  readonly from: string;
+  readonly round: number;
+  readonly seq: number;
+  readonly parts: readonly { readonly kind: 'text'; readonly text: string }[];
+  readonly stance: Stance;
+  readonly proposal?: string;
+  readonly target?: string;
+  readonly replyTo?: readonly string[];
+  readonly invalid?: true;
+  readonly failure?: string;
+}
+type NoConsensusReason = 'limit' | 'stalled' | 'budget' | 'participants';
+type DiscussionRecord =
+  | ProposalRecord
+  | MessageRecord
+  | { readonly kind: 'outcome'; readonly consensus: true; readonly proposal: string }
+  | { readonly kind: 'outcome'; readonly consensus: false; readonly reason: NoConsensusReason };
 
 /**
  * Лента шага `review` для деталей прогона (`ui-review-discussion`).

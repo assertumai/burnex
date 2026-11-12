@@ -234,6 +234,11 @@ export async function executeAgentStep(options: AgentStepOptions): Promise<Agent
 
       const resolvedModel = plan.model ?? step.model;
       const prompt = options.buildPrompt(plan, plan.includeFailure ? previousFailure : undefined);
+      const forking =
+        step.forkFrom !== undefined &&
+        adapter.capabilities.sessions &&
+        adapter.capabilities.forkSessions === true &&
+        !session.resume;
       const launch = adapter.launch({
         prompt,
         cwd: options.cwd,
@@ -245,6 +250,11 @@ export async function executeAgentStep(options: AgentStepOptions): Promise<Agent
         ...(step.effort === undefined || adapter.capabilities.effort !== true ? {} : { effort: step.effort }),
         ...(adapter.capabilities.sessions && session.id !== undefined ? { sessionId: session.id } : {}),
         resumeSession: adapter.capabilities.sessions && session.resume,
+        // Форк — только у начала сессии псевдонима (`review-defend`, решение
+        // 4): следующая попытка либо следующий ход ветки возобновляют уже сам
+        // форк. Адаптеру без форка поле не уходит вовсе — выбор свежего
+        // защитника сделан до исполнения, а не молчаливым откатом здесь.
+        ...(forking ? { forkFrom: step.forkFrom } : {}),
         ...(step.outputSchemaPath === undefined
           ? {}
           : { outputSchemaPath: step.outputSchemaPath }),
@@ -407,6 +417,13 @@ export async function executeAgentStep(options: AgentStepOptions): Promise<Agent
         backendInit === undefined
       ) {
         options.onFailedContinuation?.();
+      }
+      // Неудачный форк (ненулевой код без `init`) — обычный сбой попытки
+      // (`review-defend`, решение 4). Сессии у бэкенда не случилось, и
+      // следующая попытка обязана форкать снова, а не продолжать выданный
+      // движком идентификатор, которого бэкенд не знает.
+      if (forking && process_.outcome === 'exited' && process_.exitCode !== 0 && backendInit === undefined) {
+        options.sessions.unseed(alias);
       }
 
       const missingMcpServers =

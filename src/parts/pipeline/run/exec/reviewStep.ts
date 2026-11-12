@@ -1,33 +1,43 @@
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { AGGREGATOR_ID, type AgentStep, type ReviewParticipant, type ReviewStep } from '../../document/model.js';
 import {
-  consensusAggregatorPrompt,
-  discussionReplyAgentStep,
-  noConsensusAggregatorPrompt,
-  type DiscussionRecord,
-  type ProposalRecord,
-} from '../../steps/review/discussion.js';
+  AGGREGATOR_ID,
+  DEFAULT_DEFEND_ROUNDS,
+  DEFENDER_ID,
+  type AgentStep,
+  type ReviewParticipant,
+  type ReviewStep,
+} from '../../document/model.js';
+import {
+  defendAggregatorPrompt,
+  defenderCallBase,
+  findingsOf,
+  turnAgentStep,
+  type DefenseRecord,
+} from '../../steps/review/defend.js';
 import {
   aggregatorAgentStep,
   aggregatorPrompt,
+  participantStep,
   reviewerAgentStep,
   type ReviewerFindings,
 } from '../../steps/review/participants.js';
 import type { AttemptRecord, EventInput, ExpectReport, PredicateResult, StatusValue } from '../journal/schema.js';
-import { pool, runDiscussion } from './reviewDiscussion.js';
+import { pool, runDefense, type DefenderChoice } from './reviewDefense.js';
+
+export type { DefenderChoice } from './reviewDefense.js';
 
 /**
  * Исполнение шага `review` (`review-strategies`, design.md, решения 4–6):
  * ревьюеры параллельно, каждый в своей сессии, затем агрегатор, получающий все
- * находки. В режиме `discussion` (`review-discussion`) между ними идут раунды
- * обсуждения (`reviewDiscussion.ts`), и агрегатор получает согласованное
- * предложение либо всю ленту. Каждый участник — агентский шаг
- * (`steps/review/participants.ts`), запущенный тем же исполнением, что и
- * обычный агентский шаг прогона: вызывающий подаёт его как `runParticipant`,
- * и контекст, бюджет, отказы бэкенда и журнал попыток участник получает оттуда
- * же, а не копией.
+ * находки. В режиме `defend` (`review-defend`) между ними идут ветки защиты
+ * находок с имплементатором (`reviewDefense.ts`), и агрегатор получает каждую
+ * находку со статусом и перепиской. Каждый участник — агентский шаг
+ * (`steps/review/participants.ts`, `steps/review/defend.ts`), запущенный тем
+ * же исполнением, что и обычный агентский шаг прогона: вызывающий подаёт его
+ * как `runParticipant`, и контекст, бюджет, отказы бэкенда и журнал попыток
+ * участник получает оттуда же, а не копией.
  */
 
 /** Исход участника — то, что отдаёт исполнение агентского шага прогона. */
@@ -54,30 +64,42 @@ export interface ReviewStepOptions<O extends ParticipantOutcome> {
   readonly stepDir: string;
   readonly journal: ReviewJournal;
   /**
-   * Сколько ревьюеров идут одновременно — `limits.concurrency`. Вызовы
-   * бэкенда сверх того подчиняются общему счёту мест бэкенда прогона, который
-   * держит запуск агента, а не шаг.
+   * Сколько ревьюеров (и веток защиты) идут одновременно —
+   * `limits.concurrency`. Вызовы бэкенда сверх того подчиняются общему счёту
+   * мест бэкенда прогона, который держит запуск агента, а не шаг.
    */
   readonly concurrency: number;
-  /** Запустить участника как агентский шаг; `dir` — его каталог в журнале. */
-  readonly runParticipant: (participant: ReviewParticipant, call: AgentStep, dir: string) => Promise<O>;
+  /**
+   * Запустить участника как агентский шаг; `dir` — его каталог в журнале.
+   * `thread` — ветка защиты у хода защитника: расход всех веток ложится под
+   * участником `defender`, но у каждой ветки своя запись.
+   */
+  readonly runParticipant: (participant: ReviewParticipant, call: AgentStep, dir: string, thread?: string) => Promise<O>;
   /** Происхождение выбора агента участника — в его `step.json`. */
   readonly originOf?: (participant: string) => unknown;
   /**
    * Исход `budget_exceeded`, если бюджет шага уже перейдён, иначе ничего.
    * Первая попытка агентского шага запускается без проверки бюджета, поэтому
-   * обсуждение спрашивает перед каждым раундом, а оборванное бюджетом —
-   * перед агрегатором (`review-discussion`, решение 6).
+   * защита спрашивает перед каждым ходом и перед агрегатором
+   * (`review-defend`, решение 5).
    */
   readonly budgetStop?: () => O | undefined;
+  /** Возобновляется ли сессия агента — умеет ли его бэкенд сессии. Без значения — умеет. */
+  readonly resumable?: (agent: string) => boolean;
   /**
-   * Возобновляется ли сессия участника — умеет ли его бэкенд сессии. Без
-   * значения — умеет.
+   * Защитник режима `defend`, выбранный один раз до веток (`review-defend`,
+   * решение 3): у вызывающего — записи шагов прогона и адаптеры.
    */
-  readonly resumable?: (participant: ReviewParticipant) => boolean;
+  readonly chooseDefender?: () => DefenderChoice;
 }
 
-/** Лента обсуждения в каталоге шага (`review-discussion`, решение 1). */
+/** Ветки защиты в каталоге шага (`review-defend`, решение 7). */
+export const DEFENSE_FILE = 'defense.ndjson';
+
+/**
+ * Лента прежнего режима `discussion` (`review-discussion`): движок её больше
+ * не пишет, имя остаётся для чтения журналов прежних прогонов.
+ */
 export const DISCUSSION_FILE = 'discussion.ndjson';
 
 /** Каталог участника внутри каталога шага. */
@@ -85,9 +107,14 @@ export function participantDir(stepDir: string, participant: string): string {
   return join(stepDir, 'participants', participant);
 }
 
-/** Каталог реплики ревьюера в раунде обсуждения `round` ≥ 1. */
+/** Каталог хода ревьюера в раунде защиты `round` ≥ 1. */
 export function replyDir(stepDir: string, participant: string, round: number): string {
   return join(participantDir(stepDir, participant), 'rounds', String(round));
+}
+
+/** Каталог хода защитника ветки `thread` в раунде `round` (решение 7). */
+export function defenderTurnDir(stepDir: string, thread: string, round: number): string {
+  return join(participantDir(stepDir, DEFENDER_ID), thread, 'rounds', String(round));
 }
 
 /**
@@ -124,13 +151,12 @@ export async function executeReviewStep<O extends ParticipantOutcome>(
     return { status: 'failed', reason: `ни один ревьюер не дал находок — ${named}`, attempts: [], results: [] };
   }
 
-  const prompt =
-    step.mode === 'discussion' ? await discuss(options, findings) : aggregatorPrompt(step, findings);
+  const prompt = step.mode === 'defend' ? await defend(options, findings) : aggregatorPrompt(step, findings);
   if (typeof prompt !== 'string') return withoutSession(prompt);
 
-  // Повтор шага — попытки агрегатора с теми же находками либо тем же
-  // обсуждением: это дорогая часть, и её форма уже проверена
-  // (`review-strategies`, решение 5; `review-discussion`, решение 6).
+  // Повтор шага — попытки агрегатора с теми же находками либо той же
+  // защитой: это дорогая часть, и её форма уже проверена
+  // (`review-strategies`, решение 5; `review-defend`, решение 6).
   const outcome = await runOne(
     options,
     aggregator,
@@ -141,65 +167,121 @@ export async function executeReviewStep<O extends ParticipantOutcome>(
 }
 
 /**
- * Режим `discussion`: раунды обсуждения ревьюеров, давших находки, затем
- * промпт агрегатора — согласованное предложение либо вся лента. Исход
- * участника вместо промпта — обсуждение оборвали отмена или бюджет, на
- * агрегатора которого уже не хватает.
+ * Режим `defend`: выбор защитника, ветки защиты по ревьюерам, давшим
+ * находки, затем промпт агрегатора со статусами находок. Исход участника
+ * вместо промпта — защиту оборвали отмена или бюджет, и агрегатора нет
+ * (`review-defend`, решение 5).
  */
-async function discuss<O extends ParticipantOutcome>(
+async function defend<O extends ParticipantOutcome>(
   options: ReviewStepOptions<O>,
   findings: readonly ReviewerFindings[],
 ): Promise<string | O> {
   const { step, journal } = options;
-  const participants = step.reviewers.flatMap((reviewer, index) => {
-    const entry = findings[index];
-    return entry === undefined || 'failure' in entry ? [] : [{ reviewer, findings: entry.findings }];
-  });
-  const failures = findings.flatMap((entry) => ('failure' in entry ? [{ id: entry.id, failure: entry.failure }] : []));
-  const resumable = (reviewer: ReviewParticipant): boolean => options.resumable?.(reviewer) ?? true;
-  // Обсуждение без сессии доступно, но дороже и беднее: каждая реплика —
-  // новый процесс с полным контекстом. Журнал называет такого ревьюера.
-  if (participants.length >= 2) {
-    for (const { reviewer } of participants.filter(({ reviewer }) => !resumable(reviewer))) {
-      journal.event({
-        kind: 'backend.degraded',
-        backend: reviewer.agent,
-        capability: 'sessions',
-        detail: `ревьюер ${reviewer.id} шага ${options.job}/${step.id} обсуждает без сессии: каждая реплика несёт задание, контекст и всю ленту заново`,
-      });
-    }
-  }
+  if (options.chooseDefender === undefined) throw new Error('executeReviewStep: режиму defend не передан выбор защитника');
+  const record = (entry: DefenseRecord): void => {
+    journal.appendStepLine(options.stepDir, DEFENSE_FILE, entry);
+  };
 
-  const result = await runDiscussion<O>({
+  const choice = options.chooseDefender();
+  record(choice.record);
+  journal.event({
+    kind: 'review.defender',
     job: options.job,
     step: step.id,
-    maxMessages: step.maxMessages ?? 1,
-    participants,
-    concurrency: options.concurrency,
-    resumable,
-    budgetLeft: () => options.budgetStop?.() === undefined,
-    record: (record: DiscussionRecord) => journal.appendStepLine(options.stepDir, DISCUSSION_FILE, record),
-    event: (input) => journal.event(input),
-    reply: (reviewer, round, prompt, check) => {
-      const dir = replyDir(options.stepDir, reviewer.id, round);
-      mkdirSync(dir, { recursive: true });
-      const checkPath = journal.writeStepJson(dir, 'reply-check.schema.json', check);
-      return runOne(options, reviewer, discussionReplyAgentStep(step, reviewer, prompt, checkPath, resumable(reviewer)), dir, round);
-    },
+    mode: choice.record.mode,
+    ...(choice.record.implementer === undefined ? {} : { implementer: choice.record.implementer }),
+    agent: choice.record.agent,
+    ...(choice.record.model === undefined ? {} : { model: choice.record.model }),
+    ...(choice.record.reason === undefined ? {} : { reason: choice.record.reason }),
   });
-  if ('canceled' in result) return result.canceled;
-  const { outcome } = result;
-  if (!outcome.consensus && outcome.reason === 'budget') {
-    const stop = options.budgetStop?.() ?? result.interrupted;
-    if (stop !== undefined) return stop;
+
+  // Ревьюер с пустым списком ветки не получает (решение 5).
+  const branches = step.reviewers.flatMap((reviewer, index) => {
+    const entry = findings[index];
+    if (entry === undefined || 'failure' in entry) return [];
+    const list = findingsOf(reviewer.id, entry.findings);
+    return list.length === 0 ? [] : [{ reviewer, findings: list, summary: summaryOf(entry.findings) }];
+  });
+  for (const branch of branches) for (const finding of branch.findings) record(finding);
+
+  // Ветка без сессии доступна, но дороже и беднее: каждый ход — новый
+  // процесс с заданием и всей перепиской ветки. Журнал называет такого
+  // участника, как называл ревьюера без сессии прежний режим обсуждения.
+  const resumable = (agent: string): boolean => options.resumable?.(agent) ?? true;
+  const stateless = [
+    ...(branches.length > 0 && !resumable(choice.participant.agent) ? [{ who: 'защитник', agent: choice.participant.agent }] : []),
+    ...branches.filter(({ reviewer }) => !resumable(reviewer.agent)).map(({ reviewer }) => ({ who: `ревьюер ${reviewer.id}`, agent: reviewer.agent })),
+  ];
+  for (const { who, agent } of stateless) {
+    journal.event({
+      kind: 'backend.degraded',
+      backend: agent,
+      capability: 'sessions',
+      detail: `${who} шага ${options.job}/${step.id} защищает находки без сессии: каждый ход несёт задание и всю переписку ветки заново`,
+    });
   }
 
-  if (!outcome.consensus) return noConsensusAggregatorPrompt(step, outcome.reason, result.records, result.positions, failures);
-  const proposal = result.records.find(
-    (record): record is ProposalRecord => record.kind === 'proposal' && record.id === outcome.proposal,
-  );
-  if (proposal === undefined) throw new Error(`discuss: согласованное предложение ${outcome.proposal} не записано`);
-  return consensusAggregatorPrompt(step, proposal);
+  const result = await runDefense<O>({
+    job: options.job,
+    step,
+    rounds: step.rounds ?? DEFAULT_DEFEND_ROUNDS,
+    defender: choice,
+    branches,
+    concurrency: options.concurrency,
+    resumable,
+    budgetStop: () => options.budgetStop?.(),
+    record,
+    event: (input) => journal.event(input),
+    defend: (reviewer, round, prompt, check, carriesContext) => {
+      const dir = defenderTurnDir(options.stepDir, reviewer.id, round);
+      mkdirSync(dir, { recursive: true });
+      const checkPath = journal.writeStepJson(dir, 'turn-check.schema.json', check);
+      const call = turnAgentStep(defenderCallBase(step, choice.participant, reviewer.id), 'defense', prompt, checkPath, carriesContext);
+      return runOne(options, choice.participant, choice.forkFrom === undefined ? call : { ...call, forkFrom: choice.forkFrom }, dir, round, reviewer.id);
+    },
+    rebut: (reviewer, round, prompt, check, carriesContext) => {
+      const dir = replyDir(options.stepDir, reviewer.id, round);
+      mkdirSync(dir, { recursive: true });
+      const checkPath = journal.writeStepJson(dir, 'turn-check.schema.json', check);
+      const call = turnAgentStep(participantStep(step, reviewer), 'rebuttal', prompt, checkPath, carriesContext);
+      return runOne(options, reviewer, call, dir, round);
+    },
+  });
+
+  const counts = { accepted: 0, withdrawn: 0, contested: 0 };
+  for (const state of result.settled.values()) counts[state.status] += 1;
+  record({ kind: 'outcome', ...counts });
+  journal.event({ kind: 'review.defense.finished', job: options.job, step: step.id, ...counts });
+
+  if (result.stopped !== undefined) return result.stopped;
+  // Последний ход мог перейти бюджет, а агрегатор — ещё один ход (решение 5).
+  const exceeded = options.budgetStop?.();
+  if (exceeded !== undefined) return exceeded;
+
+  return defendAggregatorPrompt({
+    step,
+    defender: choice.record,
+    reviewers: branches.map(({ reviewer, findings: list, summary }) => ({
+      id: reviewer.id,
+      ...(reviewer.focus === undefined ? {} : { focus: reviewer.focus }),
+      ...(summary === undefined ? {} : { summary }),
+      findings: list.map((finding) => {
+        const state = result.settled.get(finding.id);
+        return { finding, status: state?.status ?? 'contested', severity: state?.severity ?? finding.severity };
+      }),
+    })),
+    without: findings.flatMap((entry) => {
+      const focus = entry.focus === undefined ? {} : { focus: entry.focus };
+      if ('failure' in entry) return [{ id: entry.id, ...focus, reason: `ревью сорвалось — ${entry.failure}` }];
+      return branches.some((branch) => branch.reviewer.id === entry.id) ? [] : [{ id: entry.id, ...focus, reason: 'находок нет' }];
+    }),
+    messages: result.messages,
+  });
+}
+
+function summaryOf(findings: unknown): string | undefined {
+  const summary = (findings as { readonly summary?: unknown } | null)?.summary;
+  return typeof summary === 'string' ? summary : undefined;
 }
 
 /** Сессии участников живут внутри шага: продолжать их следующему шагу нечего. */
@@ -215,21 +297,22 @@ async function runOne<O extends ParticipantOutcome>(
   call: AgentStep,
   dir: string,
   round?: number,
+  thread?: string,
 ): Promise<O> {
   const { journal, job, step } = options;
-  const roundField = round === undefined ? {} : { round };
+  const turnFields = { ...(round === undefined ? {} : { round }), ...(thread === undefined ? {} : { thread }) };
   mkdirSync(dir, { recursive: true });
   journal.event({
     kind: 'review.participant.started',
     job,
     step: step.id,
     participant: participant.id,
-    ...roundField,
+    ...turnFields,
     agent: call.agent,
     ...(call.model === undefined ? {} : { model: call.model }),
   });
 
-  const outcome = await options.runParticipant(participant, call, dir);
+  const outcome = await options.runParticipant(participant, call, dir, thread);
 
   for (const [index, results] of outcome.results.entries()) {
     journal.writeExpectReport(dir, { attempt: index + 1, results: [...results] });
@@ -237,8 +320,8 @@ async function runOne<O extends ParticipantOutcome>(
   const origin = options.originOf?.(participant.id);
   journal.writeStepJson(dir, 'step.json', {
     participant: participant.id,
-    role: participant.id === AGGREGATOR_ID ? 'aggregator' : 'reviewer',
-    ...roundField,
+    role: participant.id === AGGREGATOR_ID ? 'aggregator' : participant.id === DEFENDER_ID ? 'defender' : 'reviewer',
+    ...turnFields,
     agent: call.agent,
     ...(call.model === undefined ? {} : { model: call.model }),
     ...(call.effort === undefined ? {} : { effort: call.effort }),
@@ -247,6 +330,7 @@ async function runOne<O extends ParticipantOutcome>(
     ...(origin === undefined ? {} : { origin }),
     ...(participant.focus === undefined ? {} : { focus: participant.focus }),
     session: call.session,
+    ...(call.forkFrom === undefined ? {} : { fork_from: call.forkFrom }),
     ...(outcome.session === undefined ? {} : { session_id: outcome.session }),
     status: outcome.status,
     ...(outcome.reason === undefined ? {} : { reason: outcome.reason }),
@@ -259,7 +343,7 @@ async function runOne<O extends ParticipantOutcome>(
     job,
     step: step.id,
     participant: participant.id,
-    ...roundField,
+    ...turnFields,
     status: outcome.status,
     ...(outcome.reason === undefined ? {} : { reason: outcome.reason }),
   });

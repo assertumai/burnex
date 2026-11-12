@@ -65,15 +65,25 @@ export interface LockReviewParticipant {
 
 /**
  * Стратегия шага `review` в замке: режим, лимит реплик и участники в порядке
- * стратегии. Порядок нужен ленте обсуждения (`ui-review-discussion`):
+ * стратегии. Порядок нужен ленте шага (`ui-review-discussion`, `review-defend`):
  * цвет участника — по его позиции, а каталоги участников в журнале порядка
  * не хранят.
  */
 export interface LockReview {
   readonly mode?: string;
+  /**
+   * Лимит реплик прежнего режима `discussion` — только у замков его
+   * прогонов: журналы до `review-defend` открываются по-прежнему.
+   */
   readonly maxMessages?: number;
+  /** Раунды защиты режима `defend`. */
+  readonly rounds?: number;
+  /** Имплементатор `<работа>.<шаг>`, как его записал замок. */
+  readonly implementer?: string;
   readonly reviewers: readonly LockReviewParticipant[];
   readonly aggregator?: LockReviewParticipant;
+  /** Свежий защитник режима `defend` (форк выбирается при исполнении). */
+  readonly defender?: LockReviewParticipant;
 }
 
 function reviewParticipant(value: unknown): LockReviewParticipant | undefined {
@@ -96,6 +106,9 @@ function reviewOf(record: Record<string, unknown>): LockReview | undefined {
   if (strategy === undefined) return undefined;
   const mode = asString(strategy.mode);
   const maxMessages = asRecord(strategy.discussion)?.max_messages;
+  const rounds = asRecord(strategy.defend)?.rounds;
+  const implementer = asString(record.implementer);
+  const defender = reviewParticipant(record.defender);
   const reviewers = Array.isArray(record.reviewers)
     ? record.reviewers.map(reviewParticipant).filter((entry): entry is LockReviewParticipant => entry !== undefined)
     : [];
@@ -103,8 +116,11 @@ function reviewOf(record: Record<string, unknown>): LockReview | undefined {
   return {
     ...(mode === undefined ? {} : { mode }),
     ...(typeof maxMessages === 'number' ? { maxMessages } : {}),
+    ...(typeof rounds === 'number' ? { rounds } : {}),
+    ...(implementer === undefined ? {} : { implementer }),
     reviewers,
     ...(aggregator === undefined ? {} : { aggregator }),
+    ...(defender === undefined ? {} : { defender }),
   };
 }
 

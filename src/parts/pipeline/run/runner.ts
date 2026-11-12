@@ -37,7 +37,8 @@ import { assembleContext, type UpstreamOutput } from '../domain/context/assemble
 import { resolveLate, type JobScopeEntry, type LateWithheld } from '../document/late.js';
 import { ExitCode, BurnexError, isBurnexError, type ExitCodeValue } from '../../../kernel/errors.js';
 import { createSessionRegistry, executeAgentStep } from './exec/agentStep.js';
-import { executeReviewStep } from './exec/reviewStep.js';
+import { executeReviewStep, type DefenderChoice } from './exec/reviewStep.js';
+import { defenderSession, type FreshReason } from '../steps/review/defend.js';
 import { agentCallsOf } from '../steps/review/participants.js';
 import { describeStrategyUnresolved } from '../document/reviewStrategy.js';
 import { buildStepEnv, injectedVariables, type EnvLayers } from './exec/env.js';
@@ -92,6 +93,7 @@ import { describeScriptUnresolved } from '../document/expand.js';
 import type {
   AgentStep,
   ReviewStep,
+  ReviewParticipant,
   ContextEntry,
   EffortOrigin,
   ExpandedPipeline,
@@ -101,6 +103,7 @@ import type {
   ScriptUnresolved,
   Step,
 } from '../document/model.js';
+import { DEFENDER_ID } from '../document/model.js';
 import type {
   AwaitingDecision,
   BudgetExceededState,
@@ -4013,41 +4016,145 @@ async function runReviewStep(
   }
   // Сессии участников живут только внутри шага: повтор шага в следующем
   // проходе цикла начинает их заново, с полным контекстом.
-  for (const { call } of agentCallsOf(step)) {
-    const key = sessionKey(call.agent, call.session);
+  const forget = (key: string): void => {
     context.sessions.unseed(key);
     jobContextSent.delete(key);
     for (const sent of [...context.pipelineContextSent]) {
       if (sent === key || sent.startsWith(`${key}\0`)) context.pipelineContextSent.delete(sent);
     }
-  }
+  };
+  for (const { call } of agentCallsOf(step)) forget(sessionKey(call.agent, call.session));
+
+  // Защитник выбирается один раз за исполнение шага; его же видят ходы и
+  // `step.json` участника (`review-defend`, решение 3).
+  let choice: DefenderChoice | undefined;
+  const chooseDefender = (): DefenderChoice => {
+    choice = defenderChoice(step, context);
+    for (const reviewer of step.reviewers) forget(sessionKey(choice.participant.agent, defenderSession(step, reviewer.id)));
+    return choice;
+  };
+
   return executeReviewStep<StepOutcome>({
     step,
     job: job.id,
     stepDir: stepDirPath,
     journal: context.journal,
     concurrency: context.config.limits.concurrency,
-    runParticipant: (participant, call, dir) => {
-      // Ревьюер в обсуждении вызывается не раз, и номера его попыток
-      // начинаются заново: прежний расход запечатывается, а не затирается
-      // (`review-discussion`, решение 6).
-      context.usage.sealStep(job.id, step.id, participant.id);
-      return runAgentStep(call, job, context, dir, context.sessions, sessionKey, jobContextSent, budgetScopes, changedPaths, participant.id);
+    runParticipant: (participant, call, dir, thread) => {
+      // Ревьюер и защитник в ветке вызываются не раз, и номера их попыток
+      // начинаются заново: прежний расход запечатывается, а не затирается.
+      // Ветки защитника идут параллельно, поэтому у каждой своя запись под
+      // участником `defender` (`review-defend`, решение 7).
+      const usageKey = thread === undefined ? participant.id : `${participant.id}@~${thread}`;
+      context.usage.sealStep(job.id, step.id, usageKey);
+      if (call.forkFrom !== undefined) {
+        // Форк уже несёт контекст имплементатора: блок контекста первым
+        // сообщением повторил бы прочитанное в той же сессии.
+        const key = sessionKey(call.agent, call.session);
+        context.pipelineContextSent.add(key);
+        jobContextSent.add(key);
+      }
+      return runAgentStep(call, job, context, dir, context.sessions, sessionKey, jobContextSent, budgetScopes, changedPaths, usageKey);
     },
-    resumable: (participant) => adapterOf(participant.agent, context).capabilities.sessions,
+    resumable: (agent) => adapterOf(agent, context).capabilities.sessions,
     budgetStop: () => {
       const exceeded = context.usage.check(budgetScopes());
       return exceeded === undefined
         ? undefined
         : { status: 'budget_exceeded', reason: describeExceeded(exceeded), attempts: [], results: [], exceeded };
     },
+    chooseDefender,
     originOf: (participant) => {
+      // Форк берёт агента у имплементатора, а не у выбора `defender`:
+      // происхождение свежего защитника к нему не относится.
+      if (participant === DEFENDER_ID && choice?.record.mode === 'fork') return undefined;
       const key = `${job.id}/${step.id}/${participant}`;
       const agent = context.expanded.agentOrigins.get(key);
       if (agent === undefined) return undefined;
       return { agent, model: context.expanded.modelOrigins.get(key), effort: context.expanded.effortOrigins.get(key) };
     },
   });
+}
+
+/**
+ * Выбор защитника режима `defend` (`review-defend`, решение 3). Форк — когда
+ * шаг назвал имплементатора, в его записи есть сессия, а адаптер его агента
+ * умеет сессии и форк. Запись ищется среди записей этого прогона: у шага,
+ * переиспользованного при `resume`, она перенесена из исходного прогона
+ * вместе с `session`. Иначе — свежий агент `defender` стратегии с причиной.
+ */
+function defenderChoice(step: ReviewStep, context: RunContext): DefenderChoice {
+  const fresh = step.defender ?? (step.aggregator as ReviewParticipant);
+  const freshParticipant: ReviewParticipant = { ...fresh, id: DEFENDER_ID };
+  const ref = step.implementer;
+  const implementer = ref === undefined ? undefined : `${ref.job}.${ref.step}`;
+  const freshChoice = (reason: FreshReason, text?: string): DefenderChoice => ({
+    record: {
+      kind: 'defender',
+      mode: 'fresh',
+      ...(implementer === undefined ? {} : { implementer }),
+      agent: freshParticipant.agent,
+      ...(freshParticipant.model === undefined ? {} : { model: freshParticipant.model }),
+      reason,
+    },
+    participant: freshParticipant,
+    ...(text === undefined ? {} : { implementerText: text }),
+  });
+  if (ref === undefined || implementer === undefined) return freshChoice('no_implementer');
+
+  const declared = context.expanded.pipeline.jobs.find((job) => job.id === ref.job)?.steps.find((candidate) => candidate.id === ref.step);
+  const record = context.records.get(ref.job)?.steps.find((candidate) => candidate.id === ref.step);
+  const text = record === undefined ? undefined : implementerText(context, ref.job, ref.step, record);
+  if (declared?.kind !== 'agent' || record?.session === undefined) return freshChoice('no_session', text);
+  const adapter = adapterOf(declared.agent, context);
+  if (!adapter.capabilities.sessions || adapter.capabilities.forkSessions !== true) return freshChoice('no_fork', text);
+  return {
+    record: {
+      kind: 'defender',
+      mode: 'fork',
+      implementer,
+      agent: declared.agent,
+      ...(declared.model === undefined ? {} : { model: declared.model }),
+    },
+    // Агент, модель и effort — имплементатора; права и схема хода — шага
+    // `review` (`defenderCallBase`).
+    participant: {
+      id: DEFENDER_ID,
+      agent: declared.agent,
+      ...(declared.model === undefined ? {} : { model: declared.model }),
+      ...(declared.effort === undefined ? {} : { effort: declared.effort }),
+    },
+    forkFrom: record.session,
+  };
+}
+
+/**
+ * Текстовый выход шага имплементатора — свежему защитнику (решение 3):
+ * итоговый текст последней попытки из её `stdout`, разобранного адаптером
+ * агента, а без него — структурированный выход. Переиспользованный шаг
+ * читается из каталога исходного прогона.
+ */
+function implementerText(context: RunContext, jobId: string, stepId: string, record: StepRecord): string | undefined {
+  const paths = record.reused_from === undefined ? context.journal.paths : context.resume?.source.paths;
+  const dir = paths === undefined ? undefined : findStepDir(paths, jobId, stepId);
+  if (dir === undefined) return undefined;
+  const attempt = record.attempts.length;
+  const stdout = join(dir, attempt <= 1 ? 'stdout.log' : `stdout.${attempt}.log`);
+  const declared = context.expanded.pipeline.jobs.find((job) => job.id === jobId)?.steps.find((step) => step.id === stepId);
+  if (declared?.kind === 'agent' && existsSync(stdout)) {
+    const adapter = adapterOf(declared.agent, context);
+    let text: string | undefined;
+    const pieces: string[] = [];
+    for (const line of readFileSync(stdout, 'utf8').split('\n')) {
+      const event = adapter.parseLine(line);
+      if (event.kind === 'result' && event.text !== undefined) text = event.text;
+      if (event.kind === 'text') pieces.push(event.text);
+    }
+    const found = text ?? (pieces.length === 0 ? undefined : pieces.join('\n'));
+    if (found !== undefined && found.trim() !== '') return found;
+  }
+  const output = join(dir, 'output.json');
+  return existsSync(output) ? readFileSync(output, 'utf8') : undefined;
 }
 
 /** Задание шага без блока контекста — вход судьи на командном или плагинном шаге. */

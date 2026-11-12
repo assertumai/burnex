@@ -4032,6 +4032,12 @@
                           },
                           "additionalProperties": false
                         },
+                        "implementer": {
+                          "type": "string",
+                          "minLength": 1,
+                          "pattern": "\\S",
+                          "description": "Агентский шаг, чья сессия защищает код в режиме defend: <шаг> своей работы либо <работа>.<шаг>"
+                        },
                         "agent": {
                           "not": {},
                           "description": "Участников шага review и их агентов объявляет стратегия ревью, а не шаг"

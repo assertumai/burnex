@@ -171,7 +171,8 @@ describe('review-strategies: документ стратегии', () => {
     const b = box({ 's.yml': `${PANEL}mode: debate\n` });
     const error = rejection(() => parseReviewStrategyFile(join(b.cwd, 's.yml'), []));
     assert.equal(error.at, 'mode');
-    assert.match(error.message, /известны independent, discussion/);
+    assert.match(error.message, /известны independent, defend/);
+    assert.doesNotMatch(error.message, /discussion/, 'подсказка о замене — только для mode: discussion');
   });
 
   it('без aggregator агрегатор исполняется профилем default', () => {

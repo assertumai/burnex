@@ -1,0 +1,26 @@
+{
+  "title": "burnex review rebuttal",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "text": { "type": "string" },
+    "responses": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "finding": { "type": "string" },
+          "stance": { "type": "string", "enum": ["maintain", "withdraw", "revise"] },
+          "text": { "type": "string" },
+          "severity": {
+            "anyOf": [{ "type": "string", "enum": ["critical", "major", "minor", "info"] }, { "type": "null" }]
+          }
+        },
+        "required": ["finding", "stance", "text", "severity"],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": ["text", "responses"],
+  "additionalProperties": false
+}

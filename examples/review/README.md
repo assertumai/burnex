@@ -40,28 +40,44 @@ cd "$T" && burnex lint /путь/к/burnex/examples/review/burnex.yml && burnex 
   участника, в сумме — расход шага;
 - `events.ndjson` — по паре `review.participant.started|finished` на участника.
 
-## Режим discussion
+## Режим defend
 
-`burnex-discussion.yml` — то же ревью со стратегией `strategy-discussion.yml`:
-ревьюеры обсуждают находки до трёх реплик каждый (`discussion.max_messages: 3`),
-затем агрегатор оформляет согласованное предложение либо решает сам по ленте.
-Тратит от четырёх до девяти вызовов модели. Запуск — как выше, с этим файлом:
+`burnex-defend.yml` — ревью с защитой находок (`strategy-defend.yml`,
+`mode: defend`, `defend.rounds: 2`). Шаг `implement` (Claude) пишет в рабочий
+каталог маленький `login.ts`, затем шаг `review-diff` с
+`implementer: implement`: ревьюеры `security` (Codex) и `tests` (Claude) ищут
+находки, и каждый обсуждает свои в собственной ветке с защитником — форком
+сессии имплементатора (`claude --resume <сессия implement> --fork-session
+--session-id <новый>`). Принятое защитником и снятое ревьюером закрывается в
+ветке, спорное после двух раундов (`contested`) решает агрегатор. Тратит от
+пяти до одиннадцати вызовов модели. Рабочий каталог — тот, где запущен burnex
+(`workspace.mode: cwd`), поэтому запускайте во временном каталоге `$T`, как
+выше:
 
 ```bash
-cd "$T" && burnex lint /путь/к/burnex/examples/review/burnex-discussion.yml && burnex run /путь/к/burnex/examples/review/burnex-discussion.yml
+cd "$T" && burnex lint /путь/к/burnex/examples/review/burnex-defend.yml && burnex run /путь/к/burnex/examples/review/burnex-defend.yml
 ```
+
+`burnex config --pipeline` для этого файла называет и строку
+`review/review-diff/defender` — свежего защитника, который нужен, только если
+форк невозможен.
 
 Что сверить:
 
-- `jobs/review/steps/1-review-diff/discussion.ndjson` — предложения `p1`, `p2`
-  находок раунда 0, реплики раундов в форме A2A `Message` (`messageId`, `role`,
-  `parts`) и последняя запись `outcome`: `consensus: true` с id предложения
-  либо `consensus: false` с причиной (`limit`, `stalled`, `budget`);
-- `participants/<ревьюер>/rounds/<раунд>/` — промпт и ответ каждой реплики;
-  промпт раунда несёт только реплики другого ревьюера, которых тот ещё не видел;
-- `participants/aggregator/prompt.txt` — согласованное предложение и требование
-  оформить его без изменения решения либо вся лента с позициями;
-- `events.ndjson` — `review.message` на каждую реплику и `review.consensus` или
-  `review.no_consensus`;
-- `usage.json` → `jobs.review.steps.review-diff.participants` — расход всех
-  вызовов каждого ревьюера.
+- `jobs/review/steps/2-review-diff/defense.ndjson` — первая строка
+  `{"kind":"defender","mode":"fork","implementer":"review.implement","agent":"claude",…}`,
+  затем находки `security.<n>` и `tests.<n>`, реплики веток в форме A2A
+  `Message` (`messageId`, `role`, `parts`, `from`, `thread`, `round`,
+  `responses`), по одной строке `settled` на находку и последняя строка
+  `outcome` со счётом `accepted`/`withdrawn`/`contested`;
+- `participants/defender/<ревьюер>/rounds/<r>/` — ходы защитника;
+  `step.json` первого хода несёт `fork_from` — идентификатор сессии шага
+  `implement` (поле `session` в `jobs/review/steps/1-implement/step.json`), и у
+  двух веток разные `session_id`;
+- `participants/<ревьюер>/rounds/<r>/` — ответы ревьюера защитнику;
+- `participants/aggregator/prompt.txt` — строка о защитнике, находки со
+  статусами и перепиской, требование решить `contested` самому;
+- `events.ndjson` — `review.defender`, `review.message` с `thread` на каждую
+  реплику, `review.settled` на каждую находку, `review.defense.finished`;
+- `usage.json` → `jobs.review.steps.review-diff.participants.defender` — расход
+  ходов защитника обеих веток.

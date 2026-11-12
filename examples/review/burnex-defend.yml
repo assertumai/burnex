@@ -1,0 +1,56 @@
+# Шаг review в режиме defend: агентский шаг Claude пишет маленький файл, затем
+# два ревьюера на разных бэкендах (Codex и Claude) ищут находки, и каждый
+# обсуждает свои с защитником — форком сессии имплементатора. Спорное решает
+# агрегатор. Как запускать и что сверить — README.md рядом.
+#
+# Рабочий каталог — тот, где запущен burnex (`workspace.mode: cwd`): запускайте
+# во временном каталоге, как в README, — шаг implement пишет в него login.ts.
+# Вызовов модели — от пяти (всё принято в первом раунде) до одиннадцати.
+
+version: 1
+kind: pipeline
+name: review-defend-example
+
+workspace:
+  mode: cwd
+
+budget:
+  tokens: 1500k
+  wallclock: 30m
+
+jobs:
+  review:
+    description: Реализация, два ревьюера, защита находок имплементатором, вердикт агрегатора
+    output: { from: review-diff }
+    steps:
+      - id: implement
+        agent: claude
+        model_tier: balance
+        prompt: |
+          Создай в текущем каталоге файл login.ts с функцией
+
+            export function login(user: string, password: string): boolean
+
+          Она проверяет пользователя запросом через глобальный `db.run(sql, params)` и пишет
+          отладочную строку входа в console.log. Ничего больше не создавай и не запускай.
+          В конце ответа кратко перечисли принятые решения.
+        permissions: { mode: acceptEdits, allow: [Read, Write, Edit] }
+        expect:
+          - file_exists: login.ts
+        timeout: 5m
+
+      - id: review-diff
+        review: ./strategy-defend.yml
+        implementer: implement
+        prompt: |
+          Проведи ревью файла login.ts в текущем каталоге. Прочитай его, другие файлы не нужны.
+        output_schema: ./schemas/verdict.json
+        permissions: { allow: [Read, Grep, Glob] }
+        timeout: 10m
+        budget: { tokens: 1200k }
+
+  report:
+    needs: [review]
+    steps:
+      - id: echo
+        run: [sh, -c, 'printf "%s\n" "${jobs.review.output.verdict}"']

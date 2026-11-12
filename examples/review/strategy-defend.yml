@@ -1,0 +1,26 @@
+version: 1
+kind: review-strategy
+name: strategy-defend
+description: Безопасность на Codex и тесты на Claude обсуждают свои находки с имплементатором; спорное решает Claude
+reviewers:
+  - id: security
+    agent: codex
+    model_tier: balance
+    focus: Границы доверия, секреты в логах, инъекции
+  - id: tests
+    agent: claude
+    model_tier: balance
+    focus: file:./tests-focus.md
+aggregator:
+  agent: claude
+  model_tier: balance
+  prompt: Вердикт request_changes, если в итоге есть хотя бы одна находка critical или major.
+mode: defend
+defend:
+  rounds: 2
+# Свежий защитник — только если форк сессии имплементатора невозможен
+# (нет implementer, нет записанной сессии, бэкенд без форка).
+defender:
+  agent: claude
+  model_tier: balance
+  prompt: Защищай решения, опираясь на код; принимай только доказанное.

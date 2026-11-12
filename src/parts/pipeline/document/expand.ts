@@ -114,8 +114,10 @@ import type {
   Workspace,
   PipelinePublication,
   ReviewParticipant,
+  ImplementerRef,
 } from './model.js';
-import { AGGREGATOR_ID } from './model.js';
+import { AGGREGATOR_ID, DEFENDER_ID } from './model.js';
+import { buildGraph } from '../domain/graph.js';
 import { resolveReviewStrategy, type StrategyChoice } from './reviewStrategy.js';
 
 /**
@@ -1787,15 +1789,26 @@ function parseReviewStep(raw: RawStep, ctx: BuiltinStepParseContext): StepParseR
     ...participant(AGGREGATOR_ID, raw.id, strategy.aggregator),
     ...(strategy.aggregator.prompt === undefined ? {} : { prompt: strategy.aggregator.prompt }),
   };
+  // Свежий защитник режима `defend` (`review-defend`, решение 3) — тем же
+  // выбором, адрес `step_agents` `<работа>.<шаг>/defender`. Раскрывается
+  // всегда: форк или свежий — решает исполнение по записи имплементатора.
+  const defender =
+    strategy.defender === undefined
+      ? undefined
+      : {
+          ...participant(DEFENDER_ID, `${raw.id}/${DEFENDER_ID}`, strategy.defender),
+          ...(strategy.defender.prompt === undefined ? {} : { prompt: strategy.defender.prompt }),
+        };
 
   return {
     step: {
       ...base,
       strategy: strategy.origin,
       mode: strategy.mode,
-      ...(strategy.maxMessages === undefined ? {} : { maxMessages: strategy.maxMessages }),
+      ...(strategy.rounds === undefined ? {} : { rounds: strategy.rounds }),
       reviewers,
       aggregator,
+      ...(defender === undefined ? {} : { defender }),
     },
     participantOrigins: origins,
   };
@@ -2466,6 +2479,8 @@ export function expandPipeline(options: ExpandOptions): ExpandedPipeline {
   const pipelineMcp: McpServers | undefined = doc.mcp === undefined ? undefined : toMcp(doc.mcp);
 
   const jobs: Job[] = [];
+  /** Ссылки `implementer` шагов `review`: разрешаются по графу, когда работы собраны. */
+  const pendingImplementers: PendingImplementer[] = [];
   const modelOrigins = new Map<string, ModelOrigin>();
   const effortOrigins = new Map<string, EffortOrigin>();
   const agentOrigins = new Map<string, AgentOrigin>();
@@ -2647,6 +2662,10 @@ export function expandPipeline(options: ExpandOptions): ExpandedPipeline {
       };
     })();
     const rawSteps = body.steps as RawStep[];
+    for (const [index, step] of rawSteps.entries()) {
+      if (!('review' in step) || step.implementer === undefined) continue;
+      pendingImplementers.push({ job: id, index, declared: step.implementer, file: declaringFile, at: `${at}.steps.${index}.implementer` });
+    }
 
     const until = body.until as
       | { max_iterations?: string | number; check: RawPredicate[] }
@@ -2889,7 +2908,7 @@ export function expandPipeline(options: ExpandOptions): ExpandedPipeline {
     }
   }
 
-  const pipeline: Pipeline = {
+  const pipeline: Pipeline = withImplementers({
     name: doc.name ?? 'pipeline',
     file: pipelinePath,
     knowledge: resolveKnowledge(document, config, pipelinePath),
@@ -2912,7 +2931,7 @@ export function expandPipeline(options: ExpandOptions): ExpandedPipeline {
     ...(triggers === undefined ? {} : { triggers }),
     jobs,
     loops: toLoops(doc.loops, config.limits, substitutions),
-  };
+  }, pendingImplementers);
 
   const unusedAgentEntries =
     pipelineKey === undefined
@@ -2922,6 +2941,88 @@ export function expandPipeline(options: ExpandOptions): ExpandedPipeline {
   return {
     pipeline, substitutions, modelOrigins, effortOrigins, agentOrigins, unusedAgentEntries,
     ...(pipelineKey === undefined ? {} : { agentEntryName: pipelineKey }),
+  };
+}
+
+interface PendingImplementer {
+  readonly job: string;
+  readonly index: number;
+  readonly declared: string;
+  readonly file: string;
+  readonly at: string;
+}
+
+/**
+ * Разрешить `implementer` шагов `review` (`review-defend`, решение 2).
+ * Ссылка — агентский шаг своей работы, объявленный до `review`, либо шаг
+ * работы выше по графу (`needs`, транзитивно). `<шаг>` без точки — шаг своей
+ * работы; с точкой — сначала шаг своей работы с таким id, затем
+ * `<работа>.<шаг>` по первой точке. Иное — отказ раскрытия с названием шага:
+ * исполнение не узнало бы, чью сессию форкать, и тихо взяло бы свежего
+ * защитника там, где автор ждал форка.
+ */
+function withImplementers(pipeline: Pipeline, pending: readonly PendingImplementer[]): Pipeline {
+  if (pending.length === 0) return pipeline;
+  const { upstream } = buildGraph(pipeline).graph;
+  const byJob = new Map(pipeline.jobs.map((job) => [job.id, job]));
+  const resolved = new Map<string, ImplementerRef>();
+  for (const entry of pending) {
+    const own = byJob.get(entry.job);
+    const review = own?.steps[entry.index];
+    if (own === undefined || review === undefined) continue;
+    const subject = `Шаг ${entry.job}/${review.id} называет имплементатором ${entry.declared}`;
+    const sameJob = own.steps.findIndex((step) => step.id === entry.declared);
+    const dot = entry.declared.indexOf('.');
+    const ref: ImplementerRef | undefined =
+      sameJob !== -1 || dot === -1
+        ? { job: entry.job, step: entry.declared }
+        : { job: entry.declared.slice(0, dot), step: entry.declared.slice(dot + 1) };
+    const job = byJob.get(ref.job);
+    const target = job?.steps.find((step) => step.id === ref.step);
+    if (job === undefined || target === undefined) {
+      throw new BurnexError(`${subject}, а такого шага нет`, {
+        file: entry.file,
+        at: entry.at,
+        hint: 'Укажите id агентского шага своей работы либо <работа>.<шаг> работы, от которой эта зависит',
+      });
+    }
+    if (target.kind !== 'agent') {
+      throw new BurnexError(`${subject}, а это шаг ${target.kind}: имплементатор — агентский шаг`, {
+        file: entry.file,
+        at: entry.at,
+        hint: 'Защитник — форк сессии имплементатора, а сессия есть только у агентского шага (prompt:)',
+      });
+    }
+    if (ref.job === entry.job) {
+      if (target.index >= review.index) {
+        throw new BurnexError(`${subject}, а он объявлен не раньше шага review`, {
+          file: entry.file,
+          at: entry.at,
+          hint: 'Имплементатор своей работы исполняется до ревью: перенесите его выше шага review',
+        });
+      }
+    } else if (!(upstream.get(entry.job)?.has(ref.job) ?? false)) {
+      throw new BurnexError(`${subject}, а работа ${entry.job} не зависит от работы ${ref.job}`, {
+        file: entry.file,
+        at: entry.at,
+        hint: `Добавьте ${ref.job} в needs работы ${entry.job} (прямо или через другие работы)`,
+      });
+    }
+    resolved.set(`${entry.job}\0${entry.index}`, ref);
+  }
+  return {
+    ...pipeline,
+    jobs: pipeline.jobs.map((job) =>
+      job.steps.some((_step, index) => resolved.has(`${job.id}\0${index}`))
+        ? {
+            ...job,
+            steps: job.steps.map((step, index) => {
+              const ref = resolved.get(`${job.id}\0${index}`);
+              return ref === undefined || step.kind !== 'review' ? step : { ...step, implementer: ref };
+            }),
+          }
+        : job,
+    ),
   };
 }
 
@@ -3024,7 +3125,13 @@ function collectUnusedAgentEntries(
         out.push({ key, kind: 'step_agents', files, reason: { kind: 'not_review' } });
       } else if (
         reviewer !== undefined &&
-        !found.some((step) => step.kind === 'review' && step.reviewers.some((entry) => entry.id === reviewer))
+        !found.some(
+          (step) =>
+            step.kind === 'review' &&
+            (step.reviewers.some((entry) => entry.id === reviewer) ||
+              // `<шаг>/defender` — свежий защитник режима `defend` (`review-defend`).
+              (reviewer === DEFENDER_ID && step.defender !== undefined)),
+        )
       ) {
         out.push({ key, kind: 'step_agents', files, reason: { kind: 'no_reviewer' } });
       } else if (!found.some((step) => step.kind === 'agent' || step.kind === 'review')) {

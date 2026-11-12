@@ -217,6 +217,13 @@ export interface AgentStep extends StepCommon {
   readonly effort?: string;
   /** Псевдоним сессии. Шаги с одинаковым псевдонимом продолжают один диалог. */
   readonly session: string;
+  /**
+   * Начать сессию псевдонима форком сессии с этим идентификатором — только
+   * у вызова защитника ревью, собранного движком (`review-defend`, решение
+   * 4); документ поля не объявляет. Уходит адаптеру, пока сессия псевдонима
+   * не начата, и только адаптеру с `forkSessions`.
+   */
+  readonly forkFrom?: string;
   /** Текст промпта, уже прочитанный из файла и раскрытый. */
   readonly prompt: string;
   /** Откуда прочитан промпт — для диагностики. */
@@ -274,6 +281,7 @@ export function forStepHash(step: Step): Step {
     strategy,
     reviewers: step.reviewers.map(participant),
     ...(step.aggregator === undefined ? {} : { aggregator: participant(step.aggregator) }),
+    ...(step.defender === undefined ? {} : { defender: participant(step.defender) }),
   };
 }
 
@@ -470,12 +478,37 @@ export interface PluginStep extends StepCommon {
   readonly fields: unknown;
 }
 
-/** Режимы стратегии ревью: `discussion` — обсуждение ревьюеров (`review-discussion`). */
-export const REVIEW_MODES = ['independent', 'discussion'] as const;
+/**
+ * Режимы стратегии ревью: `defend` — защита находок имплементатором
+ * (`review-defend`, решение 1). Прежний `discussion` удалён целиком.
+ */
+export const REVIEW_MODES = ['independent', 'defend'] as const;
 export type ReviewMode = (typeof REVIEW_MODES)[number];
 
 /** Псевдоним агрегатора среди участников: каталог журнала, адрес `step_agents` нет. */
 export const AGGREGATOR_ID = 'aggregator';
+
+/**
+ * Псевдоним защитника режима `defend` (`review-defend`, решение 3): каталог
+ * журнала `participants/defender/<ревьюер>/`, адрес `step_agents`
+ * `<работа>.<шаг>/defender`, участник расхода. `id` ревьюера `defender`
+ * поэтому занят, как `aggregator`.
+ */
+export const DEFENDER_ID = 'defender';
+
+/** Раунды защиты по умолчанию (`defend.rounds`). */
+export const DEFAULT_DEFEND_ROUNDS = 2;
+
+/**
+ * Имплементатор шага `review` (`review-defend`, решение 2): агентский шаг
+ * своей работы до `review` либо работы, от которой работа `review` зависит.
+ * Ссылка разрешена раскрытием и хранится нормализованной — запись `implement`
+ * и `review.implement` для шага своей работы дают один ключ шага.
+ */
+export interface ImplementerRef {
+  readonly job: string;
+  readonly step: string;
+}
 
 /**
  * Участник стратегии ревью, уже раскрытый в агента (`review-strategies`,
@@ -483,7 +516,7 @@ export const AGGREGATOR_ID = 'aggregator';
  * стоит на месте слоя «шаг».
  */
 export interface ReviewParticipant {
-  /** `id` ревьюера либо `aggregator`. */
+  /** `id` ревьюера, `aggregator` либо `defender`. */
   readonly id: string;
   readonly agent: string;
   readonly model?: string;
@@ -496,7 +529,7 @@ export interface ReviewParticipant {
   readonly profileContextFingerprint?: string;
   /** Направление ревьюера — текст, уже прочитанный из `file:`. */
   readonly focus?: string;
-  /** Дополнение стратегии к промпту агрегатора. */
+  /** Дополнение стратегии к промпту агрегатора либо свежего защитника. */
   readonly prompt?: string;
 }
 
@@ -534,12 +567,23 @@ export interface ReviewStep extends StepCommon {
   readonly permissions?: Permissions;
   readonly strategy: ReviewStrategyOrigin;
   readonly mode: ReviewMode;
-  /** Лимит реплик каждого ревьюера в режиме `discussion` (`discussion.max_messages`). */
-  readonly maxMessages?: number;
+  /** Число раундов защиты — только в режиме `defend` (`defend.rounds`). */
+  readonly rounds?: number;
   /** Пусто, пока стратегия не разрешилась. */
   readonly reviewers: readonly ReviewParticipant[];
   /** Нет, пока стратегия не разрешилась. */
   readonly aggregator?: ReviewParticipant;
+  /**
+   * Свежий защитник режима `defend`, раскрытый из `defender` стратегии либо
+   * профиля `default`. Форк сессии имплементатора выбирается только при
+   * исполнении (`review-defend`, решение 3), поэтому раскрыт он всегда.
+   */
+  readonly defender?: ReviewParticipant;
+  /**
+   * Имплементатор (`implementer` шага): разрешённая ссылка входит в ключ шага,
+   * идентификатор его сессии — нет (`review-defend`, решение 2).
+   */
+  readonly implementer?: ImplementerRef;
   readonly unresolved?: ReviewStrategyUnresolved;
 }
 

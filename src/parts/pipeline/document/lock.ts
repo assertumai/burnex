@@ -169,14 +169,16 @@ function stepToPlain(step: Step): Record<string, unknown> {
         ...(step.strategy.path === undefined ? {} : { path: step.strategy.path }),
         ...(step.strategy.fingerprint === undefined ? {} : { fingerprint: step.strategy.fingerprint }),
         mode: step.mode,
-        ...(step.maxMessages === undefined ? {} : { discussion: { max_messages: step.maxMessages } }),
+        ...(step.rounds === undefined ? {} : { defend: { rounds: step.rounds } }),
       },
+      ...(step.implementer === undefined ? {} : { implementer: `${step.implementer.job}.${step.implementer.step}` }),
       prompt: step.prompt,
       ...(step.promptSource === undefined ? {} : { prompt_source: step.promptSource }),
       output_schema: step.outputSchemaPath,
       ...(step.permissions === undefined ? {} : { permissions: step.permissions }),
       reviewers: step.reviewers.map(participant),
       ...(step.aggregator === undefined ? {} : { aggregator: participant(step.aggregator) }),
+      ...(step.defender === undefined ? {} : { defender: participant(step.defender) }),
       ...(step.unresolved === undefined ? {} : { unresolved: step.unresolved }),
     };
   }

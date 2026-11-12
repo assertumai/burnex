@@ -396,6 +396,8 @@ describe('codex-backend: возможности и манифест плагин
       // Поток Codex несёт токены, а не цену: цену даёт каталог цен движка.
       reportsCost: false,
       sessionIdSource: 'backend',
+      // Форк нити (`review-defend`) — под той же настройкой, что сессии.
+      forkSessions: false,
     });
   });
 

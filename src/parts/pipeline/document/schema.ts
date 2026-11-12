@@ -283,6 +283,7 @@ export const STEP_COMMON_KEYS: readonly string[] = [
 export const BUILTIN_STEP_KIND_KEY_OWNERS: Readonly<Record<string, readonly string[]>> = {
   prompt: ['agent', 'review'],
   review: ['review'],
+  implementer: ['review'],
   agent: ['agent'],
   model: ['agent'],
   effort: ['agent'],
@@ -696,6 +697,15 @@ export function buildDocumentSchemas(
       prompt: z.string(),
       output_schema: z.string(),
       permissions: PermissionsSchema.optional(),
+      // Имплементатор режима `defend` (`review-defend`, решение 2): `<шаг>`
+      // своей работы либо `<работа>.<шаг>`. Ссылку проверяет раскрытие —
+      // ей нужен граф работ, а не один шаг.
+      implementer: z
+        .string()
+        .min(1)
+        .regex(/\S/)
+        .describe('Агентский шаг, чья сессия защищает код в режиме defend: <шаг> своей работы либо <работа>.<шаг>')
+        .optional(),
       agent: declaredByStrategy('agent'),
       model: declaredByStrategy('model'),
       model_tier: declaredByStrategy('model_tier'),

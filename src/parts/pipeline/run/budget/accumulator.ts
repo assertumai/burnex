@@ -399,8 +399,12 @@ export class UsageAccumulator {
     for (const [key, counters] of [...this.steps]) {
       if (!key.startsWith(prefix)) continue;
       // Переисполняется один участник шага `review`: записи его соседей,
-      // идущих параллельно, живые и запечатыванию не подлежат.
-      if (participant !== undefined && !key.slice(prefix.length).replace(/@.*$/, '').endsWith(`%${participant}`)) continue;
+      // идущих параллельно, живые и запечатыванию не подлежат. Участник может
+      // нести ветку после `@` (`defender@~<ревьюер>`, `review-defend`; `~` не даёт имени ветки
+      // сойтись с метками `@seal`, `@job`, `@pass`):
+      // сводка роняет её вместе с хвостом запечатывания и складывает ветки
+      // под одним участником, а запечатывается только своя ветка.
+      if (participant !== undefined && !key.slice(prefix.length).replace(/@seal.*$/, '').endsWith(`%${participant}`)) continue;
       this.sealCounter += 1;
       const sealedKey = `${key}@seal${this.sealCounter}`;
       this.steps.delete(key);

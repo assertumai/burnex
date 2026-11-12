@@ -42,6 +42,9 @@ export function createCodexAdapter(config: BackendConfig): BackendAdapter {
       // Поток Codex несёт только токены; цену даёт каталог цен движка.
       reportsCost: false,
       sessionIdSource: 'backend',
+      // `codex exec fork <id>` (Codex CLI 0.160) принимает те же опции, что
+      // `exec resume`; новая нить приходит записью `thread.started`.
+      forkSessions: config.sessions,
     },
 
     launch(invocation: AgentInvocation): LaunchSpec {
@@ -50,9 +53,14 @@ export function createCodexAdapter(config: BackendConfig): BackendAdapter {
       // продолжения (design.md, решение 2). Рабочий каталог задаёт движок
       // процессом, `-C` не нужен.
       const resume = invocation.resumeSession && invocation.sessionId !== undefined && config.sessions;
+      // Форк (`review-defend`, решение 4) — третья форма команды: нить ещё не
+      // начата, и новый идентификатор назовёт `thread.started`.
+      const fork = !resume && invocation.forkFrom !== undefined && config.sessions;
       const command: string[] = resume
         ? [config.command, 'exec', 'resume', invocation.sessionId as string]
-        : [config.command, 'exec'];
+        : fork
+          ? [config.command, 'exec', 'fork', invocation.forkFrom as string]
+          : [config.command, 'exec'];
       // `--skip-git-repo-check`: режим `copy` даёт дерево без `.git`, и без
       // флага CLI отказывает ещё до промпта.
       // Автоматический шаг не наследует личные MCP-серверы из
