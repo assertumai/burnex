@@ -366,8 +366,8 @@ describe('job-group-loops: изолированные деревья', () => {
   });
 
   it('worktree: точка входа продолжает дерево выхода, когда у починки своё', async () => {
-    // `fix` в режиме copy — другой режим, поэтому цепочки нет и у неё свой каталог,
-    // засеянный деревом проверки.
+    // `fix` в режиме copy — другой режим, поэтому у неё личное дерево,
+    // засеянное каталогом проверки.
     const pipeline = checkFix({ threshold: 2, max: 4, head: 'workspace: { mode: worktree }' }).replace(
       '  fix:\n    needs: [check]\n    on: failure\n',
       '  fix:\n    needs: [check]\n    on: failure\n    workspace: { mode: copy }\n',
@@ -380,14 +380,16 @@ describe('job-group-loops: изолированные деревья', () => {
     const check = records.find((job) => job.id === 'check');
     const fix = records.find((job) => job.id === 'fix');
     assert.ok(check?.workspace !== undefined && fix?.workspace !== undefined);
-    // Проверка последнего прохода идёт в каталоге починки: счётчик там и вырос.
-    assert.equal(check.workspace.path, fix.workspace.path);
+    // У починки личное дерево, у проверки — дерево по умолчанию: второй проход
+    // засевает его каталогом починки, и проверка видит выросший счётчик.
+    assert.notEqual(check.workspace.path, fix.workspace.path);
+    assert.equal(fix.workspace.tree, 'own');
     assert.equal(readFileSync(join(check.workspace.path, 'counter.txt'), 'utf8').trim(), '2');
   });
 
-  it('worktree: засеянный участник второго прохода получает дерево своего источника, а не своё прошлое', async () => {
-    // У `a` два последователя, цепочки нет: `b` и `c` засеваются деревом `a`.
-    // Выход прохода — `c`, и во втором проходе `a` продолжает его каталог.
+  it('worktree: участник второго прохода видит дерево, на котором кончился прошлый проход', async () => {
+    // Все трое в дереве по умолчанию и идут по очереди: a, b, c. Выход
+    // прохода — `c`, и во втором проходе `a` продолжает дерево после него.
     const append = (name: string): string =>
       `[sh, -c, 'echo ${name}$BURNEX_LOOP_ITERATION >> log.txt']`;
     const project = repoProject(`

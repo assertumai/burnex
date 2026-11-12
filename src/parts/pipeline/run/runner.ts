@@ -1841,8 +1841,8 @@ function resumeTarget(pipeline: Pipeline, graph: Graph, jobId: string): string {
  * Источник дерева точки входа цикла в проходе N > 1: дерево выхода прошлого
  * прохода — последнего участника, у которого оно есть, — а не её внешний
  * источник: починка правит то, что проверка найдёт в следующем проходе.
- * Точка входа в общем дереве его и так продолжает; заново засевается только
- * заводящая свой каталог (`RunTrees.place`).
+ * Точка входа в дереве выхода его и так продолжает; дерево иной точки входа
+ * засевается каталогом выхода заново (`RunTrees.place`).
  */
 function loopReseed(context: RunContext, job: Job, pass: LoopPass): { job: string; dir: string } | undefined {
   const runtime = context.loops.get(pass.loop.id);

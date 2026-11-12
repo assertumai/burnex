@@ -119,7 +119,7 @@ export class RunTrees {
 
   /**
    * Каталог работы. `loopReseed` — источник точки входа цикла в проходе
-   * N > 1: дерево выхода прошлого прохода.
+   * N > 1: каталог выхода прошлого прохода.
    */
   async place(job: Job, loopReseed?: { readonly job: string; readonly dir: string }): Promise<Placement> {
     const tree = jobTree(job);
@@ -128,7 +128,10 @@ export class RunTrees {
     }
     const key = treeKey(job);
 
-    if (loopReseed !== undefined && opensTree(job, this.heads) && this.dirOf(key) !== loopReseed.dir) {
+    // Точка входа цикла продолжает дерево выхода прошлого прохода: если оно
+    // другое, её дерево засевается его каталогом заново — этого требует
+    // цикл, а не слияние деревьев (design.md, решение 11).
+    if (loopReseed !== undefined && this.dirOf(key) !== loopReseed.dir) {
       await this.open(job, { kind: 'copy', from: { dir: loopReseed.dir } }, { from: loopReseed.job, by: 'copy' });
     }
 

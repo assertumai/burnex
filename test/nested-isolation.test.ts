@@ -49,6 +49,7 @@ jobs:
           - { exit_code: 0 }
           - { changed_only: ['root-verify.txt', 'linked-part/**'] }
   independent:
+    workspace: { tree: own }
     steps:
       - id: touch
         run: [sh, -c, 'echo чужое > root-independent.txt; echo чужое > linked-part/independent.txt']
@@ -185,7 +186,7 @@ describe('nested-repo-isolation: сквозной сценарий состав�
       nested: ['ignored-part', 'linked-part'],
     });
     const saved = anchorer.capture();
-    // Дорожка a уже прогнала verify в этом же каталоге (продолжение цепочки),
+    // Дорожка a уже прогнала verify в этом же каталоге (дерево по умолчанию),
     // так что «исходное» здесь — состояние после обеих работ дорожки, не
     // только после propose.
     const linkedSiteBefore = readFileSync(join(dir, 'linked-part', 'site.txt'), 'utf8');
@@ -218,8 +219,8 @@ describe('nested-repo-isolation: сквозной сценарий состав�
       }
     };
 
-    // Два корневых worktree этого прогона: propose делится своим с verify
-    // (продолжение цепочки), а independent заводит собственный.
+    // Два корневых worktree этого прогона: дерево по умолчанию (propose и
+    // verify) и личное дерево independent.
     assert.equal(worktreeRecords(project.root).length, 2);
     assert.ok(worktreeRecords(project.path('linked-part')).length > 0);
     assert.ok(worktreeRecords(project.path('ignored-part')).length > 0);
@@ -242,18 +243,18 @@ describe('nested-repo-isolation: сквозной сценарий состав�
     assert.ok(existsSync(foreignPath), 'постороннее дерево должно остаться на месте');
   });
 
-  it('продолжение видит части предшественника с его правками, а развилка получает части, приведённые к источнику', async () => {
+  it('продолжение видит части предшественника с его правками, а головы деревьев получают части полным переносом', async () => {
     const project = makeProject({
       'burnex.yml': `
 version: 1
 kind: pipeline
 name: наследование-составное
-workspace: { mode: worktree }
+workspace: { mode: worktree, trees: [main, a, b] }
 jobs:
   seed:
     steps:
       - id: touch
-        run: [sh, -c, 'echo корень-seed > root.txt; echo часть-seed > linked-part/site.txt']
+        run: [sh, -c, 'echo корень-seed > root.txt; echo часть-seed > linked-part/site.txt; echo мимо > ignored-part/vendor.txt']
         expect: [{ exit_code: 0 }]
   chain:
     needs: [seed]
@@ -263,12 +264,14 @@ jobs:
         expect: [{ exit_code: 0 }]
   forkA:
     needs: [chain]
+    workspace: { tree: a }
     steps:
       - id: touch
         run: [sh, -c, 'true']
         expect: [{ exit_code: 0 }]
   forkB:
     needs: [chain]
+    workspace: { tree: b }
     steps:
       - id: touch
         run: [sh, -c, 'true']
@@ -301,12 +304,19 @@ jobs:
     assert.equal(chainWorkspace.path, seedDir);
     assert.equal(readFileSync(join(chainWorkspace.path, 'linked-part', 'site.txt'), 'utf8'), 'часть-seed\n');
 
-    // Развилка: собственный каталог, части приведены к состоянию источника.
+    // Головы деревьев a и b: собственный каталог, части перенесены целиком и
+    // остаются рабочими деревьями своих репозиториев.
     for (const fork of [forkAWorkspace, forkBWorkspace]) {
       assert.notEqual(fork.path, seedDir);
-      assert.equal(fork.inherited_from, 'chain');
+      assert.deepEqual(fork.seed, { from: 'chain', by: 'copy' });
       assert.equal(readFileSync(join(fork.path, 'linked-part', 'site.txt'), 'utf8'), 'часть-seed\n');
+      assert.equal(readFileSync(join(fork.path, 'ignored-part', 'vendor.txt'), 'utf8'), 'мимо\n');
       assert.equal(readFileSync(join(fork.path, 'root.txt'), 'utf8'), 'корень-seed\n');
+      for (const relDir of ['ignored-part', 'linked-part']) {
+        const top = execFileSync('git', ['-C', join(fork.path, relDir), 'rev-parse', '--show-toplevel'], { encoding: 'utf8' }).trim();
+        assert.equal(realpathSync(top), realpathSync(join(fork.path, relDir)));
+      }
+      assert.match(gitStatus(join(fork.path, 'linked-part')), /site\.txt/);
     }
   });
 
@@ -314,7 +324,7 @@ jobs:
   // форма записи, что и до этого изменения — части не материализуются.
   it('режим cwd на том же дереве не заводит части и ведёт себя как прежде', async () => {
     const project = twoPartsProject();
-    project.write('burnex.yml', PIPELINE.replace('mode: worktree', 'mode: cwd'));
+    project.write('burnex.yml', PIPELINE.replace('mode: worktree', 'mode: cwd').replace('    workspace: { tree: own }\n', ''));
 
     const result = await runWithConfig(project, withNestedRepos(project, ['ignored-part', 'linked-part']));
     assert.equal(result.status, 'success');

@@ -3782,6 +3782,14 @@ kind: pipeline
 name: общее-дерево
 workspace: { mode: worktree }
 jobs:
+  # Якорь каталога запуска — опора сверки, как у «нулевой» выше.
+  нулевая:
+    session: per_step
+    workspace: { mode: cwd }
+    steps:
+      - id: сверяет
+        run: [echo, начало]
+        expect: [{ exit_code: 0 }]
   первая:
     session: per_step
     steps:
