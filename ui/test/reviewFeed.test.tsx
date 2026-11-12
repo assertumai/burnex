@@ -3,10 +3,12 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterEach, describe, it } from 'node:test';
 
+import type { Context } from 'cordis';
 import { renderToStaticMarkup } from 'react-dom/server';
 
 import { COLLAPSE_AFTER, ReviewFeedView, groupEntries, initials, type ReviewSelection } from '../src/components/ReviewFeed';
 import { fetchReviewFeed, fetchStepOutput, type ReviewFeed, type ReviewFeedEntry, type ReviewFeedParticipant } from '../src/api';
+import { bindRouterKernel } from '../src/router';
 
 /**
  * Лента шага `review` (`ui-review-discussion`, задача 2.4) — по сценариям
@@ -14,6 +16,10 @@ import { fetchReviewFeed, fetchStepOutput, type ReviewFeed, type ReviewFeedEntry
  * готовой модели, выбор участника — начальным `selected`, живое дополнение —
  * рендером модели следующего опроса и запросом `GET /api/review-feed`.
  */
+
+// Ссылка на исходный прогон (`TargetLink`) читает таблицу маршрутов ядра; без
+// совпавшего маршрута она рисует текст с причиной — для рендера этого хватает.
+bindRouterKernel({ routes: { get: () => ({ table: [] }) } } as unknown as Context);
 
 function participant(id: string, color: number, overrides: Partial<ReviewFeedParticipant> = {}): ReviewFeedParticipant {
   return {
@@ -142,6 +148,33 @@ describe('ui-review-discussion: лента обсуждения', () => {
       }),
     );
     assert.match(plain, /reply failed the schema check/);
+  });
+
+  it('реплика, сорванная сбоем, помечена причиной, а не схемой', () => {
+    const plain = text(
+      render({
+        ...CONSENSUS,
+        entries: [
+          { kind: 'message', participant: 'tests', messageId: 'm2', round: 1, seq: 1, stance: 'disagree', text: '', count: 1, failure: 'timeout' },
+        ],
+      }),
+    );
+    assert.match(plain, /reply failed: timeout/);
+    assert.doesNotMatch(plain, /schema check/);
+  });
+
+  it('переиспользованный шаг называет исходный прогон; без него — вердикт вместо «No messages yet»', () => {
+    const available = text(render({ ...CONSENSUS, reusedFrom: { runId: 'run-0', available: true } }));
+    assert.match(available, /Reused from run run-0/);
+    assert.match(available, /security summary/);
+
+    const verdict = CONSENSUS.entries.at(-1) as ReviewFeedEntry;
+    const gone = text(
+      render({ ...CONSENSUS, participants: PARTICIPANTS.map((entry) => ({ ...entry, sessions: [] })), entries: [verdict], proposals: [], reusedFrom: { runId: 'run-0', available: false } }),
+    );
+    assert.match(gone, /Reused from run run-0/);
+    assert.match(gone, /no longer available/);
+    assert.doesNotMatch(gone, /No messages yet/);
   });
 
   it('режим independent: находки и вердикт без раундов и без блока лимита', () => {

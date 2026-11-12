@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 
 import { forStepHash, type Step } from '../document/model.js';
 import { normalizePackagePaths, portableForm, type PackagePathForm } from '../document/packagePaths.js';
+import { agentCallsOf } from '../steps/review/participants.js';
 
 /**
  * Ключ шага отвечает на один вопрос: остаётся ли прошлый успех шага
@@ -22,6 +23,11 @@ export interface StepKeyInput {
   readonly inputsFingerprint: string | undefined;
   /** Команда бэкенда: смена CLI меняет результат при том же промпте. */
   readonly backendCommand: string | undefined;
+  /**
+   * Команды бэкендов участников шага `review` по их `id` (`stepBackendCommands`):
+   * у такого шага бэкендов несколько, и смена CLI любого из них меняет итог.
+   */
+  readonly participantCommands?: Readonly<Record<string, string | null>>;
   /** Выходы работ выше по графу на момент исполнения этого шага. */
   readonly upstream: readonly { readonly job: string; readonly value: unknown }[];
   /**
@@ -30,6 +36,24 @@ export interface StepKeyInput {
    * `lockHash` обязан быть посчитан в той же форме.
    */
   readonly packagePaths?: PackagePathForm;
+}
+
+/**
+ * Команды бэкендов вызовов шага для ключа — одна функция для исполнителя и
+ * планировщика возобновления: у агентского шага команда его бэкенда, у шага
+ * `review` — команды всех участников, у остальных видов — ничего.
+ */
+export function stepBackendCommands(
+  step: Step,
+  backends: Readonly<Record<string, { readonly command?: string | undefined }>>,
+): Pick<StepKeyInput, 'backendCommand' | 'participantCommands'> {
+  if (step.kind === 'agent') return { backendCommand: backends[step.agent]?.command };
+  const calls = agentCallsOf(step);
+  if (calls.length === 0) return { backendCommand: undefined };
+  return {
+    backendCommand: undefined,
+    participantCommands: Object.fromEntries(calls.map(({ id, call }) => [id, backends[call.agent]?.command ?? null])),
+  };
 }
 
 /**
@@ -95,7 +119,9 @@ export function computeStepKey(input: StepKeyInput): string {
                 command: input.backendCommand ?? null,
                 model: step.model ?? null,
               }
-            : null,
+            : input.participantCommands === undefined
+              ? null
+              : { commands: input.participantCommands },
         upstream: input.upstream.map((output) => ({ job: output.job, value: output.value })),
       }),
     )

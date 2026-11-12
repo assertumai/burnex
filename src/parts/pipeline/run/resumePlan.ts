@@ -24,7 +24,7 @@ import { definitionFiles, type ExpandedPipeline, type Job, type Pipeline, type S
 import type { Registry } from '../../../kernel/registry.js';
 import { buildGraph, executionOrder, loopEntryPoints, loopOf, upstreamOutputs, type Graph } from '../domain/graph.js';
 import { declaredInheritance } from './inherit.js';
-import { computeStepKey, upstreamForKey } from './stepKey.js';
+import { computeStepKey, stepBackendCommands, upstreamForKey } from './stepKey.js';
 import { legacyPackageRoots, legacyStepKeys } from './legacyKey.js';
 
 /**
@@ -840,8 +840,7 @@ function invalidationReason(input: ReasonOptions): ReasonOutcome {
     jobId: job.id,
     step,
     inputsFingerprint: previous.inputs_fingerprint,
-    backendCommand:
-      step.kind === 'agent' ? options.config.backends[step.agent]?.command : undefined,
+    ...stepBackendCommands(step, options.config.backends),
     upstream: upstreamForKey(upstream),
   };
   const key = computeStepKey({ ...keyInput, lockHash: jobLockHash(options.expanded.pipeline, job) });

@@ -1310,6 +1310,7 @@ export type ReviewFeedEntry =
       readonly target?: ReviewFeedQuote;
       readonly replyTo?: readonly ReviewFeedQuote[];
       readonly invalid?: true;
+      readonly failure?: string;
     }
   | { readonly kind: 'round'; readonly round: number }
   | { readonly kind: 'failure'; readonly participant: string; readonly reason: string }
@@ -1341,6 +1342,8 @@ export interface ReviewFeed {
   readonly proposals: readonly ReviewFeedProposal[];
   readonly legacy: boolean;
   readonly done: boolean;
+  /** Шаг переиспользован: лента из исходного прогона, `available: false` — его больше нет. */
+  readonly reusedFrom?: { readonly runId: string; readonly available: boolean };
 }
 
 export async function fetchReviewFeed(options: {

@@ -240,6 +240,7 @@ function Step({
           pass={pass}
           stepUsage={step.usage}
           asOf={asOf}
+          navigate={navigate}
         />
       ) : (
         <StepOutput

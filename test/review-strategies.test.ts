@@ -9,7 +9,7 @@ import { createKernelShell } from '../src/parts/builtin.js';
 import { BUILTIN_ROWS } from '../src/parts/rows.js';
 import { createFakeBackend, initLine, resultLine, type FakeBackend } from '../src/parts/pipeline/backend/fake.js';
 import { renderAgentsReport } from '../src/parts/pipeline/commands/configAgents.js';
-import { resolveConfig, type Config } from '../src/parts/pipeline/config/resolve.js';
+import { resolveConfig, type BackendConfig, type Config } from '../src/parts/pipeline/config/resolve.js';
 import { expandPipeline } from '../src/parts/pipeline/document/expand.js';
 import { jobLockHash, serializeLock } from '../src/parts/pipeline/document/lock.js';
 import type { ReviewStep } from '../src/parts/pipeline/document/model.js';
@@ -17,6 +17,7 @@ import { parseReviewStrategyFile } from '../src/parts/pipeline/document/reviewSt
 import { lintPipeline } from '../src/parts/pipeline/domain/lint.js';
 import { findStepDir, readEvents, readStatus, readUsage } from '../src/parts/pipeline/run/journal/reader.js';
 import { runPipeline, type RunResult } from '../src/parts/pipeline/run/runner.js';
+import { buildResumePlan, readSourceRun } from '../src/parts/pipeline/run/resumePlan.js';
 import { computeStepKey } from '../src/parts/pipeline/run/stepKey.js';
 import { gitCommit, gitInit, makeProject, testBaseEnv, type Project } from './helpers.js';
 import { tempDir } from './tmp.js';
@@ -411,10 +412,14 @@ function repo(files: Record<string, string>): Project {
   return project;
 }
 
-async function run(project: Project, backends: Readonly<Record<string, FakeBackend>>): Promise<RunResult> {
+async function run(
+  project: Project,
+  backends: Readonly<Record<string, FakeBackend>>,
+  config: Config = project.config,
+): Promise<RunResult> {
   return runPipeline({
-    expanded: expandPipeline({ pipelinePath: project.path('burnex.yml'), config: project.config }),
-    config: { ...project.config, runs: { ...project.config.runs, root: tempDir('runs-') } },
+    expanded: expandPipeline({ pipelinePath: project.path('burnex.yml'), config }),
+    config: { ...config, runs: { ...config.runs, root: tempDir('runs-') } },
     projectRoot: project.root,
     cwd: project.root,
     baseEnv: testBaseEnv(),
@@ -593,6 +598,36 @@ describe('review-strategies: исполнение independent', () => {
     assert.match(second, /Прошлая попытка не прошла проверку/);
     const step = readStatus(result.journal.paths).jobs.find((job) => job.id === 'review')?.steps[0];
     assert.equal(step?.attempts.length, 2);
+  });
+
+  it('команда бэкенда участника входит в ключ шага: смена CLI ревьюера отменяет переиспользование', async () => {
+    const project = reviewRepo();
+    const withCommand = (command: string): Config => ({
+      ...project.config,
+      backends: { ...project.config.backends, 'rev-a': { ...(project.config.backends.claude as BackendConfig), command } },
+    });
+    const source = await run(
+      project,
+      { 'rev-a': ok(FINDINGS), 'rev-b': ok(FINDINGS), agg: ok({ verdict: 'APPROVED' }) },
+      withCommand('reviewer-cli'),
+    );
+    assert.equal(source.status, 'success');
+
+    const decision = (command: string) => {
+      const config = withCommand(command);
+      const plan = buildResumePlan({
+        expanded: expandPipeline({ pipelinePath: project.path('burnex.yml'), config }),
+        config,
+        source: readSourceRun(source.journal.paths),
+        changed: [],
+        cwd: project.root,
+      });
+      return plan.steps.find((entry) => entry.step === 'review-diff')?.decision;
+    };
+    assert.equal(decision('reviewer-cli')?.kind, 'reuse');
+    const changed = decision('reviewer-cli-2');
+    assert.equal(changed?.kind, 'rerun');
+    assert.match(changed?.kind === 'rerun' ? changed.reason : '', /бэкенд/);
   });
 
   it('бюджет общий: шаг останавливается по бюджету, расход разложен по участникам', async () => {

@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 
 import { packagedSchemaPath } from '../../domain/package-schema.js';
 import type { AgentStep, ReviewParticipant, ReviewStep } from '../../document/model.js';
-import { participantSession } from './participants.js';
+import { participantStep, reviewerTask } from './participants.js';
 
 /**
  * Обсуждение ревьюеров (`review-discussion`): записи ленты, вычисление
@@ -25,8 +25,10 @@ export interface ProposalRecord {
 /**
  * Реплика в форме A2A `Message` (`messageId`, `role`, `parts`) с метаданными
  * движка (design.md, решение 1). `seq` — порядковый номер реплики в её раунде,
- * с единицы; `invalid` — реплика дважды не прошла схему и засчитана
- * позицией `disagree` без текста.
+ * с единицы. Реплики нет — она засчитана позицией `disagree` без текста и
+ * расходует лимит, а запись называет почему: `invalid` — реплика дважды не
+ * прошла схему, `failure` — сбой вызова (таймаут, отказ или ненулевой код
+ * бэкенда) с его причиной.
  */
 export interface MessageRecord {
   readonly kind: 'message';
@@ -41,6 +43,7 @@ export interface MessageRecord {
   readonly target?: string;
   readonly replyTo?: readonly string[];
   readonly invalid?: true;
+  readonly failure?: string;
 }
 
 /**
@@ -114,7 +117,9 @@ function describeMessage(message: MessageRecord, proposals: ReadonlyMap<string, 
   const stance =
     message.invalid === true
       ? 'disagree (реплика не прошла схему и засчитана несогласием)'
-      : message.stance === 'propose'
+      : message.failure !== undefined
+        ? `disagree (реплики нет — сбой: ${message.failure}; засчитана несогласием)`
+        : message.stance === 'propose'
         ? `propose — предложение ${message.proposal ?? ''}`
         : `${message.stance} с ${message.target ?? ''}`;
   const head = `### ${message.messageId} — \`${message.from}\`, раунд ${message.round}: ${stance}`;
@@ -151,29 +156,42 @@ const REPLY_INSTRUCTION = [
 ].join('\n');
 
 /**
- * Промпт реплики (design.md, решение 3): сессия ревьюера возобновляется, и
+ * Промпт реплики (design.md, решение 3). Сессия ревьюера возобновляется, и
  * он получает только новые реплики остальных — прежние уже в его сессии.
+ * Бэкенд без сессий (`resumed: false`) прежних раундов не помнит: ему уходит
+ * вся лента с его собственными репликами и находками.
  */
 export function discussionReplyPrompt(options: {
+  readonly reviewer: string;
   readonly round: number;
+  readonly resumed: boolean;
+  /** Реплики, которых ревьюер не видел; без сессии — вся лента. */
   readonly fresh: readonly MessageRecord[];
   readonly proposals: ReadonlyMap<string, ProposalRecord>;
   readonly own?: MessageRecord;
   readonly remaining: number;
 }): string {
   const fresh = options.fresh.map((message) => describeMessage(message, options.proposals));
+  const findings = [...options.proposals.values()].find((proposal) => proposal.by === options.reviewer && proposal.round === 0);
   return [
     [
       `## Обсуждение ревью — раунд ${options.round}`,
       '',
       'Ты обсуждаешь итог ревью с другими ревьюерами. Цель — согласиться об одном предложении итога.',
+      options.resumed
+        ? undefined
+        : `Ты — ревьюер \`${options.reviewer}\`. Прежних раундов ты не помнишь: ниже вся лента обсуждения, включая твои реплики${findings === undefined ? '' : `, а твои находки независимого ревью — предложение ${findings.id}`}.`,
       `Предложения: ${describeProposals(options.proposals)}.`,
       options.own === undefined ? undefined : `Твоя последняя реплика — ${options.own.messageId}: ${positionKey(options.own).replace(':', ' ')}.`,
       `Реплик у тебя осталось: ${options.remaining}, включая эту.`,
     ]
       .filter((line): line is string => line !== undefined)
       .join('\n'),
-    fresh.length === 0 ? '## Новых реплик нет' : `## Новые реплики\n\n${fresh.join('\n\n')}`,
+    !options.resumed
+      ? `## Лента обсуждения\n\n${fresh.join('\n\n')}`
+      : fresh.length === 0
+        ? '## Новых реплик нет'
+        : `## Новые реплики\n\n${fresh.join('\n\n')}`,
     REPLY_INSTRUCTION,
   ].join('\n\n');
 }
@@ -182,30 +200,20 @@ export function discussionReplyPrompt(options: {
  * Реплика ревьюера как агентский шаг: та же сессия `<шаг>/<ревьюер>`, что у
  * его независимого ревью; бэкенд получает встроенную схему реплики, проверка —
  * схему с целями (`checkSchemaPath`), и невалидная реплика получает один повтор
- * с ошибкой. Контекст шага уже в сессии и не повторяется.
+ * с ошибкой. Возобновлённой сессии задание и контекст шага не повторяются;
+ * без сессии (`resumed: false`) реплика несёт их заново, как первый вызов.
  */
 export function discussionReplyAgentStep(
   step: ReviewStep,
   reviewer: ReviewParticipant,
   prompt: string,
   checkSchemaPath: string,
+  resumed: boolean,
 ): AgentStep {
   return {
-    id: step.id,
-    index: step.index,
-    env: step.env,
-    context: [],
-    contextInherit: step.contextInherit,
-    contextExclude: step.contextExclude,
-    ...(step.contextMaxTokens === undefined ? {} : { contextMaxTokens: step.contextMaxTokens }),
-    timeoutMs: step.timeoutMs,
-    kind: 'agent',
-    agent: reviewer.agent,
-    ...(reviewer.model === undefined ? {} : { model: reviewer.model }),
-    ...(reviewer.effort === undefined ? {} : { effort: reviewer.effort }),
-    session: participantSession(step, reviewer.id),
-    ...(step.permissions === undefined ? {} : { permissions: step.permissions }),
-    prompt,
+    ...participantStep(step, reviewer),
+    ...(resumed ? { context: [] } : {}),
+    prompt: resumed ? prompt : `${reviewerTask(step, reviewer)}\n\n${prompt}`,
     outputSchemaPath: reviewMessageSchemaPath(),
     expect: [{ kind: 'schema', path: checkSchemaPath }],
     attempts: { max: 2, escalation: [{ includeFailure: true }] },

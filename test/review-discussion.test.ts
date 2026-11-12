@@ -1,16 +1,19 @@
 import assert from 'node:assert/strict';
-import { existsSync, readFileSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
 import { describe, it } from 'node:test';
 
 import { BurnexError } from '../src/kernel/errors.js';
 import { createFakeBackend, initLine, resultLine, type FakeBackend } from '../src/parts/pipeline/backend/fake.js';
+import type { BackendCapabilities } from '../src/parts/pipeline/backend/types.js';
 import { expandPipeline } from '../src/parts/pipeline/document/expand.js';
 import { serializeLock } from '../src/parts/pipeline/document/lock.js';
 import type { ReviewStep } from '../src/parts/pipeline/document/model.js';
 import { parseReviewStrategyFile } from '../src/parts/pipeline/document/reviewStrategy.js';
 import { findStepDir, readEvents, readUsage } from '../src/parts/pipeline/run/journal/reader.js';
+import { buildResumePlan, readSourceRun } from '../src/parts/pipeline/run/resumePlan.js';
 import { runPipeline, type RunResult } from '../src/parts/pipeline/run/runner.js';
+import { readReviewFeed } from '../src/parts/ui/reviewFeed.js';
 import { findConsensus, type MessageRecord } from '../src/parts/pipeline/steps/review/discussion.js';
 import { gitCommit, gitInit, makeProject, testBaseEnv, type Project } from './helpers.js';
 import { tempDir } from './tmp.js';
@@ -124,14 +127,17 @@ describe('review-discussion: консенсус', () => {
 
 const SCHEMA = '{"type":"object","properties":{"verdict":{"type":"string"}},"required":["verdict"]}\n';
 
-function reviewRepo(reviewers: readonly string[], options: { readonly discussion?: string; readonly stepExtra?: string } = {}): Project {
+function reviewRepo(
+  reviewers: readonly string[],
+  options: { readonly discussion?: string; readonly stepExtra?: string; readonly jobExtra?: string; readonly strategy?: string } = {},
+): Project {
   const project = makeProject({
     'burnex.yml': `version: 1
 kind: pipeline
 name: p
 jobs:
   review:
-    output: { from: review-diff }
+${options.jobExtra ?? ''}    output: { from: review-diff }
     steps:
       - id: review-diff
         review: ./strategies/panel.yml
@@ -139,7 +145,7 @@ jobs:
         output_schema: verdict.json
 ${options.stepExtra ?? ''}`,
     'verdict.json': SCHEMA,
-    'strategies/panel.yml': STRATEGY(reviewers, options.discussion),
+    'strategies/panel.yml': options.strategy ?? STRATEGY(reviewers, options.discussion),
   });
   gitInit(project.root);
   gitCommit(project.root, 'init');
@@ -180,13 +186,19 @@ const propose = (title: string, replyTo: string[] | null = null) => ({
  * находки, затем реплики); последний повторяется. `hang` — задержка вызова,
  * чтобы проверить порядок записей при обратном порядке ответов.
  */
-function scripted(replies: readonly unknown[], tokens = 10, hang: (index: number) => number = () => 0): FakeBackend {
+function scripted(
+  replies: readonly unknown[],
+  tokens = 10,
+  hang: (index: number) => number = () => 0,
+  capabilities: Partial<BackendCapabilities> = {},
+): FakeBackend {
   return createFakeBackend({
     lines: (index) => [
       initLine(),
       resultLine({ structured: replies[Math.min(index, replies.length - 1)], tokensIn: tokens, tokensOut: tokens }),
     ],
     hangMs: hang,
+    capabilities,
   });
 }
 
@@ -351,6 +363,87 @@ describe('review-discussion: раунды', () => {
     assert.ok(readEvents(result.journal.paths).some((event) => event.kind === 'review.message' && event.invalid === true));
   });
 
+  it('бэкенд без сессий: реплика несёт задачу, контексты, фокус, свои находки и всю ленту; деградация в журнале', async () => {
+    const project = reviewRepo(['security', 'tests'], {
+      jobExtra: '    context: [{ text: "КОНТЕКСТ РАБОТЫ" }]\n',
+      stepExtra: '        context: [{ text: "КОНТЕКСТ ШАГА" }]\n',
+      strategy: `version: 1
+kind: review-strategy
+name: panel
+reviewers:
+  - id: security
+    agent: sec
+    focus: ищи утечки секретов
+  - id: tests
+    agent: rev-1
+aggregator:
+  agent: agg
+profiles:
+  sec:
+    backend: claude
+    context: [{ text: "КОНТЕКСТ ПРОФИЛЯ" }]
+mode: discussion
+discussion: { max_messages: 3 }
+`,
+    });
+    const security = scripted([findings('секрет'), disagree('p2'), agree('p3')], 10, () => 0, { sessions: false });
+    const tests = scripted([findings('тест'), propose('итог'), agree('p3')]);
+    const agg = verdict();
+    const result = await run(project, { claude: security, 'rev-1': tests, agg });
+
+    assert.equal(result.status, 'success');
+    assert.equal(security.invocations.length, 3);
+    for (const round of [1, 2]) {
+      const prompt = security.invocations[round]?.prompt ?? '';
+      assert.equal(security.invocations[round]?.resumeSession, false, `раунд ${round}`);
+      for (const part of [/проверь дифф/, /КОНТЕКСТ РАБОТЫ/, /КОНТЕКСТ ШАГА/, /КОНТЕКСТ ПРОФИЛЯ/, /ищи утечки секретов/, /Ты — ревьюер `security`/]) {
+        assert.match(prompt, part, `раунд ${round}`);
+      }
+      // Вся лента с предложениями, включая собственные находки ревьюера.
+      assert.match(prompt, /### m1 — `security`, раунд 0: propose — предложение p1/, `раунд ${round}`);
+      assert.match(prompt, /"title": "секрет"/, `раунд ${round}`);
+      assert.match(prompt, /### m2 — `tests`/, `раунд ${round}`);
+    }
+    const round2 = security.invocations[2]?.prompt ?? '';
+    assert.match(round2, /### m3 — `security`, раунд 1: disagree с p2/);
+    assert.match(round2, /"title": "итог"/);
+    // Ревьюер с сессией по-прежнему получает только новое.
+    assert.equal(tests.invocations[1]?.resumeSession, true);
+    assert.doesNotMatch(tests.invocations[1]?.prompt ?? '', /проверь дифф/);
+
+    const discussing = readEvents(result.journal.paths).flatMap((event) =>
+      event.kind === 'backend.degraded' && /обсуждает без сессии/.test(event.detail) ? [event] : [],
+    );
+    assert.deepEqual(
+      discussing.map((event) => [event.backend, event.capability, event.detail]),
+      [['claude', 'sessions', 'ревьюер security шага review/review-diff обсуждает без сессии: каждая реплика несёт задание, контекст и всю ленту заново']],
+    );
+  });
+
+  it('сбой бэкенда в реплике записан с причиной, а не как невалидная реплика; лимит расходуется', async () => {
+    const project = reviewRepo(['security', 'tests'], { discussion: 'mode: discussion\ndiscussion: { max_messages: 1 }\n' });
+    const security = scripted([findings('секрет'), agree('p2')]);
+    const tests = createFakeBackend({
+      lines: (index) => [initLine(), resultLine({ structured: index === 0 ? findings('тест') : agree('p1'), tokensIn: 10, tokensOut: 10 })],
+      exitCode: (index) => (index === 0 ? 0 : 1),
+    });
+    const agg = verdict();
+    const result = await run(project, { 'rev-0': security, 'rev-1': tests, agg });
+
+    assert.equal(result.status, 'success');
+    const { records } = feedOf(result);
+    assert.deepEqual(shape(records).slice(4), ['m3:security:agree:p2', 'm4:tests:disagree:', 'no_consensus:limit']);
+    assert.deepEqual(records[5], {
+      kind: 'message', messageId: 'm4', role: 'agent', from: 'tests', round: 1, seq: 2, parts: [], stance: 'disagree',
+      failure: 'бэкенд завершился кодом 1',
+    });
+    const event = readEvents(result.journal.paths).find((entry) => entry.kind === 'review.message' && entry.message_id === 'm4');
+    assert.deepEqual(event?.kind === 'review.message' ? [event.invalid, event.failure] : [], [undefined, 'бэкенд завершился кодом 1']);
+    const aggPrompt = agg.invocations[0]?.prompt ?? '';
+    assert.match(aggPrompt, /### m4 — `tests`, раунд 1: disagree \(реплики нет — сбой: бэкенд завершился кодом 1; засчитана несогласием\)/);
+    assert.doesNotMatch(aggPrompt, /не прошла схему/);
+  });
+
   it('ревьюер без находок не участвует; консенсус двух оставшихся', async () => {
     const project = reviewRepo(['security', 'tests', 'architecture']);
     const security = scripted([findings('секрет'), agree('p2')]);
@@ -417,5 +510,46 @@ describe('review-discussion: агрегатор и бюджет', () => {
     assert.equal(agg.invocations.length, 0);
     assert.deepEqual(shape(feedOf(result).records).at(-1), 'no_consensus:budget');
     assert.ok(readEvents(result.journal.paths).some((event) => event.kind === 'review.no_consensus' && event.reason === 'budget'));
+  });
+});
+
+describe('review-discussion: переиспользование при возобновлении', () => {
+  it('переиспользованный шаг показывает ленту исходного прогона', async () => {
+    const project = reviewRepo(['security', 'tests']);
+    const backends = { 'rev-0': scripted([findings('секрет'), agree('p2')]), 'rev-1': scripted([findings('тест'), agree('p2')]), agg: verdict() };
+    const source = await run(project, backends);
+    assert.equal(source.status, 'success');
+
+    const expanded = expandPipeline({ pipelinePath: project.path('burnex.yml'), config: project.config });
+    const sourceRun = readSourceRun(source.journal.paths);
+    const plan = buildResumePlan({ expanded, config: project.config, source: sourceRun, changed: [], cwd: project.root });
+    assert.equal(plan.steps.find((entry) => entry.step === 'review-diff')?.decision.kind, 'reuse');
+    const resumed = await runPipeline({
+      expanded,
+      config: { ...project.config, runs: { ...project.config.runs, root: dirname(source.journal.paths.projectDir) } },
+      projectRoot: project.root,
+      cwd: project.root,
+      baseEnv: testBaseEnv(),
+      resume: { plan, source: sourceRun },
+      adapterFor: (name) => (backends[name as keyof typeof backends] as FakeBackend).adapter,
+    });
+    assert.equal(resumed.status, 'success');
+    assert.equal(backends.agg.invocations.length, 1);
+
+    const feed = readReviewFeed(resumed.journal.paths, 'review', 'review-diff');
+    assert.deepEqual(
+      feed?.entries.map((entry) => entry.kind),
+      ['findings', 'findings', 'round', 'message', 'message', 'outcome', 'verdict'],
+    );
+    assert.deepEqual(feed?.reusedFrom, { runId: source.journal.paths.runId, available: true });
+    assert.deepEqual(feed?.participants.map((participant) => participant.status), ['success', 'success', 'success']);
+
+    // Исходный прогон удалён: остаются вердикт и ссылка на источник.
+    rmSync(source.journal.paths.dir, { recursive: true, force: true });
+    const orphan = readReviewFeed(resumed.journal.paths, 'review', 'review-diff');
+    assert.deepEqual(orphan?.reusedFrom, { runId: source.journal.paths.runId, available: false });
+    assert.deepEqual(orphan?.entries.map((entry) => entry.kind), ['verdict']);
+    const verdictEntry = orphan?.entries[0];
+    assert.deepEqual(verdictEntry?.kind === 'verdict' ? verdictEntry.output : undefined, { verdict: 'APPROVED' });
   });
 });

@@ -70,6 +70,11 @@ export interface ReviewStepOptions<O extends ParticipantOutcome> {
    * перед агрегатором (`review-discussion`, решение 6).
    */
   readonly budgetStop?: () => O | undefined;
+  /**
+   * Возобновляется ли сессия участника — умеет ли его бэкенд сессии. Без
+   * значения — умеет.
+   */
+  readonly resumable?: (participant: ReviewParticipant) => boolean;
 }
 
 /** Лента обсуждения в каталоге шага (`review-discussion`, решение 1). */
@@ -151,6 +156,19 @@ async function discuss<O extends ParticipantOutcome>(
     return entry === undefined || 'failure' in entry ? [] : [{ reviewer, findings: entry.findings }];
   });
   const failures = findings.flatMap((entry) => ('failure' in entry ? [{ id: entry.id, failure: entry.failure }] : []));
+  const resumable = (reviewer: ReviewParticipant): boolean => options.resumable?.(reviewer) ?? true;
+  // Обсуждение без сессии доступно, но дороже и беднее: каждая реплика —
+  // новый процесс с полным контекстом. Журнал называет такого ревьюера.
+  if (participants.length >= 2) {
+    for (const { reviewer } of participants.filter(({ reviewer }) => !resumable(reviewer))) {
+      journal.event({
+        kind: 'backend.degraded',
+        backend: reviewer.agent,
+        capability: 'sessions',
+        detail: `ревьюер ${reviewer.id} шага ${options.job}/${step.id} обсуждает без сессии: каждая реплика несёт задание, контекст и всю ленту заново`,
+      });
+    }
+  }
 
   const result = await runDiscussion<O>({
     job: options.job,
@@ -158,6 +176,7 @@ async function discuss<O extends ParticipantOutcome>(
     maxMessages: step.maxMessages ?? 1,
     participants,
     concurrency: options.concurrency,
+    resumable,
     budgetLeft: () => options.budgetStop?.() === undefined,
     record: (record: DiscussionRecord) => journal.appendStepLine(options.stepDir, DISCUSSION_FILE, record),
     event: (input) => journal.event(input),
@@ -165,7 +184,7 @@ async function discuss<O extends ParticipantOutcome>(
       const dir = replyDir(options.stepDir, reviewer.id, round);
       mkdirSync(dir, { recursive: true });
       const checkPath = journal.writeStepJson(dir, 'reply-check.schema.json', check);
-      return runOne(options, reviewer, discussionReplyAgentStep(step, reviewer, prompt, checkPath), dir, round);
+      return runOne(options, reviewer, discussionReplyAgentStep(step, reviewer, prompt, checkPath, resumable(reviewer)), dir, round);
     },
   });
   if ('canceled' in result) return result.canceled;

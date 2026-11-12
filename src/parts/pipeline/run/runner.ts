@@ -70,7 +70,7 @@ import { computeWaitId, pipelineStepAddresses, toDecisionRecord } from './decisi
 import { carriedKey, collectPendingDecisions, type CarriedDecision } from './decisionCarry.js';
 import { waitForDecision } from './decisionWait.js';
 import type { ResumePlan, SourceRun, StepPlan } from './resumePlan.js';
-import { computeStepKey, upstreamForKey } from './stepKey.js';
+import { computeStepKey, stepBackendCommands, upstreamForKey } from './stepKey.js';
 import { prepareWorkspace, type PreparedWorkspace } from './workspace.js';
 import { syncLiveFiles, writebackLiveFiles } from './liveFiles.js';
 import { createWaitState } from './waitState.js';
@@ -2792,10 +2792,7 @@ async function runJobSteps(
         jobId: job.id,
         step: declaredStep,
         inputsFingerprint: fingerprint?.value,
-        backendCommand:
-          declaredStep.kind === 'agent'
-            ? context.config.backends[declaredStep.agent]?.command
-            : undefined,
+        ...stepBackendCommands(declaredStep, context.config.backends),
         // Порядок завершения работ у исполнителя свой, у планировщика
         // возобновления свой; общая функция приводит оба к одному виду.
         // Состав берётся по графу, а не по тому, что успело завершиться:
@@ -3630,20 +3627,22 @@ async function runAgentStep(
       env: (plan) => stepEnv(step, job, plan.attempt, context, stepDirPath),
       buildPrompt: (_plan, previousFailure) => {
         // Унаследованный контекст уходит в первое сообщение сессии: повторять
-        // агенту то, что он уже прочитал в этой же сессии, незачем.
+        // агенту то, что он уже прочитал в этой же сессии, незачем. Бэкенд без
+        // сессий не продолжает диалог: каждый его вызов — первое сообщение.
         const key = sessionKey(step.agent, step.session);
+        const resumes = adapter.capabilities.sessions;
         // Контекст пайплайна — один раз на диалог; контекст работы и выходы
         // предшественников — один раз на работу внутри диалога. У работы без
         // объявленной группы оба совпадают, и поведение прежнее.
-        const first = !context.pipelineContextSent.has(key);
-        const firstInJob = !jobContextSent.has(key);
+        const first = !resumes || !context.pipelineContextSent.has(key);
+        const firstInJob = !resumes || !jobContextSent.has(key);
         context.pipelineContextSent.add(key);
         jobContextSent.add(key);
         // Контекст профиля — по правилам общего контекста: один раз на диалог,
         // но для каждого профиля свой — шаги разных профилей в одной сессии
         // не делят его.
         const profileKey = step.profile === undefined ? undefined : `${key}\0profile:${step.profile}`;
-        const firstForProfile = profileKey !== undefined && !context.pipelineContextSent.has(profileKey);
+        const firstForProfile = profileKey !== undefined && (!resumes || !context.pipelineContextSent.has(profileKey));
         if (profileKey !== undefined) context.pipelineContextSent.add(profileKey);
 
         const interrupted = interruptedNotePending;
@@ -4035,6 +4034,7 @@ async function runReviewStep(
       context.usage.sealStep(job.id, step.id, participant.id);
       return runAgentStep(call, job, context, dir, context.sessions, sessionKey, jobContextSent, budgetScopes, changedPaths, participant.id);
     },
+    resumable: (participant) => adapterOf(participant.agent, context).capabilities.sessions,
     budgetStop: () => {
       const exceeded = context.usage.check(budgetScopes());
       return exceeded === undefined

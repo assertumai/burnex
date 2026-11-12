@@ -13,6 +13,8 @@ import {
   type UsageSnapshot,
 } from '../api';
 import { fmtDuration, fmtTokens } from '../format';
+import { TargetLink } from '../routeLink';
+import { declaration as runScreen } from '../../../src/parts/ui/screens/run/declaration.ts';
 import { Cost } from './Cost';
 import { FileView } from './FileView';
 import { StepOutput } from './StepOutput';
@@ -196,6 +198,7 @@ function EntryView({
               <Who participant={participant} id={entry.participant} />
               <Badge variant={stance.variant}>{stance.label}</Badge>
               {entry.invalid === true ? <Badge variant="destructive">reply failed the schema check</Badge> : null}
+              {entry.failure === undefined ? null : <Badge variant="destructive">reply failed: {entry.failure}</Badge>}
               <span className="kind review-counter" title="reviewer's messages used of the limit">
                 {entry.count}/{maxMessages ?? '?'}
               </span>
@@ -435,6 +438,7 @@ export function ReviewFeedView({
   asOf,
   selected,
   onSelect,
+  navigate = () => undefined,
 }: {
   readonly feed: ReviewFeed;
   readonly address: string;
@@ -445,6 +449,7 @@ export function ReviewFeedView({
   readonly asOf?: string | undefined;
   readonly selected: ReviewSelection | undefined;
   readonly onSelect: (selection: ReviewSelection | undefined) => void;
+  readonly navigate?: (href: string) => void;
 }): JSX.Element {
   const participants = new Map(feed.participants.map((participant) => [participant.id, participant]));
   const running = feed.participants.filter((participant) => participant.running);
@@ -463,6 +468,9 @@ export function ReviewFeedView({
   return (
     <div className="review-feed">
       <div className="review-chat">
+        {feed.reusedFrom === undefined ? null : (
+          <ReusedNotice runId={feed.reusedFrom.runId} available={feed.reusedFrom.available} address={address} navigate={navigate} />
+        )}
         {feed.legacy ? (
           <Alert className="review-legacy">
             <AlertDescription>
@@ -524,6 +532,37 @@ export function ReviewFeedView({
   );
 }
 
+/**
+ * Шаг переиспользован при возобновлении: лента — из исходного прогона, а если
+ * его уже нет, от неё остался вердикт.
+ */
+function ReusedNotice({
+  runId,
+  available,
+  address,
+  navigate,
+}: {
+  readonly runId: string;
+  readonly available: boolean;
+  readonly address: string;
+  readonly navigate: (href: string) => void;
+}): JSX.Element {
+  const projectKey = address.slice(0, address.lastIndexOf('/'));
+  return (
+    <Alert className="review-legacy">
+      <AlertDescription>
+        Reused from run{' '}
+        <TargetLink target={{ kind: 'screen', id: runScreen.id }} params={{ projectKey, runId }} navigate={navigate}>
+          {runId}
+        </TargetLink>
+        {available
+          ? ' — the discussion is shown from that run.'
+          : ' — that run is no longer available, so only the verdict is shown.'}
+      </AlertDescription>
+    </Alert>
+  );
+}
+
 /** Лента шага `review` с опросом демона, пока шаг идёт. */
 export function ReviewFeedPanel({
   address,
@@ -532,6 +571,7 @@ export function ReviewFeedPanel({
   pass,
   stepUsage,
   asOf,
+  navigate,
 }: {
   readonly address: string;
   readonly jobId: string;
@@ -539,6 +579,7 @@ export function ReviewFeedPanel({
   readonly pass?: number | undefined;
   readonly stepUsage?: UsageSnapshot | undefined;
   readonly asOf?: string | undefined;
+  readonly navigate?: (href: string) => void;
 }): JSX.Element {
   const [feed, setFeed] = useState<ReviewFeed | undefined>(undefined);
   const [error, setError] = useState<string | undefined>(undefined);
@@ -591,6 +632,7 @@ export function ReviewFeedPanel({
       asOf={asOf}
       selected={selected}
       onSelect={setSelected}
+      {...(navigate === undefined ? {} : { navigate })}
     />
   );
 }

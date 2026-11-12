@@ -29,15 +29,16 @@ const FINDINGS_INSTRUCTION = [
   'Файлы не правь: шаг review — про чтение.',
 ].join('\n');
 
-/** Промпт ревьюера: задача шага, затем его `focus`, затем требование схемы находок. */
-export function reviewerPrompt(step: ReviewStep, reviewer: ReviewParticipant): string {
-  return [
-    step.prompt,
-    reviewer.focus === undefined ? undefined : `## Твой фокус ревью\n\n${reviewer.focus}`,
-    FINDINGS_INSTRUCTION,
-  ]
+/** Задание ревьюера: задача шага, затем его `focus`. */
+export function reviewerTask(step: ReviewStep, reviewer: ReviewParticipant): string {
+  return [step.prompt, reviewer.focus === undefined ? undefined : `## Твой фокус ревью\n\n${reviewer.focus}`]
     .filter((part): part is string => part !== undefined && part !== '')
     .join('\n\n');
+}
+
+/** Промпт ревьюера: его задание, затем требование схемы находок. */
+export function reviewerPrompt(step: ReviewStep, reviewer: ReviewParticipant): string {
+  return [reviewerTask(step, reviewer), FINDINGS_INSTRUCTION].filter((part) => part !== '').join('\n\n');
 }
 
 /** Находки ревьюера либо причина, по которой их нет. */
@@ -71,7 +72,8 @@ export function aggregatorPrompt(step: ReviewStep, findings: readonly ReviewerFi
     .join('\n\n');
 }
 
-function participantStep(step: ReviewStep, participant: ReviewParticipant): Omit<AgentStep, 'prompt' | 'outputSchemaPath' | 'expect' | 'attempts'> {
+/** Общая часть вызова участника: бэкенд, модель, сессия, права, контекст шага и профиля. */
+export function participantStep(step: ReviewStep, participant: ReviewParticipant): Omit<AgentStep, 'prompt' | 'outputSchemaPath' | 'expect' | 'attempts'> {
   return {
     id: step.id,
     index: step.index,

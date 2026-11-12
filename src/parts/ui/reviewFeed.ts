@@ -1,11 +1,11 @@
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
-import { join, relative } from 'node:path';
+import { basename, dirname, join, relative } from 'node:path';
 
 import { readLockJobs, type LockReview, type LockReviewParticipant } from '../pipeline/document/lockRead.js';
 import { AGGREGATOR_ID } from '../pipeline/document/model.js';
 import { DISCUSSION_FILE, participantDir, replyDir } from '../pipeline/run/exec/reviewStep.js';
 import { findStepDir, isRunAlive, listLoopPasses, readUsageSoft } from '../pipeline/run/journal/reader.js';
-import { type RunPaths } from '../pipeline/run/journal/paths.js';
+import { runPaths, type RunPaths } from '../pipeline/run/journal/paths.js';
 import type { CostSource, StatusValue } from '../pipeline/run/journal/schema.js';
 import type {
   DiscussionRecord,
@@ -112,7 +112,10 @@ export type ReviewFeedEntry =
       readonly target?: ReviewFeedQuote;
       /** Реплики, на которые она отвечает. */
       readonly replyTo?: readonly ReviewFeedQuote[];
+      /** Реплики нет: дважды не прошла схему. */
       readonly invalid?: true;
+      /** Реплики нет: вызов сорвался — таймаут, отказ или ненулевой код бэкенда. */
+      readonly failure?: string;
     }
   | { readonly kind: 'round'; readonly round: number }
   | { readonly kind: 'failure'; readonly participant: string; readonly reason: string }
@@ -153,6 +156,12 @@ export interface ReviewFeed {
   readonly legacy: boolean;
   /** Дописывать больше нечего: шаг записан, прогон не жив либо проход прошлый. */
   readonly done: boolean;
+  /**
+   * Шаг переиспользован при возобновлении и в этом прогоне не исполнялся:
+   * лента прочитана из исходного прогона `runId`. `available: false` —
+   * исходного прогона (или шага в нём) больше нет, и от ленты остался вердикт.
+   */
+  readonly reusedFrom?: { readonly runId: string; readonly available: boolean };
 }
 
 export interface ReviewFeedQuery {
@@ -289,6 +298,39 @@ function lockReview(paths: RunPaths, jobId: string, stepId: string): LockReview 
   }
 }
 
+function reusedFromOf(stepDir: string): string | undefined {
+  return asString(asRecord(readJournalJson(join(stepDir, 'step.json')))?.reused_from);
+}
+
+/** Сколько переиспользований подряд прослеживается до исполнившего шаг прогона. */
+const MAX_REUSE_HOPS = 32;
+
+/**
+ * Откуда читать ленту переиспользованного шага: он в этом прогоне не
+ * исполнялся, и его участники и `discussion.ndjson` остались в исходном
+ * прогоне — а тот мог и сам переиспользовать шаг. Без `paths` исходного шага
+ * уже нет: прогон удалён или его каталог не найти.
+ */
+function reusedSource(
+  paths: RunPaths,
+  jobId: string,
+  stepId: string,
+  stepDir: string,
+): { readonly runId: string; readonly paths?: RunPaths; readonly stepDir?: string } | undefined {
+  const first = reusedFromOf(stepDir);
+  if (first === undefined) return undefined;
+  let runId = first;
+  for (let hop = 0; hop < MAX_REUSE_HOPS; hop += 1) {
+    const source = runPaths(dirname(paths.projectDir), basename(paths.projectDir), runId);
+    const sourceDir = findStepDir(source, jobId, stepId);
+    if (sourceDir === undefined) break;
+    const next = reusedFromOf(sourceDir);
+    if (next === undefined) return { runId: first, paths: source, stepDir: sourceDir };
+    runId = next;
+  }
+  return { runId: first };
+}
+
 export function readReviewFeed(
   paths: RunPaths,
   jobId: string,
@@ -298,13 +340,18 @@ export function readReviewFeed(
   const passes = listLoopPasses(paths, jobId);
   const lastPass = passes.at(-1);
   const pastPass = query.pass !== undefined && lastPass !== undefined && query.pass < lastPass;
-  const stepDir = findStepDir(paths, jobId, stepId, undefined, undefined, query.pass);
+  const ownDir = findStepDir(paths, jobId, stepId, undefined, undefined, query.pass);
   const strategy = lockReview(paths, jobId, stepId);
-  if (stepDir === undefined && strategy === undefined) return undefined;
+  if (ownDir === undefined && strategy === undefined) return undefined;
 
   const alive = !pastPass && isRunAlive(paths);
-  const stepFinished = stepDir !== undefined && existsSync(join(stepDir, 'step.json'));
+  const stepFinished = ownDir !== undefined && existsSync(join(ownDir, 'step.json'));
   const done = !alive || stepFinished;
+  const reused = ownDir === undefined ? undefined : reusedSource(paths, jobId, stepId, ownDir);
+  const stepDir = reused === undefined ? ownDir : reused.stepDir;
+  // Сырой поток вызова открывается по пути в каталоге этого прогона; файлы
+  // исходного прогона так не адресовать.
+  const stdoutOf = (path: string): JournalFileRef | undefined => (reused === undefined ? fileRef(paths.dir, path) : undefined);
 
   const reviewers = strategy !== undefined && strategy.reviewers.length > 0
     ? strategy.reviewers
@@ -314,7 +361,7 @@ export function readReviewFeed(
   const aggregator = strategy?.aggregator ?? { id: AGGREGATOR_ID };
   const mode = strategy?.mode === 'independent' || strategy?.mode === 'discussion' ? strategy.mode : undefined;
   const records = stepDir === undefined ? undefined : readDiscussion(join(stepDir, DISCUSSION_FILE));
-  const summary = readUsageSoft(paths).summary;
+  const summary = readUsageSoft(reused?.paths ?? paths).summary;
   const usageOf = summary?.jobs[jobId]?.steps[stepId]?.participants ?? {};
 
   const messages = (records ?? []).filter((record): record is MessageRecord => record.kind === 'message');
@@ -329,7 +376,7 @@ export function readReviewFeed(
     const firstRunning = dir !== undefined && existsSync(dir) && first === undefined && alive;
     const sessions: ReviewFeedSession[] = [];
     if (dir !== undefined && existsSync(dir)) {
-      const stdout = fileRef(paths.dir, join(dir, 'stdout.log'));
+      const stdout = stdoutOf(join(dir, 'stdout.log'));
       sessions.push({
         running: firstRunning,
         ...(first?.status === undefined ? {} : { status: first.status }),
@@ -346,7 +393,7 @@ export function readReviewFeed(
         const callRunning = call === undefined && alive;
         running ||= callRunning;
         wallclockMs += call?.wallclockMs ?? 0;
-        const stdout = fileRef(paths.dir, join(callDir, 'stdout.log'));
+        const stdout = stdoutOf(join(callDir, 'stdout.log'));
         sessions.push({
           round,
           running: callRunning,
@@ -457,6 +504,7 @@ export function readReviewFeed(
         ...(target === undefined ? {} : { target }),
         ...(replyTo.length === 0 ? {} : { replyTo }),
         ...(message.invalid === true ? { invalid: true as const } : {}),
+        ...(message.failure === undefined ? {} : { failure: message.failure }),
       });
     }
 
@@ -471,19 +519,19 @@ export function readReviewFeed(
 
   const judge = participants.find((participant) => participant.role === 'aggregator');
   if (judge !== undefined && judge.status !== undefined && stepDir !== undefined) {
-    const output = readJournalJson(join(participantDir(stepDir, judge.id), 'output.json'));
-    const record = asRecord(output);
-    const verdict = asString(record?.verdict);
-    const summaryText = asString(record?.summary);
-    entries.push({
-      kind: 'verdict',
-      participant: judge.id,
-      status: judge.status,
-      ...(judge.reason === undefined ? {} : { reason: judge.reason }),
-      ...(verdict === undefined ? {} : { verdict }),
-      ...(summaryText === undefined ? {} : { summary: summaryText }),
-      ...(output === undefined ? {} : { output }),
-    });
+    entries.push(verdictEntry(judge.id, judge.status, judge.reason, readJournalJson(join(participantDir(stepDir, judge.id), 'output.json'))));
+  } else if (reused !== undefined && stepDir === undefined && ownDir !== undefined) {
+    // Исходного прогона нет: вердикт — выход шага, перенесённый при
+    // переиспользовании, исход — его запись в этом прогоне.
+    const record = asRecord(readJournalJson(join(ownDir, 'step.json')));
+    entries.push(
+      verdictEntry(
+        aggregator.id,
+        asString(record?.status) as StatusValue | undefined,
+        asString(record?.reason),
+        readJournalJson(join(ownDir, 'output.json')),
+      ),
+    );
   }
 
   return {
@@ -494,6 +542,22 @@ export function readReviewFeed(
     proposals: proposalStatuses(proposalRecords, outcome),
     legacy,
     done,
+    ...(reused === undefined ? {} : { reusedFrom: { runId: reused.runId, available: stepDir !== undefined } }),
+  };
+}
+
+function verdictEntry(participant: string, status: StatusValue | undefined, reason: string | undefined, output: unknown): ReviewFeedEntry {
+  const record = asRecord(output);
+  const verdict = asString(record?.verdict);
+  const summary = asString(record?.summary);
+  return {
+    kind: 'verdict',
+    participant,
+    ...(status === undefined ? {} : { status }),
+    ...(reason === undefined ? {} : { reason }),
+    ...(verdict === undefined ? {} : { verdict }),
+    ...(summary === undefined ? {} : { summary }),
+    ...(output === undefined ? {} : { output }),
   };
 }
 

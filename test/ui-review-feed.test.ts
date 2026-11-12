@@ -215,6 +215,20 @@ describe('лента шага review', () => {
     assert.equal(invalid.stance, 'disagree');
   });
 
+  it('реплика, сорванная сбоем, — сообщение с причиной, не отметка схемы', () => {
+    const { journal, stepDir } = seed('discussion');
+    discussion(stepDir, [
+      { kind: 'proposal', id: 'p1', by: 'security', round: 0, content: findings('security') },
+      message('m1', 'security', 0, 1, { stance: 'propose', proposal: 'p1' }),
+      { kind: 'message', messageId: 'm2', role: 'agent', from: 'tests', round: 1, seq: 1, parts: [], stance: 'disagree', failure: 'бэкенд завершился кодом 1' },
+    ]);
+
+    const failed = readReviewFeed(journal.paths, 'review', 'check')?.entries.find((entry) => entry.kind === 'message');
+    assert.ok(failed?.kind === 'message');
+    assert.equal(failed.invalid, undefined);
+    assert.equal(failed.failure, 'бэкенд завершился кодом 1');
+  });
+
   it('режим independent: находки по выходам ревьюеров и вердикт без раундов', () => {
     const { journal, stepDir } = seed('independent');
     call(stepDir, 'security', { output: findings('security') });

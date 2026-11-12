@@ -12,6 +12,7 @@ import {
   ReviewStrategiesView,
   selectStrategy,
   StrategyEditor,
+  strategyChanged,
   strategyDocumentOf,
   strategyDraftOf,
   strategyRemovalConfirmation,
@@ -123,6 +124,18 @@ function editor(draft: StrategyDraft, problem?: { message: string; at?: string }
 describe('ui-review-strategies: черновик и документ', () => {
   it('нетронутая стратегия даёт тот же документ: запись не тронет файл', () => {
     assert.deepEqual(strategyDocumentOf(strategyDraftOf(PANEL_DOCUMENT), PANEL_DOCUMENT), PANEL_DOCUMENT);
+  });
+
+  it('нетронутая стратегия не изменена при любом порядке ключей в файле; правка — изменена', () => {
+    const shuffled = {
+      ...PANEL_DOCUMENT,
+      reviewers: PANEL_DOCUMENT.reviewers.map(({ id, agent, focus }) => ({ id, focus, agent })),
+      aggregator: { model_tier: 'max', agent: 'claude' },
+    };
+    assert.equal(strategyChanged(strategyDraftOf(shuffled), shuffled), false);
+    const draft = strategyDraftOf(shuffled);
+    assert.equal(strategyChanged({ ...draft, description: 'новое' }, shuffled), true);
+    assert.equal(strategyChanged(draft, undefined), true);
   });
 
   it('режим обсуждения пишет mode и discussion.max_messages, независимый снимает блок', () => {

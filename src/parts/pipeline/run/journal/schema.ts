@@ -908,6 +908,7 @@ export const EventSchema = z.discriminatedUnion('kind', [
     proposal: z.string().optional(),
     target: z.string().optional(),
     invalid: z.literal(true).optional(),
+    failure: z.string().optional(),
   }).strict(),
   z.object({ ...eventBase, kind: z.literal('review.consensus'), job: z.string(), step: z.string(), proposal: z.string() }).strict(),
   z.object({ ...eventBase, kind: z.literal('review.no_consensus'), job: z.string(), step: z.string(), reason: z.enum(['limit', 'stalled', 'budget', 'participants']) }).strict(),

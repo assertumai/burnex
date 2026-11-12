@@ -184,6 +184,28 @@ export function strategyDocumentOf(draft: StrategyDraft, original: Raw = {}): Re
   return document;
 }
 
+/**
+ * Есть ли в черновике несохранённые правки. Сравнение структурное: документ из
+ * черновика собирает ключи ревьюеров и агрегатора в своём порядке, и
+ * нетронутый файл с другим порядком ключей правкой не считается. Новая
+ * стратегия (`original` нет) — всегда правка.
+ */
+export function strategyChanged(draft: StrategyDraft, original: Raw | undefined): boolean {
+  return original === undefined || !sameValue(strategyDocumentOf(draft, original), original);
+}
+
+function sameValue(left: unknown, right: unknown): boolean {
+  if (left === right) return true;
+  if (Array.isArray(left) || Array.isArray(right)) {
+    return Array.isArray(left) && Array.isArray(right) && left.length === right.length && left.every((item, index) => sameValue(item, right[index]));
+  }
+  if (typeof left !== 'object' || typeof right !== 'object' || left === null || right === null) return false;
+  const a = left as Raw;
+  const b = right as Raw;
+  const keys = Object.keys(a);
+  return keys.length === Object.keys(b).length && keys.every((key) => Object.hasOwn(b, key) && sameValue(a[key], b[key]));
+}
+
 /** Схема хода ревью — этапы выбранного режима. */
 export function courseSteps(mode: ReviewModeChoice, maxMessages: number): readonly string[] {
   if (mode === 'discussion') {
@@ -763,7 +785,7 @@ export function ReviewStrategies({ name, onSelectName, navigate, confirm = (mess
   }, [selectedKey, creating]);
 
   const original = creating === undefined ? selected?.document : undefined;
-  const dirty = draft !== undefined && (original === undefined || JSON.stringify(strategyDocumentOf(draft, original)) !== JSON.stringify(original));
+  const dirty = draft !== undefined && strategyChanged(draft, original);
 
   const select = (strategy: StrategyView): void => {
     if (dirty && !confirm('Discard the unsaved changes?')) return;

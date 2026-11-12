@@ -34,6 +34,11 @@ export interface DiscussionOptions<O extends ParticipantOutcome> {
   /** Участники в порядке стратегии: ревьюеры, давшие находки. */
   readonly participants: readonly DiscussionParticipant[];
   readonly concurrency: number;
+  /**
+   * Возобновляется ли сессия ревьюера. Без сессии он не помнит прежних
+   * раундов, и каждая его реплика получает всю ленту.
+   */
+  readonly resumable: (reviewer: ReviewParticipant) => boolean;
   /** Позволяет ли бюджет шага новый раунд. */
   readonly budgetLeft: () => boolean;
   /** Записать запись ленты (`discussion.ndjson`). */
@@ -96,6 +101,7 @@ export async function runDiscussion<O extends ParticipantOutcome>(
       ...(record.proposal === undefined ? {} : { proposal: record.proposal }),
       ...(record.target === undefined ? {} : { target: record.target }),
       ...(record.invalid === true ? { invalid: true as const } : {}),
+      ...(record.failure === undefined ? {} : { failure: record.failure }),
     });
     return record;
   };
@@ -125,11 +131,16 @@ export async function runDiscussion<O extends ParticipantOutcome>(
 
     const check = replyCheckSchema([...proposals.keys()], messages.map((message) => message.messageId));
     const prompts = speakers.map(({ reviewer }) => {
-      const fresh = messages.slice(delivered.get(reviewer.id) ?? 0).filter((message) => message.from !== reviewer.id);
+      const resumed = options.resumable(reviewer);
+      const fresh = resumed
+        ? messages.slice(delivered.get(reviewer.id) ?? 0).filter((message) => message.from !== reviewer.id)
+        : messages;
       delivered.set(reviewer.id, messages.length);
       const own = positions.get(reviewer.id);
       return discussionReplyPrompt({
+        reviewer: reviewer.id,
         round,
+        resumed,
         fresh,
         proposals,
         ...(own === undefined ? {} : { own }),
@@ -159,7 +170,7 @@ export async function runDiscussion<O extends ParticipantOutcome>(
       const payload = outcome.status === 'success' ? (outcome.structured as ReplyPayload | undefined) : undefined;
       const message =
         payload === undefined
-          ? addMessage({ from: reviewer.id, round, seq, parts: [], stance: 'disagree', invalid: true })
+          ? addMessage({ from: reviewer.id, round, seq, parts: [], stance: 'disagree', ...missingReply(outcome) })
           : addMessage({
               from: reviewer.id,
               round,
@@ -182,6 +193,17 @@ export async function runDiscussion<O extends ParticipantOutcome>(
     if ([...remaining.values()].every((left) => left <= 0)) return noConsensus('limit');
     if (!changed) return noConsensus('stalled');
   }
+}
+
+/**
+ * Почему реплики нет: невалидна — последняя попытка отклонена только схемой
+ * реплики; иначе сбой вызова с его причиной.
+ */
+function missingReply(outcome: ParticipantOutcome): { readonly invalid: true } | { readonly failure: string } {
+  const failed = (outcome.results.at(-1) ?? []).filter((result) => !result.passed && result.hard);
+  return failed.length > 0 && failed.every((result) => result.predicate === 'schema')
+    ? { invalid: true }
+    : { failure: outcome.reason ?? `статус ${outcome.status}` };
 }
 
 function summaryOf(findings: unknown): string {
