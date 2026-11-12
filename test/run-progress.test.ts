@@ -383,7 +383,9 @@ describe('run-progress: расход в снимке растёт от шага 
   it('токены и цена во втором исходе шага больше, чем в первом', async () => {
     const project = makeProject({ 'burnex.yml': TWO_AGENT_STEPS });
     const fake = createFakeBackend({
-      lines: [initLine(), resultLine({ text: 'готово', tokensIn: 100, tokensOut: 20, costUsd: 0.25 })],
+      // Шаги работы продолжают одну сессию, а Claude сообщает цену нарастающей
+      // по сессии: каждый вызов стоит 0.25.
+      lines: (index) => [initLine(), resultLine({ text: 'готово', tokensIn: 100, tokensOut: 20, costUsd: 0.25 * (index + 1) })],
     });
     const runsRoot = tempDir('runs-');
     const snapshots: UsageSnapshot[] = [];

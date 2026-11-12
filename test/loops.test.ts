@@ -330,7 +330,9 @@ jobs:
 `,
     });
     const backend = createFakeBackend({
-      lines: () => [initLine(), resultLine({ text: 'ок', tokensIn: 10, tokensOut: 0, costUsd: 0.4 })],
+      // Шаги цикла продолжают одну сессию, а Claude сообщает цену нарастающей
+      // по сессии: каждый вызов стоит 0.4.
+      lines: (index) => [initLine(), resultLine({ text: 'ок', tokensIn: 10, tokensOut: 0, costUsd: 0.4 * (index + 1) })],
     });
     const result = await run(project, backend.adapter);
 

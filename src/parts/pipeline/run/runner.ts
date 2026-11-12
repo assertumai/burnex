@@ -2606,6 +2606,11 @@ async function runJobSteps(
       // под вопрос отказом сессии у бэкенда (design.md, решение 8).
       const carriedUsage = continuing.record.attempts.at(-1)?.usage;
       if (carriedUsage !== undefined) context.usage.carry(job.id, step.id, carriedUsage);
+      // Нарастающая цена сессии на конец оборванной попытки — от неё
+      // продолжение вычтет свою цену, а не запишет всю сессию заново.
+      if (carriedUsage?.session_cost_usd !== undefined) {
+        context.sessions.noteCost(continuing.sessionId, carriedUsage.session_cost_usd);
+      }
     }
 
     if (loopPass !== undefined) (context.loops.get(loopPass.loop.id) as LoopRuntime).executed = true;
@@ -4097,6 +4102,13 @@ function defenderChoice(step: ReviewStep, job: Job, context: RunContext): Defend
   if (declared?.kind !== 'agent' || record?.session === undefined) return freshChoice('no_session', text);
   const adapter = adapterOf(declared.agent, context);
   if (!adapter.capabilities.sessions || adapter.capabilities.forkSessions !== true) return freshChoice('no_fork', text);
+  // Форк сообщает цену вместе с исходной сессией. Имплементатор этого
+  // прогона уже отметил её в реестре; переиспользованный из исходного прогона
+  // — только в своей записи.
+  const implementerCost = record.attempts.at(-1)?.usage?.session_cost_usd;
+  if (implementerCost !== undefined && context.sessions.costOf(record.session) === undefined) {
+    context.sessions.noteCost(record.session, implementerCost);
+  }
   return {
     record: {
       kind: 'defender',
