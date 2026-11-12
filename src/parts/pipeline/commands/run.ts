@@ -154,9 +154,23 @@ export async function runRunCommand(
       (job) => job.workspace !== undefined && job.workspace.mode !== 'cwd',
     );
     if (isolated.length > 0) {
-      write('рабочие деревья:');
+      // Каталог принадлежит дереву, а не работе: работы одного дерева
+      // называются одной строкой (`named-workspace-trees`).
+      const byPath = new Map<string, { mode: string; tree?: string; jobs: string[] }>();
       for (const job of isolated) {
-        write(`  ${job.id} (${job.workspace?.mode}): ${job.workspace?.path}`);
+        const workspace = job.workspace as NonNullable<typeof job.workspace>;
+        const entry = byPath.get(workspace.path) ?? {
+          mode: workspace.mode,
+          ...(workspace.tree === undefined ? {} : { tree: workspace.tree }),
+          jobs: [],
+        };
+        entry.jobs.push(job.id);
+        byPath.set(workspace.path, entry);
+      }
+      write('рабочие деревья:');
+      for (const [path, entry] of byPath) {
+        const tree = entry.tree === undefined || entry.tree === 'own' ? '' : `дерево ${entry.tree}, `;
+        write(`  ${entry.jobs.join(', ')} (${tree}${entry.mode}): ${path}`);
       }
       write(`наложить результат на текущее дерево: burnex apply ${runId}`);
     }

@@ -1,52 +1,44 @@
 import { execFileSync } from 'node:child_process';
-import { cpSync, mkdirSync, readdirSync, realpathSync, rmSync, statSync } from 'node:fs';
-import { dirname, join, relative } from 'node:path';
+import { constants, copyFileSync, cpSync, existsSync, mkdirSync, readdirSync, realpathSync, rmSync, statSync } from 'node:fs';
+import { dirname, join, relative, resolve as resolvePath } from 'node:path';
 
-import { createAnchorer, detectAnchorKind } from '../domain/anchor/index.js';
+import { createAnchorer } from '../domain/anchor/index.js';
 import type { Anchor, AnchorKind, TreeAnchorer } from '../domain/anchor/index.js';
 import { loadIgnoreRules } from '../domain/anchor/ignore.js';
 import { isGitWorktree } from '../domain/anchor/git.js';
 import { BurnexError } from '../../../kernel/errors.js';
 import { buildGraph } from '../domain/graph.js';
-import type { Job, Pipeline, Workspace } from '../document/model.js';
+import type { Pipeline, Workspace } from '../document/model.js';
 import type { BookkeepingScope } from './bookkeeping.js';
-import {
-  potentialSeedSource,
-  workspaceInheritanceDiagnostics,
-  type InheritSource,
-} from './inherit.js';
+import { treeDiagnostics } from './trees.js';
 import { createScope } from './scope.js';
 import { addWorktree, removeWorktree } from './worktrees.js';
 
 /**
- * Рабочая директория работы.
+ * Рабочие каталоги прогона (`named-workspace-trees`).
  *
- * Раньше это было одно значение на прогон; теперь — значение на работу, потому
- * что режим объявляется на пайплайне и переопределяется работой. Рабочий
- * каталог передаётся дочерним процессам явным параметром: `process.chdir` в
- * движке с несколькими работами — источник трудноуловимых ошибок.
+ * Каталог принадлежит дереву, а не работе: дерево по умолчанию заводится в
+ * начале прогона, именованное — его голове, личное — своей работе. Здесь —
+ * механика заведения и снятия одного каталога; что и когда заводить, решает
+ * прогон (`runner.ts`) по раскладке из `run/trees.ts`.
  *
- * Журнал прогона в любом режиме лежит вне рабочего дерева. В режиме `copy`
- * копия живёт в `<run_dir>/workspace/<job>/`, а якорь снимается именно с неё,
- * а не с директории прогона целиком, — иначе запись журнала меняла бы `tree_id`.
+ * Журнал прогона в любом режиме лежит вне рабочего дерева. Рабочий каталог
+ * передаётся дочерним процессам явным параметром: `process.chdir` в движке с
+ * несколькими работами — источник трудноуловимых ошибок.
  */
-export interface PreparedWorkspace {
-  readonly mode: Workspace['mode'];
+export interface TreeDir {
   readonly dir: string;
-  /** Работа, чьё дерево унаследовано. Отсутствует у работы без наследования. */
-  readonly inheritedFrom?: string;
-  /** Каталог продолжен, а не заведён заново, — работа была в цепочке. */
-  readonly continued?: boolean;
   /**
    * Материализованные части дерева — объявленный каталог и репозиторий,
-   * которому он принадлежит, в каноническом порядке состава. Заполняется
-   * только в режиме `worktree`, только для работы, которая сама заводила
-   * дерево (не для продолжения цепочки: части предшественника уже на месте,
-   * и заводить их заново нечего).
+   * которому он принадлежит, в каноническом порядке состава. Только в режиме
+   * `worktree`: уборка снимает учётную запись каждой части адресно.
    */
   readonly nested?: readonly { readonly dir: string; readonly repo: string }[];
-  /** Прогон, у которого перенят этот каталог для продолжения оборванной сессии. */
-  readonly adoptedFrom?: string;
+}
+
+/** Рабочая директория работы, как её видит исполнение. */
+export interface PreparedWorkspace extends TreeDir {
+  readonly mode: Workspace['mode'];
 }
 
 function git(dir: string, args: readonly string[]): string {
@@ -160,59 +152,54 @@ function visibleFiles(root: string): string[] {
   return found;
 }
 
-export interface PrepareOptions {
-  readonly job: Job;
-  /** Каталог запуска: он же рабочая директория в режиме `cwd`. */
+/**
+ * Каталог дерева в раскладке (решение 7): `<base>/trees/<дерево>/` у общего,
+ * `<base>/jobs/<работа>/` у личного. `<base>` — объявленный `workspace.path`
+ * либо `<run_dir>/workspace`.
+ */
+export function treeDirPath(options: {
+  readonly runDir: string;
+  readonly path: string | undefined;
+  readonly shared?: string;
+  readonly job: string;
+}): string {
+  const base = options.path ?? join(options.runDir, 'workspace');
+  return options.shared === undefined ? join(base, 'jobs', options.job) : join(base, 'trees', options.shared);
+}
+
+/** Откуда наполняется заводимый каталог. */
+export type TreeSeed =
+  /** Исходное состояние проекта: `HEAD` начала прогона либо копия каталога запуска. */
+  | { readonly kind: 'none' }
+  /** Полный перенос каталога источника — отслеживаемое, неотслеживаемое и игнорируемое. */
+  | { readonly kind: 'copy'; readonly from: TreeDir }
+  /** Отступление: исходное состояние, приведённое к якорю источника. */
+  | { readonly kind: 'anchor'; readonly anchor: Anchor };
+
+export interface OpenTreeOptions {
+  readonly mode: Exclude<Workspace['mode'], 'cwd'>;
+  /** Путь заводимого каталога (`treeDirPath`). Существующий каталог по нему снимается и заводится заново. */
+  readonly dir: string;
+  /** Каталог запуска: репозиторий, чьей базой объектов заводятся деревья. */
   readonly cwd: string;
-  /** Директория прогона: место по умолчанию для рабочих копий. */
+  /** Директория прогона: инвариант снятия рабочих деревьев. */
   readonly runDir: string;
   /**
    * Куда писать отказ уборки за неудавшейся подготовкой. Обязателен: откат
    * снимает чужие рабочие деревья и учётные записи репозиториев, и отказ
-   * такого снятия обязан быть виден — раньше он проглатывался молча.
+   * такого снятия обязан быть виден.
    */
   readonly bookkeeping: BookkeepingScope;
-  /** Источник наследования, уже разрешённый (`resolveInheritSource`). */
-  readonly source?: InheritSource;
-  /** Способ фиксации якорей на этот прогон — нужен, чтобы засеять развилку. */
-  readonly anchorKind?: AnchorKind;
-  /** Каталог служебных файлов якорей прогона. */
-  readonly anchorsDir?: string;
-  /** Объявленный состав вложенных репозиториев (`project.nested_repos`), в каноническом порядке. */
+  readonly seed: TreeSeed;
+  /** Объявленный состав вложенных репозиториев (`project.nested_repos`). */
   readonly nestedRepos?: readonly string[];
   /** Коммиты начала прогона: `.` для корня и относительный путь для каждой части. */
   readonly sourceCommits?: Readonly<Record<string, string>>;
-  /**
-   * Каталог, перенятый у исходного прогона для продолжения оборванной сессии
-   * — назван планом возобновления (`ResumePlan.adoptWorkspace`). Перенимается
-   * вместо заведения своего каталога, только в режимах `worktree` и `copy` и
-   * только когда работа не наследует чужой каталог и не продолжает цепочку:
-   * в этих случаях каталог решает наследование, а не эта работа.
-   */
-  readonly adoptFrom?: {
-    readonly path: string;
-    readonly runId: string;
-    /**
-     * Части составного дерева, лежащие в перенимаемом каталоге. Переходят в
-     * запись перенявшей работы вместе с каталогом: перечень читает уборка
-     * (`collectRunWorktrees` в `run/cleanup.ts`), и без него учётные записи
-     * частей не снял бы никто — исходный прогон каталог бережёт, а
-     * перенявший о частях не знал бы.
-     */
-    readonly nested?: readonly { readonly dir: string; readonly repo: string }[];
-  };
-  /**
-   * Каталог, который эта же работа завела в прошлом проходе цикла. Заново его
-   * не заводят: `worktree add` в существующий путь отказал бы, а дерево
-   * прошлого прохода и есть то, что цикл продолжает. Засев из источника
-   * (`source.kind === 'seed'`) повторяется поверх него: источник — участник
-   * этого же прохода, и его дерево за проход изменилось. Действует, только
-   * когда работа не продолжает чужой каталог (`source.kind === 'continue'`).
-   */
-  readonly reuse?: {
-    readonly dir: string;
-    readonly nested?: readonly { readonly dir: string; readonly repo: string }[];
-  };
+  /** Способ фиксации якорей прогона и каталог их служебных файлов — для засева якорем. */
+  readonly anchorKind?: AnchorKind;
+  readonly anchorsDir?: string;
+  /** Область служебных файлов якоря засева. */
+  readonly anchorScope?: string;
   /** Подмена якоря: тесты подставляют поддельный, как и в `runner.ts`. */
   readonly anchorerFor?: (options: {
     readonly dir: string;
@@ -224,164 +211,157 @@ export interface PrepareOptions {
   }) => TreeAnchorer;
 }
 
-export async function prepareWorkspace(options: PrepareOptions): Promise<PreparedWorkspace> {
-  const { job, cwd, runDir, source } = options;
-  // Режим у работы уже разрешён при раскрытии: она либо объявила свой, либо
-  // унаследовала пайплайновый.
-  const workspace = job.workspace;
-
-  if (workspace.mode === 'cwd') return { mode: 'cwd', dir: cwd };
-
-  // Продолжение оборванной сессии: каталог исходного прогона перенимается
-  // как есть, а не заводится заново, — диалог помнит абсолютные пути именно
-  // этого дерева (design.md, решение 4), и дерево в нём не восстанавливается
-  // вовсе: перенятый каталог и есть то состояние, которое диалог оставил.
-  // Наследующая либо продолжающая чужую цепочку работа сюда не попадает: её
-  // каталог решает наследование, а не эта работа.
-  if (options.adoptFrom !== undefined && (source === undefined || source.kind === 'none')) {
-    return {
-      mode: workspace.mode,
-      dir: options.adoptFrom.path,
-      adoptedFrom: options.adoptFrom.runId,
-      ...(options.adoptFrom.nested === undefined
-        ? {}
-        : { nested: options.adoptFrom.nested.map((part) => ({ ...part })) }),
-    };
-  }
-
-  // Цепочка: каталог предшественника продолжается как есть — ничего не
-  // готовится и не восстанавливается, а неотслеживаемое содержимое (кеши
-  // сборки, зависимости) переходит дальше само.
-  if (source?.kind === 'continue') {
-    return { mode: workspace.mode, dir: source.dir, inheritedFrom: source.job, continued: true };
-  }
-
-  if (options.reuse !== undefined) {
-    const reused = options.reuse;
-    const reusedNested = reused.nested === undefined ? {} : { nested: reused.nested.map((part) => ({ ...part })) };
-    if (source?.kind !== 'seed') return { mode: workspace.mode, dir: reused.dir, ...reusedNested };
-    // Каталог принадлежит прошлому проходу и при отказе засева не снимается:
-    // отказ уходит наверх отказом подготовки, как и у свежезаведённого.
-    await seedWorkspace(options, reused.dir, (reused.nested ?? []).map((part) => part.dir), source.anchor);
-    return { mode: workspace.mode, dir: reused.dir, inheritedFrom: source.job, ...reusedNested };
-  }
-
-  const base = workspace.path ?? join(runDir, 'workspace');
-  const dir = join(base, job.id);
+/**
+ * Завести каталог дерева. Отказ на любом шаге снимает всё заведённое и уходит
+ * наверх как есть: работа отказывает прежним `spawn_failed`, и ни один её
+ * шаг не исполняется.
+ */
+export async function openTreeDir(options: OpenTreeOptions): Promise<TreeDir> {
+  const { mode, dir, cwd, runDir, seed } = options;
   // Канонический порядок состава — отсортированный, тот же, что у составного
-  // якоря (`anchor/composite.ts`). Он приводится здесь, а не берётся на веру у
-  // вызывающего: для вложенных друг в друга объявленных каталогов порядок
-  // значим — `worktree add` объемлющего (`a`) отказал бы «not an empty
+  // якоря (`anchor/composite.ts`): для вложенных друг в друга объявленных
+  // каталогов `worktree add` объемлющего (`a`) отказал бы «not an empty
   // directory», заведись раньше вложенный (`a/b`).
-  const nestedRepos = [...(options.nestedRepos ?? [])].sort();
-  const nested: { dir: string; repo: string }[] = [];
+  const nestedRepos = mode === 'worktree' ? [...(options.nestedRepos ?? [])].sort() : [];
+  const nested = nestedRepos.map((relDir) => ({ dir: relDir, repo: join(cwd, relDir) }));
+
+  // Каталог прошлого прохода цикла (или брошенный прежней попыткой)
+  // заводится заново: засев переносит состояние источника целиком.
+  if (existsSync(dir)) {
+    const failures = discardTreeDir({ mode, dir: { dir, nested }, cwd, runDir });
+    if (failures.length > 0) throw new BurnexError(`Прежний каталог дерева снять не удалось: ${failures.join('; ')}`);
+  }
 
   /**
    * Область подготовки: каждый заведённый каталог регистрирует своё снятие
-   * сразу после заведения. Отказ на любом шаге снимает область — и обратный
-   * порядок сам даёт правило «части в обратном порядке, затем корень»
-   * (design.md, решение 4): снять корень раньше частей означало бы убирать
-   * из-под них каталог, в котором они ещё числятся рабочими деревьями.
-   *
-   * При успехе область **отпускается**, а не снимается: изолированное дерево
-   * обязано пережить прогон (`workspace-modes`), и снять его вправе только
-   * `burnex gc`.
+   * сразу после заведения. Обратный порядок сам даёт правило «части в
+   * обратном порядке, затем корень». При успехе область отпускается: дерево
+   * обязано пережить прогон, и снять его вправе только `burnex gc`.
    */
   const preparation = createScope(options.bookkeeping);
-
   try {
-    if (workspace.mode === 'worktree') {
-      // Отделённый worktree от текущего HEAD: незакоммиченные изменения в него
-      // не попадают, а ветка проекта остаётся свободной.
-      const rootRef = options.sourceCommits?.['.'];
-      addWorktree({ repoDir: cwd, path: dir, ...(rootRef === undefined ? {} : { ref: rootRef }) });
-      preparation.defer('снятие рабочего дерева работы', () => {
+    if (mode === 'worktree') {
+      const from = seed.kind === 'copy' ? seed.from.dir : undefined;
+      addWorktree({
+        repoDir: cwd,
+        path: dir,
+        ref: headOf(from) ?? options.sourceCommits?.['.'] ?? 'HEAD',
+        noCheckout: from !== undefined,
+      });
+      preparation.defer('снятие рабочего дерева', () => {
         removeWorktree({ repoDir: cwd, path: dir, runDir });
       });
-
-      for (const relDir of nestedRepos) {
-        const repo = join(cwd, relDir);
+      for (const part of nested) {
         // Часть выкладывается из HEAD своего репозитория — не гитлинка корня
-        // и не рабочего дерева части: gitlink говорит о том, что корень
-        // помнит о части, а не о том, где она сейчас (design.md, решение 2).
-        // Родительский каталог мог не существовать (часть, которую корень
-        // игнорирует) или уже существовать пустым (часть под gitlink'ом) —
-        // `addWorktree` заводит его и принимает оба случая.
-        const partRef = options.sourceCommits?.[relDir];
+        // и не рабочего дерева части: gitlink говорит о том, что корень помнит
+        // о части, а не о том, где она сейчас.
+        const fromPart = from === undefined ? undefined : join(from, part.dir);
         addWorktree({
-          repoDir: repo,
-          path: join(dir, relDir),
-          ...(partRef === undefined ? {} : { ref: partRef }),
+          repoDir: part.repo,
+          path: join(dir, part.dir),
+          ref: headOf(fromPart) ?? options.sourceCommits?.[part.dir] ?? 'HEAD',
+          noCheckout: from !== undefined,
         });
-        preparation.defer(`снятие части ${relDir} рабочего дерева работы`, () => {
-          removeWorktree({ repoDir: repo, path: join(dir, relDir), runDir });
+        preparation.defer(`снятие части ${part.dir} рабочего дерева`, () => {
+          removeWorktree({ repoDir: part.repo, path: join(dir, part.dir), runDir });
         });
-        nested.push({ dir: relDir, repo });
+      }
+      if (from !== undefined) {
+        transferContent(from, dir, nestedRepos);
+        for (const relDir of ['.', ...nestedRepos]) {
+          transferIndex(join(from, relDir), join(dir, relDir));
+        }
       }
     } else {
       mkdirSync(dir, { recursive: true, mode: 0o700 });
-      preparation.defer('снятие рабочей копии работы', () => {
+      preparation.defer('снятие рабочей копии', () => {
         rmSync(dir, { recursive: true, force: true });
       });
-      for (const relativePath of visibleFiles(cwd)) {
-        const from = join(cwd, relativePath);
-        const to = join(dir, relativePath);
-        mkdirSync(dirname(to), { recursive: true, mode: 0o700 });
-        cpSync(from, to, { preserveTimestamps: true });
+      if (seed.kind === 'copy') {
+        transferContent(seed.from.dir, dir, []);
+      } else {
+        for (const relativePath of visibleFiles(cwd)) {
+          const to = join(dir, relativePath);
+          mkdirSync(dirname(to), { recursive: true, mode: 0o700 });
+          cpSync(join(cwd, relativePath), to, { preserveTimestamps: true, mode: constants.COPYFILE_FICLONE });
+        }
       }
     }
+
+    // Отступление к якорю: каталог заведён от исходного состояния и приведён
+    // к якорю источника тем же `restore`, что и возобновление — без
+    // наполовину приведённого дерева.
+    if (seed.kind === 'anchor') await restoreToAnchor(options, nestedRepos, seed.anchor);
   } catch (error) {
-    // Исходная причина уходит наружу как есть: работа отказывает прежним
-    // spawn_failed, новой причины остановки не заводится. Отказ самой уборки
-    // не подменяет её, а уходит в журнал событием `bookkeeping.failed`.
+    // Исходная причина уходит наружу как есть; отказ самой уборки не
+    // подменяет её, а уходит в журнал событием `bookkeeping.failed`.
     await preparation.dispose();
     throw error;
   }
-
-  const nestedField = nested.length === 0 ? {} : { nested };
-
-  // Развилка: каталог заведён как обычно (корень и части), но приведён к
-  // якорю источника — тем же `restore`, что и возобновление. Отказ здесь
-  // добирается до вызывающей стороны как отказ подготовки директории и не
-  // оставляет за собой ни наполовину приведённого дерева (гарантия
-  // `restore`), ни заведённого под него каталога: он убирается здесь же.
-  if (source?.kind === 'seed') {
-    try {
-      await seedWorkspace(options, dir, nestedRepos, source.anchor);
-    } catch (error) {
-      await preparation.dispose();
-      throw error;
-    }
-    preparation.release();
-    return { mode: workspace.mode, dir, inheritedFrom: source.job, ...nestedField };
-  }
-
   preparation.release();
-  return { mode: workspace.mode, dir, ...nestedField };
+  return nested.length === 0 ? { dir } : { dir, nested };
 }
 
-/** Привести каталог работы к якорю источника засева. */
-async function seedWorkspace(
-  options: PrepareOptions,
-  dir: string,
-  nestedRepos: readonly string[],
-  anchor: Anchor,
-): Promise<void> {
+/** Коммит, на котором стоит рабочее дерево `dir`, — если это рабочее дерево git. */
+function headOf(dir: string | undefined): string | undefined {
+  if (dir === undefined || !existsSync(join(dir, '.git'))) return undefined;
+  try {
+    return git(dir, ['rev-parse', 'HEAD']).trim();
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Перенести всё содержимое каталога источника — отслеживаемое,
+ * неотслеживаемое и игнорируемое, — кроме служебного `.git` корня и частей:
+ * он принадлежит рабочему дереву источника, а у заводимого свой. Фильтр
+ * игнорирования к засеву не применяется (решение 3). Файлы клонируются там,
+ * где файловая система умеет (`COPYFILE_FICLONE`: APFS, reflink), иначе
+ * копируются; символические ссылки переносятся как есть.
+ */
+function transferContent(from: string, to: string, nestedRepos: readonly string[]): void {
+  const skipped = new Set(['.', ...nestedRepos].map((relDir) => resolvePath(from, relDir, '.git')));
+  cpSync(from, to, {
+    recursive: true,
+    force: true,
+    preserveTimestamps: true,
+    verbatimSymlinks: true,
+    mode: constants.COPYFILE_FICLONE,
+    filter: (source) => !skipped.has(resolvePath(source)),
+  });
+}
+
+/**
+ * Индекс заводимого дерева — индекс источника, если источник — рабочее
+ * дерево git, иначе дерево коммита, от которого заведено: файлы уже лежат,
+ * и выкладка не нужна. Индексы лежат в общей базе объектов репозитория,
+ * поэтому копия индекса годна как есть; сведения о файлах git обновит сам.
+ */
+function transferIndex(from: string, to: string): void {
+  const index = (dir: string): string => git(dir, ['rev-parse', '--path-format=absolute', '--git-path', 'index']).trim();
+  if (existsSync(join(from, '.git')) && existsSync(index(from))) {
+    copyFileSync(index(from), index(to));
+    return;
+  }
+  git(to, ['read-tree', 'HEAD']);
+}
+
+/** Привести каталог к якорю источника засева. */
+async function restoreToAnchor(options: OpenTreeOptions, nestedRepos: readonly string[], anchor: Anchor): Promise<void> {
   if (options.anchorKind === undefined || options.anchorsDir === undefined) {
-    throw new BurnexError('Внутренняя ошибка: для засева развилки не передан способ фиксации якорей');
+    throw new BurnexError('Внутренняя ошибка: для засева якорем не передан способ фиксации якорей');
   }
   const anchorer = (options.anchorerFor ?? createAnchorer)({
-    dir,
+    dir: options.dir,
     stateDir: options.anchorsDir,
     kind: options.anchorKind,
-    scope: options.job.id,
+    scope: options.anchorScope ?? 'seed',
     repoDir: options.cwd,
     ...(nestedRepos.length === 0 ? {} : { nested: nestedRepos }),
   });
-  // Своя область, а не область подготовки: служебные файлы якоря живут
-  // ровно на время засева и снимаются при любом его исходе, а область
-  // подготовки при успехе отпускается — регистрация в ней означала бы
-  // индексный файл, переживший засев.
+  // Своя область, а не область подготовки: служебные файлы якоря живут ровно
+  // на время засева и снимаются при любом его исходе.
   const seeding = createScope(options.bookkeeping);
   seeding.defer('снятие служебных файлов якоря засева', () => {
     anchorer.dispose();
@@ -391,6 +371,33 @@ async function seedWorkspace(
   } finally {
     await seeding.dispose();
   }
+}
+
+/**
+ * Снять каталог дерева: части в обратном каноническом порядке, затем корень.
+ * Возвращает отказы снятия учётных записей — вызывающий решает, отказ это
+ * подготовки или учётная запись в журнал.
+ */
+export function discardTreeDir(options: {
+  readonly mode: Workspace['mode'];
+  readonly dir: TreeDir;
+  readonly cwd: string;
+  readonly runDir: string;
+}): string[] {
+  const { mode, dir, cwd, runDir } = options;
+  if (mode === 'cwd') return [];
+  if (mode === 'copy') {
+    rmSync(dir.dir, { recursive: true, force: true });
+    return [];
+  }
+  const failures: string[] = [];
+  for (const part of [...(dir.nested ?? [])].reverse()) {
+    const outcome = removeWorktree({ repoDir: part.repo, path: join(dir.dir, part.dir), runDir });
+    if (outcome.kind === 'record_kept') failures.push(outcome.reason);
+  }
+  const outcome = removeWorktree({ repoDir: cwd, path: dir.dir, runDir });
+  if (outcome.kind === 'record_kept') failures.push(outcome.reason);
+  return failures;
 }
 
 /**
@@ -412,17 +419,15 @@ export function checkWorkspaceAvailability(options: {
   const { pipeline, cwd, nestedRepos } = options;
   const workspaces = pipeline.jobs.map((job) => job.workspace);
 
-  // Те же четыре отказа, что и `burnex lint`: пайплайн, минующий линт,
+  // Те же отказы раскладки, что и `burnex lint`: пайплайн, минующий линт,
   // обязан отказать до первой работы, а не посреди прогона.
   const { graph } = buildGraph(pipeline);
-  const inheritanceProblem = workspaceInheritanceDiagnostics(pipeline, graph).find(
-    (diagnostic) => diagnostic.severity === 'error',
-  );
-  if (inheritanceProblem !== undefined) {
-    throw new BurnexError(inheritanceProblem.message, {
-      file: inheritanceProblem.file ?? pipeline.file,
-      ...(inheritanceProblem.at === undefined ? {} : { at: inheritanceProblem.at }),
-      ...(inheritanceProblem.hint === undefined ? {} : { hint: inheritanceProblem.hint }),
+  const treeProblem = treeDiagnostics(pipeline, graph).find((diagnostic) => diagnostic.severity === 'error');
+  if (treeProblem !== undefined) {
+    throw new BurnexError(treeProblem.message, {
+      file: treeProblem.file ?? pipeline.file,
+      ...(treeProblem.at === undefined ? {} : { at: treeProblem.at }),
+      ...(treeProblem.hint === undefined ? {} : { hint: treeProblem.hint }),
     });
   }
 
@@ -432,25 +437,6 @@ export function checkWorkspaceAvailability(options: {
       at: 'workspace.mode',
       hint: 'Вне репозитория доступен режим copy — он работает с незакоммиченными изменениями и без git',
     });
-  }
-
-  // Засев развилки требует якоря, хранящего содержимое дерева. Вне git состояние
-  // фиксируется хеш-манифестом, который содержимого не хранит и `restore` не
-  // умеет: работа, которой граф обещает чужое дерево, его не получит. Это видно
-  // до запуска — значит и отказывать надо здесь, а не отказом подготовки
-  // директории посреди прогона.
-  if (detectAnchorKind(cwd) === 'manifest') {
-    const seeding = pipeline.jobs.find((job) => potentialSeedSource(graph, job) !== undefined);
-    if (seeding !== undefined) {
-      throw new BurnexError(
-        `Работа ${seeding.id} наследует дерево работы, каталог которой не продолжает, а вне репозитория git это невозможно`,
-        {
-          file: seeding.source,
-          at: `jobs.${seeding.id}.workspace.inherit`,
-          hint: 'Вне git состояние фиксируется хеш-манифестом: он отвечает, изменилось ли дерево, но содержимого не хранит. Оставьте работе одну зависимость (тогда она продолжит её каталог) или объявите workspace.inherit: none',
-        },
-      );
-    }
   }
 
   for (const workspace of workspaces) {

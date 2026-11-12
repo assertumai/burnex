@@ -18,7 +18,7 @@ import { hasPredicateEvaluator, hasStepExecutor } from '../contract.js';
 import { availableNames, nativePredicateNames, nativeStepKindNames, type Registry } from '../../../kernel/registry.js';
 import { backendsInUse, describeSecretParamsIssue } from '../secrets/declaration.js';
 import { isGitWorktree } from './anchor/git.js';
-import { workspaceInheritanceDiagnostics } from '../run/inherit.js';
+import { jobTree, treeDiagnostics, treeKey } from '../run/trees.js';
 import { keyRejection, MAX_OUTPUT_KEYS, needsJobSegment } from '../run/jobOutputs.js';
 import {
   describeCopyRejection,
@@ -405,33 +405,36 @@ function checkSessionGroups(
       }
     }
 
-    // Рабочее дерево: у агента посреди диалога не должен смениться каталог.
-    // Первая работа группы своё дерево заводит — остальные обязаны его
-    // продолжить.
-    const inOrder = [...members].sort(
-      (left, right) =>
-        (graph.upstream.get(left.id)?.size ?? 0) - (graph.upstream.get(right.id)?.size ?? 0),
-    );
-    for (const job of inOrder.slice(1)) {
-      const first = inOrder[0]!;
-      if (job.workspace.inherit === 'none') {
+    // Рабочее дерево: у агента посреди диалога не должен смениться каталог
+    // (`named-workspace-trees`, решение 8). Работы группы обязаны идти в
+    // одном дереве: личное дерево и область `job` дают каждой свой каталог.
+    if (members.length < 2) continue;
+    if (pipeline.workspace.scope === 'job' && pipeline.workspace.mode !== 'cwd') {
+      for (const job of members) {
         push({
           severity: 'error',
-          message: `Работа ${job.id} в группе сессий ${name} заводит своё рабочее дерево`,
+          message: `Работа ${job.id} состоит в группе сессий ${name} при scope: job`,
           file: pipeline.file,
-          at: `jobs.${job.id}.workspace.inherit`,
-          hint: `Диалог продолжается в дереве работы ${first.id}: inherit: none сменил бы агенту каталог посреди сессии`,
+          at: `jobs.${job.id}.session_group`,
+          hint: 'При scope: job у каждой работы свой каталог, и диалог группы сменил бы агенту каталог посреди сессии: объявите scope: run или разведите работы по разным группам',
         });
       }
-      if (job.workspace.mode !== first.workspace.mode) {
-        push({
-          severity: 'error',
-          message: `Работы группы сессий ${name} объявляют разные режимы рабочего дерева: ${first.id} — ${first.workspace.mode}, ${job.id} — ${job.workspace.mode}`,
-          file: pipeline.file,
-          at: `jobs.${job.id}.workspace.mode`,
-          hint: 'Работы одного диалога обязаны видеть одно дерево',
-        });
-      }
+      continue;
+    }
+    const first = members[0] as Job;
+    for (const job of members.slice(1)) {
+      if (treeKey(job) === treeKey(first)) continue;
+      const own = jobTree(job).kind === 'own' ? job : jobTree(first).kind === 'own' ? first : undefined;
+      const modeDiffers = job.workspace.mode !== first.workspace.mode;
+      push({
+        severity: 'error',
+        message: modeDiffers
+          ? `Работы группы сессий ${name} объявляют разные режимы рабочего дерева: ${first.id} — ${first.workspace.mode}, ${job.id} — ${job.workspace.mode}`
+          : `Работы группы сессий ${name} исполняются в разных деревьях: ${first.id} — ${first.workspace.tree ?? 'cwd'}, ${job.id} — ${job.workspace.tree ?? 'cwd'}`,
+        file: pipeline.file,
+        at: modeDiffers ? `jobs.${job.id}.workspace.mode` : `jobs.${(own ?? job).id}.workspace.tree`,
+        hint: 'Работы одного диалога обязаны видеть одно дерево: объявите им одно workspace.tree',
+      });
     }
   }
 }
@@ -925,7 +928,25 @@ export function lintPipeline(expanded: ExpandedPipeline, given: LintOptions): Di
     }
   }
 
-  for (const diagnostic of workspaceInheritanceDiagnostics(pipeline, graph)) push(diagnostic);
+  for (const diagnostic of treeDiagnostics(pipeline, graph)) push(diagnostic);
+
+  // Форк защитника `defend` видит сессию имплементатора только в его каталоге:
+  // Claude хранит сессии по каталогу (`named-workspace-trees`, решение 8).
+  // В другом дереве защитник будет свежим — это не ошибка, но автор ждал форка.
+  for (const job of pipeline.jobs) {
+    for (const [index, step] of job.steps.entries()) {
+      if (step.kind !== 'review' || step.implementer === undefined) continue;
+      const implementer = graph.byId.get(step.implementer.job);
+      if (implementer === undefined || treeKey(implementer) === treeKey(job)) continue;
+      push({
+        severity: 'warning',
+        message: `Шаг ${job.id}/${step.id} называет имплементатора ${step.implementer.job}.${step.implementer.step} из другого рабочего дерева`,
+        file: job.source,
+        at: `jobs.${job.id}.steps.${index}.implementer`,
+        hint: `Работа ${implementer.id} идёт в дереве ${implementer.workspace.tree ?? 'cwd'}, а ${job.id} — в ${job.workspace.tree ?? 'cwd'}: форк сессии не найдёт каталога, и защитник будет свежим (other_tree). Поместите работы в одно дерево`,
+      });
+    }
+  }
 
   if (pipeline.workspace.mode === 'cwd' && pipeline.concurrency > 1) {
     push({

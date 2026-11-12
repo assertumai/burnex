@@ -59,7 +59,11 @@ import { bookkeep } from './bookkeeping.js';
 import { buildIterationNote, type IterationNoteTruncation } from './iterationNote.js';
 import { locateEngine, isEditableEngine, pinEngine, type EngineInfo, type EngineLocation } from './engine.js';
 import { HaltCause, type HaltCauseValue } from './halt.js';
-import { resolveInheritSource, type CompletedJob, type InheritSource } from './inherit.js';
+import { type CompletedJob as TreeCompletion } from './trees.js';
+
+/** Каталог и последний якорь завершившейся работы. */
+type CompletedJob = Omit<TreeCompletion, 'frozen'>;
+import { RunTrees } from './runTrees.js';
 import { builtinRegistry } from '../../builtin.js';
 import { DecisionHalt, hasStepExecutor, type StepKindDecisionRequest, type StepKindDecisionResult } from '../contract.js';
 import { contributionOwner, formerStepKindOwner, stepKindNames, type Registry } from '../../../kernel/registry.js';
@@ -72,7 +76,7 @@ import { carriedKey, collectPendingDecisions, type CarriedDecision } from './dec
 import { waitForDecision } from './decisionWait.js';
 import type { ResumePlan, SourceRun, StepPlan } from './resumePlan.js';
 import { computeStepKey, stepBackendCommands, upstreamForKey } from './stepKey.js';
-import { prepareWorkspace, type PreparedWorkspace } from './workspace.js';
+
 import { syncLiveFiles, writebackLiveFiles } from './liveFiles.js';
 import { createWaitState } from './waitState.js';
 import {
@@ -118,6 +122,8 @@ import type {
   StepRecord,
   Usage,
 } from './journal/schema.js';
+import { JOURNAL_FORMAT } from './journal/schema.js';
+import { sharedTreeOf, treeKey } from './trees.js';
 import { isRetryableJobOutcome, schedule, type JobOutcome, type LoopOutcome, type LoopPass } from './scheduler.js';
 
 /** Адрес запущенного в решении шага — с идентичностью попытки и итерации цикла. */
@@ -394,7 +400,8 @@ export async function runPipeline(options: RunOptions): Promise<RunResult> {
     ...(pipelineAddress === undefined ? {} : { pipeline_address: pipelineAddress }),
     lock_hash: lockHash,
     project_root: options.projectRoot,
-    workspace: pipeline.workspace,
+    journal_format: JOURNAL_FORMAT,
+    workspace: workspaceRecord(pipeline.workspace),
     anchor_kind: anchorKind,
     // Список пишется всегда, включая пустой: «плагинов не было» и «версия
     // движка о них не знала» — разные утверждения, и различать их читателю
@@ -470,6 +477,18 @@ export async function runPipeline(options: RunOptions): Promise<RunResult> {
   // Читается по зависимостям работы, а они к её началу уже отдали исход, —
   // одновременность соседей записи в карте не касается.
   const completedWorkspaces = new Map<string, CompletedJob>();
+  const trees = new RunTrees({
+    pipeline,
+    graph,
+    cwd: options.cwd,
+    journal,
+    anchorKind,
+    ...(config.project.nestedRepos === undefined ? {} : { nestedRepos: config.project.nestedRepos }),
+    sourceCommits,
+    completed: completedWorkspaces,
+    ...(options.resume === undefined ? {} : { resume: options.resume }),
+    ...(options.anchorerFor === undefined ? {} : { anchorerFor: options.anchorerFor }),
+  });
   // Цикл в ходе прогона: то, что планировщик не хранит, а исполнению и
   // состоянию нужно — начало первого прохода, дерево прошлого прохода, исход.
   const loops = new Map<string, LoopRuntime>(
@@ -535,6 +554,7 @@ export async function runPipeline(options: RunOptions): Promise<RunResult> {
     runCwd: options.cwd,
     graph,
     completedWorkspaces,
+    trees,
     loops,
     failureNote: { pending: options.resume === undefined ? undefined : previousFailureText(options.resume) },
     budgetExceededLatch: { value: undefined },
@@ -732,7 +752,7 @@ export async function runPipeline(options: RunOptions): Promise<RunResult> {
       pipeline: pipeline.name,
       lock_hash: lockHash,
       status,
-      workspace: pipeline.workspace,
+      workspace: workspaceRecord(pipeline.workspace),
       ...(options.resume === undefined
         ? {}
         : { resumed_from: options.resume.source.manifest.run_id }),
@@ -813,6 +833,8 @@ export async function runPipeline(options: RunOptions): Promise<RunResult> {
     carryOverRunDir(options.resume, journal);
     carryOverDecisions(options.resume, journal, carriedDecisions);
   }
+  // Дерево по умолчанию — до первой работы, от исходного состояния.
+  await trees.openDefault();
 
   writeStatus('running', true);
 
@@ -844,6 +866,9 @@ export async function runPipeline(options: RunOptions): Promise<RunResult> {
       // Потолок конфигурации применяет сам прогон: линт отклоняет превышение,
       // но прогон не обязан полагаться на то, что линт был.
       concurrency: Math.min(pipeline.concurrency, config.limits.concurrency),
+      // Дерево — ресурс: в общем дереве одновременно идёт одна работа
+      // (`named-workspace-trees`, решение 4).
+      treeOf: sharedTreeOf,
       signal: runController.signal,
       scopeExtras: { run: { id: journal.paths.runId, dir: journal.paths.dir }, env: {} },
       // Данные берутся из записи работы, а не читаются с диска заново: движок
@@ -893,6 +918,7 @@ export async function runPipeline(options: RunOptions): Promise<RunResult> {
         },
       },
       onSettled: async (job, outcome) => {
+        trees.settledWithoutRun(job.id);
         const record = records.get(job.id) as JobRecord;
         records.set(job.id, {
           ...record,
@@ -913,6 +939,7 @@ export async function runPipeline(options: RunOptions): Promise<RunResult> {
       },
       });
   } finally {
+    trees.disposeUnused();
     await runResources.dispose();
   }
 
@@ -1063,8 +1090,10 @@ export interface RunContext extends RunOptions {
   readonly runCwd: string;
   /** Граф работ: наследованию нужны зависимости и число потомков. */
   readonly graph: Graph;
-  /** Каталог и последний якорь уже завершившихся работ — источник наследования. */
+  /** Каталог и последний якорь уже завершившихся работ — источник засева. */
   readonly completedWorkspaces: Map<string, CompletedJob>;
+  /** Деревья прогона: каталог каждого дерева, его засев и перенимание (`run/runTrees.ts`). */
+  readonly trees: RunTrees;
   /** Циклы прогона по идентификатору; без объявленных циклов пусто. */
   readonly loops: ReadonlyMap<string, LoopRuntime>;
   /**
@@ -1442,9 +1471,11 @@ async function executeJob(
   // работа ещё не начиналась.
   context.refreshStatus();
 
+  context.trees.begin(declared.id);
   try {
     return await runJob(declared, scope, context, resources);
   } finally {
+    context.trees.end(declared.id);
     // Пустой каталог черновиков не несёт материала для разбора и не должен
     // копиться в раскладке прогона годами; непустой остаётся — в нём мог лечь
     // след отказа. Отказ любой обратной операции области — учётная операция,
@@ -1478,43 +1509,12 @@ async function runJob(
   // запустить негде, — это `spawn_failed` из закрытого перечня, а не новая
   // причина остановки.
   const loopPass = context.loopPass;
-  // Перенос данных и дерева по плану возобновления относится к первому проходу:
+  // Перенос данных по плану возобновления относится к первому проходу:
   // проход N > 1 строится на дереве прошлого, а не на сохранённом исходным прогоном.
   const firstPass = (loopPass?.iteration ?? 1) === 1;
-  const inherited = resolveInheritSource(context.graph, job, context.completedWorkspaces);
-  const source = loopPass === undefined || firstPass ? inherited : loopPassSource(context, job, loopPass, inherited);
-  // Участник цикла в проходе N > 1 заново каталог не заводит: его каталог
-  // с прошлого прохода есть, и `worktree add` в него отказал бы.
-  const previousWorkspace = firstPass ? undefined : context.records.get(job.id)?.workspace;
-  const adoptWorkspace = context.resume?.plan.adoptWorkspace.find((item) => item.job === job.id);
-  let prepared: PreparedWorkspace;
+  let placement;
   try {
-    prepared = await prepareWorkspace({
-      job,
-      cwd: context.cwd,
-      runDir: journal.paths.dir,
-      bookkeeping: { journal, job: job.id },
-      source,
-      anchorKind: context.anchorKind,
-      anchorsDir: journal.paths.anchors,
-      ...(context.config.project.nestedRepos === undefined
-        ? {}
-        : { nestedRepos: context.config.project.nestedRepos }),
-      sourceCommits: context.sourceCommits,
-      ...(context.anchorerFor === undefined ? {} : { anchorerFor: context.anchorerFor }),
-      ...(previousWorkspace === undefined
-        ? {}
-        : { reuse: { dir: previousWorkspace.path, ...(previousWorkspace.nested === undefined ? {} : { nested: previousWorkspace.nested }) } }),
-      ...(adoptWorkspace === undefined || context.resume === undefined
-        ? {}
-        : {
-            adoptFrom: {
-              path: adoptWorkspace.path,
-              runId: context.resume.source.manifest.run_id,
-              ...(adoptWorkspace.nested === undefined ? {} : { nested: adoptWorkspace.nested }),
-            },
-          }),
-    });
+    placement = await context.trees.place(job, loopPass === undefined || firstPass ? undefined : loopReseed(context, job, loopPass));
   } catch (error) {
     const detail = error instanceof Error ? error.message : String(error);
     return {
@@ -1523,40 +1523,17 @@ async function runJob(
       cause: HaltCause.spawnFailed,
     };
   }
+  const prepared = placement.prepared;
 
   context.records.set(job.id, {
     ...(context.records.get(job.id) as JobRecord),
-    workspace: {
-      mode: prepared.mode,
-      path: prepared.dir,
-      ...(prepared.inheritedFrom === undefined ? {} : { inherited_from: prepared.inheritedFrom }),
-      ...(prepared.continued === undefined ? {} : { continued: prepared.continued }),
-      ...(prepared.adoptedFrom === undefined ? {} : { adopted_from: prepared.adoptedFrom }),
-      // Пишется здесь, до первого шага, а не по завершении работы: уборка
-      // обязана быть полной и после отказа, отмены и остановки по бюджету —
-      // то есть именно тогда, когда «по завершении» не наступает.
-      ...(prepared.nested === undefined ? {} : { nested: prepared.nested.map((part) => ({ ...part })) }),
-    },
+    workspace: placement.record,
   });
   // И на диск — сразу, а не вместе с исходом первого шага: перечень читает
   // уборка (`collectRunWorktrees` в `run/cleanup.ts`), и прогон, убитый между
   // подготовкой дерева и концом первого шага, оставил бы учётные записи
   // частей в чужих репозиториях — ровно ту утечку, ради которой заведён учёт.
   context.refreshStatus();
-
-  if (prepared.inheritedFrom !== undefined) {
-    journal.event({
-      kind: 'workspace.inherited',
-      job: job.id,
-      source: prepared.inheritedFrom,
-      via: prepared.continued === true ? 'continue' : 'seed',
-    });
-  }
-
-  // Дерево работы приводится к состоянию переиспользованных шагов сразу после
-  // подготовки: раньше каталога нет, позже его уже читают шаги и предикаты
-  // `until`.
-  if (firstPass) restoreJobWorkspace(context, job, prepared);
 
   try {
     const lateEnv = substitutableEnv(declared.env, context);
@@ -1796,13 +1773,17 @@ async function runJob(
     if (openAttempt !== undefined) closeAttempt(openAttempt, errored);
     return startedAttempts === 0 ? errored : finishAttempts(errored, startedAttempts);
     } finally {
-    // Каталог и последний якорь записываются независимо от исхода: наследник
+    // Каталог и последний якорь записываются независимо от исхода: голова
     // может продолжить дерево даже упавшей работы, а работа без единого
-    // снятого якоря пропускается по цепочке (`resolveInheritSource`).
+    // снятого якоря пропускается по цепочке (`resolveSeedSource`). Каталоги
+    // голов, ждущих эту работу, заводятся здесь же — до того, как её дерево
+    // получит следующая работа: планировщик держит дерево занятым, пока
+    // исполнение не вернуло исход.
     context.completedWorkspaces.set(job.id, {
       dir: prepared.dir,
       ...(anchorState.lastAnchor === undefined ? {} : { anchor: anchorState.lastAnchor }),
     });
+    await context.trees.completed(job);
     }
   })();
 
@@ -1859,18 +1840,19 @@ function resumeTarget(pipeline: Pipeline, graph: Graph, jobId: string): string {
 }
 
 /**
- * Источник дерева участника в проходе N > 1. Точка входа наследует дерево
- * выхода прошлого прохода — последнего участника, у которого оно есть, —
- * а не своего внешнего источника: починка правит то, что проверка найдёт в
- * следующем проходе. Прочие участники наследуют как обычно, внутри прохода.
+ * Источник дерева точки входа цикла в проходе N > 1: дерево выхода прошлого
+ * прохода — последнего участника, у которого оно есть, — а не её внешний
+ * источник: починка правит то, что проверка найдёт в следующем проходе.
+ * Точка входа в общем дереве его и так продолжает; заново засевается только
+ * заводящая свой каталог (`RunTrees.place`).
  */
-function loopPassSource(context: RunContext, job: Job, pass: LoopPass, resolved: InheritSource): InheritSource {
+function loopReseed(context: RunContext, job: Job, pass: LoopPass): { job: string; dir: string } | undefined {
   const runtime = context.loops.get(pass.loop.id);
-  if (runtime === undefined || job.workspace.mode === 'cwd') return resolved;
-  if (!loopEntryPoints(context.graph, pass.loop).some((entry) => entry.id === job.id)) return resolved;
+  if (runtime === undefined || job.workspace.mode === 'cwd') return undefined;
+  if (!loopEntryPoints(context.graph, pass.loop).some((entry) => entry.id === job.id)) return undefined;
   const exit = loopExit(context.graph, pass.loop, (id) => runtime.previous.has(id));
   const tree = exit === undefined ? undefined : runtime.previous.get(exit.id);
-  return exit === undefined || tree === undefined ? resolved : { kind: 'continue', job: exit.id, dir: tree.dir };
+  return exit === undefined || tree === undefined ? undefined : { job: exit.id, dir: tree.dir };
 }
 
 /**
@@ -4029,7 +4011,7 @@ async function runReviewStep(
   // `step.json` участника (`review-defend`, решение 3).
   let choice: DefenderChoice | undefined;
   const chooseDefender = (): DefenderChoice => {
-    choice = defenderChoice(step, context);
+    choice = defenderChoice(step, job, context);
     for (const reviewer of step.reviewers) forget(sessionKey(choice.participant.agent, defenderSession(step, reviewer.id)));
     return choice;
   };
@@ -4083,7 +4065,7 @@ async function runReviewStep(
  * переиспользованного при `resume`, она перенесена из исходного прогона
  * вместе с `session`. Иначе — свежий агент `defender` стратегии с причиной.
  */
-function defenderChoice(step: ReviewStep, context: RunContext): DefenderChoice {
+function defenderChoice(step: ReviewStep, job: Job, context: RunContext): DefenderChoice {
   const fresh = step.defender ?? (step.aggregator as ReviewParticipant);
   const freshParticipant: ReviewParticipant = { ...fresh, id: DEFENDER_ID };
   const ref = step.implementer;
@@ -4101,6 +4083,15 @@ function defenderChoice(step: ReviewStep, context: RunContext): DefenderChoice {
     ...(text === undefined ? {} : { implementerText: text }),
   });
   if (ref === undefined || implementer === undefined) return freshChoice('no_implementer');
+
+  // Claude хранит сессии по каталогу: форк из чужого дерева не нашёл бы
+  // сессии имплементатора (`named-workspace-trees`, решение 8). Другое
+  // дерево — обычный исход, а не сбой хода.
+  const implementerJob = context.graph.byId.get(ref.job);
+  if (implementerJob !== undefined && treeKey(implementerJob) !== treeKey(job)) {
+    const record = context.records.get(ref.job)?.steps.find((candidate) => candidate.id === ref.step);
+    return freshChoice('other_tree', record === undefined ? undefined : implementerText(context, ref.job, ref.step, record));
+  }
 
   const declared = context.expanded.pipeline.jobs.find((job) => job.id === ref.job)?.steps.find((candidate) => candidate.id === ref.step);
   const record = context.records.get(ref.job)?.steps.find((candidate) => candidate.id === ref.step);
@@ -4808,40 +4799,6 @@ function restoreForResume(
   });
 }
 
-/**
- * Привести рабочий каталог работы изолированного режима к состоянию, на
- * котором остановилось переиспользование её шагов.
- *
- * Возобновление заводит новое дерево (`worktree` — от HEAD проекта, `copy` —
- * копией каталога запуска), а переиспользованный шаг в нём не исполняется и
- * ничего не пишет: без этого восстановления переисполняемый шаг и предикаты
- * `until` работы увидели бы дерево без единой правки предшественников —
- * проверка гоняла бы код, которого там нет.
- *
- * Перенятый каталог (продолжение оборванной сессии) не трогается: он и есть
- * то состояние, которое диалог оставил (design.md, решение 4).
- */
-function restoreJobWorkspace(context: RunContext, job: Job, prepared: PreparedWorkspace): void {
-  if (prepared.mode === 'cwd' || prepared.adoptedFrom !== undefined) return;
-  const restore = context.resume?.plan.restoreWorkspace.find((item) => item.job === job.id);
-  if (restore === undefined) return;
-
-  restoreTree({
-    journal: context.journal,
-    dir: prepared.dir,
-    // Своя область на работу: индексный файл якоря у параллельных дорожек
-    // общим быть не может.
-    scope: `resume:${job.id}`,
-    anchorKind: context.anchorKind,
-    repoDir: context.cwd,
-    ...(context.config.project.nestedRepos === undefined
-      ? {}
-      : { nestedRepos: context.config.project.nestedRepos }),
-    anchor: restore.anchor,
-    paths: restore.paths,
-  });
-}
-
 /** Общая механика обоих восстановлений: якорь, пути, каталог — и мягкий отказ. */
 function restoreTree(options: {
   readonly journal: RunJournal;
@@ -4952,3 +4909,13 @@ function takeFailureNote(
 }
 
 export { isBurnexError };
+
+/** Объявление рабочей директории пайплайна для манифеста и состояния. */
+function workspaceRecord(workspace: Pipeline['workspace']): RunManifest['workspace'] {
+  return {
+    mode: workspace.mode,
+    ...(workspace.path === undefined ? {} : { path: workspace.path }),
+    ...(workspace.scope === undefined ? {} : { scope: workspace.scope }),
+    ...(workspace.trees === undefined ? {} : { trees: [...workspace.trees] }),
+  };
+}

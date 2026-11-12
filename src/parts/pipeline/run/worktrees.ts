@@ -30,6 +30,12 @@ export interface AddWorktreeOptions {
   readonly path: string;
   /** Коммит или ссылка, из которой выкладывается дерево. По умолчанию HEAD. */
   readonly ref?: string;
+  /**
+   * Не выкладывать файлы: дерево заводится пустым, без индекса. Нужно засеву
+   * полным переносом (`run/workspace.ts`): файлы и индекс приходят из
+   * каталога источника, и выкладка из коммита была бы лишней работой.
+   */
+  readonly noCheckout?: boolean;
 }
 
 /**
@@ -43,7 +49,15 @@ export function addWorktree(options: AddWorktreeOptions): void {
   mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
   // Отделённый worktree от текущего HEAD: незакоммиченные изменения в него не
   // попадают, а ветка репозитория остаётся свободной.
-  git(repoDir, ['worktree', 'add', '--detach', '--quiet', path, options.ref ?? 'HEAD']);
+  git(repoDir, [
+    'worktree',
+    'add',
+    '--detach',
+    '--quiet',
+    ...(options.noCheckout === true ? ['--no-checkout'] : []),
+    path,
+    options.ref ?? 'HEAD',
+  ]);
 }
 
 export interface RemoveWorktreeOptions {

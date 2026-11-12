@@ -489,7 +489,16 @@ export function buildDocumentSchemas(
     })
     .strict();
 
+  /**
+   * Область и деревья объявляются только пайплайном (`named-workspace-trees`,
+   * решение 1): у работы их нет, и `.strict()` её блока их отклоняет. Имя
+   * дерева — слаг, как имя цикла: из него собирается каталог
+   * `<base>/trees/<дерево>/`.
+   */
+  const TreeNameSchema = z.string().regex(LOOP_NAME_PATTERN, 'имя дерева — слаг: строчные буквы, цифры и дефисы');
   const PipelineWorkspaceSchema = WorkspaceSchema.extend({
+    scope: z.enum(['run', 'job']).optional(),
+    trees: z.array(TreeNameSchema).min(1).optional(),
     source: z.literal('commit').optional(),
     preserve_local_changes: z.boolean().optional(),
     live_files: z.array(LiveFileSchema).optional(),
@@ -503,6 +512,7 @@ export function buildDocumentSchemas(
    */
   const JobWorkspaceSchema = WorkspaceSchema.extend({
     inherit: z.string().optional(),
+    tree: TreeNameSchema.optional(),
   });
 
   /**

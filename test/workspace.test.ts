@@ -9,12 +9,14 @@ import { buildGraph } from '../src/parts/pipeline/domain/graph.js';
 import type { Config } from '../src/parts/pipeline/config/resolve.js';
 import { expandPipeline } from '../src/parts/pipeline/document/expand.js';
 import { readEvents, readStatus, resolveRun } from '../src/parts/pipeline/run/journal/reader.js';
-import { resolveInheritSource, type CompletedJob } from '../src/parts/pipeline/run/inherit.js';
+import { resolveSeedSource, treeDiagnostics, type CompletedJob } from '../src/parts/pipeline/run/trees.js';
 import { runPipeline, type RunResult } from '../src/parts/pipeline/run/runner.js';
 import { BurnexError } from '../src/kernel/errors.js';
 import { applyRun } from '../src/parts/pipeline/run/apply.js';
 import { HaltCause } from '../src/parts/pipeline/run/halt.js';
-import { prepareWorkspace } from '../src/parts/pipeline/run/workspace.js';
+import { openTreeDir, treeDirPath } from '../src/parts/pipeline/run/workspace.js';
+import type { Job } from '../src/parts/pipeline/document/model.js';
+import type { BookkeepingScope } from '../src/parts/pipeline/run/bookkeeping.js';
 import { RunJournal } from '../src/parts/pipeline/run/journal/writer.js';
 import { gitCommit, gitInit as gitInitDir, makeProject, type Project } from './helpers.js';
 import { tempDir } from './tmp.js';
@@ -114,142 +116,172 @@ async function waitForJobOutcome(
   }
 }
 
-const DONE = (dir: string): CompletedJob => ({ dir, anchor: { kind: 'git', id: dir } });
-const NOT_STARTED = (dir: string): CompletedJob => ({ dir });
+const DONE = (dir: string, frozen = false): CompletedJob => ({ dir, anchor: { kind: 'git', id: dir }, frozen });
 
-describe('dependent-job-workspace: разрешение источника наследования', () => {
-  it('единственная зависимость выбирается сама', () => {
+/** Каталог работы от исходного состояния — как его заводит прогон для личного дерева. */
+function prepareWorkspace(options: {
+  readonly job: Job;
+  readonly cwd: string;
+  readonly runDir: string;
+  readonly bookkeeping: BookkeepingScope;
+  readonly nestedRepos?: readonly string[];
+  readonly sourceCommits?: Readonly<Record<string, string>>;
+}) {
+  return openTreeDir({
+    mode: options.job.workspace.mode as 'worktree' | 'copy',
+    dir: treeDirPath({ runDir: options.runDir, path: options.job.workspace.path, job: options.job.id }),
+    cwd: options.cwd,
+    runDir: options.runDir,
+    bookkeeping: options.bookkeeping,
+    seed: { kind: 'none' },
+    ...(options.nestedRepos === undefined ? {} : { nestedRepos: options.nestedRepos }),
+    ...(options.sourceCommits === undefined ? {} : { sourceCommits: options.sourceCommits }),
+  });
+}
+
+function pipelineOf(yaml: string) {
+  const project = makeProject({ 'burnex.yml': yaml });
+  return expandPipeline({ pipelinePath: project.path('burnex.yml'), config: project.config }).pipeline;
+}
+
+describe('named-workspace-trees: источник засева и раскладка', () => {
+  const exists = (): boolean => true;
+
+  it('единственная зависимость — источник; личное дерево переносится копией каталога', () => {
     const graph = graphOf(`
 kind: pipeline
-workspace: { mode: worktree }
+workspace: { mode: worktree, scope: job }
 jobs:
   a: { steps: [{ id: c, run: [echo, a] }] }
   b: { needs: [a], steps: [{ id: c, run: [echo, b] }] }
 `);
-    const source = resolveInheritSource(graph, graph.byId.get('b')!, new Map([['a', DONE('/a')]]));
-    assert.deepEqual(source, { kind: 'continue', job: 'a', dir: '/a' });
+    const source = resolveSeedSource(graph, graph.byId.get('b')!, new Map([['a', DONE('/a', true)]]), exists);
+    assert.deepEqual(source, { kind: 'copy', job: 'a', dir: '/a' });
   });
 
-  it('объявленный inherit уважается среди нескольких зависимостей', () => {
+  it('продолженное другими дерево источника засевается якорем с причиной', () => {
     const graph = graphOf(`
 kind: pipeline
-workspace: { mode: worktree }
+workspace: { mode: worktree, trees: [main, b] }
 jobs:
   a: { steps: [{ id: c, run: [echo, a] }] }
-  b: { steps: [{ id: c, run: [echo, b] }] }
-  c: { needs: [a, b], workspace: { inherit: b }, steps: [{ id: c, run: [echo, c] }] }
+  b: { needs: [a], workspace: { tree: b }, steps: [{ id: c, run: [echo, b] }] }
 `);
-    const completed = new Map([
-      ['a', DONE('/a')],
-      ['b', DONE('/b')],
-    ]);
-    const source = resolveInheritSource(graph, graph.byId.get('c')!, completed);
-    assert.deepEqual(source, { kind: 'seed', job: 'b', anchor: { kind: 'git', id: '/b' } });
+    const source = resolveSeedSource(graph, graph.byId.get('b')!, new Map([['a', DONE('/a')]]), exists);
+    assert.equal(source.kind, 'anchor');
+    assert.match(source.kind === 'anchor' ? source.reason : '', /продолжено/);
   });
 
-  it('inherit: none даёт отсутствие источника', () => {
+  it('inherit: none и исчерпанная цепочка дают исходное состояние', () => {
     const graph = graphOf(`
 kind: pipeline
-workspace: { mode: worktree }
+workspace: { mode: worktree, scope: job }
 jobs:
   a: { steps: [{ id: c, run: [echo, a] }] }
   b: { steps: [{ id: c, run: [echo, b] }] }
   c: { needs: [a, b], workspace: { inherit: none }, steps: [{ id: c, run: [echo, c] }] }
+  d: { needs: [a], steps: [{ id: c, run: [echo, d] }] }
 `);
-    const completed = new Map([
-      ['a', DONE('/a')],
-      ['b', DONE('/b')],
-    ]);
-    assert.deepEqual(resolveInheritSource(graph, graph.byId.get('c')!, completed), { kind: 'none' });
+    assert.deepEqual(resolveSeedSource(graph, graph.byId.get('c')!, new Map([['a', DONE('/a', true)]]), exists), { kind: 'none' });
+    assert.deepEqual(resolveSeedSource(graph, graph.byId.get('d')!, new Map(), exists), { kind: 'none' });
   });
 
-  it('источник без якоря заменяется своим источником транзитивно', () => {
+  it('источник без каталога пропускается по цепочке', () => {
     const graph = graphOf(`
 kind: pipeline
-workspace: { mode: worktree }
+workspace: { mode: worktree, scope: job }
 jobs:
   a: { steps: [{ id: c, run: [echo, a] }] }
   b: { needs: [a], steps: [{ id: c, run: [echo, b] }] }
   c: { needs: [b], steps: [{ id: c, run: [echo, c] }] }
 `);
-    // b пропущена по условию: каталога у неё нет вовсе, продолжать нечего — и
-    // c ищет дерево дальше по цепочке, у a.
-    const completed = new Map([['a', DONE('/a')]]);
-    const source = resolveInheritSource(graph, graph.byId.get('c')!, completed);
-    assert.deepEqual(source, { kind: 'seed', job: 'a', anchor: { kind: 'git', id: '/a' } });
+    const completed = new Map([['a', DONE('/a', true)]]);
+    assert.deepEqual(resolveSeedSource(graph, graph.byId.get('c')!, completed, exists), { kind: 'copy', job: 'a', dir: '/a' });
   });
 
-  it('исчерпание цепочки даёт отсутствие источника', () => {
+  it('якорь, не хранящий содержимого, засева не даёт', () => {
     const graph = graphOf(`
 kind: pipeline
-workspace: { mode: worktree }
+workspace: { mode: copy, trees: [main, b] }
 jobs:
   a: { steps: [{ id: c, run: [echo, a] }] }
-  b: { needs: [a], steps: [{ id: c, run: [echo, b] }] }
+  b: { needs: [a], workspace: { tree: b }, steps: [{ id: c, run: [echo, b] }] }
 `);
-    // a не исполнялась вовсе — каталога у неё нет, продолжать нечего.
-    assert.deepEqual(resolveInheritSource(graph, graph.byId.get('b')!, new Map()), { kind: 'none' });
+    const completed = new Map<string, CompletedJob>([['a', { dir: '/a', anchor: { kind: 'manifest', id: 'хеш' }, frozen: false }]]);
+    assert.deepEqual(resolveSeedSource(graph, graph.byId.get('b')!, completed, exists), { kind: 'none' });
   });
 
-  // Раскладка каталогов держится на объявленном графе, а не на исходах работ:
-  // продолжение чужого каталога якоря не требует — файлы уже лежат на месте.
-  // Иначе отказ бухгалтерии у предшественника молча уводил бы наследника в
-  // свежий каталог, теряя весь результат предшественника.
-  it('продолжает каталог предшественника, даже если якорь у того снять не удалось', () => {
-    const graph = graphOf(`
+  it('работа без tree идёт в первом объявленном дереве, при scope: job и смене режима — в личном', () => {
+    const pipeline = pipelineOf(`
 kind: pipeline
-workspace: { mode: worktree }
+workspace: { mode: worktree, trees: [main, b] }
 jobs:
   a: { steps: [{ id: c, run: [echo, a] }] }
-  b: { needs: [a], steps: [{ id: c, run: [echo, b] }] }
+  b: { needs: [a], workspace: { tree: b }, steps: [{ id: c, run: [echo, b] }] }
+  c: { needs: [a], workspace: { tree: own }, steps: [{ id: c, run: [echo, c] }] }
+  d: { needs: [a], workspace: { mode: cwd }, steps: [{ id: c, run: [echo, d] }] }
+  e: { needs: [a], workspace: { mode: copy }, steps: [{ id: c, run: [echo, e] }] }
 `);
-    const completed = new Map([['a', NOT_STARTED('/a')]]);
-    assert.deepEqual(resolveInheritSource(graph, graph.byId.get('b')!, completed), {
-      kind: 'continue',
-      job: 'a',
-      dir: '/a',
+    const trees = Object.fromEntries(pipeline.jobs.map((job) => [job.id, job.workspace.tree]));
+    assert.deepEqual(trees, { a: 'main', b: 'b', c: 'own', d: undefined, e: 'own' });
+    const scoped = pipelineOf(`
+kind: pipeline
+workspace: { mode: copy, scope: job }
+jobs:
+  a: { steps: [{ id: c, run: [echo, a] }] }
+`);
+    assert.equal(scoped.jobs[0]?.workspace.tree, 'own');
+  });
+
+  for (const [title, yaml, at] of [
+    ['scope при cwd', 'workspace: { mode: cwd, scope: job }\njobs:\n  a: { steps: [{ id: c, run: [echo] }] }', 'workspace.scope'],
+    ['trees при scope: job', 'workspace: { mode: worktree, scope: job, trees: [main] }\njobs:\n  a: { steps: [{ id: c, run: [echo] }] }', 'workspace.trees'],
+    ['own в trees', 'workspace: { mode: worktree, trees: [main, own] }\njobs:\n  a: { steps: [{ id: c, run: [echo] }] }', 'workspace.trees'],
+    ['повтор в trees', 'workspace: { mode: worktree, trees: [main, main] }\njobs:\n  a: { steps: [{ id: c, run: [echo] }] }', 'workspace.trees'],
+    ['необъявленное дерево', 'workspace: { mode: worktree, trees: [main, b] }\njobs:\n  a: { workspace: { tree: c }, steps: [{ id: c, run: [echo] }] }', 'jobs.a.workspace.tree'],
+    ['tree при scope: job', 'workspace: { mode: worktree, scope: job }\njobs:\n  a: { workspace: { tree: own }, steps: [{ id: c, run: [echo] }] }', 'jobs.a.workspace.tree'],
+    ['tree у работы со своим режимом', 'workspace: { mode: worktree }\njobs:\n  a: { workspace: { mode: copy, tree: own }, steps: [{ id: c, run: [echo] }] }', 'jobs.a.workspace.tree'],
+    ['tree при cwd', 'workspace: { mode: cwd }\njobs:\n  a: { workspace: { tree: main }, steps: [{ id: c, run: [echo] }] }', 'jobs.a.workspace.tree'],
+  ] as const) {
+    it(`раскрытие отклоняет ${title}`, () => {
+      assert.throws(
+        () => pipelineOf(`kind: pipeline\n${yaml}\n`),
+        (error: unknown) => error instanceof BurnexError && error.at === at,
+      );
     });
-  });
+  }
 
-  // Хеш-манифест содержимого дерева не хранит, и `restore` у него отказывает:
-  // засеять им развилку нельзя. Наследование пропускает такой якорь, как
-  // отсутствующий, вместо отказа посреди прогона.
-  it('не засевает развилку якорем, не хранящим содержимого', () => {
-    const graph = graphOf(`
+  it('линт: две головы дерева, inherit у продолжения, предупреждение о порядке', () => {
+    const pipeline = pipelineOf(`
 kind: pipeline
-workspace: { mode: copy }
+workspace: { mode: worktree, trees: [main, b] }
 jobs:
   a: { steps: [{ id: c, run: [echo, a] }] }
-  b: { needs: [a], steps: [{ id: c, run: [echo, b] }] }
-  c: { needs: [a], steps: [{ id: c, run: [echo, c] }] }
+  x: { steps: [{ id: c, run: [echo, x] }] }
+  p: { needs: [a], workspace: { tree: b }, steps: [{ id: c, run: [echo, p] }] }
+  q: { needs: [x], workspace: { tree: b }, steps: [{ id: c, run: [echo, q] }] }
+  r: { needs: [a, x], workspace: { inherit: a }, steps: [{ id: c, run: [echo, r] }] }
 `);
-    const completed = new Map<string, CompletedJob>([
-      ['a', { dir: '/a', anchor: { kind: 'manifest', id: 'хеш' } }],
-    ]);
-    assert.deepEqual(resolveInheritSource(graph, graph.byId.get('b')!, completed), { kind: 'none' });
+    const diagnostics = treeDiagnostics(pipeline, buildGraph(pipeline).graph);
+    const errors = diagnostics.filter((item) => item.severity === 'error');
+    assert.ok(errors.some((item) => /Дерево b не имеет единственной головы: p, q/.test(item.message)));
+    assert.ok(errors.some((item) => item.at === 'jobs.r.workspace.inherit' && /продолжает уже заведённое/.test(item.message)));
+    const warnings = diagnostics.filter((item) => item.severity === 'warning');
+    assert.ok(warnings.some((item) => /a и x делят дерево main.*a раньше x/.test(item.message)));
   });
 
-  it('различает продолжение каталога и собственный каталог развилки', () => {
-    const graph = graphOf(`
+  it('линт: голова с несколькими зависимостями обязана выбрать источник, продолжение — нет', () => {
+    const pipeline = pipelineOf(`
 kind: pipeline
-workspace: { mode: worktree }
+workspace: { mode: worktree, trees: [main, b] }
 jobs:
   a: { steps: [{ id: c, run: [echo, a] }] }
-  b: { needs: [a], steps: [{ id: c, run: [echo, b] }] }
-  c: { needs: [a], steps: [{ id: c, run: [echo, c] }] }
+  x: { needs: [a], steps: [{ id: c, run: [echo, x] }] }
+  p: { needs: [a, x], workspace: { tree: b }, steps: [{ id: c, run: [echo, p] }] }
+  m: { needs: [a, x], steps: [{ id: c, run: [echo, m] }] }
 `);
-    const completed = new Map([['a', DONE('/a')]]);
-    // a — предшественник и b, и c: у него два потомка, значит развилка, а не цепочка.
-    assert.deepEqual(resolveInheritSource(graph, graph.byId.get('b')!, completed), {
-      kind: 'seed',
-      job: 'a',
-      anchor: { kind: 'git', id: '/a' },
-    });
-    assert.deepEqual(resolveInheritSource(graph, graph.byId.get('c')!, completed), {
-      kind: 'seed',
-      job: 'a',
-      anchor: { kind: 'git', id: '/a' },
-    });
+    const errors = treeDiagnostics(pipeline, buildGraph(pipeline).graph).filter((item) => item.severity === 'error');
+    assert.deepEqual(errors.map((item) => item.at), ['jobs.p.workspace.inherit']);
   });
 });
 
@@ -373,7 +405,7 @@ describe('workspace-modes: режим copy', () => {
     const project = makeProject({ 'burnex.yml': pipelineWriting('copy', `, path: ${base}`) });
 
     const result = await run(project);
-    assert.equal(workspaceOfJob(result, 'build').path, join(base, 'build'));
+    assert.equal(workspaceOfJob(result, 'build').path, join(base, 'trees', 'main'));
   });
 
   // Сценарий: «Журнал не попадает в дерево»
@@ -410,7 +442,8 @@ describe('workspace-modes: режим worktree', () => {
     );
   });
 
-  // Сценарий: «Изоляция независимых работ друг от друга»
+  // Сценарий: «Изоляция деревьев друг от друга» — при scope: job у каждой
+  // работы своё дерево.
   //
   // Без needs изоляция безусловна и наследование её не задевает: оно
   // распространяется по рёбрам needs, а не на любые две работы прогона. Здесь
@@ -426,7 +459,7 @@ describe('workspace-modes: режим worktree', () => {
 version: 1
 kind: pipeline
 name: изоляция
-workspace: { mode: worktree }
+workspace: { mode: worktree, scope: job }
 jobs:
   первая:
     steps:
@@ -718,7 +751,7 @@ jobs:
     const worktreeRecords = (repoDir: string): string[] =>
       existsSync(join(repoDir, '.git', 'worktrees')) ? readdirSync(join(repoDir, '.git', 'worktrees')) : [];
 
-    const workspaceDir = join(runsRoot, 'workspace', job.id);
+    const workspaceDir = join(runsRoot, 'workspace', 'jobs', job.id);
     assert.equal(existsSync(workspaceDir), false, 'каталог дорожки не должен остаться на диске');
     assert.deepEqual(worktreeRecords(project.root), [], 'корневая учётная запись не должна остаться');
     assert.deepEqual(worktreeRecords(project.path('part-a')), [], 'учётная запись части a не должна остаться');
@@ -787,7 +820,7 @@ jobs:
   });
 });
 
-describe('dependent-job-workspace: наследование под тестом прогона', () => {
+describe('named-workspace-trees: деревья под тестом прогона', () => {
   // Сценарий: «Файл предшественника виден» / «Изменение видно» / «Удаление перенесено»
   it('цепочка в worktree видит создание, изменение и удаление файла предшественником', async () => {
     const project = makeProject({
@@ -867,13 +900,13 @@ jobs:
   // внутри репозитория. Копия `.git` не содержит, поэтому её состояние
   // фиксируется git-якорем с базой объектов проекта: без этого якоря копии не
   // снимались бы вовсе и развилка в режиме copy осталась бы без источника.
-  it('копия внутри репозитория фиксируется якорями, и развилка получает дерево источника', async () => {
+  it('копия внутри репозитория фиксируется якорями, и при scope: job потомки получают дерево источника', async () => {
     const project = makeProject({
       'изменяемый.txt': 'старое',
       'burnex.yml': `
 version: 1
 kind: pipeline
-workspace: { mode: copy }
+workspace: { mode: copy, scope: job }
 jobs:
   a:
     steps:
@@ -909,59 +942,64 @@ jobs:
     }
   });
 
-  // Сценарий: «Приведение невозможно заранее» — вне репозитория состояние
-  // фиксируется хеш-манифестом, который содержимого не хранит, и засеять им
-  // каталог развилки нечем. Это видно до запуска — значит и отказ должен быть
-  // до первого шага, а не подготовкой директории посреди прогона.
-  it('отклоняет развилку в режиме copy вне репозитория git до первой работы', async () => {
+  // Полный перенос каталога якоря не требует: вне git, где якорь —
+  // хеш-манифест без содержимого, потомки при scope: job всё равно получают
+  // состояние источника.
+  it('при scope: job в режиме copy вне git потомки получают каталог источника', async () => {
     const project = makeProject({
       'burnex.yml': `
 version: 1
 kind: pipeline
-workspace: { mode: copy }
+workspace: { mode: copy, scope: job }
 jobs:
   a:
     steps: [{ id: c, run: [sh, -c, 'echo из-a > результат.txt'], expect: [{ exit_code: 0 }] }]
   b:
     needs: [a]
-    steps: [{ id: c, run: [echo, ok], expect: [{ exit_code: 0 }] }]
+    steps: [{ id: c, run: [cat, результат.txt], expect: [{ exit_code: 0 }] }]
   c:
     needs: [a]
-    steps: [{ id: c, run: [echo, ok], expect: [{ exit_code: 0 }] }]
+    steps: [{ id: c, run: [cat, результат.txt], expect: [{ exit_code: 0 }] }]
 `,
     });
 
-    await assert.rejects(
-      () => run(project),
-      (error: unknown) => {
-        assert.ok(error instanceof BurnexError);
-        assert.match(error.message, /вне репозитория git это невозможно/);
-        assert.match(error.hint ?? '', /inherit: none/);
-        return true;
-      },
-    );
-
-    assert.equal(existsSync(project.path('результат.txt')), false, 'ни один шаг не исполнен');
+    const result = await run(project);
+    assert.equal(result.status, 'success');
+    for (const id of ['b', 'c']) {
+      const dir = workspaceOfJob(result, id).path;
+      assert.notEqual(dir, workspaceOfJob(result, 'a').path);
+      assert.equal(readFileSync(join(dir, 'результат.txt'), 'utf8').trim(), 'из-a');
+    }
+    assert.equal(existsSync(project.path('результат.txt')), false, 'каталог запуска не тронут');
   });
 
-  // Сценарий: «Приведение не удалось» — отказ приведения каталога к якорю
-  // источника проходит тем же путём, что и отказ подготовки директории, и не
-  // оставляет за собой ни исполненных шагов, ни заведённого каталога.
+  // Сценарий: «Приведение не удалось» — засев якорем (отступление: источник
+  // s пропущен, а дерево a продолжено другими работами) отказывает тем же
+  // путём, что и отказ подготовки директории, и не оставляет за собой ни
+  // исполненных шагов, ни заведённого каталога.
   it('отказ приведения к якорю источника даёт spawn_failed без единого шага', async () => {
     const project = makeProject({
       'burnex.yml': `
 version: 1
 kind: pipeline
-workspace: { mode: worktree }
+workspace: { mode: worktree, trees: [main, b, c] }
 fail_fast: false
 jobs:
   a:
     steps: [{ id: c, run: [sh, -c, 'echo из-a > от-a.txt'], expect: [{ exit_code: 0 }] }]
-  b:
+  s:
     needs: [a]
+    if: "false"
+    steps: [{ id: c, run: [echo, ok], expect: [{ exit_code: 0 }] }]
+  x:
+    steps: [{ id: c, run: [echo, ok], expect: [{ exit_code: 0 }] }]
+  b:
+    needs: [s, x]
+    workspace: { tree: b, inherit: s }
     steps: [{ id: c, run: [sh, -c, 'echo из-b > от-b.txt'], expect: [{ exit_code: 0 }] }]
   c:
-    needs: [a]
+    needs: [s, x]
+    workspace: { tree: c, inherit: s }
     steps: [{ id: c, run: [sh, -c, 'echo из-c > от-c.txt'], expect: [{ exit_code: 0 }] }]
 `,
     });
@@ -1015,7 +1053,7 @@ jobs:
     // вхождению строки срабатывало на самом ключе и роняло тест случайным
     // образом. Строка каталога работы `a` подтверждает форму сравнения: без неё
     // проверка отсутствия `b` и `c` проходила бы вхолостую.
-    assert.ok(dirs.includes(join(workspaces, 'a')), 'worktree работы a в учёте git есть');
+    assert.ok(dirs.includes(join(workspaces, 'main')), 'worktree дерева main в учёте git есть');
     for (const id of ['b', 'c']) {
       assert.equal(dirs.includes(join(workspaces, id)), false, `worktree ${id} снят с учёта`);
       assert.equal(existsSync(join(workspaces, id)), false, `каталог ${id} убран`);
@@ -1028,22 +1066,30 @@ jobs:
   // повод оставить каталог на диске. Здесь учётная запись worktree исчезает
   // ровно перед уборкой (так выглядит чужой prune, успевший первым), и
   // `worktree remove` отказывает — каталог всё равно обязан уйти.
-  it('убирает каталог развилки, даже когда git worktree remove отказал', async () => {
+  it('убирает каталог головы дерева, даже когда git worktree remove отказал', async () => {
     const project = makeProject({
       'burnex.yml': `
 version: 1
 kind: pipeline
-workspace: { mode: worktree }
+workspace: { mode: worktree, trees: [main, b, c] }
 fail_fast: false
 jobs:
   a:
     steps: [{ id: c, run: [sh, -c, 'echo из-a > от-a.txt'], expect: [{ exit_code: 0 }] }]
+  s:
+    needs: [a]
+    if: "false"
+    steps: [{ id: c, run: [echo, ok], expect: [{ exit_code: 0 }] }]
+  x:
+    steps: [{ id: c, run: [echo, ok], expect: [{ exit_code: 0 }] }]
   b:
-    needs: [a]
-    steps: [{ id: c, run: [echo, ok], expect: [{ exit_code: 0 }] }]
+    needs: [s, x]
+    workspace: { tree: b, inherit: s }
+    steps: [{ id: c, run: [sh, -c, 'echo из-b > от-b.txt'], expect: [{ exit_code: 0 }] }]
   c:
-    needs: [a]
-    steps: [{ id: c, run: [echo, ok], expect: [{ exit_code: 0 }] }]
+    needs: [s, x]
+    workspace: { tree: c, inherit: s }
+    steps: [{ id: c, run: [sh, -c, 'echo из-c > от-c.txt'], expect: [{ exit_code: 0 }] }]
 `,
     });
     gitInit(project);
@@ -1082,7 +1128,7 @@ jobs:
     const dirs = execFileSync('git', ['-C', project.root, 'worktree', 'list'], {
       encoding: 'utf8',
     });
-    assert.ok(dirs.includes(join(workspaces, 'a')), 'worktree работы a в учёте git есть');
+    assert.ok(dirs.includes(join(workspaces, 'main')), 'worktree дерева main в учёте git есть');
     for (const id of ['b', 'c']) {
       assert.equal(dirs.includes(join(workspaces, id)), false, `worktree ${id} снят с учёта`);
     }
@@ -1121,8 +1167,8 @@ jobs:
     assert.equal(readFileSync(join(dirC, 'игнор.txt'), 'utf8').trim(), 'мимо-git');
   });
 
-  // Сценарий: «Развилка каталог не продолжает» / «Игнорируемое содержимое источника не переносится»
-  it('развилка даёт по каталогу на потомка, и игнорируемый файл источника в них не попадает', async () => {
+  // Сценарий: «Развилка не заводит каталогов»
+  it('развилка в дереве по умолчанию идёт в одном каталоге, игнорируемое переходит дальше', async () => {
     const project = makeProject({
       '.gitignore': 'игнор.txt\n',
       'burnex.yml': `
@@ -1137,10 +1183,10 @@ jobs:
         expect: [{ exit_code: 0 }]
   b:
     needs: [a]
-    steps: [{ id: c, run: [echo, ok], expect: [{ exit_code: 0 }] }]
+    steps: [{ id: c, run: [cat, игнор.txt], expect: [{ exit_code: 0 }] }]
   c:
     needs: [a]
-    steps: [{ id: c, run: [echo, ok], expect: [{ exit_code: 0 }] }]
+    steps: [{ id: c, run: [cat, игнор.txt], expect: [{ exit_code: 0 }] }]
 `,
     });
     gitInit(project);
@@ -1148,24 +1194,106 @@ jobs:
 
     const result = await run(project);
     assert.equal(result.status, 'success');
-
     const dirA = workspaceOfJob(result, 'a').path;
-    const dirB = workspaceOfJob(result, 'b').path;
-    const dirC = workspaceOfJob(result, 'c').path;
-    assert.notEqual(dirA, dirB);
-    assert.notEqual(dirA, dirC);
-    assert.notEqual(dirB, dirC);
+    assert.equal(workspaceOfJob(result, 'b').path, dirA);
+    assert.equal(workspaceOfJob(result, 'c').path, dirA);
+    assert.match(dirA, /workspace\/trees\/main$/);
 
-    // Отслеживаемый файл, зафиксированный якорем, приходит в оба каталога.
-    assert.equal(readFileSync(join(dirB, 'отслеживаемый.txt'), 'utf8').trim(), 'из-a');
-    assert.equal(readFileSync(join(dirC, 'отслеживаемый.txt'), 'utf8').trim(), 'из-a');
-    // Игнорируемый файл якорем не зафиксирован — развилка его не получает.
-    assert.equal(existsSync(join(dirB, 'игнор.txt')), false);
-    assert.equal(existsSync(join(dirC, 'игнор.txt')), false);
+    const records = readStatus(result.journal.paths).jobs;
+    for (const record of records) {
+      assert.equal(record.workspace?.tree, 'main');
+      assert.equal(record.workspace?.continued, true);
+      assert.equal(record.workspace?.seed, undefined);
+    }
+  });
+
+  // Сценарий: «Сборка источника доступна потомку» — при scope: job новый
+  // каталог получает всё: отслеживаемое, неотслеживаемое и игнорируемое.
+  it('при scope: job потомок получает изменения, зависимости и сборку источника', async () => {
+    const project = makeProject({
+      '.gitignore': 'node_modules/\ndist/\n',
+      'исходник.txt': 'было',
+      'burnex.yml': `
+version: 1
+kind: pipeline
+workspace: { mode: worktree, scope: job }
+jobs:
+  build:
+    steps:
+      - id: c
+        run: [sh, -c, 'echo стало > исходник.txt; echo черновик > новый.txt; mkdir -p node_modules/x dist; echo пакет > node_modules/x/index.js; echo сборка > dist/out.js; ln -s x node_modules/link']
+        expect: [{ exit_code: 0 }]
+  probe:
+    needs: [build]
+    steps: [{ id: c, run: [sh, -c, 'cat node_modules/x/index.js dist/out.js node_modules/link/index.js && git -c core.quotePath=false status --porcelain > статус.txt'], expect: [{ exit_code: 0 }] }]
+`,
+    });
+    gitInit(project);
+    commit(project, 'первый');
+
+    const result = await run(project);
+    assert.equal(result.status, 'success');
+    const dirBuild = workspaceOfJob(result, 'build').path;
+    const dirProbe = workspaceOfJob(result, 'probe').path;
+    assert.notEqual(dirBuild, dirProbe);
+    assert.match(dirProbe, /workspace\/jobs\/probe$/);
+    assert.equal(readFileSync(join(dirProbe, 'исходник.txt'), 'utf8').trim(), 'стало');
+    assert.equal(readFileSync(join(dirProbe, 'новый.txt'), 'utf8').trim(), 'черновик');
+    assert.equal(readFileSync(join(dirProbe, 'node_modules/x/index.js'), 'utf8').trim(), 'пакет');
+    assert.equal(readFileSync(join(dirProbe, 'dist/out.js'), 'utf8').trim(), 'сборка');
+    // Индекс перенесён: git видит в потомке ровно то же, что в источнике.
+    const status = readFileSync(join(dirProbe, 'статус.txt'), 'utf8');
+    assert.match(status, / M исходник\.txt/);
+    assert.match(status, /\?\? новый\.txt/);
+    assert.doesNotMatch(status, /node_modules|dist/);
+
+    const record = readStatus(result.journal.paths).jobs.find((job) => job.id === 'probe');
+    assert.equal(record?.workspace?.tree, 'own');
+    assert.deepEqual(record?.workspace?.seed, { from: 'build', by: 'copy' });
+    const seeded = readEvents(result.journal.paths).find((event) => event.kind === 'workspace.seeded');
+    assert.ok(seeded !== undefined, 'событие workspace.seeded записано');
+  });
+
+  // Сценарий: «Состояние на момент завершения источника» и «Файл другого
+  // дерева не виден».
+  it('голова дерева b получает состояние build на момент его завершения, и деревья не сливаются', async () => {
+    const project = makeProject({
+      'файл.txt': 'исходный',
+      'burnex.yml': `
+version: 1
+kind: pipeline
+workspace: { mode: worktree, trees: [main, b] }
+jobs:
+  build:
+    steps: [{ id: c, run: [sh, -c, 'echo после-build > файл.txt'], expect: [{ exit_code: 0 }] }]
+  review:
+    needs: [build]
+    steps: [{ id: c, run: [sh, -c, 'echo после-review > файл.txt'], expect: [{ exit_code: 0 }] }]
+  probe:
+    needs: [build, review]
+    workspace: { tree: b, inherit: build }
+    steps: [{ id: c, run: [sh, -c, 'cat файл.txt > увидено.txt; echo из-b > только-b.txt'], expect: [{ exit_code: 0 }] }]
+  report:
+    needs: [probe]
+    steps: [{ id: c, run: [sh, -c, 'test ! -e только-b.txt'], expect: [{ exit_code: 0 }] }]
+`,
+    });
+    gitInit(project);
+    commit(project, 'первый');
+
+    const result = await run(project);
+    assert.equal(result.status, 'success');
+    const probe = workspaceOfJob(result, 'probe').path;
+    assert.match(probe, /workspace\/trees\/b$/);
+    assert.equal(readFileSync(join(probe, 'увидено.txt'), 'utf8').trim(), 'после-build');
+    assert.equal(workspaceOfJob(result, 'report').path, workspaceOfJob(result, 'build').path);
+    const record = readStatus(result.journal.paths).jobs.find((job) => job.id === 'probe');
+    assert.equal(record?.workspace?.tree, 'b');
+    assert.deepEqual(record?.workspace?.seed, { from: 'build', by: 'copy' });
   });
 
   // Сценарий: «Пропуск потомка цепочку не открывает»
-  it('пропуск одного из двух потомков не открывает цепочку исполненному', async () => {
+  it('пропуск одного из двух потомков ничего не меняет в раскладке', async () => {
     const project = makeProject({
       'burnex.yml': `
 version: 1
@@ -1189,11 +1317,8 @@ jobs:
     const result = await run(project);
     assert.equal(result.status, 'success');
 
-    const dirA = workspaceOfJob(result, 'a').path;
-    const dirC = workspaceOfJob(result, 'c').path;
-    // a — предшественник у двух потомков в графе: развилка, даже если один из
-    // них пропущен. c не занимает каталог a, будто цепочка ему открылась.
-    assert.notEqual(dirA, dirC);
+    // Форма графа каталог не выбирает: c продолжает дерево по умолчанию.
+    assert.equal(workspaceOfJob(result, 'c').path, workspaceOfJob(result, 'a').path);
   });
 
   // Сценарий: «Явно выбранный источник» / «Отказ от наследования»
@@ -1202,7 +1327,7 @@ jobs:
       'burnex.yml': `
 version: 1
 kind: pipeline
-workspace: { mode: worktree }
+workspace: { mode: worktree, scope: job }
 jobs:
   a:
     steps: [{ id: c, run: [sh, -c, 'echo из-a > от-a.txt'], expect: [{ exit_code: 0 }] }]
@@ -1247,7 +1372,7 @@ jobs:
       'burnex.yml': `
 version: 1
 kind: pipeline
-workspace: { mode: worktree }
+workspace: { mode: worktree, scope: job }
 jobs:
   a:
     steps: [{ id: c, run: [sh, -c, 'echo из-a > от-a.txt'], expect: [{ exit_code: 0 }] }]
@@ -1286,7 +1411,7 @@ jobs:
       'burnex.yml': `
 version: 1
 kind: pipeline
-workspace: { mode: worktree }
+workspace: { mode: worktree, scope: job }
 jobs:
   a:
     if: "false"
@@ -1444,7 +1569,7 @@ describe('runner-disposers: откат подготовки рабочей ди�
     // Снятие идёт в обратном порядке: часть a, затем корень.
     assert.deepEqual(
       failures.map((event) => event.operation),
-      ['снятие части part-a рабочего дерева работы', 'снятие рабочего дерева работы'],
+      ['снятие части part-a рабочего дерева', 'снятие рабочего дерева'],
     );
     assert.deepEqual(new Set(failures.map((event) => event.job)), new Set([job.id]));
   });

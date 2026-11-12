@@ -404,9 +404,30 @@ export const JobRecordSchema = z
       .object({
         mode: z.string(),
         path: z.string(),
-        /** Работа, чьё дерево унаследовано. Отсутствует у работы без наследования. */
+        /**
+         * Дерево, в котором работа исполнялась (`named-workspace-trees`):
+         * имя общего дерева либо `own` — личное дерево и каталог при
+         * `scope: job`. Нет в режиме `cwd` и у записи прежнего формата: её
+         * каталог берётся из `path`.
+         */
+        tree: z.string().optional(),
+        /**
+         * Засев каталога, заведённого для этой работы: работа-источник (или
+         * `none` — исходное состояние) и способ — `copy` (перенесён весь
+         * каталог источника) либо `anchor` (каталога источника уже не было,
+         * засев якорем, с причиной). У `from: none` способа нет.
+         */
+        seed: z
+          .object({
+            from: z.string(),
+            by: z.enum(['copy', 'anchor']).optional(),
+            reason: z.string().optional(),
+          })
+          .strict()
+          .optional(),
+        /** Работа прежнего формата: чьё дерево унаследовано. Новый формат пишет `seed.from`. */
         inherited_from: z.string().optional(),
-        /** Каталог продолжен, а не заведён заново — цепочка, а не развилка. */
+        /** Каталог продолжен, а не заведён для этой работы: она шла в уже заведённом дереве. */
         continued: z.boolean().optional(),
         /**
          * Прогон, у которого перенят этот каталог для продолжения оборванной
@@ -434,6 +455,20 @@ export const JobRecordSchema = z
   })
   .strict();
 
+/**
+ * Объявление рабочей директории пайплайна в манифесте и состоянии: режим,
+ * путь размещения копий, область и деревья (`named-workspace-trees`) —
+ * последние два есть, только если пайплайн их объявил.
+ */
+const PipelineWorkspaceRecordSchema = z
+  .object({
+    mode: z.string(),
+    path: z.string().optional(),
+    scope: z.enum(['run', 'job']).optional(),
+    trees: z.array(z.string()).optional(),
+  })
+  .strict();
+
 export const RunManifestSchema = z
   .object({
     run_id: z.string(),
@@ -449,7 +484,13 @@ export const RunManifestSchema = z
     pipeline_address: z.string().optional(),
     lock_hash: z.string(),
     project_root: z.string(),
-    workspace: z.object({ mode: z.string(), path: z.string().optional() }).strict(),
+    /**
+     * Версия формата журнала. Нет у прогона прежнего формата (1); `2` —
+     * записи работ несут дерево и засев (`named-workspace-trees`), каталоги
+     * лежат в `workspace/trees/` и `workspace/jobs/`.
+     */
+    journal_format: z.number().int().positive().optional(),
+    workspace: PipelineWorkspaceRecordSchema,
     /** Способ фиксации состояния дерева: определяется один раз на прогон. */
     anchor_kind: z.enum(['git', 'manifest', 'composite']).optional(),
     /**
@@ -636,7 +677,7 @@ export const RunStatusSchema = z
     pipeline: z.string(),
     lock_hash: z.string(),
     status: StatusValueSchema,
-    workspace: z.object({ mode: z.string(), path: z.string().optional() }).strict(),
+    workspace: PipelineWorkspaceRecordSchema,
     /** Прогон, из которого этот получен возобновлением. */
     resumed_from: z.string().optional(),
     inputs: z.record(z.string(), z.union([z.string(), z.number(), z.boolean()])),
@@ -906,7 +947,7 @@ export const EventSchema = z.discriminatedUnion('kind', [
     implementer: z.string().optional(),
     agent: z.string(),
     model: z.string().optional(),
-    reason: z.enum(['no_implementer', 'no_session', 'no_fork']).optional(),
+    reason: z.enum(['no_implementer', 'other_tree', 'no_session', 'no_fork']).optional(),
   }).strict(),
   // Реплика ветки защиты (`review-defend`, решение 7): запись в
   // `defense.ndjson` — событием по ходу шага. `thread` — ветка (ревьюер).
@@ -1042,6 +1083,18 @@ export const EventSchema = z.discriminatedUnion('kind', [
     source: z.string(),
     via: z.enum(['continue', 'seed']),
   }).strict(),
+  // Каталог дерева заведён для работы засевом из источника
+  // (`named-workspace-trees`): пишется до её первого шага. Прежнее
+  // `workspace.inherited` остаётся читаемым в журналах старых прогонов.
+  z.object({
+    ...eventBase,
+    kind: z.literal('workspace.seeded'),
+    job: z.string(),
+    tree: z.string(),
+    source: z.string(),
+    by: z.enum(['copy', 'anchor']).optional(),
+    reason: z.string().optional(),
+  }).strict(),
   // Состояние каталога прогона, оставленное переиспользованными шагами:
   // перенесено из исходного прогона, потому что каталог нового пуст.
   z.object({ ...eventBase, kind: z.literal('run_dir.carried'), path: z.string(), source: z.string() }).strict(),
@@ -1137,6 +1190,9 @@ export type EventInput = Omit<Event, 'ts' | 'seq'> extends never ? never : Distr
 type DistributiveOmit<T, K extends keyof never> = T extends unknown ? Omit<T, K> : never;
 
 export type RunManifest = z.infer<typeof RunManifestSchema>;
+
+/** Версия формата журнала, которую пишет этот движок (`journal_format` манифеста). */
+export const JOURNAL_FORMAT = 2;
 export type RunStatus = z.infer<typeof RunStatusSchema>;
 export type BudgetState = z.infer<typeof BudgetStateSchema>;
 export type BudgetExceededState = NonNullable<BudgetState['exceeded']>;

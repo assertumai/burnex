@@ -23,7 +23,6 @@ import { normalizePackagePaths, portableForm } from '../document/packagePaths.js
 import { definitionFiles, type ExpandedPipeline, type Job, type Pipeline, type Step } from '../document/model.js';
 import type { Registry } from '../../../kernel/registry.js';
 import { buildGraph, executionOrder, loopEntryPoints, loopOf, upstreamOutputs, type Graph } from '../domain/graph.js';
-import { declaredInheritance } from './inherit.js';
 import { computeStepKey, stepBackendCommands, upstreamForKey } from './stepKey.js';
 import { legacyPackageRoots, legacyStepKeys } from './legacyKey.js';
 
@@ -641,7 +640,7 @@ function resolveContinuation(input: {
       readonly nested?: readonly { readonly dir: string; readonly repo: string }[];
     }
   | undefined {
-  const { job, step, previous, record, from, isAbove, graph, options } = input;
+  const { job, step, previous, record, from, isAbove, options } = input;
 
   // Явный `--from` на этот шаг или выше отменяет продолжение: запрос «сделать
   // заново» — это запрос чистого разговора (design.md, решение 2). Точка
@@ -659,10 +658,8 @@ function resolveContinuation(input: {
   // ответил на вопрос, и продолжать нечего.
   if (previous.attempts.at(-1)?.status !== 'canceled') return undefined;
   if (options.config.backends[step.agent]?.sessions !== true) return undefined;
-  // Каталог работы в новом прогоне обязан быть её собственным: наследующая
-  // либо продолжающая чужую цепочку работа перенять нечего не может — её
-  // каталог решает наследование, а не эта работа.
-  if (declaredInheritance(graph, job).kind !== 'none') return undefined;
+  // Каталог перенимается деревом работы целиком (`named-workspace-trees`,
+  // решение 9): продолжение в общем дереве перенимает и его, и соседей.
   if (record === undefined || record.workspace === undefined) return undefined;
   if (options.canAdoptWorkspace === undefined || !options.canAdoptWorkspace(record, previous)) {
     return undefined;

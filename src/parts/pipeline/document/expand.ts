@@ -116,7 +116,7 @@ import type {
   ReviewParticipant,
   ImplementerRef,
 } from './model.js';
-import { AGGREGATOR_ID, DEFENDER_ID } from './model.js';
+import { AGGREGATOR_ID, DEFAULT_TREE, DEFENDER_ID, OWN_TREE } from './model.js';
 import { buildGraph } from '../domain/graph.js';
 import { resolveReviewStrategy, type StrategyChoice } from './reviewStrategy.js';
 
@@ -2425,7 +2425,11 @@ export function expandPipeline(options: ExpandOptions): ExpandedPipeline {
   const pipelineWorkspace: Workspace = {
     mode: doc.workspace?.mode ?? config.defaults.workspace.mode,
     ...(doc.workspace?.path === undefined ? {} : { path: doc.workspace.path }),
+    ...(doc.workspace?.scope === undefined ? {} : { scope: doc.workspace.scope }),
+    ...(doc.workspace?.trees === undefined ? {} : { trees: [...doc.workspace.trees] }),
   };
+  checkPipelineTrees(pipelineWorkspace, pipelinePath);
+  const declaredTrees = pipelineWorkspace.trees ?? [DEFAULT_TREE];
   const publicationDeclared =
     doc.workspace?.source !== undefined ||
     doc.workspace?.preserve_local_changes !== undefined ||
@@ -2648,17 +2652,26 @@ export function expandPipeline(options: ExpandOptions): ExpandedPipeline {
     // замена стёрла бы его и оставила `mode` неопределённым.
     const rawWorkspace = body.workspace as Workspace | undefined;
     const workspace: Workspace = ((): Workspace => {
-      if (rawWorkspace === undefined) return pipelineWorkspace;
-      const mode = rawWorkspace.mode ?? pipelineWorkspace.mode;
+      const mode = rawWorkspace?.mode ?? pipelineWorkspace.mode;
       // Пайплайновый путь размещения принадлежит пайплайновому режиму: работа,
       // сменившая режим, наследовать его не может — при режиме, отличном от
       // `copy`, путь и вовсе запрещён. Свой путь работа объявляет сама.
       const inheritedPath = mode === pipelineWorkspace.mode ? pipelineWorkspace.path : undefined;
-      const path = rawWorkspace.path ?? inheritedPath;
+      const path = rawWorkspace?.path ?? inheritedPath;
+      const tree = resolveJobTree({
+        id,
+        mode,
+        declared: rawWorkspace?.tree,
+        pipeline: pipelineWorkspace,
+        trees: declaredTrees,
+        file: declaringFile,
+        at: `${at}.workspace.tree`,
+      });
       return {
         mode,
         ...(path === undefined ? {} : { path }),
-        ...(rawWorkspace.inherit === undefined ? {} : { inherit: rawWorkspace.inherit }),
+        ...(rawWorkspace?.inherit === undefined ? {} : { inherit: rawWorkspace.inherit }),
+        ...(tree === undefined ? {} : { tree }),
       };
     })();
     const rawSteps = body.steps as RawStep[];
@@ -3142,4 +3155,92 @@ function collectUnusedAgentEntries(
     }
   }
   return out;
+}
+
+/**
+ * Область и деревья пайплайна (`named-workspace-trees`, решение 1). Отказы,
+ * видные по одному блоку `workspace`, — здесь, при раскрытии: работа видит
+ * уже проверенный перечень. Отказы, требующие графа (головы деревьев,
+ * `inherit` продолжения), — в `run/trees.ts`.
+ */
+function checkPipelineTrees(workspace: Workspace, file: string): void {
+  if (workspace.mode === 'cwd') {
+    const key = workspace.scope !== undefined ? 'scope' : workspace.trees !== undefined ? 'trees' : undefined;
+    if (key !== undefined) {
+      throw new BurnexError(`workspace.${key} объявлен при режиме cwd`, {
+        file,
+        at: `workspace.${key}`,
+        hint: 'В режиме cwd каталог работ — checkout пользователя: делить его на деревья нечем. Объявите mode: worktree или copy',
+      });
+    }
+    return;
+  }
+  const trees = workspace.trees;
+  if (trees === undefined) return;
+  if (workspace.scope === 'job') {
+    throw new BurnexError('workspace.trees объявлен при scope: job', {
+      file,
+      at: 'workspace.trees',
+      hint: 'При scope: job у каждой работы и так своё дерево — уберите trees или объявите scope: run',
+    });
+  }
+  if (trees.includes(OWN_TREE)) {
+    throw new BurnexError(`Имя дерева ${OWN_TREE} зарезервировано`, {
+      file,
+      at: 'workspace.trees',
+      hint: `${OWN_TREE} означает личное дерево работы и объявляется на работе: workspace: { tree: ${OWN_TREE} }`,
+    });
+  }
+  const duplicate = trees.find((tree, index) => trees.indexOf(tree) !== index);
+  if (duplicate !== undefined) {
+    throw new BurnexError(`Дерево ${duplicate} объявлено дважды`, { file, at: 'workspace.trees' });
+  }
+}
+
+/** Дерево работы: объявленное, личное или дерево по умолчанию; в режиме `cwd` — никакого. */
+function resolveJobTree(options: {
+  readonly id: string;
+  readonly mode: Workspace['mode'];
+  readonly declared: string | undefined;
+  readonly pipeline: Workspace;
+  readonly trees: readonly string[];
+  readonly file: string;
+  readonly at: string;
+}): string | undefined {
+  const { id, mode, declared, pipeline, trees, file, at } = options;
+  const overridden = mode !== pipeline.mode;
+  if (declared !== undefined) {
+    if (mode === 'cwd') {
+      throw new BurnexError(`Работа ${id} объявляет workspace.tree при режиме cwd`, {
+        file,
+        at,
+        hint: 'В режиме cwd каталог работы — checkout пользователя, а не дерево прогона',
+      });
+    }
+    if (overridden) {
+      throw new BurnexError(`Работа ${id} переопределяет режим и объявляет workspace.tree`, {
+        file,
+        at,
+        hint: `Работа в режиме, отличном от режима пайплайна (${pipeline.mode}), всегда идёт в личном дереве: уберите tree`,
+      });
+    }
+    if (pipeline.scope === 'job') {
+      throw new BurnexError(`Работа ${id} объявляет workspace.tree при scope: job`, {
+        file,
+        at,
+        hint: 'При scope: job у каждой работы своё дерево — уберите tree или объявите scope: run',
+      });
+    }
+    if (declared !== OWN_TREE && !trees.includes(declared)) {
+      throw new BurnexError(`Работа ${id} называет необъявленное дерево ${declared}`, {
+        file,
+        at,
+        hint: `Объявлены: ${trees.join(', ')}; личное дерево — ${OWN_TREE}. Новое дерево объявляется в workspace.trees пайплайна`,
+      });
+    }
+    return declared;
+  }
+  if (mode === 'cwd') return undefined;
+  if (overridden || pipeline.scope === 'job') return OWN_TREE;
+  return trees[0];
 }

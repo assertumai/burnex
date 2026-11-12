@@ -130,6 +130,14 @@ export interface ScheduleOptions {
    * единица: последовательное исполнение в порядке объявления.
    */
   readonly concurrency?: number;
+  /**
+   * Общее дерево, в котором исполняется работа (`named-workspace-trees`,
+   * решение 4): в дереве одновременно идёт не более одной работы, и готовая
+   * работа ждёт, пока её дерево занято. Из ждущих первой идёт объявленная
+   * раньше — выбор и так идёт по порядку объявления. `undefined` — работа
+   * дерева ни с кем не делит.
+   */
+  readonly treeOf?: (job: Job) => string | undefined;
   readonly signal?: AbortSignal;
   /** Вызывается на каждый проход участника цикла, а не только на последний. */
   readonly onSettled?: (job: Job, outcome: JobOutcome) => void | Promise<void>;
@@ -435,10 +443,16 @@ export async function schedule(options: ScheduleOptions): Promise<ScheduleResult
   const runPhase = async (jobs: readonly Job[], phase: 'main' | 'terminal'): Promise<void> => {
     /** Идущие работы: обещание удаляет себя из множества по завершении. */
     const running = new Map<string, Promise<void>>();
+    /** Занятые деревья: дерево → идущая в нём работа. */
+    const busyTrees = new Map<string, string>();
+    const treeFree = (job: Job): boolean => {
+      const tree = options.treeOf?.(job);
+      return tree === undefined || !busyTrees.has(tree);
+    };
 
     for (;;) {
       while (running.size < limit) {
-        const job = jobs.find((candidate) => !claimed.has(candidate.id) && isReady(candidate));
+        const job = jobs.find((candidate) => !claimed.has(candidate.id) && isReady(candidate) && treeFree(candidate));
         if (job === undefined) break;
 
         claimed.add(job.id);
@@ -481,6 +495,8 @@ export async function schedule(options: ScheduleOptions): Promise<ScheduleResult
         }
 
         const scope = conditionScope(job);
+        const tree = options.treeOf?.(job);
+        if (tree !== undefined) busyTrees.set(tree, job.id);
         const task: Promise<void> = (async () => {
           try {
             await settle(job, await options.execute(job, scope, pass));
@@ -495,6 +511,7 @@ export async function schedule(options: ScheduleOptions): Promise<ScheduleResult
           // Вердикт, закрывший проход внутри `settle`, уже мог запустить
           // участника следующего прохода под тем же идентификатором.
           if (running.get(job.id) === task) running.delete(job.id);
+          if (tree !== undefined && busyTrees.get(tree) === job.id) busyTrees.delete(tree);
         });
         running.set(job.id, task);
       }

@@ -20,7 +20,7 @@ export type ReviewerStance = 'maintain' | 'withdraw' | 'revise';
 export type FindingStatus = 'accepted' | 'withdrawn' | 'contested';
 
 /** Причина свежего защитника (`review-defend`, решение 3). */
-export type FreshReason = 'no_implementer' | 'no_session' | 'no_fork';
+export type FreshReason = 'no_implementer' | 'other_tree' | 'no_session' | 'no_fork';
 
 /** Первая строка `defense.ndjson`: кто защищает (решение 3). */
 export interface DefenderRecord {
@@ -188,9 +188,11 @@ export function describeDefender(record: DefenderRecord): string {
   const why =
     record.reason === 'no_implementer'
       ? 'шаг не назвал имплементатора'
-      : record.reason === 'no_session'
-        ? `у шага имплементатора \`${record.implementer ?? ''}\` нет записанной сессии`
-        : `бэкенд имплементатора \`${record.implementer ?? ''}\` не умеет форк сессии`;
+      : record.reason === 'other_tree'
+        ? `шаг имплементатора \`${record.implementer ?? ''}\` исполнялся в другом рабочем дереве, и его сессию не форкнуть отсюда`
+        : record.reason === 'no_session'
+          ? `у шага имплементатора \`${record.implementer ?? ''}\` нет записанной сессии`
+          : `бэкенд имплементатора \`${record.implementer ?? ''}\` не умеет форк сессии`;
   return `Защитник — свежий агент (${record.agent}${record.model === undefined ? '' : `, ${record.model}`}), не автор кода: ${why}.`;
 }
 
