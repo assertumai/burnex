@@ -23,11 +23,14 @@ import './reviewFeed.css';
 
 /**
  * Шаг `review` лентой, как переписка в мессенджере (`review-defend`,
- * design.md, решение 8): ревьюеры слева со своими находками, под находками —
- * ветка защиты; защитник и вердикт агрегатора — справа, на противоположной
- * стороне. Рядом — панель находок со статусами, раундов веток и расхода.
- * Ревьюеров больше одного — над лентой вкладки «All» и по ревьюеру: вкладка
- * показывает ветку одного ревьюера и сводку по его находкам.
+ * `review-defend-shared-session`): ревьюеры слева со своими находками, затем
+ * раунды защиты — ход защитника с ответами, сгруппированными по ревьюерам, и
+ * ответы ревьюеров; защитник и вердикт агрегатора — справа, на
+ * противоположной стороне. Журнал прежнего формата с ветками показывается
+ * прежней лентой: ветка ревьюера — под его находками. Рядом — панель находок
+ * со статусами, раундов и расхода. Ревьюеров больше одного — над лентой
+ * вкладки «All» и по ревьюеру: вкладка показывает его находки, его часть
+ * ходов защитника, его ответы и сводку по его находкам.
  *
  * Данные — модель ленты, собранная демоном из журнала шага
  * (`GET /api/review-feed`). Пока шаг идёт, она перечитывается раз в секунду —
@@ -60,8 +63,8 @@ const STANCE: Readonly<Record<ReviewFeedResponse['stance'], { readonly label: st
 /** Почему защищает свежий агент — значения `reason` (design.md, решение 3). */
 const FRESH_REASON: Readonly<Record<string, string>> = {
   no_implementer: 'the step names no implementer',
-  no_session: 'the implementer step recorded no session',
-  no_fork: "the implementer's agent cannot fork sessions",
+  no_session: 'the implementer step has no session to continue',
+  no_fork: "the implementer session cannot be continued in place, and its agent cannot fork sessions",
   no_schema: "the implementer's agent cannot answer by a JSON schema",
   other_tree: "the implementer ran in another workspace tree",
 };
@@ -97,23 +100,30 @@ export function reviewerTabs(feed: Pick<ReviewFeed, 'participants'>): string[] {
 
 /**
  * Записи вкладки ревьюера: строка о защитнике (кто ему отвечает), его
- * находки или отказ и его ветка защиты. Итог защиты и вердикт — общие, они
- * только во вкладке «All».
+ * находки или отказ, его ответы и ходы защитника — только с ответами на его
+ * находки. Итог защиты и вердикт — общие, они только во вкладке «All».
  */
 export function entriesForTab(entries: readonly ReviewFeedEntry[], tab: string): readonly ReviewFeedEntry[] {
   if (tab === ALL_TAB) return entries;
-  return entries.filter((entry) => {
+  return entries.flatMap((entry): ReviewFeedEntry[] => {
     switch (entry.kind) {
       case 'defender':
-        return true;
+        return [entry];
       case 'findings':
       case 'failure':
-        return entry.participant === tab;
-      case 'reply':
-        return entry.thread === tab;
+        return entry.participant === tab ? [entry] : [];
+      case 'reply': {
+        if (entry.thread !== undefined) return entry.thread === tab ? [entry] : [];
+        // Ход защитника в общих раундах: во вкладке — его ответы этому
+        // ревьюеру; сорванный ход касается всех.
+        if (entry.groups === undefined) return [entry];
+        const own = entry.groups.filter((group) => group.reviewer === tab);
+        if (own.length === 0) return entry.responses.length === 0 ? [entry] : [];
+        return [{ ...entry, groups: own, responses: own.flatMap((group) => group.responses) }];
+      }
       case 'outcome':
       case 'verdict':
-        return false;
+        return [];
     }
   });
 }
@@ -123,8 +133,9 @@ function colorClass(participant: ReviewFeedParticipant | undefined): string {
 }
 
 /**
- * Выбранный вызов участника: без `round` — первый вызов, с `round` — ответ
- * этого раунда, с `thread` и `round` — ход защитника в ветке ревьюера.
+ * Выбранный вызов участника: без `round` — первый вызов, с `round` — ход
+ * этого раунда, с `thread` и `round` — ход защитника в ветке ревьюера
+ * (журнал прежнего формата).
  */
 export interface ReviewSelection {
   readonly participant: string;
@@ -138,11 +149,22 @@ export function stanceLabel(response: Pick<ReviewFeedResponse, 'stance' | 'sever
   return response.stance === 'revise' && response.severity !== undefined ? `${label} → ${response.severity}` : label;
 }
 
-/** Строка о защитнике: форк сессии имплементатора либо свежий агент с причиной. */
+/** Почему защищает форк, а не сама сессия, — значения `reason` у `fork`. */
+const FORK_REASON: Readonly<Record<string, string>> = {
+  reused: 'reused',
+  shared: 'shared',
+};
+
+/** Строка о защитнике: сессия имплементатора, её форк либо свежий агент с причиной. */
 export function defenderLine(defender: ReviewFeedDefender): string {
   const agent = [defender.agent, defender.model].filter((part) => part !== undefined).join(' · ');
+  const tail = agent === '' ? '' : ` · ${agent}`;
+  if (defender.mode === 'resume') {
+    return `Defender: implementer session ${defender.implementer ?? 'of the implementer'}${tail}`;
+  }
   if (defender.mode === 'fork') {
-    return `Defender: fork of the ${defender.implementer ?? 'implementer'} session${agent === '' ? '' : ` · ${agent}`}`;
+    const reason = defender.reason === undefined ? '' : ` (${FORK_REASON[defender.reason] ?? defender.reason})`;
+    return `Defender: fork of the ${defender.implementer ?? 'implementer'} session${reason}${tail}`;
   }
   const reason = defender.reason === undefined ? undefined : (FRESH_REASON[defender.reason] ?? defender.reason);
   return `Defender: fresh agent${agent === '' ? '' : ` ${agent}`}${reason === undefined ? '' : ` — ${reason}`}`;
@@ -281,9 +303,10 @@ function EntryView({
     case 'reply': {
       const participant = participants.get(entry.participant);
       const defender = entry.side === 'defender';
-      const selection: ReviewSelection = defender
-        ? { participant: entry.participant, thread: entry.thread, round: entry.round }
-        : { participant: entry.participant, round: entry.round };
+      const selection: ReviewSelection =
+        defender && entry.thread !== undefined
+          ? { participant: entry.participant, thread: entry.thread, round: entry.round }
+          : { participant: entry.participant, round: entry.round };
       const avatar = <Avatar participant={participant} id={entry.participant} selection={selection} onSelect={onSelect} />;
       return (
         <li className={`review-message review-thread${defender ? ' own' : ''}`}>
@@ -291,16 +314,30 @@ function EntryView({
           <article className={`review-bubble ${colorClass(participant)}`}>
             <header className="review-bubble-head">
               <Who participant={participant} id={entry.participant} />
-              {defender ? <span className="kind">on {entry.thread}</span> : null}
+              {defender && entry.thread !== undefined ? <span className="kind">on {entry.thread}</span> : null}
               {entry.invalid === true ? <Badge variant="destructive">reply failed the schema check</Badge> : null}
               {entry.failure === undefined ? null : <Badge variant="destructive">reply failed: {entry.failure}</Badge>}
-              <span className="kind review-counter" title="round of this thread of the limit">
+              <span className="kind review-counter" title="round of the defense limit">
                 round {entry.round}/{rounds ?? '?'}
               </span>
               <OpenTurn selection={selection} onSelect={onSelect} />
             </header>
             {entry.text === '' ? null : <p className="review-text">{entry.text}</p>}
-            {entry.responses.length === 0 ? null : (
+            {entry.groups !== undefined ? (
+              entry.groups.map((group) => {
+                const reviewer = participants.get(group.reviewer);
+                return (
+                  <section key={group.reviewer} className={`review-group ${colorClass(reviewer)}`} aria-label={`Answers to ${group.reviewer}`}>
+                    <span className={`review-name ${colorClass(reviewer)}`}>{group.reviewer}</span>
+                    <ul className="review-responses">
+                      {group.responses.map((response) => (
+                        <ResponseView key={response.finding} response={response} />
+                      ))}
+                    </ul>
+                  </section>
+                );
+              })
+            ) : entry.responses.length === 0 ? null : (
               <ul className="review-responses">
                 {entry.responses.map((response) => (
                   <ResponseView key={response.finding} response={response} />
@@ -369,21 +406,25 @@ function sessionLabel(participant: ReviewFeedParticipant, session: ReviewFeedSes
   const id = displayId(participant.id);
   if (participant.role === 'aggregator') return `${id} is writing the verdict…`;
   if (session.thread !== undefined) return `${id} is answering ${session.thread} in round ${session.round ?? '?'}…`;
+  if (participant.role === 'defender') return `${id} is answering the reviewers in round ${session.round ?? '?'}…`;
   return session.round === undefined
     ? `${id} is reviewing…`
     : `${id} is answering the defender in round ${session.round}…`;
 }
 
 /**
- * Кто пишет прямо сейчас: по строке на начатый вызов — ветки защитника идут
- * параллельно. Во вкладке ревьюера — только он сам и защитник в его ветке.
+ * Кто пишет прямо сейчас: по строке на начатый вызов — ревьюеры отвечают
+ * параллельно, а в журнале прежнего формата параллельно шли и ветки
+ * защитника. Во вкладке ревьюера — только он сам и защитник: в общих раундах
+ * защитник отвечает всем, в ветках — только в его ветке.
  */
 export function runningLabels(participants: readonly ReviewFeedParticipant[], tab: string = ALL_TAB): string[] {
   return participants.flatMap((participant) => {
     if (!participant.running) return [];
     if (tab !== ALL_TAB && participant.role !== 'defender' && participant.id !== tab) return [];
     const sessions = participant.sessions.filter(
-      (session) => session.running && (tab === ALL_TAB || participant.role !== 'defender' || session.thread === tab),
+      (session) =>
+        session.running && (tab === ALL_TAB || participant.role !== 'defender' || session.thread === undefined || session.thread === tab),
     );
     if (tab !== ALL_TAB && participant.role === 'defender' && sessions.length === 0) return [];
     return sessions.length === 0 ? [sessionLabel(participant, { running: true })] : sessions.map((session) => sessionLabel(participant, session));
@@ -419,18 +460,32 @@ function SidePanel({
           </ul>
         </section>
       )}
-      {threads.length === 0 ? null : (
+      {threads.length === 0 && feed.defenseRounds === undefined ? null : (
         <section>
           <h4>Rounds</h4>
           <ul>
+            {feed.defenseRounds === undefined ? null : (
+              <li>
+                <b>defense</b>{' '}
+                <span className="mono">
+                  {feed.defenseRounds}/{feed.rounds ?? '?'}
+                </span>
+              </li>
+            )}
             {threads.map((thread) => {
               const reviewer = feed.participants.find((participant) => participant.id === thread.reviewer);
               return (
                 <li key={thread.reviewer} className={thread.settled ? 'settled' : undefined}>
                   <span className={`review-name ${colorClass(reviewer)}`}>{thread.reviewer}</span>{' '}
-                  <span className="mono">
-                    {thread.rounds}/{feed.rounds ?? '?'}
-                  </span>
+                  {feed.defenseRounds === undefined ? (
+                    <span className="mono">
+                      {thread.rounds}/{feed.rounds ?? '?'}
+                    </span>
+                  ) : (
+                    <span className="kind">
+                      {thread.rounds} {thread.rounds === 1 ? 'turn' : 'turns'}
+                    </span>
+                  )}
                   {thread.settled ? <span className="kind"> · settled</span> : null}
                 </li>
               );

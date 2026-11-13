@@ -286,7 +286,8 @@ Id возражения — `<участник>.<n>`. Пустой список 
 - `author/rounds/<r>/` — ходы защиты;
 - `aggregator/` — итог.
 
-`discussion.ndjson` содержит записи:
+`discuss.ndjson` содержит записи (имя `discussion.ndjson` занято: по нему
+витрина узнаёт журналы прежнего режима `discussion`):
 
 - `proposal` (участник, статус);
 - `draft`;

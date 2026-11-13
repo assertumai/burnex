@@ -1253,7 +1253,7 @@ export type RebuttalStance = 'maintain' | 'withdraw' | 'revise';
 
 export interface ReviewFeedSession {
   readonly round?: number;
-  /** Ветка ревьюера — у ходов защитника. */
+  /** Ветка ревьюера — у ходов защитника в журнале прежнего формата. */
   readonly thread?: string;
   readonly status?: StatusValue;
   readonly reason?: string;
@@ -1293,11 +1293,17 @@ export interface ReviewFinding {
 }
 
 export interface ReviewFeedDefender {
-  readonly mode: 'fork' | 'fresh';
+  /** Сама сессия имплементатора, её форк или свежий агент. */
+  readonly mode: 'resume' | 'fork' | 'fresh';
   readonly implementer?: string;
   readonly agent?: string;
   readonly model?: string;
   readonly reason?: string;
+}
+
+export interface ReviewFeedResponseGroup {
+  readonly reviewer: string;
+  readonly responses: readonly ReviewFeedResponse[];
 }
 
 export interface ReviewFeedResponse {
@@ -1320,11 +1326,14 @@ export type ReviewFeedEntry =
       readonly kind: 'reply';
       readonly participant: string;
       readonly side: 'defender' | 'reviewer';
-      readonly thread: string;
+      /** Ревьюер реплики; у хода защитника в общих раундах нет — он отвечает всем. */
+      readonly thread?: string;
       readonly round: number;
       readonly messageId: string;
       readonly text: string;
       readonly responses: readonly ReviewFeedResponse[];
+      /** Ответы хода защитника по ревьюерам в порядке стратегии. */
+      readonly groups?: readonly ReviewFeedResponseGroup[];
       readonly invalid?: true;
       readonly failure?: string;
     }
@@ -1357,8 +1366,10 @@ export interface ReviewFeedThread {
 
 export interface ReviewFeed {
   readonly mode?: 'independent' | 'defend';
-  /** Лимит раундов ветки — у `defend`. */
+  /** Лимит раундов защиты — у `defend`. */
   readonly rounds?: number;
+  /** Прошедшие раунды общей защиты; нет — журнал прежнего формата с ветками. */
+  readonly defenseRounds?: number;
   readonly defender?: ReviewFeedDefender;
   readonly participants: readonly ReviewFeedParticipant[];
   readonly entries: readonly ReviewFeedEntry[];

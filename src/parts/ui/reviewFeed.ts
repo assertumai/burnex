@@ -15,9 +15,10 @@ import type { JournalFileRef } from './snapshot.js';
  * решение 8).
  *
  * Строится из журнала шага, а не из потока бэкенда: `defense.ndjson` —
- * защитник, находки, реплики веток, закрытия и исход;
- * `participants/<id>/step.json`, `participants/<id>/rounds/<r>/step.json` и
- * `participants/defender/<ревьюер>/rounds/<r>/step.json` — кто участвовал,
+ * защитник, находки, реплики раундов, закрытия и исход;
+ * `participants/<id>/step.json` и `participants/<id>/rounds/<r>/step.json`
+ * (у защитника в журнале прежнего формата —
+ * `participants/defender/<ревьюер>/rounds/<r>/step.json`) — кто участвовал,
  * чем и с каким исходом; `output.json` — находки независимого ревью и вердикт
  * агрегатора. Порядок участников и лимит раундов — из замка прогона: каталоги
  * участников порядка не хранят, а цвет участника задаётся его позицией в
@@ -31,7 +32,7 @@ import type { JournalFileRef } from './snapshot.js';
  * строки или файла даёт пропуск записи, а не исключение.
  */
 
-/** Раундов ветки по умолчанию — `defend.rounds` стратегии без значения. */
+/** Раундов защиты по умолчанию — `defend.rounds` стратегии без значения. */
 export const DEFAULT_DEFEND_ROUNDS = 2;
 
 /** Расход участника. `null` — сводка ещё не записана либо не называет его. */
@@ -45,9 +46,9 @@ export interface ReviewFeedUsage {
 
 /** Один вызов участника: находки, ответ раунда, ход защитника или вердикт. Открывается разобранным ходом. */
 export interface ReviewFeedSession {
-  /** Раунд ветки; нет — первый вызов (находки ревьюера, вердикт агрегатора). */
+  /** Раунд защиты; нет — первый вызов (находки ревьюера, вердикт агрегатора). */
   readonly round?: number;
-  /** Ветка ревьюера — только у ходов защитника. */
+  /** Ветка ревьюера — у ходов защитника в журнале прежнего формата. */
   readonly thread?: string;
   readonly status?: StatusValue;
   readonly reason?: string;
@@ -92,14 +93,24 @@ export interface ReviewFinding {
   readonly revisedFrom?: string;
 }
 
-/** Кто защищает: форк сессии имплементатора или свежий агент с причиной. */
+/** Кто защищает: сама сессия имплементатора, её форк или свежий агент с причиной. */
 export interface ReviewFeedDefender {
-  readonly mode: 'fork' | 'fresh';
+  readonly mode: 'resume' | 'fork' | 'fresh';
   readonly implementer?: string;
   readonly agent?: string;
   readonly model?: string;
-  /** `no_implementer`, `no_session`, `no_fork`, `no_schema` или `other_tree` — у свежего агента. */
+  /**
+   * У свежего агента — `no_implementer`, `no_session`, `no_fork`,
+   * `no_schema` или `other_tree`; у форка — `reused` или `shared` (в журнале
+   * прежнего формата у форка причины нет).
+   */
   readonly reason?: string;
+}
+
+/** Ответы реплики защитника на находки одного ревьюера. */
+export interface ReviewFeedResponseGroup {
+  readonly reviewer: string;
+  readonly responses: readonly ReviewFeedResponse[];
 }
 
 /** Ответ реплики по одной находке. */
@@ -123,16 +134,22 @@ export type ReviewFeedEntry =
       readonly findings: readonly ReviewFinding[];
     }
   | {
-      /** Реплика ветки: ход защитника либо ответ ревьюера. */
+      /** Реплика защиты: ход защитника либо ответ ревьюера. */
       readonly kind: 'reply';
       readonly participant: string;
       readonly side: 'defender' | 'reviewer';
-      /** Ветка — id ревьюера. */
-      readonly thread: string;
+      /**
+       * Ревьюер, к которому относится реплика: у ответа ревьюера — он сам, у
+       * хода защитника в журнале прежнего формата — его ветка. У хода
+       * защитника в общих раундах нет: он отвечает всем.
+       */
+      readonly thread?: string;
       readonly round: number;
       readonly messageId: string;
       readonly text: string;
       readonly responses: readonly ReviewFeedResponse[];
+      /** Ответы хода защитника, разложенные по ревьюерам в порядке стратегии. */
+      readonly groups?: readonly ReviewFeedResponseGroup[];
       /** Ответа нет: дважды не прошёл схему. */
       readonly invalid?: true;
       /** Ответа нет: вызов сорвался — таймаут, отказ бэкенда, неудачный форк. */
@@ -162,18 +179,26 @@ export interface ReviewFeedFinding {
   readonly status: ReviewFindingStatus;
 }
 
-/** Ветка защиты ревьюера: прошедшие раунды из лимита. */
+/**
+ * Ревьюер в защите: в общих раундах — сколько раз он ответил защитнику, в
+ * журнале прежнего формата — прошедшие раунды его ветки из лимита.
+ */
 export interface ReviewFeedThread {
   readonly reviewer: string;
   readonly rounds: number;
-  /** Все находки ветки закрыты. */
+  /** Все находки ревьюера закрыты. */
   readonly settled: boolean;
 }
 
 export interface ReviewFeed {
   readonly mode?: 'independent' | 'defend';
-  /** Лимит раундов ветки — только у `defend`. */
+  /** Лимит раундов защиты — только у `defend`. */
   readonly rounds?: number;
+  /**
+   * Прошедшие раунды общей защиты — только у `defend` в общих раундах. Нет —
+   * журнал прежнего формата с ветками: раунды у каждой ветки свои.
+   */
+  readonly defenseRounds?: number;
   readonly defender?: ReviewFeedDefender;
   readonly participants: readonly ReviewFeedParticipant[];
   readonly entries: readonly ReviewFeedEntry[];
@@ -382,7 +407,7 @@ const FINDING_STATUSES: ReadonlySet<string> = new Set(['accepted', 'withdrawn', 
 const STANCES: ReadonlySet<string> = new Set(['accept', 'dispute', 'clarify', 'maintain', 'withdraw', 'revise']);
 
 function defenderOf(record: Record<string, unknown> | undefined): ReviewFeedDefender | undefined {
-  if (record === undefined || (record.mode !== 'fork' && record.mode !== 'fresh')) return undefined;
+  if (record === undefined || (record.mode !== 'resume' && record.mode !== 'fork' && record.mode !== 'fresh')) return undefined;
   const implementer = asString(record.implementer);
   const agent = asString(record.agent);
   const model = asString(record.model);
@@ -462,10 +487,11 @@ function readDefense(records: readonly Record<string, unknown>[]): DefenseLog {
       case 'message': {
         const from = asString(record.from);
         const messageId = asString(record.messageId);
-        const thread = asString(record.thread);
-        const round = record.round;
-        if (from === undefined || messageId === undefined || thread === undefined || typeof round !== 'number') break;
         const side = from === DEFENDER_ID ? 'defender' : 'reviewer';
+        // У ответа ревьюера ветка — он сам, даже если журнал её не записал.
+        const thread = asString(record.thread) ?? (side === 'reviewer' ? from : undefined);
+        const round = record.round;
+        if (from === undefined || messageId === undefined || typeof round !== 'number') break;
         const responses = responsesOf(record.responses);
         // Пересмотр серьёзности ревьюером — до закрытия: `settled` несёт итог.
         if (side === 'reviewer') {
@@ -479,7 +505,7 @@ function readDefense(records: readonly Record<string, unknown>[]): DefenseLog {
           kind: 'reply',
           participant: from,
           side,
-          thread,
+          ...(thread === undefined ? {} : { thread }),
           round,
           messageId,
           text: textOf(record),
@@ -507,6 +533,17 @@ function readDefense(records: readonly Record<string, unknown>[]): DefenseLog {
         break;
     }
   }
+  // Ход защитника в общих раундах отвечает всем: ответы раскладываются по
+  // ревьюерам в порядке записи их находок — это порядок стратегии.
+  const owners = [...new Set(order.map((id) => findings.get(id)!.by))];
+  const grouped = replies.map((reply) => {
+    if (reply.side !== 'defender' || reply.thread !== undefined) return reply;
+    const groups = owners.flatMap((reviewer) => {
+      const own = reply.responses.filter((response) => findings.get(response.finding)?.by === reviewer);
+      return own.length === 0 ? [] : [{ reviewer, responses: own }];
+    });
+    return { ...reply, groups };
+  });
   return {
     ...(defender === undefined ? {} : { defender }),
     findings: order.map((id) => {
@@ -522,7 +559,7 @@ function readDefense(records: readonly Record<string, unknown>[]): DefenseLog {
         ...(revised ? { revisedFrom: entry.declared } : {}),
       };
     }),
-    replies,
+    replies: grouped,
     ...(outcome === undefined ? {} : { outcome }),
   };
 }
@@ -633,38 +670,47 @@ export function readReviewFeed(
     };
   });
 
-  // Защитник — один участник на все ветки: его ходы лежат по ревьюерам, расход
-  // ведётся под `defender` (design.md, решение 7).
+  // Защитник — один участник шага, расход ведётся под `defender`. В общих
+  // раундах его ходы лежат в `participants/defender/rounds/<r>/`
+  // (`review-defend-shared-session`, решение 4), в журнале прежнего формата —
+  // по веткам ревьюеров.
+  const defenderRoot = stepDir === undefined ? undefined : participantDir(stepDir, DEFENDER_ID);
+  const sharedRounds =
+    (defenderRoot !== undefined && existsSync(join(defenderRoot, 'rounds'))) ||
+    (defense?.replies.some((reply) => reply.side === 'defender' && reply.thread === undefined) ?? false);
   if (mode === 'defend') {
     const sessions: ReviewFeedSession[] = [];
     let wallclockMs = 0;
     let running = false;
     let seen: CallRecord | undefined;
-    if (stepDir !== undefined) {
-      const root = participantDir(stepDir, DEFENDER_ID);
-      const declaredOrder = reviewers.map((reviewer) => reviewer.id);
-      const threads = listDirs(root).sort((left, right) => {
-        const a = declaredOrder.indexOf(left);
-        const b = declaredOrder.indexOf(right);
-        return (a === -1 ? Infinity : a) - (b === -1 ? Infinity : b) || left.localeCompare(right);
+    const turn = (callDir: string, round: number, thread?: string): void => {
+      const call = readCall(callDir);
+      seen ??= call;
+      const callRunning = call === undefined && alive;
+      running ||= callRunning;
+      wallclockMs += call?.wallclockMs ?? 0;
+      const stdout = stdoutOf(join(callDir, 'stdout.log'));
+      sessions.push({
+        ...(thread === undefined ? {} : { thread }),
+        round,
+        running: callRunning,
+        ...(call?.status === undefined ? {} : { status: call.status }),
+        ...(call?.reason === undefined ? {} : { reason: call.reason }),
+        ...(stdout === undefined ? {} : { stdout }),
       });
-      for (const thread of threads) {
-        for (const round of listRounds(join(root, thread))) {
-          const callDir = threadTurnDir(stepDir, DEFENDER_ID, thread, round);
-          const call = readCall(callDir);
-          seen ??= call;
-          const callRunning = call === undefined && alive;
-          running ||= callRunning;
-          wallclockMs += call?.wallclockMs ?? 0;
-          const stdout = stdoutOf(join(callDir, 'stdout.log'));
-          sessions.push({
-            thread,
-            round,
-            running: callRunning,
-            ...(call?.status === undefined ? {} : { status: call.status }),
-            ...(call?.reason === undefined ? {} : { reason: call.reason }),
-            ...(stdout === undefined ? {} : { stdout }),
-          });
+    };
+    if (stepDir !== undefined && defenderRoot !== undefined) {
+      if (sharedRounds) {
+        for (const round of listRounds(defenderRoot)) turn(replyDir(stepDir, DEFENDER_ID, round), round);
+      } else {
+        const declaredOrder = reviewers.map((reviewer) => reviewer.id);
+        const threads = listDirs(defenderRoot).sort((left, right) => {
+          const a = declaredOrder.indexOf(left);
+          const b = declaredOrder.indexOf(right);
+          return (a === -1 ? Infinity : a) - (b === -1 ? Infinity : b) || left.localeCompare(right);
+        });
+        for (const thread of threads) {
+          for (const round of listRounds(join(defenderRoot, thread))) turn(threadTurnDir(stepDir, DEFENDER_ID, thread, round), round, thread);
         }
       }
     }
@@ -692,6 +738,15 @@ export function readReviewFeed(
 
   if (!legacy) {
     if (defense?.defender !== undefined) entries.push({ kind: 'defender', ...defense.defender });
+    // Общие раунды: сначала находки всех ревьюеров, затем раунды — ход
+    // защитника раунда и ответы ревьюеров этого раунда в порядке стратегии.
+    // Журнал прежнего формата: ветка ревьюера — под его находками.
+    const order = reviewerParticipants.map((reviewer) => reviewer.id);
+    const rank = (reply: Extract<ReviewFeedEntry, { kind: 'reply' }>): number =>
+      reply.side === 'defender' ? -1 : order.indexOf(reply.participant) === -1 ? order.length : order.indexOf(reply.participant);
+    const roundsInOrder = sharedRounds
+      ? [...(defense?.replies ?? [])].sort((left, right) => left.round - right.round || rank(left) - rank(right))
+      : [];
     for (const reviewer of reviewerParticipants) {
       if (reviewer.running || reviewer.status === undefined) continue;
       const output = reviewer.status === 'success' && stepDir !== undefined
@@ -703,10 +758,12 @@ export function readReviewFeed(
         continue;
       }
       entries.push({ kind: 'findings', participant: reviewer.id, summary: summaryOf(output), findings: reviewerFindings(reviewer.id, output, defense) });
+      if (sharedRounds) continue;
       for (const reply of defense?.replies ?? []) {
         if (reply.thread === reviewer.id) entries.push(reply);
       }
     }
+    entries.push(...roundsInOrder);
     if (defense?.outcome !== undefined) entries.push(defense.outcome);
   }
 
@@ -729,18 +786,27 @@ export function readReviewFeed(
 
   const rounds = mode === 'defend' ? (strategy?.rounds ?? DEFAULT_DEFEND_ROUNDS) : undefined;
   const findings: ReviewFeedFinding[] = (defense?.findings ?? []).map(({ finding: _finding, ...rest }) => rest);
+  const replies = defense?.replies ?? [];
   const threads: ReviewFeedThread[] = mode === 'defend'
     ? reviewerParticipants.flatMap((reviewer) => {
         const own = findings.filter((finding) => finding.by === reviewer.id);
         if (own.length === 0) return [];
-        const passed = Math.max(0, ...(defense?.replies ?? []).filter((reply) => reply.thread === reviewer.id).map((reply) => reply.round));
+        const mine = replies.filter((reply) => reply.thread === reviewer.id);
+        // Общие раунды — ходы самого ревьюера; ветки — прошедшие раунды ветки.
+        const passed = sharedRounds
+          ? mine.filter((reply) => reply.side === 'reviewer').length
+          : Math.max(0, ...mine.map((reply) => reply.round));
         return [{ reviewer: reviewer.id, rounds: passed, settled: own.every((finding) => finding.status !== 'open') }];
       })
     : [];
+  const defenseRounds = mode === 'defend' && sharedRounds
+    ? Math.max(0, ...replies.filter((reply) => reply.side === 'defender').map((reply) => reply.round))
+    : undefined;
 
   return {
     ...(mode === undefined ? {} : { mode }),
     ...(rounds === undefined ? {} : { rounds }),
+    ...(defenseRounds === undefined ? {} : { defenseRounds }),
     ...(defense?.defender === undefined ? {} : { defender: defense.defender }),
     participants,
     entries,

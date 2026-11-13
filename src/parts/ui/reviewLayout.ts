@@ -13,7 +13,10 @@ export const DEFENSE_FILE = 'defense.ndjson';
 /** Журнал прежнего режима `discussion`: витрина узнаёт его, но не разбирает. */
 export const DISCUSSION_FILE = 'discussion.ndjson';
 
-/** Участник-защитник: его ходы лежат по веткам ревьюеров. */
+/**
+ * Участник-защитник: его ходы лежат в `participants/defender/rounds/<r>/`,
+ * а в журналах прежнего формата — по веткам ревьюеров.
+ */
 export const DEFENDER_ID = 'defender';
 
 /** Каталог участника внутри каталога шага. */
@@ -21,14 +24,15 @@ export function participantDir(stepDir: string, participant: string): string {
   return join(stepDir, 'participants', participant);
 }
 
-/** Каталог ответа ревьюера в раунде `round` ≥ 1. */
+/** Каталог хода ревьюера или защитника в раунде `round` ≥ 1. */
 export function replyDir(stepDir: string, participant: string, round: number): string {
   return join(participantDir(stepDir, participant), 'rounds', String(round));
 }
 
 /**
- * Каталог хода участника в ветке `thread`, раунд `round` ≥ 1. Ветки есть
- * только у защитника: `participants/defender/<ревьюер>/rounds/<r>/`.
+ * Каталог хода участника в ветке `thread`, раунд `round` ≥ 1, — журнал
+ * прежнего формата: ветки были только у защитника,
+ * `participants/defender/<ревьюер>/rounds/<r>/`.
  */
 export function threadTurnDir(stepDir: string, participant: string, thread: string, round: number): string {
   return join(participantDir(stepDir, participant), thread, 'rounds', String(round));

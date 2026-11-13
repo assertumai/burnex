@@ -46,11 +46,12 @@ cd "$T" && burnex lint /путь/к/burnex/examples/review/burnex.yml && burnex 
 `mode: defend`, `defend.rounds: 2`). Шаг `implement` (Claude) пишет в рабочий
 каталог маленький `login.ts`, затем шаг `review-diff` с
 `implementer: implement`: ревьюеры `security` (Codex) и `tests` (Claude) ищут
-находки, и каждый обсуждает свои в собственной ветке с защитником — форком
-сессии имплементатора (`claude --resume <сессия implement> --fork-session
---session-id <новый>`). Принятое защитником и снятое ревьюером закрывается в
-ветке, спорное после двух раундов (`contested`) решает агрегатор. Тратит от
-пяти до одиннадцати вызовов модели. Рабочий каталог — тот, где запущен burnex
+находки, а защищает их сама сессия имплементатора, возобновлённая на месте
+(`claude --resume <сессия implement>`). Раунд — один ход защитника на
+открытые находки обоих ревьюеров, затем ревьюеры параллельно отвечают ему в
+своих сессиях. Принятое защитником и снятое ревьюером закрывается сразу,
+спорное после двух раундов (`contested`) решает агрегатор. Тратит от пяти до
+десяти вызовов модели. Рабочий каталог — тот, где запущен burnex
 (`workspace.mode: cwd`), поэтому запускайте во временном каталоге `$T`, как
 выше:
 
@@ -60,24 +61,24 @@ cd "$T" && burnex lint /путь/к/burnex/examples/review/burnex-defend.yml && 
 
 `burnex config --pipeline` для этого файла называет и строку
 `review/review-diff/defender` — свежего защитника, который нужен, только если
-форк невозможен.
+у шага `implement` нет сессии.
 
 Что сверить:
 
 - `jobs/review/steps/2-review-diff/defense.ndjson` — первая строка
-  `{"kind":"defender","mode":"fork","implementer":"review.implement","agent":"claude",…}`,
-  затем находки `security.<n>` и `tests.<n>`, реплики веток в форме A2A
-  `Message` (`messageId`, `role`, `parts`, `from`, `thread`, `round`,
-  `responses`), по одной строке `settled` на находку и последняя строка
-  `outcome` со счётом `accepted`/`withdrawn`/`contested`;
-- `participants/defender/<ревьюер>/rounds/<r>/` — ходы защитника;
-  `step.json` первого хода несёт `fork_from` — идентификатор сессии шага
-  `implement` (поле `session` в `jobs/review/steps/1-implement/step.json`), и у
-  двух веток разные `session_id`;
+  `{"kind":"defender","mode":"resume","implementer":"review.implement","agent":"claude",…}`,
+  затем находки `security.<n>` и `tests.<n>`, реплики в форме A2A `Message`
+  (`messageId`, `role`, `parts`, `from`, `round`, `responses`; у реплик
+  ревьюеров ещё `thread`), по одной строке `settled` на находку и последняя
+  строка `outcome` со счётом `accepted`/`withdrawn`/`contested`;
+- `participants/defender/rounds/<r>/` — ходы защитника; `session_id` в их
+  `step.json` совпадает с полем `session` в
+  `jobs/review/steps/1-implement/step.json`;
 - `participants/<ревьюер>/rounds/<r>/` — ответы ревьюера защитнику;
 - `participants/aggregator/prompt.txt` — строка о защитнике, находки со
   статусами и перепиской, требование решить `contested` самому;
-- `events.ndjson` — `review.defender`, `review.message` с `thread` на каждую
-  реплику, `review.settled` на каждую находку, `review.defense.finished`;
+- `events.ndjson` — `review.defender` с `mode: resume`, `review.message` на
+  каждую реплику (у защитника без `thread`), `review.settled` на каждую
+  находку, `review.defense.finished`;
 - `usage.json` → `jobs.review.steps.review-diff.participants.defender` — расход
-  ходов защитника обеих веток.
+  ходов защитника.

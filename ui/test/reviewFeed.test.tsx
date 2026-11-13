@@ -171,8 +171,8 @@ describe('review-defend: лента защиты', () => {
   });
 
   it('свежий защитник называет агента и причину', () => {
-    assert.equal(defenderLine({ mode: 'fresh', agent: 'claude', reason: 'no_session' }), 'Defender: fresh agent claude — the implementer step recorded no session');
-    assert.equal(defenderLine({ mode: 'fresh', agent: 'codex', model: 'gpt', reason: 'no_fork' }), "Defender: fresh agent codex · gpt — the implementer's agent cannot fork sessions");
+    assert.equal(defenderLine({ mode: 'fresh', agent: 'claude', reason: 'no_session' }), 'Defender: fresh agent claude — the implementer step has no session to continue');
+    assert.equal(defenderLine({ mode: 'fresh', agent: 'codex', model: 'gpt', reason: 'no_fork' }), "Defender: fresh agent codex · gpt — the implementer session cannot be continued in place, and its agent cannot fork sessions");
     assert.equal(defenderLine({ mode: 'fresh', agent: 'claude', reason: 'no_implementer' }), 'Defender: fresh agent claude — the step names no implementer');
   });
 
@@ -474,5 +474,101 @@ describe('лента ревью: вердикт судьи', () => {
     assert.match(html, /<p class="review-text">Принято одно замечание \(minor\): echo непереносим<\/p>/);
     assert.doesNotMatch(html, /verdict: Принято/);
     assert.match(text(render(DEFEND)), /verdict: request_changes/);
+  });
+});
+
+/** Общие раунды (`review-defend-shared-session`): один ход защитника на всех ревьюеров. */
+const SHARED: ReviewFeed = {
+  mode: 'defend',
+  rounds: 2,
+  defenseRounds: 1,
+  defender: { mode: 'resume', implementer: 'build.implement', agent: 'claude', model: 'sonnet' },
+  participants: [
+    participant('security', 0),
+    participant('tests', 1),
+    participant('defender', 3, { agent: 'claude', model: 'sonnet', sessions: [{ round: 1, running: false, status: 'success' }] }, true),
+    participant('aggregator', 2),
+  ],
+  entries: [
+    { kind: 'defender', mode: 'resume', implementer: 'build.implement', agent: 'claude', model: 'sonnet' },
+    { kind: 'findings', participant: 'security', summary: '', findings: [{ id: 'security.1', severity: 'critical', title: 'SQL injection', status: 'contested' }] },
+    { kind: 'findings', participant: 'tests', summary: '', findings: [{ id: 'tests.1', severity: 'major', title: 'no test', status: 'accepted' }] },
+    {
+      kind: 'reply',
+      participant: 'defender',
+      side: 'defender',
+      round: 1,
+      messageId: 'm1',
+      text: 'one turn for both',
+      responses: [
+        { finding: 'security.1', stance: 'dispute', text: 'escaped', evidence: 'src/db.ts:12' },
+        { finding: 'tests.1', stance: 'accept', text: 'right' },
+      ],
+      groups: [
+        { reviewer: 'security', responses: [{ finding: 'security.1', stance: 'dispute', text: 'escaped', evidence: 'src/db.ts:12' }] },
+        { reviewer: 'tests', responses: [{ finding: 'tests.1', stance: 'accept', text: 'right' }] },
+      ],
+    },
+    { kind: 'reply', participant: 'security', side: 'reviewer', thread: 'security', round: 1, messageId: 'm2', text: '', responses: [{ finding: 'security.1', stance: 'maintain', text: 'not everywhere' }] },
+    { kind: 'outcome', accepted: 1, withdrawn: 0, contested: 1 },
+  ],
+  findings: [
+    { id: 'security.1', by: 'security', status: 'contested', severity: 'critical' },
+    { id: 'tests.1', by: 'tests', status: 'accepted', severity: 'major' },
+  ],
+  threads: [
+    { reviewer: 'security', rounds: 1, settled: true },
+    { reviewer: 'tests', rounds: 0, settled: true },
+  ],
+  legacy: false,
+  done: true,
+};
+
+describe('review-defend-shared-session: лента общих раундов', () => {
+  // Сценарий: «Защитник — сессия имплементатора»
+  it('строка о защитнике: сессия имплементатора; форк — с причиной', () => {
+    assert.equal(defenderLine({ mode: 'resume', implementer: 'build.implement', agent: 'claude', model: 'sonnet' }), 'Defender: implementer session build.implement · claude · sonnet');
+    assert.equal(defenderLine({ mode: 'fork', implementer: 'build.implement', agent: 'claude', reason: 'shared' }), 'Defender: fork of the build.implement session (shared) · claude');
+    assert.equal(defenderLine({ mode: 'fork', implementer: 'build.implement', agent: 'claude', reason: 'reused' }), 'Defender: fork of the build.implement session (reused) · claude');
+  });
+
+  // Сценарий: «Раунд со спором»
+  it('одна реплика защитника с группами по ревьюерам, защитник справа, затем ответ ревьюера', () => {
+    const html = render(SHARED);
+    assert.match(html, /Defender: implementer session build\.implement · claude · sonnet/);
+    const reply = html.indexOf('one turn for both');
+    assert.ok(reply !== -1);
+    const security = html.indexOf('aria-label="Answers to security"');
+    const tests = html.indexOf('aria-label="Answers to tests"');
+    assert.ok(security > reply && tests > security, 'группы — внутри реплики, в порядке стратегии');
+    assert.match(html.slice(security, tests), /disputes[\s\S]*src\/db\.ts:12/);
+    assert.match(html.slice(tests), /accepts/);
+    assert.ok(html.indexOf('not everywhere') > tests, 'ответ ревьюера — после хода защитника');
+    assert.match(html, /review-message review-thread own/);
+    assert.doesNotMatch(html.slice(reply - 600, reply), /on security/);
+  });
+
+  it('вкладка ревьюера: ход защитника только с ответами ему', () => {
+    const security = entriesForTab(SHARED.entries, 'security');
+    const turn = security.find((entry) => entry.kind === 'reply' && entry.side === 'defender');
+    assert.ok(turn?.kind === 'reply');
+    assert.deepEqual(turn.groups?.map((group) => group.reviewer), ['security']);
+    assert.deepEqual(turn.responses.map((response) => response.finding), ['security.1']);
+    const tests = entriesForTab(SHARED.entries, 'tests');
+    assert.deepEqual(tests.map((entry) => `${entry.kind}${'participant' in entry ? `:${entry.participant}` : ''}`), ['defender', 'findings:tests', 'reply:defender']);
+  });
+
+  // Сценарий: «Итог защиты» — раунды защиты и ходы ревьюеров
+  it('панель: раунды защиты r/rounds и число ходов каждого ревьюера', () => {
+    const html = render(SHARED);
+    assert.match(html, /<b>defense<\/b> <span class="mono">1\/2<\/span>/);
+    assert.match(html, /security<\/span> <span class="kind">1 turn<\/span>/);
+    assert.match(html, /tests<\/span> <span class="kind">0 turns<\/span>/);
+  });
+
+  it('идущий ход защитника виден во всех вкладках', () => {
+    const running = [participant('defender', 3, { running: true, sessions: [{ round: 2, running: true }] }, true)];
+    assert.deepEqual(runningLabels(running, 'tests'), ['defender is answering the reviewers in round 2…']);
+    assert.deepEqual(runningLabels(running), ['defender is answering the reviewers in round 2…']);
   });
 });

@@ -444,7 +444,7 @@ export function StrategyEditor({ draft, settings, strategy, problem, readOnly, n
                   min={ROUNDS_RANGE.min} max={ROUNDS_RANGE.max} value={draft.rounds}
                   onChange={(event) => onChange({ ...draft, rounds: Number(event.target.value) })} />
               </div>
-              <span className="small dim">Rounds of defender answer and reviewer reply per reviewer; findings still open after them are contested.</span>
+              <span className="small dim">Rounds of one defender answer to all reviewers, then their replies; findings still open after them are contested.</span>
             </Field>
           ) : null}
           <CourseScheme mode={draft.mode} rounds={draft.rounds} />
@@ -459,9 +459,9 @@ export function StrategyEditor({ draft, settings, strategy, problem, readOnly, n
               <Badge variant="secondary">defends</Badge>
             </div>
             <CardDescription>
-              Answers each reviewer&apos;s findings on behalf of the implementation. When the <code>review:</code> step names
-              an <code>implementer</code> whose session can be forked, the defender is a fork of that session and these
-              settings are not used; otherwise a fresh agent with them defends.
+              Answers the reviewers&apos; findings on behalf of the implementation. When the <code>review:</code> step names
+              an <code>implementer</code> with a session, that session defends itself (or its fork, when another step may
+              continue it) and these settings are not used; when it has none, a fresh agent with them defends.
             </CardDescription>
           </CardHeader>
           <CardContent>

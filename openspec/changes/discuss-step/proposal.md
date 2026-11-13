@@ -47,7 +47,7 @@
 - Поля движка в итоге — всегда, при любой `output_schema`: `agreed`,
   `unresolved[]`, `changed_by_aggregator[]`. Инвариант: при `agreed: true`
   список `unresolved` пуст.
-- Журнал шага `discussion.ndjson` и события `discuss.*`. Каталоги
+- Журнал шага `discuss.ndjson` и события `discuss.*`. Каталоги
   участников — как у `review`.
 - Линт и предстартовые проверки шага `discuss` и стратегии.
 

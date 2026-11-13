@@ -216,7 +216,7 @@ describe('ui-review-strategies: режим и схема хода', () => {
     assert.match(defend, /class="[^"]*strategy-defender[^"]*"/);
     assert.match(defend, /id="defender-agent"/);
     assert.match(defend, /id="defender-prompt"/);
-    assert.match(defend, /the defender is a fork of that session/);
+    assert.match(defend, /that session defends itself/);
     assert.match(defend, /<li>Reviewers in parallel<\/li><li>Defend with implementer ≤ 2 rounds<\/li><li>Aggregator decides contested<\/li>/);
   });
 

@@ -181,7 +181,7 @@
 - `participants/author/draft/`;
 - `participants/author/rounds/<r>/`;
 - `participants/aggregator/`;
-- `discussion.ndjson` с записями `proposal`, `draft`, `objection`, `message`, `settled` и `outcome`.
+- `discuss.ndjson` с записями `proposal`, `draft`, `objection`, `message`, `settled` и `outcome`.
 
 Журнал прогона MUST получать события:
 

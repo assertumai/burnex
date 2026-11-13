@@ -81,6 +81,8 @@
 /* Реплики ветки защиты — под находками своего ревьюера, с отступом. */
 .review-thread { margin-left: 2.5rem; }
 .review-thread.own { margin-left: 0; }
+.review-group { margin-top: .45rem; padding-left: .5rem; border-left: 2px solid var(--participant); }
+.review-group .review-responses { margin-top: .2rem; }
 .review-responses { margin: .35rem 0 0; padding-left: 0; list-style: none; font-size: .85rem; display: flex; flex-direction: column; gap: .25rem; }
 .review-response-text { overflow-wrap: anywhere; }
 .review-evidence { display: block; margin-top: .1rem; padding-left: .5rem; border-left: 2px solid var(--muted-foreground); overflow-wrap: anywhere; }

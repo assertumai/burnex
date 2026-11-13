@@ -103,25 +103,81 @@ function finding(id: string, by: string, severity: string, title: string): unkno
   return { kind: 'finding', id, by, severity, title, location: 'a.ts:1', detail: 'd', suggestion: null };
 }
 
-function reply(messageId: string, from: string, thread: string, round: number, responses: readonly unknown[], extra: Record<string, unknown> = {}): unknown {
+/** Реплика защиты; `thread: undefined` — ход защитника в общих раундах. */
+function reply(messageId: string, from: string, thread: string | undefined, round: number, responses: readonly unknown[], extra: Record<string, unknown> = {}): unknown {
   return {
     kind: 'message',
     messageId,
     role: 'agent',
     from,
-    thread,
+    ...(thread === undefined ? {} : { thread }),
     round,
-    parts: [{ kind: 'text', text: `${from} в ветке ${thread}, раунд ${round}` }],
+    parts: [{ kind: 'text', text: `${from} в ветке ${thread ?? 'всех'}, раунд ${round}` }],
     responses,
     ...extra,
   };
 }
 
 function kinds(entries: readonly ReviewFeedEntry[]): string[] {
-  return entries.map((entry) => (entry.kind === 'reply' ? `${entry.side} ${entry.thread}/${entry.round}` : entry.kind === 'findings' || entry.kind === 'failure' ? `${entry.kind} ${entry.participant}` : entry.kind));
+  return entries.map((entry) => (entry.kind === 'reply' ? `${entry.side} ${entry.thread ?? '*'}/${entry.round}` : entry.kind === 'findings' || entry.kind === 'failure' ? `${entry.kind} ${entry.participant}` : entry.kind));
 }
 
 describe('лента шага review', () => {
+  // review-defend-shared-session: «Раунд со спором», «Защитник — сессия имплементатора», «Итог защиты»
+  it('общие раунды: находки всех ревьюеров, затем раунды — ход защитника с группами по ревьюерам и ответы ревьюеров', () => {
+    const { journal, stepDir } = seed('defend');
+    call(stepDir, 'security', { output: findings('security', [{ severity: 'critical', title: 'инъекция' }]) });
+    call(stepDir, 'tests', { output: findings('tests') });
+    call(stepDir, 'style', { output: findings('style', []) });
+    for (const round of [1, 2]) call(stepDir, 'defender', { round });
+    for (const round of [1, 2]) call(stepDir, 'security', { round });
+    call(stepDir, 'aggregator', { output: { verdict: 'request_changes' } });
+    defense(stepDir, [
+      { kind: 'defender', mode: 'resume', implementer: 'build.implement', agent: 'claude', model: 'sonnet' },
+      finding('security.1', 'security', 'critical', 'инъекция'),
+      finding('tests.1', 'tests', 'major', 'tests: заголовок'),
+      reply('m1', 'defender', undefined, 1, [
+        { finding: 'security.1', stance: 'dispute', text: 'вход экранирован', evidence: 'src/x.ts:42' },
+        { finding: 'tests.1', stance: 'accept', text: 'верно', evidence: null },
+      ]),
+      { kind: 'settled', finding: 'tests.1', status: 'accepted', severity: 'major', round: 1 },
+      reply('m2', 'security', 'security', 1, [{ finding: 'security.1', stance: 'maintain', text: 'не везде', severity: null }]),
+      reply('m3', 'defender', undefined, 2, [{ finding: 'security.1', stance: 'dispute', text: 'везде', evidence: null }]),
+      reply('m4', 'security', 'security', 2, [{ finding: 'security.1', stance: 'maintain', text: 'настаиваю', severity: null }]),
+      { kind: 'settled', finding: 'security.1', status: 'contested', severity: 'critical', round: 2 },
+      { kind: 'outcome', accepted: 1, withdrawn: 0, contested: 1 },
+    ]);
+    journal.writeStepJson(stepDir, 'step.json', { status: 'success' });
+
+    const feed = readReviewFeed(journal.paths, 'review', 'check');
+    assert.ok(feed !== undefined);
+    assert.deepEqual(feed.defender, { mode: 'resume', implementer: 'build.implement', agent: 'claude', model: 'sonnet' });
+    assert.deepEqual(kinds(feed.entries), [
+      'defender',
+      'findings security', 'findings tests', 'findings style',
+      'defender */1', 'reviewer security/1', 'defender */2', 'reviewer security/2',
+      'outcome', 'verdict',
+    ]);
+    const first = feed.entries[4];
+    assert.ok(first?.kind === 'reply');
+    assert.equal(first.thread, undefined);
+    assert.deepEqual(first.groups?.map((group) => [group.reviewer, group.responses.map((response) => `${response.finding}:${response.stance}`)]), [
+      ['security', ['security.1:dispute']],
+      ['tests', ['tests.1:accept']],
+    ]);
+    assert.equal(feed.defenseRounds, 2);
+    assert.deepEqual(feed.threads, [
+      { reviewer: 'security', rounds: 2, settled: true },
+      { reviewer: 'tests', rounds: 0, settled: true },
+    ]);
+    const defender = feed.participants.find((participant) => participant.id === 'defender');
+    assert.deepEqual(defender?.sessions.map((session) => [session.thread, session.round]), [[undefined, 1], [undefined, 2]]);
+    assert.equal(defender?.sessions[1]?.stdout?.path, join('jobs', 'review', 'steps', '01-check', 'participants', 'defender', 'rounds', '2', 'stdout.log'));
+    assert.equal(defender?.usage.wallclockMs, 10_000);
+    const turn = readStepOutput(journal.paths, 'review', 'check', { participant: 'defender', round: 2, stdoutOffset: 0 });
+    assert.equal(turn.stdout?.content, '{"type":"result","result":"defender"}\n');
+  });
+
   it('защитник-форк: спор до contested, принятие и снятие; реплики под находками своего ревьюера, вердикт последним', () => {
     const { journal, stepDir } = seed('defend');
     call(stepDir, 'security', { output: findings('security', [{ severity: 'critical', title: 'инъекция' }, { severity: 'major', title: 'утечка' }]) });
