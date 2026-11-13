@@ -47,6 +47,10 @@ export function createCopilotAdapter(config: BackendConfig): BackendAdapter {
       // CLI нет, а `resume` позже пошёл бы её продолжать.
       sessionIdSource: 'backend',
       structuredOutput: false,
+      // Схемы не принимают ни CLI, ни ACP-сервер, ни SDK, но `-s` отдаёт один
+      // текст ответа, который движок склеивает из строк: схему держит движок
+      // по нему (`backend-structured-output`).
+      schemaFromText: true,
       strictPermissions: false,
       mcp: false,
       effort: false,
@@ -68,7 +72,8 @@ export function createCopilotAdapter(config: BackendConfig): BackendAdapter {
       // `--resume`/`--continue` не передаются никогда: `-p` идентификатора не
       // печатает, а `--continue` берёт «последнюю» сессию каталога — при двух
       // одновременных шагах это гонка. Effort, схема и MCP-серверы тоже не
-      // переводятся: их отсекают предстартовые проверки и `agentStep`.
+      // переводятся: их отсекают предстартовые проверки и `agentStep`, а схему
+      // держит движок по итоговому тексту.
 
       // Слитная форма, а не пара `-p <промпт>`: промпт, начатый с `-`, так
       // разборщик флагов принять за флаг не может. Цена — предел длины одного

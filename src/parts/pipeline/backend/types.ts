@@ -52,6 +52,26 @@ export interface BackendCapabilities {
    * передаёт; защитник ревью идёт свежим агентом с причиной `no_fork`.
    */
   readonly forkSessions?: boolean;
+  /**
+   * Бэкенд надёжно отдаёт итоговый текст ответа, и схему вызова держит движок:
+   * дописывает её в промпт, берёт последний JSON-блок текста и проверяет той
+   * же схемой (`backend-structured-output`, решения 1–4). Нужна адаптеру без
+   * нативного `structuredOutput` (Cursor, Copilot); при обеих возможностях
+   * главнее нативная. Необязательное поле: отсутствие — «не умеет».
+   */
+  readonly schemaFromText?: boolean;
+}
+
+/**
+ * Каким путём вызов получит структуру по схеме: нативным флагом CLI,
+ * проверкой итогового текста движком либо никаким. Единственное место, где
+ * решается приоритет, — его спрашивают исполнение, судья, предстарт, линт и
+ * выбор защитника.
+ */
+export function structuredOutputMode(capabilities: BackendCapabilities): 'native' | 'text' | undefined {
+  if (capabilities.structuredOutput) return 'native';
+  if (capabilities.schemaFromText === true) return 'text';
+  return undefined;
 }
 
 export interface AgentInvocation {

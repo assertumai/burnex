@@ -16,7 +16,7 @@ import { BurnexError } from '../src/kernel/errors.js';
 import { expandPipeline } from '../src/parts/pipeline/document/expand.js';
 import { lintPipeline } from '../src/parts/pipeline/domain/lint.js';
 import { runPipeline } from '../src/parts/pipeline/run/runner.js';
-import { readEvents, readStatus } from '../src/parts/pipeline/run/journal/reader.js';
+import { findStepDir, readEvents, readStatus } from '../src/parts/pipeline/run/journal/reader.js';
 import { resolveWithPlugins } from '../src/parts/resolve.js';
 import { makeProject } from './helpers.js';
 import { tempDir } from './tmp.js';
@@ -132,6 +132,7 @@ describe('cursor-backend: сборка запуска', () => {
     assert.deepEqual(adapter.capabilities, {
       sessions: true,
       structuredOutput: false,
+      schemaFromText: true,
       strictPermissions: false,
       mcp: false,
       effort: false,
@@ -375,9 +376,15 @@ describe('cursor-backend: исполнение шага на подменённ�
    * если пришёл `--resume`, иначе `new.jsonl`. Ни сети, ни настоящего CLI.
    * Шебанг — абсолютный путь к node: PATH шага не обязан его содержать.
    */
-  function fakeCursorProject(pipeline: string) {
+  function fakeCursorProject(pipeline: string, answer?: string) {
     const project = makeProject({ 'burnex.yml': pipeline });
     const bin = tempDir('cursor-bin-');
+    // Итоговая запись с заданным текстом ответа вместо фикстуры — для схемы,
+    // которую держит движок по тексту.
+    const answerPath = join(bin, 'answer.jsonl');
+    if (answer !== undefined) {
+      writeFileSync(answerPath, `${JSON.stringify({ type: 'result', subtype: 'success', is_error: false, result: answer, session_id: 's-1' })}\n`);
+    }
     const calls = join(bin, 'calls');
     const script = join(bin, 'cursor-agent');
     writeFileSync(
@@ -392,7 +399,8 @@ const stdin = fs.readFileSync(0, 'utf8');
 const n = fs.readdirSync(calls).length;
 fs.writeFileSync(path.join(calls, n + '.json'), JSON.stringify({ argv, stdin }));
 const name = argv.includes('--resume') ? 'resume.jsonl' : 'new.jsonl';
-process.stdout.write(fs.readFileSync(path.join(${JSON.stringify(FIXTURES)}, name), 'utf8'));
+const answer = ${JSON.stringify(answerPath)};
+process.stdout.write(fs.readFileSync(fs.existsSync(answer) ? answer : path.join(${JSON.stringify(FIXTURES)}, name), 'utf8'));
 `,
     );
     chmodSync(script, 0o755);
@@ -475,19 +483,45 @@ process.stdout.write(fs.readFileSync(path.join(${JSON.stringify(FIXTURES)}, name
     assert.equal(degraded[0]?.backend, 'cursor-agent');
   });
 
-  // Сценарии: «Схема вывода у шага», «MCP у шага», «Жёсткий режим»
+  // Сценарии: «Схема вывода у шага», «Судья на Cursor» — схему держит движок
+  // по итоговому тексту (`backend-structured-output`).
+  it('output_schema: флага схемы нет, схема в промпте, output.json из JSON-блока ответа', async () => {
+    const { project, recorded } = fakeCursorProject(
+      `name: p\njobs:\n  работа:\n    steps:\n${step('один', '        output_schema: ./schema.json\n')}`,
+      'Проверил.```json\n{"verdict":"ok"}\n```',
+    );
+    project.write('schema.json', '{ "type": "object", "required": ["verdict"] }\n');
+
+    const result = await run(project);
+
+    assert.equal(result.status, 'success');
+    const [call] = recorded();
+    assert.ok(!call?.argv.some((arg) => /schema/.test(arg) && arg !== call.argv.at(-1)), 'флага схемы нет');
+    assert.match(call?.argv.at(-1) ?? '', /Формат итогового ответа[\s\S]*"required"/);
+    const output = readFileSync(join(findStepDir(result.journal.paths, 'работа', 'один') ?? '', 'output.json'), 'utf8');
+    assert.deepEqual(JSON.parse(output), { verdict: 'ok' });
+  });
+
+  it('судья на cursor-agent: вердикт из итогового текста', async () => {
+    const { project } = fakeCursorProject(
+      `name: p\njobs:\n  работа:\n    steps:\n${step('один').replace('expect: [{ exit_code: 0 }]', 'expect: [{ judge: "всё хорошо", agent: cursor-agent }]')}`,
+      '```json\n{"pass": true, "reason": "да"}\n```',
+    );
+
+    const result = await run(project);
+
+    assert.equal(result.status, 'success');
+  });
+
+  // Сценарии: «MCP у шага», «Жёсткий режим»
   // Отказ должен прийти от предстартовой проверки движка, а не из `launch()`:
   // исключение песочницы тоже не дало бы скрипту запуститься, но назвало бы
   // не шаг и пришло бы уже после старта работы. Поэтому сверяется текст — он
   // называет и бэкенд, и `<job>/<step>`, чего ошибки `launch()` не делают. В
   // варианте strict нет `allow`: иначе отказ песочницы за allow подменял бы
   // проверяемый.
-  it('output_schema, mcp, enforce: strict и судья отказывают предстартовой проверкой', async () => {
+  it('mcp и enforce: strict отказывают предстартовой проверкой', async () => {
     const declarations: Record<string, { extra: string; message: RegExp }> = {
-      output_schema: {
-        extra: '        output_schema: ./schema.json\n',
-        message: /^Бэкенд cursor-agent не поддерживает структурированный вывод, нужный для output_schema шага работа\/один$/,
-      },
       mcp: {
         extra: '        mcp:\n          s: { command: [node, a.js] }\n',
         message: /^Бэкенд cursor-agent не объявляет возможность работать с MCP-серверами, объявленными у шага работа\/один$/,
@@ -496,17 +530,9 @@ process.stdout.write(fs.readFileSync(path.join(${JSON.stringify(FIXTURES)}, name
         extra: '        permissions:\n          enforce: strict\n',
         message: /^Бэкенд cursor-agent не умеет применять enforce: strict, объявленный у шага работа\/один$/,
       },
-      judge: {
-        extra: '',
-        message: /^Бэкенд судьи cursor-agent не поддерживает структурированный вывод, нужный для вердикта у шага работа\/один$/,
-      },
     };
     for (const [name, { extra, message }] of Object.entries(declarations)) {
-      const body =
-        name === 'judge'
-          ? step('один').replace('expect: [{ exit_code: 0 }]', 'expect: [{ judge: "всё хорошо", agent: cursor-agent }]')
-          : step('один', extra);
-      const { project, calls } = fakeCursorProject(`name: p\njobs:\n  работа:\n    steps:\n${body}`);
+      const { project, calls } = fakeCursorProject(`name: p\njobs:\n  работа:\n    steps:\n${step('один', extra)}`);
       project.write('schema.json', '{ "type": "object" }\n');
 
       await assert.rejects(
@@ -544,15 +570,11 @@ process.stdout.write(fs.readFileSync(path.join(${JSON.stringify(FIXTURES)}, name
       { config: resolved.config, registry },
     ).filter((item) => item.severity === 'error');
 
-    const schema = errors.find((item) => item.at === 'jobs.работа.steps.0.output_schema');
-    assert.ok(schema, 'output_schema отклонён линтом');
-    assert.match(schema.hint ?? '', /Адаптер бэкенда cursor-agent этой возможности не объявляет/);
-    assert.doesNotMatch(schema.hint ?? '', /Включите/);
+    // Схему и судью Cursor получает движковой схемой по тексту — линт их принимает.
+    assert.equal(errors.find((item) => item.at === 'jobs.работа.steps.0.output_schema'), undefined);
+    assert.equal(errors.find((item) => /Бэкенд судьи cursor-agent/.test(item.message)), undefined);
     const mcp = errors.find((item) => /MCP-серверами/.test(item.message));
     assert.ok(mcp, 'mcp отклонён линтом');
     assert.doesNotMatch(mcp.hint ?? '', /Включите/);
-    const judge = errors.find((item) => /Бэкенд судьи cursor-agent не поддерживает/.test(item.message));
-    assert.ok(judge, 'судья отклонён линтом');
-    assert.match(judge.hint ?? '', /назначьте судье другой бэкенд/);
   });
 });

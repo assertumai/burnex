@@ -11,9 +11,11 @@ import {
   extractRefusal,
   mergeUsage,
   messagePrefix,
+  structuredOutputMode,
   sumUsage,
   type McpServerStatus,
 } from '../../backend/types.js';
+import { structuredFromText, withSchemaSection } from '../../backend/textSchema.js';
 import type { AgentStep, McpServers } from '../../document/model.js';
 import type { Masker } from '../journal/mask.js';
 import type { AttemptRecord, PredicateResult, StatusValue, Usage } from '../journal/schema.js';
@@ -200,6 +202,12 @@ function unavailableMcpServers(
 export async function executeAgentStep(options: AgentStepOptions): Promise<AgentStepResult> {
   const { step, adapter } = options;
   const evaluate = options.evaluate ?? evaluateDefault;
+  // Схему держит движок, а не CLI (`backend-structured-output`, решение 2):
+  // она уходит в промпт, а не адаптеру, и проверяется по итоговому тексту.
+  const textSchema =
+    step.outputSchemaPath !== undefined && structuredOutputMode(adapter.capabilities) === 'text'
+      ? step.outputSchemaPath
+      : undefined;
   const records: AttemptRecord[] = [];
   const allResults: Array<readonly PredicateResult[]> = [];
 
@@ -233,7 +241,8 @@ export async function executeAgentStep(options: AgentStepOptions): Promise<Agent
       if (session.id !== undefined) sessionId = session.id;
 
       const resolvedModel = plan.model ?? step.model;
-      const prompt = options.buildPrompt(plan, plan.includeFailure ? previousFailure : undefined);
+      const built = options.buildPrompt(plan, plan.includeFailure ? previousFailure : undefined);
+      const prompt = textSchema === undefined ? built : withSchemaSection(built, textSchema);
       const forking =
         step.forkFrom !== undefined &&
         adapter.capabilities.sessions &&
@@ -255,7 +264,7 @@ export async function executeAgentStep(options: AgentStepOptions): Promise<Agent
         // форк. Адаптеру без форка поле не уходит вовсе — выбор свежего
         // защитника сделан до исполнения, а не молчаливым откатом здесь.
         ...(forking ? { forkFrom: step.forkFrom } : {}),
-        ...(step.outputSchemaPath === undefined
+        ...(step.outputSchemaPath === undefined || textSchema !== undefined
           ? {}
           : { outputSchemaPath: step.outputSchemaPath }),
         ...(step.permissions === undefined ? {} : { permissions: step.permissions }),
@@ -395,6 +404,9 @@ export async function executeAgentStep(options: AgentStepOptions): Promise<Agent
       // с нулевым временем, которое выглядит измерением, а не пробелом.
       options.onUsage?.(usage, plan.attempt);
 
+      const textCheck = textSchema === undefined ? undefined : structuredFromText(textSchema, text);
+      if (textCheck !== undefined) structured = textCheck.structured;
+
       const outcome: AgentAttemptOutcome = {
         process: process_,
         text,
@@ -458,7 +470,12 @@ export async function executeAgentStep(options: AgentStepOptions): Promise<Agent
                     actual: { server },
                   }) satisfies PredicateResult,
               )
-            : await evaluate(step, outcome, plan);
+            : [
+                // Проверка движковой схемы — первым результатом: её провал и
+                // есть причина повтора с ошибкой схемы (решение 4).
+                ...(textCheck === undefined ? [] : [textCheck.result]),
+                ...(await evaluate(step, outcome, plan)),
+              ];
 
       // Отказ судьи внутри `evaluate` классифицируется тем же путём, что и
       // отказ самого шага, и кладёт себя в результаты предикатов тем же

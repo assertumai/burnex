@@ -18,6 +18,7 @@ import {
   BACKEND_REFUSAL_PREDICATE,
   describeRefusal,
   extractRefusal,
+  structuredOutputMode,
   sumUsage,
   type BackendAdapter,
   type BackendRefusal,
@@ -1321,12 +1322,15 @@ function requireMcpSupport(context: RunContext): void {
 function requireStructuredOutputSupport(context: RunContext): void {
   for (const { job, call: step, address } of agentCallsIn(context.expanded.pipeline)) {
     if (step.outputSchemaPath === undefined) continue;
-    if (adapterOf(step.agent, context).capabilities.structuredOutput) continue;
+    // Любой путь годится: нативная схема CLI либо схема движка по итоговому
+    // тексту (`backend-structured-output`, решение 5). Участники `review`
+    // приходят сюда же — ревьюеры, агрегатор и свежий защитник.
+    if (structuredOutputMode(adapterOf(step.agent, context).capabilities) !== undefined) continue;
     throw new BurnexError(
       `Бэкенд ${step.agent} не поддерживает структурированный вывод, нужный для output_schema шага ${address}`,
       {
         file: job.source,
-        hint: `Включите backends.${step.agent}.structured_output в конфигурации, если бэкенд это умеет, либо снимите output_schema`,
+        hint: `Включите backends.${step.agent}.structured_output в конфигурации, если бэкенд это умеет, либо назначьте шагу бэкенд со структурированным выводом`,
       },
     );
   }
@@ -1339,7 +1343,7 @@ function requireStructuredOutputSupport(context: RunContext): void {
       for (const predicate of step.expect ?? []) {
         if (predicate.kind !== 'judge') continue;
         const backend = predicate.agent ?? context.config.defaults.agent;
-        if (adapterOf(backend, context).capabilities.structuredOutput) continue;
+        if (structuredOutputMode(adapterOf(backend, context).capabilities) !== undefined) continue;
         throw new BurnexError(
           `Бэкенд судьи ${backend} не поддерживает структурированный вывод, нужный для вердикта у шага ${job.id}/${step.id}`,
           {
@@ -4097,6 +4101,10 @@ function defenderChoice(step: ReviewStep, job: Job, context: RunContext): Defend
   if (declared?.kind !== 'agent' || record?.session === undefined) return freshChoice('no_session', text);
   const adapter = adapterOf(declared.agent, context);
   if (!adapter.capabilities.sessions || adapter.capabilities.forkSessions !== true) return freshChoice('no_fork', text);
+  // Ход защитника — JSON по схеме защиты; форк бэкенда, у которого схемы нет
+  // никакой, давал бы невалидный ход за токены (`backend-structured-output`,
+  // решение 6). Свежий защитник проверен до старта как участник.
+  if (structuredOutputMode(adapter.capabilities) === undefined) return freshChoice('no_schema', text);
   return {
     record: {
       kind: 'defender',

@@ -40,6 +40,10 @@ export function createCursorAdapter(config: BackendConfig): BackendAdapter {
       // `strict_permissions`) здесь намеренно не читаются: включить ими
       // возможность, которой у CLI нет, значило бы обещать её молча.
       structuredOutput: false,
+      // Флага схемы у CLI нет, но запись `result` несёт полный текст ответа
+      // (документация формата вывода): схему держит движок по этому тексту
+      // (`backend-structured-output`, решение 1).
+      schemaFromText: true,
       strictPermissions: false,
       mcp: false,
       effort: false,
@@ -71,8 +75,9 @@ export function createCursorAdapter(config: BackendConfig): BackendAdapter {
 
       // `--approve-mcps` не передаётся никогда: MCP у адаптера выключен, и
       // подтверждать серверы, подгруженные CLI из `.cursor/mcp.json`, он не
-      // должен. Схема вывода, effort и MCP-серверы шага тоже не переводятся:
-      // их отсекают предстартовые проверки и `agentStep`.
+      // должен. Effort и MCP-серверы шага тоже не переводятся: их отсекают
+      // предстартовые проверки и `agentStep`; схему вывода держит движок и
+      // адаптеру её не передаёт.
 
       // Промпт — последний позиционный аргумент: документация показывает
       // только эту форму, чтение со stdin в ней не обещано (README фикстур).

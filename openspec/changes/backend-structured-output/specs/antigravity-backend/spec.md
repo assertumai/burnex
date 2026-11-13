@@ -11,12 +11,12 @@
 
 ### Requirement: Перевод запуска Antigravity
 
-Адаптер SHALL собирать запуск print-режима `agy --output-format stream-json` с промптом значением `-p` последним. Модель шага либо умолчание бэкенда MUST переводиться в `--model`, effort — в `--effort`. Схема вызова при включённом `structured_output` MUST переводиться в `--json-schema <путь>`. Продолжение засеянной сессии MUST собираться флагом `--conversation <идентификатор>`. Без `permissions.mode` запуск MUST нести `--dangerously-skip-permissions`; `permissions.mode` из `accept-edits`, `auto`, `plan` MUST переводиться в `--mode` без пропуска подтверждений; иное значение, `allow`, `deny` и `enforce: strict` MUST отклоняться ошибкой. Промпт длиннее предела одного аргумента MUST отклоняться ошибкой, называющей бэкенд.
+Адаптер SHALL собирать запуск print-режима `agy --output-format stream-json` с промптом последним аргументом в слитной форме `--prompt=<промпт>`. Модель шага либо умолчание бэкенда MUST переводиться в `--model`, effort — в `--effort`. Схема вызова при включённом `structured_output` MUST переводиться в `--json-schema <путь>`. Продолжение засеянной сессии MUST собираться флагом `--conversation <идентификатор>`. Без `permissions.mode` запуск MUST нести `--dangerously-skip-permissions`; `permissions.mode` из `accept-edits`, `auto`, `plan` MUST переводиться в `--mode` без пропуска подтверждений; иное значение, `allow`, `deny` и `enforce: strict` MUST отклоняться ошибкой. Промпт длиннее предела одного аргумента MUST отклоняться ошибкой, называющей бэкенд.
 
 #### Scenario: Ревьюер со схемой
 
 - **WHEN** вызов несёт `outputSchemaPath`, модель `gemini-3.1-pro-high` и effort `high`
-- **THEN** команда содержит `--model gemini-3.1-pro-high`, `--effort high`, `--json-schema <путь>` и заканчивается `-p <промпт>`
+- **THEN** команда содержит `--model gemini-3.1-pro-high`, `--effort high`, `--json-schema <путь>` и заканчивается `--prompt=<промпт>`
 
 #### Scenario: Продолжение
 
