@@ -1663,7 +1663,7 @@ function checkStep(
       const capable = declaredCapabilities(call.agent, backend, options.registry);
       checkPermissionsEnforce(job, call, call.agent, capable, at, push);
       checkMcp(job, call, call.agent, capable, at, pipelineMcp, pipelineFile, push);
-      if (call.outputSchemaPath !== undefined && !capable.structuredOutput) {
+      if (call.outputSchemaPath !== undefined && !capable.structuredOutput && !capable.schemaFromText) {
         push({
           severity: 'error',
           message: `Бэкенд ${call.agent} не поддерживает структурированный вывод, нужный для output_schema шага ${address}`,
@@ -1765,7 +1765,8 @@ function checkStep(
       });
       continue;
     }
-    if (!declaredCapabilities(backendName, backend, options.registry).structuredOutput) {
+    const judgeCapable = declaredCapabilities(backendName, backend, options.registry);
+    if (!judgeCapable.structuredOutput && !judgeCapable.schemaFromText) {
       push({
         severity: 'error',
         message: `Бэкенд судьи ${backendName} не поддерживает структурированный вывод`,
@@ -2170,6 +2171,12 @@ function checkPermissionsEnforce(
 interface CapableBackend extends BackendConfig {
   /** Флаги, как их объявила конфигурация, — для подсказки. */
   readonly configured: Pick<BackendConfig, 'structuredOutput' | 'strictPermissions' | 'mcp'>;
+  /**
+   * Схему держит движок по итоговому тексту (`backend-structured-output`):
+   * объявление адаптера, а не флаг конфигурации. Адаптер, который не собрать,
+   * её не даёт: остаётся то, что говорит флаг `structured_output`, как прежде.
+   */
+  readonly schemaFromText: boolean;
 }
 
 function declaredCapabilities(name: string, backend: BackendConfig, registry: Registry): CapableBackend {
@@ -2184,10 +2191,11 @@ function declaredCapabilities(name: string, backend: BackendConfig, registry: Re
   } catch {
     capabilities = undefined;
   }
-  if (capabilities === undefined) return { ...backend, configured };
+  if (capabilities === undefined) return { ...backend, configured, schemaFromText: false };
   return {
     ...backend,
     configured,
+    schemaFromText: capabilities.schemaFromText === true,
     structuredOutput: backend.structuredOutput && capabilities.structuredOutput,
     strictPermissions: backend.strictPermissions && capabilities.strictPermissions,
     mcp: backend.mcp && capabilities.mcp,

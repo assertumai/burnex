@@ -12,7 +12,7 @@ import { expandPipeline } from '../src/parts/pipeline/document/expand.js';
 import { discoverModels, resetModelDiscoveryCache } from '../src/parts/pipeline/backend/models.js';
 import { lintPipeline } from '../src/parts/pipeline/domain/lint.js';
 import { runPipeline } from '../src/parts/pipeline/run/runner.js';
-import { readEvents, readStatus } from '../src/parts/pipeline/run/journal/reader.js';
+import { findStepDir, readEvents, readStatus } from '../src/parts/pipeline/run/journal/reader.js';
 import { resolveWithPlugins } from '../src/parts/resolve.js';
 import { makeProject } from './helpers.js';
 import { tempDir } from './tmp.js';
@@ -124,6 +124,7 @@ describe('copilot-backend: сборка запуска', () => {
     const expected = {
       sessions: false,
       structuredOutput: false,
+      schemaFromText: true,
       strictPermissions: false,
       mcp: false,
       effort: false,
@@ -225,9 +226,11 @@ describe('copilot-backend: исполнение шага на подменённ
    * ни настоящего CLI. Шебанг — абсолютный путь к node: PATH шага не обязан
    * его содержать.
    */
-  function fakeCopilotProject(pipeline: string) {
+  function fakeCopilotProject(pipeline: string, answer?: string) {
     const project = makeProject({ 'burnex.yml': pipeline });
     const bin = tempDir('copilot-bin-');
+    const answerPath = join(bin, 'answer.txt');
+    if (answer !== undefined) writeFileSync(answerPath, answer);
     const calls = join(bin, 'calls');
     const script = join(bin, 'copilot');
     writeFileSync(
@@ -241,7 +244,8 @@ const argv = process.argv.slice(2);
 const stdin = fs.readFileSync(0, 'utf8');
 const n = fs.readdirSync(calls).length;
 fs.writeFileSync(path.join(calls, n + '.json'), JSON.stringify({ argv, stdin }));
-process.stdout.write(fs.readFileSync(path.join(${JSON.stringify(FIXTURES)}, 'answer.txt'), 'utf8'));
+const answer = ${JSON.stringify(answerPath)};
+process.stdout.write(fs.readFileSync(fs.existsSync(answer) ? answer : path.join(${JSON.stringify(FIXTURES)}, 'answer.txt'), 'utf8'));
 `,
     );
     chmodSync(script, 0o755);
@@ -350,15 +354,31 @@ process.stdout.write(fs.readFileSync(path.join(${JSON.stringify(FIXTURES)}, 'ans
     assert.equal(degraded[0]?.backend, 'copilot');
   });
 
+  // Схему и вердикт судьи держит движок по тексту `-s` (`backend-structured-output`).
+  it('output_schema и судья: JSON из текста ответа, флага схемы нет', async () => {
+    const { project, recorded } = fakeCopilotProject(
+      `name: p\njobs:\n  работа:\n    steps:\n${step('один', '        output_schema: ./schema.json\n').replace('expect: [{ exit_code: 0 }]', 'expect: [{ judge: "всё хорошо", agent: copilot }]')}`,
+      'Готово.\n\n```json\n{"pass": true, "reason": "да"}\n```\n',
+    );
+    project.write('schema.json', '{ "type": "object", "required": ["pass"] }\n');
+
+    const result = await run(project);
+
+    assert.equal(result.status, 'success');
+    const calls = recorded();
+    assert.equal(calls.length, 2, 'шаг и судья');
+    for (const call of calls) {
+      assert.match(call.argv.at(-1) ?? '', /^--prompt=[\s\S]*Формат итогового ответа/);
+    }
+    const output = readFileSync(join(findStepDir(result.journal.paths, 'работа', 'один') ?? '', 'output.json'), 'utf8');
+    assert.deepEqual(JSON.parse(output), { pass: true, reason: 'да' });
+  });
+
   // Отказ приходит от предстартовой проверки движка, а не из `launch()`: текст
   // называет `<job>/<step>`, чего ошибки `launch()` не делают.
-  it('effort шага, output_schema, mcp, enforce: strict и судья отказывают до запуска', async () => {
+  it('effort шага, mcp и enforce: strict отказывают до запуска', async () => {
     const declarations: Record<string, { extra: string; message: RegExp }> = {
       effort: { extra: '        effort: high\n', message: /copilot.*работа\/один/s },
-      output_schema: {
-        extra: '        output_schema: ./schema.json\n',
-        message: /^Бэкенд copilot не поддерживает структурированный вывод, нужный для output_schema шага работа\/один$/,
-      },
       mcp: {
         extra: '        mcp:\n          s: { command: [node, a.js] }\n',
         message: /^Бэкенд copilot не объявляет возможность работать с MCP-серверами, объявленными у шага работа\/один$/,
@@ -367,17 +387,9 @@ process.stdout.write(fs.readFileSync(path.join(${JSON.stringify(FIXTURES)}, 'ans
         extra: '        permissions:\n          enforce: strict\n',
         message: /^Бэкенд copilot не умеет применять enforce: strict, объявленный у шага работа\/один$/,
       },
-      judge: {
-        extra: '',
-        message: /^Бэкенд судьи copilot не поддерживает структурированный вывод, нужный для вердикта у шага работа\/один$/,
-      },
     };
     for (const [name, { extra, message }] of Object.entries(declarations)) {
-      const body =
-        name === 'judge'
-          ? step('один').replace('expect: [{ exit_code: 0 }]', 'expect: [{ judge: "всё хорошо", agent: copilot }]')
-          : step('один', extra);
-      const { project, calls } = fakeCopilotProject(`name: p\njobs:\n  работа:\n    steps:\n${body}`);
+      const { project, calls } = fakeCopilotProject(`name: p\njobs:\n  работа:\n    steps:\n${step('один', extra)}`);
       project.write('schema.json', '{ "type": "object" }\n');
 
       await assert.rejects(
@@ -391,7 +403,7 @@ process.stdout.write(fs.readFileSync(path.join(${JSON.stringify(FIXTURES)}, 'ans
 
   // Тот же отказ обязан прийти от `burnex lint`, раньше прогона, — и даже
   // при флагах конфигурации, включённых вопреки адаптеру.
-  it('линт отклоняет output_schema, mcp, enforce: strict и судью на copilot', async () => {
+  it('линт отклоняет mcp и enforce: strict, но принимает output_schema и судью на copilot', async () => {
     const { project, calls } = fakeCopilotProject(
       `name: p\njobs:\n  работа:\n    steps:\n` +
         step(
@@ -422,12 +434,10 @@ process.stdout.write(fs.readFileSync(path.join(${JSON.stringify(FIXTURES)}, 'ans
       { config: resolved.config, registry },
     ).filter((item) => item.severity === 'error');
 
-    const schema = errors.find((item) => item.at === 'jobs.работа.steps.0.output_schema');
-    assert.ok(schema, 'output_schema отклонён линтом');
-    assert.match(schema.hint ?? '', /Адаптер бэкенда copilot этой возможности не объявляет/);
+    assert.equal(errors.find((item) => item.at === 'jobs.работа.steps.0.output_schema'), undefined, 'схему держит движок');
     assert.ok(errors.some((item) => /copilot/.test(item.message) && /MCP-серверами/.test(item.message)), 'mcp отклонён линтом');
     assert.ok(errors.some((item) => /copilot/.test(item.message) && /enforce: strict/.test(item.message)), 'enforce: strict отклонён линтом');
-    assert.ok(errors.some((item) => /Бэкенд судьи copilot не поддерживает/.test(item.message)), 'судья отклонён линтом');
+    assert.ok(!errors.some((item) => /Бэкенд судьи copilot/.test(item.message)), 'судья принят');
     assert.equal(existsSync(calls), false, 'линт CLI не запускает');
   });
 

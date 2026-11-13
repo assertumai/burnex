@@ -292,6 +292,9 @@
           "mcp": {
             "type": "boolean"
           },
+          "user_mcp": {
+            "type": "boolean"
+          },
           "permissions": {
             "type": "object",
             "properties": {

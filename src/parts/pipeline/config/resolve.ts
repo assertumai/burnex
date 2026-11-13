@@ -95,6 +95,11 @@ export interface BackendConfig {
   readonly strictPermissions: boolean;
   /** Объявлена возможность работать с MCP-серверами (`backends.<name>.mcp`). */
   readonly mcp: boolean;
+  /**
+   * `backends.<name>.user_mcp`: `false` — запускать агента без MCP-серверов и
+   * коннекторов пользователя; отсутствие — как `true`, окружение не трогается.
+   */
+  readonly userMcp?: boolean;
   readonly permissions:
     | {
         readonly mode?: string;
@@ -638,6 +643,7 @@ function buildBackends(
       structuredOutput: raw.structured_output === true,
       strictPermissions: raw.strict_permissions === true,
       mcp: raw.mcp === true,
+      userMcp: raw.user_mcp !== false,
       permissions: (raw.permissions as BackendConfig['permissions']) ?? undefined,
       env,
       credentials,

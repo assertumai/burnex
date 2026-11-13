@@ -98,7 +98,7 @@ export interface ReviewFeedDefender {
   readonly implementer?: string;
   readonly agent?: string;
   readonly model?: string;
-  /** `no_implementer`, `no_session`, `no_fork` или `other_tree` — у свежего агента. */
+  /** `no_implementer`, `no_session`, `no_fork`, `no_schema` или `other_tree` — у свежего агента. */
   readonly reason?: string;
 }
 

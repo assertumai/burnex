@@ -105,10 +105,10 @@
 - **WHEN** конфигурация задаёт `defaults.effort: high`, а шаг на `copilot` effort не объявляет
 - **THEN** прогон идёт, команда шага не несёт effort, а журнал содержит `backend.degraded` с `backend: copilot` и `capability: effort`
 
-#### Scenario: Схема вывода, MCP, жёсткий режим, судья
+#### Scenario: MCP и жёсткий режим
 
-- **WHEN** шаг на `copilot` объявляет `output_schema`, непустой `mcp` или `permissions.enforce: strict`, либо предикат `judge` выбирает `agent: copilot`
-- **THEN** прогон отказывает до первой работы, а `stepcast lint` отклоняет объявление
+- **WHEN** шаг на `copilot` объявляет непустой `mcp` или `permissions.enforce: strict`
+- **THEN** прогон отказывает до первой работы, а `stepcast lint` отклоняет объявление (схему вывода и судью Copilot получает движковой схемой по итоговому тексту — изменение `backend-structured-output`)
 
 #### Scenario: Список моделей
 

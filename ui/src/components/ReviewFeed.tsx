@@ -60,6 +60,7 @@ const FRESH_REASON: Readonly<Record<string, string>> = {
   no_implementer: 'the step names no implementer',
   no_session: 'the implementer step recorded no session',
   no_fork: "the implementer's agent cannot fork sessions",
+  no_schema: "the implementer's agent cannot answer by a JSON schema",
   other_tree: "the implementer ran in another workspace tree",
 };
 

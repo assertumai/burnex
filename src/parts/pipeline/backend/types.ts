@@ -52,6 +52,53 @@ export interface BackendCapabilities {
    * передаёт; защитник ревью идёт свежим агентом с причиной `no_fork`.
    */
   readonly forkSessions?: boolean;
+  /**
+   * Бэкенд надёжно отдаёт итоговый текст ответа, и схему вызова держит движок:
+   * дописывает её в промпт, берёт последний JSON-блок текста и проверяет той
+   * же схемой (`backend-structured-output`, решения 1–4). Нужна адаптеру без
+   * нативного `structuredOutput` (Cursor, Copilot); при обеих возможностях
+   * главнее нативная. Необязательное поле: отсутствие — «не умеет».
+   */
+  readonly schemaFromText?: boolean;
+  /**
+   * Нативная схема входит в начало запроса (у Claude Code `--json-schema` —
+   * инструмент `StructuredOutput`): новая или другая схема заставляет бэкенд
+   * заново записать историю сессии в кеш. Тогда агентский вызов в сессии
+   * держит схему текстом (`session-cache-stable-prefix`, решение 1).
+   */
+  readonly schemaInPrefix?: boolean;
+  /**
+   * Адаптер умеет исполнить `user_mcp: false` — запустить агента без
+   * MCP-серверов и коннекторов пользователя (`session-cache-stable-prefix`,
+   * решение 3).
+   */
+  readonly isolateUserMcp?: boolean;
+}
+
+/**
+ * Режим схемы для агентского вызова (шаг, участник `review`, ход защиты):
+ * на бэкенде с сессиями, чья нативная схема входит в начало запроса, — текст,
+ * иначе тот же выбор, что `structuredOutputMode`. Судья сюда не ходит: его
+ * сессия всегда новая, и нативная схема кеша не ломает.
+ */
+export function callSchemaMode(capabilities: BackendCapabilities): 'native' | 'text' | undefined {
+  const mode = structuredOutputMode(capabilities);
+  if (mode === 'native' && capabilities.schemaInPrefix === true && capabilities.schemaFromText === true && capabilities.sessions) {
+    return 'text';
+  }
+  return mode;
+}
+
+/**
+ * Каким путём вызов получит структуру по схеме: нативным флагом CLI,
+ * проверкой итогового текста движком либо никаким. Единственное место, где
+ * решается приоритет, — его спрашивают исполнение, судья, предстарт, линт и
+ * выбор защитника.
+ */
+export function structuredOutputMode(capabilities: BackendCapabilities): 'native' | 'text' | undefined {
+  if (capabilities.structuredOutput) return 'native';
+  if (capabilities.schemaFromText === true) return 'text';
+  return undefined;
 }
 
 export interface AgentInvocation {

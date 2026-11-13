@@ -9,7 +9,8 @@ import { describe, it } from 'node:test';
  * design.md `user-decision-steps`, решение 12) закреплена дважды: правилом
  * линта (`eslint.config.js`) и здесь. Линт решает построчно и не разворачивает
  * `**`-паттерн заранее — этот тест перечисляет модули на диске, так что новый
- * файл `src/parts/backends/codex/**`, `src/parts/backends/cursor/**`, `src/parts/backends/copilot/**` или
+ * файл `src/parts/backends/codex/**`, `src/parts/backends/cursor/**`, `src/parts/backends/copilot/**`,
+ * `src/parts/backends/antigravity/**` или
  * `src/parts/pipeline/steps/decision/**`
  * проверяется без отдельной правки теста, а не только когда кто-то напишет
  * нарушающий импорт.
@@ -45,6 +46,7 @@ const surfaceRoots = [
   join(repoRoot, 'src/parts/backends/codex'),
   join(repoRoot, 'src/parts/backends/cursor'),
   join(repoRoot, 'src/parts/backends/copilot'),
+  join(repoRoot, 'src/parts/backends/antigravity'),
   join(repoRoot, 'src/parts/pipeline/steps/decision'),
 ];
 const pluginModule = resolve(repoRoot, 'src/plugin/index.ts');

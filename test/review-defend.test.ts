@@ -577,6 +577,31 @@ describe('review-defend: свежий защитник', () => {
     assert.match(def.invocations[0]?.prompt ?? '', /## Отчёт имплементатора `review\.implement`\n\nСделал: добавил проверку прав/);
   });
 
+  // Сценарий: «Бэкенд имплементатора с форком, но без схемы» (backend-structured-output)
+  it('бэкенд имплементатора с форком, но без схемы: mode fresh, reason no_schema', async () => {
+    const project = defendRepo();
+    const impl = implementer(undefined, { capabilities: { structuredOutput: false } });
+    const def = defender();
+    const result = await run(project, { impl, 'rev-0': reviewer('security'), 'rev-1': reviewer('tests'), agg: verdict(), def });
+
+    assert.equal(result.status, 'success');
+    assert.deepEqual(defenseOf(result).lines[0], { kind: 'defender', mode: 'fresh', implementer: 'review.implement', agent: 'def', reason: 'no_schema' });
+    assert.ok(impl.invocations.every((invocation) => invocation.forkFrom === undefined), 'форка нет');
+    assert.match(readFileSync(join(defenseOf(result).dir, 'participants', 'aggregator', 'prompt.txt'), 'utf8'), /не умеет ответ по схеме/);
+  });
+
+  // Сценарий: «Ревьюер на бэкенде без схемы»
+  it('ревьюер на бэкенде без какой-либо схемы: отказ до старта с адресом участника', async () => {
+    const project = defendRepo();
+    // Ответы не важны: участник отклоняется до первого вызова.
+    const security = responding(() => ({}), { capabilities: { structuredOutput: false } });
+    await assert.rejects(
+      run(project, { impl: implementer(), 'rev-0': security, 'rev-1': reviewer('tests'), agg: verdict(), def: defender() }),
+      /Бэкенд rev-0 не поддерживает структурированный вывод, нужный для output_schema шага review\/review-diff\/security/,
+    );
+    assert.equal(security.invocations.length, 0);
+  });
+
   it('у записи имплементатора нет сессии: reason no_session', async () => {
     const project = defendRepo();
     // Бэкенд сам выдаёт нить, но не назвал её: сессии у шага нет.

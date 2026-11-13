@@ -24,7 +24,8 @@
     "./step": "./dist/src/parts/pipeline/step/index.js",
     "./backends/codex": "./dist/src/parts/backends/codex/index.js",
     "./backends/cursor": "./dist/src/parts/backends/cursor/index.js",
-    "./backends/copilot": "./dist/src/parts/backends/copilot/index.js"
+    "./backends/copilot": "./dist/src/parts/backends/copilot/index.js",
+    "./backends/antigravity": "./dist/src/parts/backends/antigravity/index.js"
   },
   "files": [
     "dist",

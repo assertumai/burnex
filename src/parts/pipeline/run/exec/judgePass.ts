@@ -9,8 +9,10 @@ import {
   emptyUsage,
   mergeUsage,
   messagePrefix,
+  structuredOutputMode,
   withCallCost,
 } from '../../backend/types.js';
+import { structuredFromText, withSchemaSection } from '../../backend/textSchema.js';
 import { judgeVerdictSchemaPath, parseVerdict } from '../../expect/verdict.js';
 import type { PredicateResult, Usage } from '../journal/schema.js';
 import type { RunJournal } from '../journal/writer.js';
@@ -172,7 +174,10 @@ interface CallJudgeResult {
 
 async function callJudge(options: CallJudgeOptions): Promise<CallJudgeResult> {
   const { predicate, adapter } = options;
-  const prompt = buildPrompt(options);
+  // Бэкенд без нативной схемы, но с итоговым текстом: схему вердикта держит
+  // движок (`backend-structured-output`, решение 2).
+  const textMode = structuredOutputMode(adapter.capabilities) === 'text';
+  const prompt = textMode ? withSchemaSection(buildPrompt(options), judgeVerdictSchemaPath()) : buildPrompt(options);
 
   const launch = adapter.launch({
     prompt,
@@ -186,7 +191,7 @@ async function callJudge(options: CallJudgeOptions): Promise<CallJudgeResult> {
     // либо отказал бы, либо продолжил бы чужую.
     ...(adapter.capabilities.sessionIdSource === 'engine' ? { sessionId: randomUUID() } : {}),
     resumeSession: false,
-    outputSchemaPath: judgeVerdictSchemaPath(),
+    ...(textMode ? {} : { outputSchemaPath: judgeVerdictSchemaPath() }),
   });
 
   const dir = options.journal.prepareJudgeCall(options.stepDir, options.callIndex);
@@ -194,6 +199,8 @@ async function callJudge(options: CallJudgeOptions): Promise<CallJudgeResult> {
 
   let usage = emptyUsage(adapter.name, predicate.model, 0);
   let structured: unknown;
+  let text: string | undefined;
+  const pieces: string[] = [];
   let refusal: BackendRefusal | undefined;
   let carry = '';
 
@@ -223,9 +230,12 @@ async function callJudge(options: CallJudgeOptions): Promise<CallJudgeResult> {
       recordMessageUsage(event.usage);
     } else if (event.kind === 'result') {
       if (event.structured !== undefined) structured = event.structured;
+      if (event.text !== undefined) text = event.text;
       // Судья всегда начинает новую сессию: до вызова она не стоила ничего.
       usage = mergeUsage(usage, event.usage === undefined ? undefined : withCallCost(event.usage, 0));
       if (event.refusal !== undefined) refusal = event.refusal;
+    } else if (event.kind === 'text') {
+      pieces.push(event.text);
     }
   };
 
@@ -252,6 +262,10 @@ async function callJudge(options: CallJudgeOptions): Promise<CallJudgeResult> {
     : await options.backendSlots.run(adapter.name, runBackendProcess);
 
   if (carry.trim() !== '') handle(carry);
+  if (textMode) {
+    // Текст `result` главнее кусков текстового CLI — как у агентского шага.
+    structured = structuredFromText(judgeVerdictSchemaPath(), text ?? (pieces.length === 0 ? undefined : pieces.join('\n'))).structured;
+  }
   usage = priceUsage({ ...usage, wallclock_ms: process_.wallclockMs }, options.priceCatalog);
 
   const verdict = process_.outcome === 'exited' ? parseVerdict(structured) : undefined;

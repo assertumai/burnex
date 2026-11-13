@@ -79,7 +79,7 @@ export type {
   ProbeOutput,
 } from './backend/types.js';
 
-export { describeRefusal, emptyUsage, mergeUsage, sumUsage } from './backend/types.js';
+export { describeRefusal, emptyUsage, mergeUsage, structuredOutputMode, sumUsage } from './backend/types.js';
 
 /**
  * Правила слияния политики доступа шага с политикой из конфигурации бэкенда.

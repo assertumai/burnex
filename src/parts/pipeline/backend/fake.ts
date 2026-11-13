@@ -83,6 +83,9 @@ export function createFakeBackend(options: FakeBackendOptions): FakeBackend {
       // направление, что и у него, если тест не объявил своё.
       sessionIdSource: options.capabilities?.sessionIdSource ?? 'engine',
       ...(options.capabilities?.forkSessions === undefined ? {} : { forkSessions: options.capabilities.forkSessions }),
+      ...(options.capabilities?.schemaFromText === undefined ? {} : { schemaFromText: options.capabilities.schemaFromText }),
+      ...(options.capabilities?.schemaInPrefix === undefined ? {} : { schemaInPrefix: options.capabilities.schemaInPrefix }),
+      ...(options.capabilities?.isolateUserMcp === undefined ? {} : { isolateUserMcp: options.capabilities.isolateUserMcp }),
     },
     launch(invocation): LaunchSpec {
       const index = invocations.length;

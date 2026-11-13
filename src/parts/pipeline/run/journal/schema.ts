@@ -949,7 +949,7 @@ export const EventSchema = z.discriminatedUnion('kind', [
     implementer: z.string().optional(),
     agent: z.string(),
     model: z.string().optional(),
-    reason: z.enum(['no_implementer', 'other_tree', 'no_session', 'no_fork']).optional(),
+    reason: z.enum(['no_implementer', 'other_tree', 'no_session', 'no_fork', 'no_schema']).optional(),
   }).strict(),
   // Реплика ветки защиты (`review-defend`, решение 7): запись в
   // `defense.ndjson` — событием по ходу шага. `thread` — ветка (ревьюер).

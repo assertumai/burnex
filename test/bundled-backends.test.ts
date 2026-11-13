@@ -20,7 +20,7 @@ describe('каталог поставляемых бэкендов', () => {
 
   it('не содержит встроенного claude и держит порядок карточек', () => {
     const names = BUNDLED_BACKENDS.flatMap((entry) => Object.keys(entry.plugin.backends ?? {}));
-    assert.deepEqual(names, ['codex', 'cursor-agent', 'copilot']);
+    assert.deepEqual(names, ['codex', 'cursor-agent', 'copilot', 'antigravity']);
     assert.equal(bundledByBackend('claude'), undefined);
     assert.equal(bundledByBackend('cursor-agent')?.specifier, 'burnex/backends/cursor');
   });
