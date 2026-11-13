@@ -1,51 +1,92 @@
-import { DEFENDER_ID, type ReviewParticipant, type ReviewStep } from '../../document/model.js';
-import {
-  defenderPrompt,
-  rebuttalPrompt,
-  turnCheckSchema,
-  type DefenderRecord,
-  type DefenseMessageRecord,
-  type DefensePayload,
-  type DefenseRecord,
-  type FindingRecord,
-  type FindingStatus,
-  type RebuttalPayload,
-  type Severity,
+import { DEFENDER_ID, type ReviewParticipant } from '../../document/model.js';
+import type {
+  DefenderRecord,
+  DefenseMessageRecord,
+  DefensePayload,
+  DefenseRecord,
+  DefenseSide,
+  FindingRecord,
+  FindingStatus,
+  RebuttalPayload,
+  Severity,
 } from '../../steps/review/defend.js';
 import type { EventInput } from '../journal/schema.js';
 import type { ParticipantOutcome } from './reviewStep.js';
 
 /**
- * Ветки защиты находок (`review-defend`, design.md, решения 3, 5 и 7).
- * Движок — посредник: в ветке каждого ревьюера по очереди возобновляет
- * сессию защитника и ревьюера и ждёт по одному ходу. Раунды, закрытия
- * находок, `contested` по лимиту и сбою, порядок записей и бюджет — его, а не
- * просьба в промпте. Ветки разных ревьюеров идут параллельно и друг друга не
- * видят.
+ * Общие раунды защиты (`review-defend-shared-session`, решение 2). Движок —
+ * посредник: в раунде один ход защитника на открытые пункты всех сторон,
+ * затем стороны с открытыми пунктами параллельно отвечают в своих сессиях.
+ * Раунды, закрытия, `contested` по лимиту и сбою, порядок записей и бюджет —
+ * его, а не просьба в промпте. Слова ходов — промпты и проверочные схемы —
+ * приходят параметром (`DefenseDialect`): механика одна для ревью и для
+ * других шагов со спором по пунктам.
  */
 
-/** Кто защищает: решение принято один раз до веток (решение 3). */
+/**
+ * Кто защищает: решение принято один раз до раундов
+ * (`review-defend-shared-session`, решение 1).
+ */
 export interface DefenderChoice {
   readonly record: DefenderRecord;
-  /** Агент защитника: имплементатора при форке, `defender` стратегии при свежем. */
+  /** Агент защитника: имплементатора у `resume` и `fork`, `defender` стратегии у `fresh`. */
   readonly participant: ReviewParticipant;
   /** Идентификатор сессии имплементатора — у форка. */
   readonly forkFrom?: string;
+  /**
+   * Идентификатор сессии имплементатора — у `resume`: им засевается
+   * псевдоним защитника, и ходы продолжают саму эту сессию.
+   */
+  readonly resumeSession?: string;
   /** Текстовый выход шага имплементатора — свежему защитнику, если он есть. */
   readonly implementerText?: string;
 }
 
+/** Сторона защиты: участник и его пункты в порядке выхода. */
 export interface DefenseBranch {
   readonly reviewer: ReviewParticipant;
   readonly findings: readonly FindingRecord[];
 }
 
+/** Ход защитника: открытые пункты всех сторон и переписка до него. */
+export interface DefenderTurn {
+  readonly round: number;
+  /** Сессия защитника возобновляется: прежние ходы уже в ней. */
+  readonly resumed: boolean;
+  readonly sides: readonly DefenseSide[];
+  readonly severities: ReadonlyMap<string, Severity>;
+  readonly messages: readonly DefenseMessageRecord[];
+}
+
+/** Ход стороны: её открытые пункты и переписка, включая ход защитника раунда. */
+export interface SideTurn {
+  readonly round: number;
+  readonly resumed: boolean;
+  readonly side: DefenseSide;
+  readonly severities: ReadonlyMap<string, Severity>;
+  readonly messages: readonly DefenseMessageRecord[];
+}
+
+/** Слова защиты: промпты ходов и проверочные схемы по открытым id. */
+export interface DefenseDialect {
+  defenderPrompt(turn: DefenderTurn): string;
+  rebuttalPrompt(turn: SideTurn): string;
+  defenseCheck(openIds: readonly string[]): unknown;
+  rebuttalCheck(openIds: readonly string[]): unknown;
+}
+
 export interface DefenseOptions<O extends ParticipantOutcome> {
   readonly job: string;
-  readonly step: ReviewStep;
+  readonly step: { readonly id: string };
   readonly rounds: number;
-  readonly defender: DefenderChoice;
-  /** Ветки в порядке стратегии: ревьюеры, давшие хотя бы одну находку. */
+  /** Агент защитника: возобновляется ли его сессия. */
+  readonly defenderAgent: string;
+  /**
+   * Сессия защитника уже несёт контекст шага — это сессия имплементатора или
+   * её форк. Иначе контекст уходит с первым ходом и с каждым ходом без сессии.
+   */
+  readonly defenderHasContext: boolean;
+  /** Стороны в порядке стратегии: участники, давшие хотя бы один пункт. */
   readonly branches: readonly DefenseBranch[];
   readonly concurrency: number;
   /** Возобновляется ли сессия агента — умеет ли его бэкенд сессии. */
@@ -55,9 +96,10 @@ export interface DefenseOptions<O extends ParticipantOutcome> {
   /** Записать строку `defense.ndjson`. */
   readonly record: (record: DefenseRecord) => void;
   readonly event: (input: EventInput) => void;
-  /** Ход защитника ветки `reviewer` в раунде `round`. */
-  readonly defend: (reviewer: ReviewParticipant, round: number, prompt: string, check: unknown, carriesContext: boolean) => Promise<O>;
-  /** Ход ревьюера своей ветки в раунде `round`. */
+  readonly dialect: DefenseDialect;
+  /** Ход защитника в раунде `round`. */
+  readonly defend: (round: number, prompt: string, check: unknown, carriesContext: boolean) => Promise<O>;
+  /** Ход стороны `reviewer` в раунде `round`. */
   readonly rebut: (reviewer: ReviewParticipant, round: number, prompt: string, check: unknown, carriesContext: boolean) => Promise<O>;
 }
 
@@ -77,11 +119,15 @@ export interface DefenseResult<O extends ParticipantOutcome> {
 export async function runDefense<O extends ParticipantOutcome>(options: DefenseOptions<O>): Promise<DefenseResult<O>> {
   const messages: DefenseMessageRecord[] = [];
   const settled = new Map<string, SettledState>();
+  const severities = new Map(options.branches.flatMap(({ findings }) => findings.map((finding) => [finding.id, finding.severity] as const)));
+  /** Открытые пункты стороны; выбывшая сторона из карты удаляется. */
+  const open = new Map(options.branches.map((branch) => [branch.reviewer.id, [...branch.findings]]));
   let stopped: O | undefined;
+  let round = 1;
 
-  const addMessage = (message: Omit<DefenseMessageRecord, 'kind' | 'messageId' | 'role'>): DefenseMessageRecord => {
-    // `messageId` сквозной по шагу: номер выдаётся в момент записи, порядок
-    // внутри ветки строгий, записи разных веток перемежаются (решение 7).
+  const addMessage = (message: Omit<DefenseMessageRecord, 'kind' | 'messageId' | 'role'>): void => {
+    // `messageId` сквозной по шагу: номер выдаётся в момент записи, ответы
+    // сторон одного раунда перемежаются в порядке завершения.
     const record: DefenseMessageRecord = { kind: 'message', messageId: `m${messages.length + 1}`, role: 'agent', ...message };
     messages.push(record);
     options.record(record);
@@ -90,24 +136,41 @@ export async function runDefense<O extends ParticipantOutcome>(options: DefenseO
       job: options.job,
       step: options.step.id,
       participant: record.from,
-      thread: record.thread,
+      ...(record.thread === undefined ? {} : { thread: record.thread }),
       round: record.round,
       message_id: record.messageId,
       ...(record.invalid === true ? { invalid: true as const } : {}),
       ...(record.failure === undefined ? {} : { failure: record.failure }),
     });
-    return record;
   };
-  const settle = (finding: string, status: FindingStatus, severity: Severity, round: number): void => {
-    settled.set(finding, { status, severity });
-    options.record({ kind: 'settled', finding, status, severity, round });
-    options.event({ kind: 'review.settled', job: options.job, step: options.step.id, finding, status });
+  const write = (from: string, thread: string | undefined, outcome: O, text: string | undefined, responses: DefenseMessageRecord['responses']): void => {
+    addMessage({
+      from,
+      ...(thread === undefined ? {} : { thread }),
+      round,
+      parts: text === undefined ? [] : [{ kind: 'text', text }],
+      responses,
+      ...(text === undefined ? missingTurn(outcome) : {}),
+    });
   };
-  /** Ход оборвали отмена или бюджет — защита кончается для всех веток. */
+  const close = (side: string, id: string, status: FindingStatus): void => {
+    const list = open.get(side);
+    if (list === undefined || !list.some((finding) => finding.id === id)) return;
+    open.set(side, list.filter((finding) => finding.id !== id));
+    settled.set(id, { status, severity: severities.get(id) ?? 'info' });
+    options.record({ kind: 'settled', finding: id, status, severity: severities.get(id) ?? 'info', round });
+    options.event({ kind: 'review.settled', job: options.job, step: options.step.id, finding: id, status });
+  };
+  /** Последнее слово за стороной: её открытые — `contested`, и она выбывает. */
+  const contest = (side: string): void => {
+    for (const finding of [...(open.get(side) ?? [])]) close(side, finding.id, 'contested');
+    open.delete(side);
+  };
+  /** Ход оборвали отмена или бюджет — защита кончается для всех. */
   const halts = (outcome: O): boolean => {
     if (outcome.status !== 'canceled' && outcome.status !== 'budget_exceeded') return false;
-    // Отмена важнее бюджета: шаг отменён, даже если соседняя ветка уже
-    // упёрлась в потолок.
+    // Отмена важнее бюджета: шаг отменён, даже если соседний ход уже
+    // упёрся в потолок.
     if (stopped === undefined || (outcome.status === 'canceled' && stopped.status !== 'canceled')) stopped = outcome;
     return true;
   };
@@ -118,103 +181,70 @@ export async function runDefense<O extends ParticipantOutcome>(options: DefenseO
     stopped = stop;
     return true;
   };
-
-  const branch = async ({ reviewer, findings }: DefenseBranch): Promise<void> => {
-    const thread = reviewer.id;
-    const severities = new Map(findings.map((finding) => [finding.id, finding.severity]));
-    let open = [...findings];
-    const own: DefenseMessageRecord[] = [];
-    let round = 1;
-    const close = (id: string, status: FindingStatus): void => {
-      open = open.filter((finding) => finding.id !== id);
-      settle(id, status, severities.get(id) ?? 'info', round);
-    };
-    const write = (from: string, outcome: O, text: string | undefined, responses: DefenseMessageRecord['responses']): DefenseMessageRecord => {
-      const record = addMessage({
-        from,
-        thread,
-        round,
-        parts: text === undefined ? [] : [{ kind: 'text', text }],
-        responses,
-        ...(text === undefined ? missingTurn(outcome) : {}),
-      });
-      own.push(record);
-      return record;
-    };
-    const defenderResumes = options.resumable(options.defender.participant.agent);
-    const reviewerResumes = options.resumable(reviewer.agent);
-    const fork = options.defender.record.mode === 'fork';
-
-    for (; round <= options.rounds; round += 1) {
-      if (budgetHalts()) break;
-      const ids = open.map((finding) => finding.id);
-      const defense = await options.defend(
-        reviewer,
-        round,
-        defenderPrompt({
-          step: options.step,
-          reviewer,
-          round,
-          resumed: round > 1 && defenderResumes,
-          findings,
-          open,
-          severities,
-          messages: own,
-          mode: options.defender.record.mode,
-          ...(options.defender.implementerText === undefined ? {} : { implementerText: options.defender.implementerText }),
-          ...(options.defender.record.implementer === undefined ? {} : { implementer: options.defender.record.implementer }),
-          ...(options.defender.participant.prompt === undefined ? {} : { guidance: options.defender.participant.prompt }),
-        }),
-        turnCheckSchema('defense', ids),
-        // Форк помнит контекст у имплементатора; свежему — с первым ходом и
-        // каждым ходом без сессии.
-        !fork && (round === 1 || !defenderResumes),
-      );
-      if (halts(defense)) break;
-      const payload = defense.status === 'success' ? (defense.structured as DefensePayload | undefined) : undefined;
-      write(DEFENDER_ID, defense, payload?.text, payload?.responses ?? []);
-      // Ход без ответа кончает ветку: её открытые находки — `contested`.
-      if (payload === undefined) break;
-      for (const response of payload.responses) {
-        if (response.stance === 'accept' && open.some((finding) => finding.id === response.finding)) close(response.finding, 'accepted');
-      }
-      if (open.length === 0) break;
-
-      if (budgetHalts()) break;
-      const rebuttal = await options.rebut(
-        reviewer,
-        round,
-        rebuttalPrompt({
-          step: options.step,
-          reviewer,
-          round,
-          resumed: reviewerResumes,
-          findings,
-          open,
-          severities,
-          messages: own,
-        }),
-        turnCheckSchema('rebuttal', open.map((finding) => finding.id)),
-        !reviewerResumes,
-      );
-      if (halts(rebuttal)) break;
-      const answer = rebuttal.status === 'success' ? (rebuttal.structured as RebuttalPayload | undefined) : undefined;
-      write(reviewer.id, rebuttal, answer?.text, answer?.responses ?? []);
-      if (answer === undefined) break;
-      for (const response of answer.responses) {
-        if (!open.some((finding) => finding.id === response.finding)) continue;
-        if (response.stance === 'withdraw') close(response.finding, 'withdrawn');
-        else if (response.stance === 'revise' && response.severity !== null) severities.set(response.finding, response.severity);
-      }
-      if (open.length === 0) break;
-    }
-    // Последнее слово за ревьюером: открытое после лимита, сбоя или обрыва —
-    // `contested`, и строка `settled` пишется в конце ветки (решение 5).
-    round = Math.min(round, options.rounds);
-    for (const finding of [...open]) close(finding.id, 'contested');
+  const sides = (): DefenseSide[] =>
+    options.branches.flatMap(({ reviewer, findings }) => {
+      const list = open.get(reviewer.id) ?? [];
+      return list.length === 0 ? [] : [{ reviewer, findings, open: list }];
+    });
+  const sideOf = (finding: string): string | undefined => {
+    for (const [side, list] of open) if (list.some((entry) => entry.id === finding)) return side;
+    return undefined;
   };
 
-  await pool(options.branches, options.concurrency, branch);
+  const defenderResumes = options.resumable(options.defenderAgent);
+
+  for (; round <= options.rounds; round += 1) {
+    const current = sides();
+    if (current.length === 0 || budgetHalts()) break;
+    const ids = current.flatMap((side) => side.open.map((finding) => finding.id));
+    const resumed = round > 1 && defenderResumes;
+    const defense = await options.defend(
+      round,
+      options.dialect.defenderPrompt({ round, resumed, sides: current, severities, messages }),
+      options.dialect.defenseCheck(ids),
+      !options.defenderHasContext && (round === 1 || !defenderResumes),
+    );
+    if (halts(defense)) break;
+    const payload = defense.status === 'success' ? (defense.structured as DefensePayload | undefined) : undefined;
+    write(DEFENDER_ID, undefined, defense, payload?.text, payload?.responses ?? []);
+    // Ход защитника без ответа кончает защиту: открытые всех — `contested`.
+    if (payload === undefined) break;
+    for (const response of payload.responses) {
+      if (response.stance !== 'accept') continue;
+      const side = sideOf(response.finding);
+      if (side !== undefined) close(side, response.finding, 'accepted');
+    }
+
+    const answering = sides();
+    await pool(answering, options.concurrency, async (side) => {
+      if (budgetHalts()) return;
+      const reviewerResumes = options.resumable(side.reviewer.agent);
+      const rebuttal = await options.rebut(
+        side.reviewer,
+        round,
+        options.dialect.rebuttalPrompt({ round, resumed: reviewerResumes, side, severities, messages: [...messages] }),
+        options.dialect.rebuttalCheck(side.open.map((finding) => finding.id)),
+        !reviewerResumes,
+      );
+      if (halts(rebuttal)) return;
+      const answer = rebuttal.status === 'success' ? (rebuttal.structured as RebuttalPayload | undefined) : undefined;
+      write(side.reviewer.id, side.reviewer.id, rebuttal, answer?.text, answer?.responses ?? []);
+      // Ход стороны без ответа: её открытые — `contested`, дальше она не идёт.
+      if (answer === undefined) {
+        contest(side.reviewer.id);
+        return;
+      }
+      for (const response of answer.responses) {
+        if (response.stance === 'withdraw') close(side.reviewer.id, response.finding, 'withdrawn');
+        else if (response.stance === 'revise' && response.severity !== null) severities.set(response.finding, response.severity);
+      }
+    });
+    if (stopped !== undefined) break;
+  }
+  // Последнее слово за стороной: открытое после лимита, сбоя защитника или
+  // обрыва — `contested`, строка `settled` пишется в конце защиты.
+  round = Math.min(round, options.rounds);
+  for (const side of [...open.keys()]) contest(side);
   return { messages, settled, ...(stopped === undefined ? {} : { stopped }) };
 }
 

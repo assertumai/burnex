@@ -39,7 +39,7 @@ import { resolveLate, type JobScopeEntry, type LateWithheld } from '../document/
 import { ExitCode, BurnexError, isBurnexError, type ExitCodeValue } from '../../../kernel/errors.js';
 import { createSessionRegistry, executeAgentStep } from './exec/agentStep.js';
 import { executeReviewStep, type DefenderChoice } from './exec/reviewStep.js';
-import { defenderSession, type FreshReason } from '../steps/review/defend.js';
+import { defenderSession, type ForkReason, type FreshReason } from '../steps/review/defend.js';
 import { agentCallsOf } from '../steps/review/participants.js';
 import { describeStrategyUnresolved } from '../document/reviewStrategy.js';
 import { buildStepEnv, injectedVariables, type EnvLayers } from './exec/env.js';
@@ -99,6 +99,7 @@ import type {
   AgentStep,
   ReviewStep,
   ReviewParticipant,
+  ImplementerRef,
   ContextEntry,
   EffortOrigin,
   ExpandedPipeline,
@@ -4050,11 +4051,19 @@ async function runReviewStep(
   for (const { call } of agentCallsOf(step)) forget(sessionKey(call.agent, call.session));
 
   // Защитник выбирается один раз за исполнение шага; его же видят ходы и
-  // `step.json` участника (`review-defend`, решение 3).
+  // `step.json` участника (`review-defend-shared-session`, решение 1). У
+  // `resume` псевдоним защитника засевается сессией имплементатора: ходы
+  // продолжают её саму, а контекст она уже получила.
   let choice: DefenderChoice | undefined;
   const chooseDefender = (): DefenderChoice => {
     choice = defenderChoice(step, job, context);
-    for (const reviewer of step.reviewers) forget(sessionKey(choice.participant.agent, defenderSession(step, reviewer.id)));
+    const key = sessionKey(choice.participant.agent, defenderSession(step));
+    forget(key);
+    if (choice.resumeSession !== undefined) {
+      context.sessions.seed(key, choice.resumeSession);
+      context.pipelineContextSent.add(key);
+      jobContextSent.add(key);
+    }
     return choice;
   };
 
@@ -4064,12 +4073,11 @@ async function runReviewStep(
     stepDir: stepDirPath,
     journal: context.journal,
     concurrency: context.config.limits.concurrency,
-    runParticipant: (participant, call, dir, thread) => {
-      // Ревьюер и защитник в ветке вызываются не раз, и номера их попыток
+    runParticipant: (participant, call, dir) => {
+      // Ревьюер и защитник в защите вызываются не раз, и номера их попыток
       // начинаются заново: прежний расход запечатывается, а не затирается.
-      // Ветки защитника идут параллельно, поэтому у каждой своя запись под
-      // участником `defender` (`review-defend`, решение 7).
-      const usageKey = thread === undefined ? participant.id : `${participant.id}@~${thread}`;
+      // Ходы защитника в `resume` оплачивает шаг review, а не имплементатор.
+      const usageKey = participant.id;
       context.usage.sealStep(job.id, step.id, usageKey);
       if (call.forkFrom !== undefined) {
         // Форк уже несёт контекст имплементатора: блок контекста первым
@@ -4089,9 +4097,9 @@ async function runReviewStep(
     },
     chooseDefender,
     originOf: (participant) => {
-      // Форк берёт агента у имплементатора, а не у выбора `defender`:
-      // происхождение свежего защитника к нему не относится.
-      if (participant === DEFENDER_ID && choice?.record.mode === 'fork') return undefined;
+      // Сессия имплементатора и её форк берут агента у имплементатора, а не у
+      // выбора `defender`: происхождение свежего защитника к ним не относится.
+      if (participant === DEFENDER_ID && choice !== undefined && choice.record.mode !== 'fresh') return undefined;
       const key = `${job.id}/${step.id}/${participant}`;
       const agent = context.expanded.agentOrigins.get(key);
       if (agent === undefined) return undefined;
@@ -4101,11 +4109,14 @@ async function runReviewStep(
 }
 
 /**
- * Выбор защитника режима `defend` (`review-defend`, решение 3). Форк — когда
- * шаг назвал имплементатора, в его записи есть сессия, а адаптер его агента
- * умеет сессии и форк. Запись ищется среди записей этого прогона: у шага,
- * переиспользованного при `resume`, она перенесена из исходного прогона
- * вместе с `session`. Иначе — свежий агент `defender` стратегии с причиной.
+ * Выбор защитника режима `defend` (`review-defend-shared-session`, решение 1).
+ * Первое подходящее:
+ * - `resume` — сама сессия имплементатора: шаг назвал имплементатора из
+ *   того же дерева, он исполнен в этом прогоне, его сессия записана, адаптер
+ *   умеет сессии, и продолжить её одновременно с шагом review некому;
+ * - `fork` — один форк этой сессии на шаг, когда она принадлежит исходному
+ *   прогону (`reused`) или её может продолжить кто-то ещё (`shared`);
+ * - `fresh` — свежий агент `defender` стратегии с причиной.
  */
 function defenderChoice(step: ReviewStep, job: Job, context: RunContext): DefenderChoice {
   const fresh = step.defender ?? (step.aggregator as ReviewParticipant);
@@ -4126,9 +4137,9 @@ function defenderChoice(step: ReviewStep, job: Job, context: RunContext): Defend
   });
   if (ref === undefined || implementer === undefined) return freshChoice('no_implementer');
 
-  // Claude хранит сессии по каталогу: форк из чужого дерева не нашёл бы
-  // сессии имплементатора (`named-workspace-trees`, решение 8). Другое
-  // дерево — обычный исход, а не сбой хода.
+  // Claude хранит сессии по каталогу: из чужого дерева сессии имплементатора
+  // не найти (`named-workspace-trees`, решение 8). Другое дерево — обычный
+  // исход, а не сбой хода.
   const implementerJob = context.graph.byId.get(ref.job);
   if (implementerJob !== undefined && treeKey(implementerJob) !== treeKey(job)) {
     const record = context.records.get(ref.job)?.steps.find((candidate) => candidate.id === ref.step);
@@ -4140,36 +4151,60 @@ function defenderChoice(step: ReviewStep, job: Job, context: RunContext): Defend
   const text = record === undefined ? undefined : implementerText(context, ref.job, ref.step, record);
   if (declared?.kind !== 'agent' || record?.session === undefined) return freshChoice('no_session', text);
   const adapter = adapterOf(declared.agent, context);
-  if (!adapter.capabilities.sessions || adapter.capabilities.forkSessions !== true) return freshChoice('no_fork', text);
-  // Ход защитника — JSON по схеме защиты; форк бэкенда, у которого схемы нет
-  // никакой, давал бы невалидный ход за токены (`backend-structured-output`,
-  // решение 6). Свежий защитник проверен до старта как участник.
+  if (!adapter.capabilities.sessions) return freshChoice('no_session', text);
+  // Ход защитника — JSON по схеме защиты; сессия бэкенда, у которого схемы
+  // нет никакой, давала бы невалидный ход за токены
+  // (`backend-structured-output`, решение 6). Свежий защитник проверен до
+  // старта как участник.
   if (structuredOutputMode(adapter.capabilities) === undefined) return freshChoice('no_schema', text);
-  // Форк сообщает цену вместе с исходной сессией. Имплементатор этого
-  // прогона уже отметил её в реестре; переиспользованный из исходного прогона
-  // — только в своей записи.
+  const forkReason: ForkReason | undefined =
+    record.reused_from !== undefined ? 'reused' : sessionContinuableInPlace(ref, job, step, context) ? undefined : 'shared';
+  if (forkReason !== undefined && adapter.capabilities.forkSessions !== true) return freshChoice('no_fork', text);
+  // Форк сообщает цену вместе с исходной сессией, продолжение — свою
+  // нарастающую. Имплементатор этого прогона уже отметил её в реестре;
+  // переиспользованный из исходного прогона — только в своей записи.
   const implementerCost = record.attempts.at(-1)?.usage?.session_cost_usd;
   if (implementerCost !== undefined && context.sessions.costOf(record.session) === undefined) {
     context.sessions.noteCost(record.session, implementerCost);
   }
-  return {
-    record: {
-      kind: 'defender',
-      mode: 'fork',
-      implementer,
-      agent: declared.agent,
-      ...(declared.model === undefined ? {} : { model: declared.model }),
-    },
-    // Агент, модель и effort — имплементатора; права и схема хода — шага
-    // `review` (`defenderCallBase`).
-    participant: {
-      id: DEFENDER_ID,
-      agent: declared.agent,
-      ...(declared.model === undefined ? {} : { model: declared.model }),
-      ...(declared.effort === undefined ? {} : { effort: declared.effort }),
-    },
-    forkFrom: record.session,
+  // Агент, модель и effort — имплементатора; права и схема хода — шага
+  // `review` (`defenderCallBase`).
+  const participant: ReviewParticipant = {
+    id: DEFENDER_ID,
+    agent: declared.agent,
+    ...(declared.model === undefined ? {} : { model: declared.model }),
+    ...(declared.effort === undefined ? {} : { effort: declared.effort }),
   };
+  const base = {
+    kind: 'defender' as const,
+    implementer,
+    agent: declared.agent,
+    ...(declared.model === undefined ? {} : { model: declared.model }),
+  };
+  if (forkReason === undefined) return { record: { ...base, mode: 'resume' }, participant, resumeSession: record.session };
+  return { record: { ...base, mode: 'fork', reason: forkReason }, participant, forkFrom: record.session };
+}
+
+/**
+ * Можно ли продолжить сессию имплементатора на месте: никто не продолжит её
+ * одновременно с шагом review. Правило статическое, по графу пайплайна, —
+ * динамический захват «кто первый» дал бы прогону недетерминированную
+ * раскладку диалогов. Шаги одной работы идут по очереди; законченную
+ * работу-предка без `session_group` продолжить больше некому, если на того же
+ * имплементатора не ссылается другой шаг review.
+ */
+function sessionContinuableInPlace(ref: ImplementerRef, job: Job, step: ReviewStep, context: RunContext): boolean {
+  if (ref.job === job.id) return true;
+  if (context.graph.byId.get(ref.job)?.sessionGroup !== undefined) return false;
+  return !context.expanded.pipeline.jobs.some((other) =>
+    other.steps.some(
+      (candidate) =>
+        candidate.kind === 'review' &&
+        !(other.id === job.id && candidate.id === step.id) &&
+        candidate.implementer?.job === ref.job &&
+        candidate.implementer.step === ref.step,
+    ),
+  );
 }
 
 /**

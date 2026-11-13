@@ -934,25 +934,30 @@ export const EventSchema = z.discriminatedUnion('kind', [
   // провал ревьюера шага не роняет, и `reason` называет то, что получит
   // агрегатор. `round` — раунд защиты (`review-defend`, решение 7): ход
   // ревьюера или защитника в раунде N ≥ 1; у независимого ревью и агрегатора
-  // поля нет. `thread` — ветка защиты, то есть ревьюер, чьи находки защищает
-  // `defender`; у прочих участников поля нет.
+  // поля нет. `thread` писали журналы прежнего формата у хода защитника —
+  // ветка, то есть ревьюер, чьи находки он защищал; в общих раундах
+  // (`review-defend-shared-session`) поля нет ни у кого.
   z.object({ ...eventBase, kind: z.literal('review.participant.started'), job: z.string(), step: z.string(), participant: z.string(), round: z.number().int().positive().optional(), thread: z.string().optional(), agent: z.string(), model: z.string().optional() }).strict(),
   z.object({ ...eventBase, kind: z.literal('review.participant.finished'), job: z.string(), step: z.string(), participant: z.string(), round: z.number().int().positive().optional(), thread: z.string().optional(), status: StatusValueSchema, reason: z.string().optional() }).strict(),
-  // Выбор защитника режима `defend` (`review-defend`, решения 3 и 7): форк
-  // сессии имплементатора либо свежий агент с причиной.
+  // Выбор защитника режима `defend` (`review-defend-shared-session`,
+  // решение 1): сама сессия имплементатора, её форк с причиной (`reused`,
+  // `shared`) либо свежий агент с причиной. Журналы прежнего формата знали
+  // только форк без причины и свежего агента.
   z.object({
     ...eventBase,
     kind: z.literal('review.defender'),
     job: z.string(),
     step: z.string(),
-    mode: z.enum(['fork', 'fresh']),
+    mode: z.enum(['resume', 'fork', 'fresh']),
     implementer: z.string().optional(),
     agent: z.string(),
     model: z.string().optional(),
-    reason: z.enum(['no_implementer', 'other_tree', 'no_session', 'no_fork', 'no_schema']).optional(),
+    reason: z.enum(['no_implementer', 'other_tree', 'no_session', 'no_fork', 'no_schema', 'reused', 'shared']).optional(),
   }).strict(),
-  // Реплика ветки защиты (`review-defend`, решение 7): запись в
-  // `defense.ndjson` — событием по ходу шага. `thread` — ветка (ревьюер).
+  // Реплика защиты (`review-defend`, решение 7): запись в `defense.ndjson` —
+  // событием по ходу шага. `thread` — у реплики ревьюера его id; у реплики
+  // защитника поля нет (`review-defend-shared-session`, решение 4), а в
+  // журналах прежнего формата там была ветка.
   // Прежний режим `discussion` (`review-discussion`) писал это событие с
   // позицией `stance` и раундом 0: движок их больше не пишет, но схема их
   // читает, чтобы прежние прогоны открывались.

@@ -24,9 +24,10 @@ import { gitCommit, gitInit, makeProject, testBaseEnv, type Project } from './he
 import { tempDir } from './tmp.js';
 
 /**
- * `review-defend`: режим `defend` стратегии ревью — защитник (форк сессии
- * имплементатора либо свежий агент), ветки «ревьюер ↔ защитник» по
- * находкам, решение агрегатора по статусам и журнал `defense.ndjson`.
+ * `review-defend`, `review-defend-shared-session`: режим `defend` стратегии
+ * ревью — защитник (сама сессия имплементатора, её форк либо свежий агент),
+ * общие раунды по находкам всех ревьюеров, решение агрегатора по статусам и
+ * журнал `defense.ndjson`.
  */
 
 const STRATEGY = (extra = '') => `version: 1
@@ -217,18 +218,18 @@ async function run(
 
 /** Ход по промпту: независимое ревью, ход защитника, ход ревьюера, прочее. */
 type Turn =
-  | { readonly kind: 'defense'; readonly reviewer: string; readonly round: number; readonly open: readonly string[] }
+  | { readonly kind: 'defense'; readonly round: number; readonly open: readonly string[] }
   | { readonly kind: 'rebuttal'; readonly round: number; readonly open: readonly string[] }
   | { readonly kind: 'other' };
 
 function openIds(prompt: string): string[] {
-  const at = Math.max(prompt.lastIndexOf('## Открытые находки'), prompt.lastIndexOf('## Находки\n'));
+  const at = prompt.lastIndexOf('## Открытые находки и ответ защитника');
   return [...prompt.slice(at).matchAll(/^### ([\w-]+\.\d+) —/gm)].map((match) => match[1] as string);
 }
 
 function turnOf(prompt: string): Turn {
-  const defense = /## Защита на ревью — раунд (\d+)\n\n[^\n]*Ревьюер `([^`]+)`/.exec(prompt);
-  if (defense !== null) return { kind: 'defense', reviewer: defense[2] as string, round: Number(defense[1]), open: openIds(prompt) };
+  const defense = /## Защита на ревью — раунд (\d+)\n\n[\s\S]*?Открытые находки: ([^\n]*)/.exec(prompt);
+  if (defense !== null) return { kind: 'defense', round: Number(defense[1]), open: (defense[2] as string).split(', ') };
   const rebuttal = /## Защита находок — раунд (\d+)/.exec(prompt);
   if (rebuttal !== null) return { kind: 'rebuttal', round: Number(rebuttal[1]), open: openIds(prompt) };
   return { kind: 'other' };
@@ -241,7 +242,7 @@ interface Responding {
   readonly text?: (invocation: AgentInvocation) => string | undefined;
 }
 
-/** Бэкенд, отвечающий по промпту вызова, а не по номеру: ветки идут параллельно. */
+/** Бэкенд, отвечающий по промпту вызова, а не по номеру: ревьюеры идут параллельно. */
 function responding(respond: (invocation: AgentInvocation) => unknown, options: Responding = {}): FakeBackend {
   const tokens = options.tokens ?? 10;
   const backend: FakeBackend = createFakeBackend({
@@ -281,14 +282,14 @@ function reviewer(id: string, answer: (round: number, finding: string) => Rebutt
 }
 
 /** Защитник: позиция по таблице на каждую открытую находку хода. */
-function defender(stance: (reviewer: string, round: number, finding: string) => DefenseStance = () => 'accept', options: Responding = {}): FakeBackend {
+function defender(stance: (round: number, finding: string) => DefenseStance = () => 'accept', options: Responding = {}): FakeBackend {
   return responding((invocation) => {
     const turn = turnOf(invocation.prompt);
     if (turn.kind !== 'defense') return undefined;
     return {
-      text: `защита ${turn.reviewer}, раунд ${turn.round}`,
+      text: `защита, раунд ${turn.round}`,
       responses: turn.open.map((findingId) => {
-        const chosen = stance(turn.reviewer, turn.round, findingId);
+        const chosen = stance(turn.round, findingId);
         return { finding: findingId, stance: chosen, text: `${chosen} ${findingId} r${turn.round}`, evidence: chosen === 'dispute' ? `src/guard.ts:${turn.round}` : null };
       }),
     };
@@ -296,8 +297,8 @@ function defender(stance: (reviewer: string, round: number, finding: string) => 
 }
 
 /**
- * Имплементатор на бэкенде с форком: первый вызов — сам шаг `implement`,
- * следующие — ходы форкнутого защитника.
+ * Имплементатор: первый вызов — сам шаг `implement`, следующие — ходы
+ * защитника в его сессии (или её форке).
  */
 function implementer(stance?: Parameters<typeof defender>[0], options: Responding = {}): FakeBackend {
   return defender(stance, {
@@ -327,9 +328,9 @@ const settledOf = (lines: readonly Line[]) =>
 const defenseTurns = (backend: FakeBackend) => backend.invocations.filter((invocation) => turnOf(invocation.prompt).kind === 'defense');
 const rebuttals = (backend: FakeBackend) => backend.invocations.filter((invocation) => turnOf(invocation.prompt).kind === 'rebuttal');
 
-describe('review-defend: форк сессии имплементатора', () => {
-  // Сценарии: «Форк сессии Claude», «Защитник принял находку», «Лента в журнале», «События по ходу»
-  it('всё принято в первом раунде: две ветки-форка, сессия имплементатора не тронута, ревьюерам вопросов нет', async () => {
+describe('review-defend: сессия имплементатора на месте', () => {
+  // Сценарии: «Имплементатор в той же работе», «Защитник принял находку», «Один ход на всех», «Лента в журнале», «События по ходу»
+  it('всё принято в первом раунде: один ход в самой сессии имплементатора на находки обоих ревьюеров', async () => {
     const project = defendRepo();
     const impl = implementer();
     const security = reviewer('security');
@@ -341,28 +342,30 @@ describe('review-defend: форк сессии имплементатора', ()
     assert.equal(result.status, 'success');
     const implementSession = impl.invocations[0]?.sessionId;
     assert.ok(implementSession !== undefined);
-    const forks = impl.invocations.slice(1);
-    assert.equal(forks.length, 2, 'по ходу защитника на ветку');
-    for (const fork of forks) {
-      assert.equal(fork.forkFrom, implementSession);
-      assert.equal(fork.resumeSession, false);
-      assert.notEqual(fork.sessionId, implementSession);
-    }
-    assert.notEqual(forks[0]?.sessionId, forks[1]?.sessionId, 'у каждой ветки своя сессия защитника');
-    assert.ok(!impl.invocations.slice(1).some((invocation) => invocation.sessionId === implementSession), 'сессия S не получила сообщений');
+    const turns = impl.invocations.slice(1);
+    assert.equal(turns.length, 1, 'один ход защитника на раунд');
+    assert.equal(turns[0]?.sessionId, implementSession, 'ход продолжает саму сессию имплементатора');
+    assert.equal(turns[0]?.resumeSession, true);
+    assert.equal(turns[0]?.forkFrom, undefined);
+    const first = turnOf(turns[0]?.prompt ?? '');
+    assert.deepEqual(first.kind === 'defense' ? first.open : [], ['security.1', 'security.2', 'tests.1']);
     assert.equal(def.invocations.length, 0, 'свежий защитник не нужен');
-    // Форк помнит задание — его не повторяют; права — шага review.
-    assert.doesNotMatch(forks[0]?.prompt ?? '', /проверь дифф/);
-    assert.match(forks[0]?.prompt ?? '', /Ты — автор кода/);
-    assert.match(forks[0]?.prompt ?? '', /Принимай только то, что подтверждается кодом/);
-    assert.match(forks[0]?.prompt ?? '', /Файлы не правь/);
-    assert.match(forks[0]?.outputSchemaPath ?? '', /review-defense\.schema\.json$/);
+    // Комментарий ревью к работе: задание не повторяется, правки запрещены,
+    // прежний заход недействителен, блоки подписаны ревьюером.
+    const prompt = turns[0]?.prompt ?? '';
+    assert.doesNotMatch(prompt, /проверь дифф/);
+    assert.match(prompt, /Ревью вашей работы — шаг review-diff\. Код не правьте/);
+    assert.match(prompt, /реплики прежнего захода этого ревью, они недействительны/);
+    assert.match(prompt, /— Ревьюер `security` \(rev-0\), фокус: безопасность\n\n### security\.1 — critical: секрет/);
+    assert.match(prompt, /— Ревьюер `tests` \(rev-1\)\n\n### tests\.1 — major: нет теста/);
+    assert.match(prompt, /Принимай только то, что подтверждается кодом/);
+    assert.match(turns[0]?.outputSchemaPath ?? '', /review-defense\.schema\.json$/);
     // Ревьюерам вопросов не задавалось: находки закрыты защитником.
     assert.equal(security.invocations.length, 1);
     assert.equal(tests.invocations.length, 1);
 
     const { lines, dir } = defenseOf(result);
-    assert.deepEqual(lines[0], { kind: 'defender', mode: 'fork', implementer: 'review.implement', agent: 'impl' });
+    assert.deepEqual(lines[0], { kind: 'defender', mode: 'resume', implementer: 'review.implement', agent: 'impl' });
     assert.deepEqual(lines.at(-1), { kind: 'outcome', accepted: 3, withdrawn: 0, contested: 0 });
     assert.deepEqual(
       lines.filter((line) => line.kind === 'finding').map((line) => line.id),
@@ -374,50 +377,75 @@ describe('review-defend: форк сессии имплементатора', ()
     });
     assert.deepEqual(settledOf(lines), { 'security.1': 'accepted', 'security.2': 'accepted', 'tests.1': 'accepted' });
     assert.equal(lines.filter((line) => line.kind === 'settled').length, 3, 'ровно одна строка settled на находку');
-    const message = lines.find((line) => line.kind === 'message' && line.thread === 'security');
+    const message = lines.find((line) => line.kind === 'message');
     assert.equal(message?.role, 'agent');
     assert.equal(message?.from, 'defender');
     assert.equal(message?.round, 1);
-    assert.deepEqual(message?.parts, [{ kind: 'text', text: 'защита security, раунд 1' }]);
-    assert.deepEqual((message?.responses as Line[])[0], { finding: 'security.1', stance: 'accept', text: 'accept security.1 r1', evidence: null });
-    assert.ok(existsSync(join(dir, 'participants', 'defender', 'security', 'rounds', '1', 'output.json')));
-    const turn = JSON.parse(readFileSync(join(dir, 'participants', 'defender', 'tests', 'rounds', '1', 'step.json'), 'utf8')) as Line;
+    assert.equal('thread' in (message ?? {}), false, 'реплика защитника без thread');
+    assert.deepEqual(message?.parts, [{ kind: 'text', text: 'защита, раунд 1' }]);
+    assert.deepEqual((message?.responses as Line[]).map((response) => response.finding), ['security.1', 'security.2', 'tests.1']);
+    assert.ok(existsSync(join(dir, 'participants', 'defender', 'rounds', '1', 'output.json')));
+    const turn = JSON.parse(readFileSync(join(dir, 'participants', 'defender', 'rounds', '1', 'step.json'), 'utf8')) as Line;
     assert.equal(turn.role, 'defender');
-    assert.equal(turn.thread, 'tests');
-    assert.equal(turn.fork_from, implementSession);
-    assert.equal(turn.session, 'review-diff/defender/tests');
+    assert.equal(turn.thread, undefined);
+    assert.equal(turn.fork_from, undefined);
+    assert.equal(turn.session, 'review-diff/defender');
+    assert.equal(turn.session_id, implementSession);
+    assert.equal(turn.origin, undefined, 'агент — имплементатора, а не выбор defender');
 
-    // События: выбор защитника, реплики веток, закрытия за репликой, итог.
+    // События: выбор защитника, одна реплика без thread, закрытия за ней, итог.
     const events = readEvents(result.journal.paths);
     const chosen = events.find((event) => event.kind === 'review.defender');
     assert.deepEqual(chosen?.kind === 'review.defender' ? { mode: chosen.mode, implementer: chosen.implementer, reason: chosen.reason } : undefined, {
-      mode: 'fork', implementer: 'review.implement', reason: undefined,
+      mode: 'resume', implementer: 'review.implement', reason: undefined,
     });
-    const reply = events.findIndex((event) => event.kind === 'review.message' && event.participant === 'defender' && event.thread === 'security');
-    assert.ok(reply !== -1);
-    const settled = events.findIndex((event) => event.kind === 'review.settled' && event.finding === 'security.1' && event.status === 'accepted');
-    assert.ok(settled > reply, 'review.settled — за репликой, что закрыла находку');
-    assert.ok(events.some((event) => event.kind === 'review.participant.started' && event.participant === 'defender' && event.thread === 'security'));
+    const replies = events.filter((event) => event.kind === 'review.message' && event.participant === 'defender');
+    assert.equal(replies.length, 1);
+    assert.equal(replies[0]?.kind === 'review.message' ? replies[0].thread : 'x', undefined);
+    const reply = events.findIndex((event) => event.kind === 'review.message' && event.participant === 'defender');
+    for (const id of ['security.1', 'security.2', 'tests.1']) {
+      const settled = events.findIndex((event) => event.kind === 'review.settled' && event.finding === id && event.status === 'accepted');
+      assert.ok(settled > reply, `review.settled ${id} — за репликой, что закрыла находку`);
+    }
+    const started = events.find((event) => event.kind === 'review.participant.started' && event.participant === 'defender');
+    assert.equal(started?.kind === 'review.participant.started' ? started.thread : 'x', undefined);
     const finished = events.find((event) => event.kind === 'review.defense.finished');
     assert.deepEqual(finished?.kind === 'review.defense.finished' ? [finished.accepted, finished.withdrawn, finished.contested] : [], [3, 0, 0]);
 
     // Агрегатор: строка о защитнике и статусы находок.
     const aggPrompt = agg.invocations[0]?.prompt ?? '';
-    assert.match(aggPrompt, /форк сессии имплементатора `review\.implement`/);
+    assert.match(aggPrompt, /сама сессия имплементатора `review\.implement`/);
     assert.match(aggPrompt, /### security\.1 — critical: секрет/);
     assert.match(aggPrompt, /Статус: accepted/);
     assert.match(aggPrompt, /`accepted` включи в итог/);
 
-    // Расход обеих веток — под участником defender.
-    const usage = readUsage(result.journal.paths).jobs.review?.steps['review-diff'];
-    assert.equal(usage?.participants?.defender?.billable_tokens, 40);
-    assert.deepEqual(Object.keys(usage?.participants ?? {}).sort(), ['aggregator', 'defender', 'security', 'tests']);
+    // Расход хода — под участником defender шага review; запись имплементатора не тронута.
+    const usage = readUsage(result.journal.paths).jobs.review?.steps;
+    assert.equal(usage?.['review-diff']?.participants?.defender?.billable_tokens, 20);
+    assert.deepEqual(Object.keys(usage?.['review-diff']?.participants ?? {}).sort(), ['aggregator', 'defender', 'security', 'tests']);
+    assert.equal(usage?.implement?.billable_tokens, 20);
+    const record = readStatus(result.journal.paths).jobs.find((job) => job.id === 'review')?.steps.find((step) => step.id === 'implement');
+    assert.equal(record?.session, implementSession);
+    assert.equal(record?.attempts.length, 1);
+  });
+
+  // Сценарий: «Имплементатор в той же работе» — следующий шаг продолжает сессию
+  it('следующий шаг работы продолжает ту же сессию с репликами защиты в истории', async () => {
+    const project = defendRepo({ stepExtra: '      - id: fix\n        agent: impl\n        prompt: исправь по ревью\n' });
+    const impl = implementer();
+    const result = await run(project, { impl, 'rev-0': reviewer('security'), 'rev-1': reviewer('tests'), agg: verdict(), def: defender() });
+
+    assert.equal(result.status, 'success');
+    const session = impl.invocations[0]?.sessionId;
+    assert.equal(impl.invocations.length, 3, 'implement, ход защитника, fix');
+    assert.ok(impl.invocations.slice(1).every((invocation) => invocation.sessionId === session && invocation.resumeSession === true));
+    assert.match(impl.invocations[2]?.prompt ?? '', /исправь по ревью/);
   });
 
   // Сценарий: «Ревьюер снял находку»; `revise` меняет серьёзность
   it('снятие и пересмотр: dispute → withdraw закрывает находку, revise меняет серьёзность и оставляет её открытой', async () => {
     const project = defendRepo();
-    const impl = implementer((reviewerId, round, id) => (id === 'security.2' && round === 2 ? 'accept' : 'dispute'));
+    const impl = implementer((round, id) => (id === 'security.2' && round === 2 ? 'accept' : 'dispute'));
     const security = reviewer('security', (_round, id) => (id === 'security.1' ? { stance: 'withdraw' } : { stance: 'revise', severity: 'minor' }));
     const tests = reviewer('tests', () => ({ stance: 'withdraw' }));
     const agg = verdict();
@@ -429,27 +457,29 @@ describe('review-defend: форк сессии имплементатора', ()
     const revised = lines.find((line) => line.kind === 'settled' && line.finding === 'security.2');
     assert.equal(revised?.severity, 'minor');
     assert.equal(revised?.round, 2);
-    // Ветка tests кончилась в первом раунде; security — во втором.
     assert.equal(rebuttals(tests).length, 1);
     assert.equal(rebuttals(security).length, 1);
-    // Ревьюер отвечает в своей возобновлённой сессии; видит ответ защитника.
+    // Ревьюер отвечает в своей возобновлённой сессии и видит ответы защитника
+    // только по своим находкам.
     const rebuttal = rebuttals(security)[0];
     assert.equal(rebuttal?.resumeSession, true);
     assert.equal(rebuttal?.sessionId, security.invocations[0]?.sessionId);
+    assert.match(rebuttal?.prompt ?? '', /Защитник — сессия имплементатора `review\.implement` \(impl\) ответил на твои находки/);
     assert.match(rebuttal?.prompt ?? '', /\*\*dispute\*\* — dispute security\.1 r1\n\s+Доказательство: src\/guard\.ts:1/);
+    assert.doesNotMatch(rebuttal?.prompt ?? '', /tests\.1/);
     assert.match(rebuttal?.outputSchemaPath ?? '', /review-rebuttal\.schema\.json$/);
-    // Второй ход защитника — возобновлённый форк: только открытая находка и ответ ревьюера.
-    const second = defenseTurns(impl).find((invocation) => turnOf(invocation.prompt).kind === 'defense' && /раунд 2/.test(invocation.prompt));
+    // Второй ход защитника — та же сессия: только ответ ревьюера, без текста находки.
+    const second = defenseTurns(impl).find((invocation) => /раунд 2/.test(invocation.prompt));
     assert.equal(second?.resumeSession, true);
-    assert.equal(second?.forkFrom, undefined, 'форк — только у начала сессии ветки');
-    assert.deepEqual(turnOf(second?.prompt ?? '').kind === 'defense' ? openIds(second?.prompt ?? '') : [], ['security.2']);
-    assert.match(second?.prompt ?? '', /### security\.2 — minor \(было major\)/);
-    assert.match(second?.prompt ?? '', /\*\*revise → minor\*\*/);
+    assert.equal(second?.sessionId, impl.invocations[0]?.sessionId);
+    assert.match(second?.prompt ?? '', /Открытые находки: security\.2/);
+    assert.match(second?.prompt ?? '', /— Ревьюер `security` \(rev-0\), фокус: безопасность\n\n#### security\.2 — minor \(было major\)\n- раунд 1, ревьюер `security`: \*\*revise → minor\*\*/);
+    assert.doesNotMatch(second?.prompt ?? '', /подробно: инъекция/);
     assert.match(agg.invocations[0]?.prompt ?? '', /Статус: withdrawn/);
   });
 
-  // Сценарий: «Спор не разрешился»; «Спорная находка»
-  it('спор до лимита: dispute и maintain дважды — contested после второго ответа ревьюера, четыре вызова в ветке', async () => {
+  // Сценарий: «Спор не разрешился»
+  it('спор до лимита: dispute и maintain дважды — contested после второго ответа ревьюера, четыре вызова', async () => {
     const strategy = STRATEGY().replace('  - id: tests\n    agent: rev-1\n', '');
     const project = defendRepo({ strategy });
     const impl = implementer(() => 'dispute');
@@ -475,25 +505,50 @@ describe('review-defend: форк сессии имплементатора', ()
   });
 
   // Сценарий: «Сбой защитника»
-  it('таймаут хода защитника: реплика с причиной сбоя, открытые находки ветки — contested, другая ветка продолжается', async () => {
+  it('таймаут хода защитника: реплика с причиной сбоя, открытые находки всех ревьюеров — contested, ревьюеров не вызывали', async () => {
     const project = defendRepo({ stepExtra: '        timeout: 1s\n' });
-    const impl = implementer(undefined, {
-      hang: (invocation) => (turnOf(invocation.prompt).kind === 'defense' && /Ревьюер `security`/.test(invocation.prompt) ? 5_000 : 0),
-    });
+    const impl = implementer(undefined, { hang: (invocation) => (turnOf(invocation.prompt).kind === 'defense' ? 5_000 : 0) });
+    const security = reviewer('security');
+    const tests = reviewer('tests');
     const agg = verdict();
-    const result = await run(project, { impl, 'rev-0': reviewer('security'), 'rev-1': reviewer('tests'), agg, def: defender() });
+    const result = await run(project, { impl, 'rev-0': security, 'rev-1': tests, agg, def: defender() });
 
     assert.equal(result.status, 'success');
     const { lines } = defenseOf(result);
-    assert.deepEqual(settledOf(lines), { 'tests.1': 'accepted', 'security.1': 'contested', 'security.2': 'contested' });
-    const failed = lines.find((line) => line.kind === 'message' && line.thread === 'security');
+    assert.deepEqual(settledOf(lines), { 'security.1': 'contested', 'security.2': 'contested', 'tests.1': 'contested' });
+    const failed = lines.find((line) => line.kind === 'message');
+    assert.equal(failed?.from, 'defender');
     assert.match(String(failed?.failure), /не завершился за 1000 мс/);
     assert.deepEqual(failed?.responses, []);
     assert.equal(failed?.invalid, undefined);
-    assert.deepEqual(lines.at(-1), { kind: 'outcome', accepted: 1, withdrawn: 0, contested: 2 });
-    const event = readEvents(result.journal.paths).find((entry) => entry.kind === 'review.message' && entry.thread === 'security');
+    assert.deepEqual(lines.at(-1), { kind: 'outcome', accepted: 0, withdrawn: 0, contested: 3 });
+    assert.equal(rebuttals(security).length + rebuttals(tests).length, 0);
+    const event = readEvents(result.journal.paths).find((entry) => entry.kind === 'review.message' && entry.participant === 'defender');
     assert.match(event?.kind === 'review.message' ? event.failure ?? '' : '', /не завершился/);
     assert.match(agg.invocations[0]?.prompt ?? '', /ход защитника сорвался/);
+  });
+
+  // Сценарий: «Сбой ревьюера»
+  it('дважды невалидный ход ревьюера: его открытые — contested, раунд 2 идёт без него', async () => {
+    const project = defendRepo();
+    const impl = implementer(() => 'dispute');
+    const tests = responding((invocation) =>
+      turnOf(invocation.prompt).kind === 'rebuttal'
+        ? { text: 'мимо', responses: [{ finding: 'tests.9', stance: 'maintain', text: '', severity: null }] }
+        : { summary: 'итог tests', findings: FINDINGS.tests },
+    );
+    const security = reviewer('security');
+    const result = await run(project, { impl, 'rev-0': security, 'rev-1': tests, agg: verdict(), def: defender() });
+
+    assert.equal(result.status, 'success');
+    assert.equal(rebuttals(tests).length, 2, 'невалидный ход получает один повтор');
+    const { lines } = defenseOf(result);
+    const settled = lines.filter((line) => line.kind === 'settled');
+    assert.deepEqual(settled.find((line) => line.finding === 'tests.1'), { kind: 'settled', finding: 'tests.1', status: 'contested', severity: 'major', round: 1 });
+    assert.equal(lines.find((line) => line.kind === 'message' && line.from === 'tests')?.invalid, true);
+    const second = defenseTurns(impl).find((invocation) => /раунд 2/.test(invocation.prompt));
+    assert.match(second?.prompt ?? '', /Открытые находки: security\.1, security\.2\n/);
+    assert.equal(rebuttals(security).length, 2);
   });
 
   it('дважды невалидный ход защитника: повтор с ошибкой схемы, затем invalid и contested', async () => {
@@ -517,14 +572,14 @@ describe('review-defend: форк сессии имплементатора', ()
     assert.equal(message?.invalid, true);
     assert.deepEqual(message?.responses, []);
     assert.deepEqual(settledOf(lines), { 'security.1': 'contested', 'security.2': 'contested' });
-    const check = JSON.parse(readFileSync(join(dir, 'participants', 'defender', 'security', 'rounds', '1', 'turn-check.schema.json'), 'utf8')) as {
+    const check = JSON.parse(readFileSync(join(dir, 'participants', 'defender', 'rounds', '1', 'turn-check.schema.json'), 'utf8')) as {
       properties: { responses: { minItems: number; items: { properties: { finding: { enum: string[] } } } } };
     };
     assert.deepEqual(check.properties.responses.items.properties.finding.enum, ['security.1', 'security.2']);
     assert.equal(check.properties.responses.minItems, 2);
   });
 
-  it('ревьюер без находок ветки не получает и назван агрегатору с причиной', async () => {
+  it('ревьюер без находок в защите не участвует и назван агрегатору с причиной', async () => {
     const project = defendRepo();
     const impl = implementer();
     const tests = reviewer('tests', undefined, []);
@@ -533,8 +588,22 @@ describe('review-defend: форк сессии имплементатора', ()
 
     assert.equal(result.status, 'success');
     assert.equal(defenseTurns(impl).length, 1);
+    assert.doesNotMatch(defenseTurns(impl)[0]?.prompt ?? '', /Ревьюер `tests`/);
     assert.equal(tests.invocations.length, 1);
     assert.match(agg.invocations[0]?.prompt ?? '', /## Ревьюеры без находок\n\n- `tests`: находок нет/);
+  });
+
+  // Сценарий: «Бэкенд с сессиями без форка»
+  it('бэкенд имплементатора с сессиями без форка: защищает сама сессия', async () => {
+    const project = defendRepo();
+    const impl = implementer(undefined, { capabilities: { forkSessions: false } });
+    const def = defender();
+    const result = await run(project, { impl, 'rev-0': reviewer('security'), 'rev-1': reviewer('tests'), agg: verdict(), def });
+
+    assert.equal(result.status, 'success');
+    assert.equal(defenseOf(result).lines[0]?.mode, 'resume');
+    assert.equal(impl.invocations[1]?.sessionId, impl.invocations[0]?.sessionId);
+    assert.equal(def.invocations.length, 0);
   });
 });
 
@@ -547,38 +616,24 @@ describe('review-defend: свежий защитник', () => {
     const result = await run(project, { impl, 'rev-0': reviewer('security'), 'rev-1': reviewer('tests'), agg: verdict(), def });
 
     assert.equal(result.status, 'success');
-    const { lines } = defenseOf(result);
+    const { lines, dir } = defenseOf(result);
     assert.deepEqual(lines[0], { kind: 'defender', mode: 'fresh', agent: 'def', reason: 'no_implementer' });
-    assert.equal(impl.invocations.length, 1, 'имплементатор не форкается');
-    assert.equal(def.invocations.length, 2);
+    assert.equal(impl.invocations.length, 1, 'сессия имплементатора не продолжается');
+    assert.equal(def.invocations.length, 1, 'один ход на всех ревьюеров');
     const prompt = def.invocations[0]?.prompt ?? '';
     assert.match(prompt, /проверь дифф/);
     assert.match(prompt, /Защищай по коду\./);
     assert.match(prompt, /вместо его автора/);
     assert.equal(def.invocations[0]?.forkFrom, undefined);
     assert.equal(def.invocations[0]?.resumeSession, false);
-    assert.match(readFileSync(join(defenseOf(result).dir, 'participants', 'defender', 'security', 'rounds', '1', 'step.json'), 'utf8'), /"origin"/);
+    assert.match(readFileSync(join(dir, 'participants', 'defender', 'rounds', '1', 'step.json'), 'utf8'), /"origin"/);
     const event = readEvents(result.journal.paths).find((entry) => entry.kind === 'review.defender');
     assert.deepEqual(event?.kind === 'review.defender' ? [event.mode, event.reason, event.implementer] : [], ['fresh', 'no_implementer', undefined]);
-    assert.match(readFileSync(join(defenseOf(result).dir, 'participants', 'aggregator', 'prompt.txt'), 'utf8'), /свежий агент .*шаг не назвал имплементатора/);
-  });
-
-  // Сценарий: «Бэкенд без форка»
-  it('бэкенд имплементатора без forkSessions: mode fresh, reason no_fork, промпт несёт текстовый выход имплементатора', async () => {
-    const project = defendRepo();
-    const impl = implementer(undefined, { capabilities: { forkSessions: false } });
-    const def = defender();
-    const result = await run(project, { impl, 'rev-0': reviewer('security'), 'rev-1': reviewer('tests'), agg: verdict(), def });
-
-    assert.equal(result.status, 'success');
-    assert.deepEqual(defenseOf(result).lines[0], { kind: 'defender', mode: 'fresh', implementer: 'review.implement', agent: 'def', reason: 'no_fork' });
-    assert.equal(impl.invocations.length, 1);
-    assert.ok(impl.invocations.every((invocation) => invocation.forkFrom === undefined), 'адаптер без форка forkFrom не получает');
-    assert.match(def.invocations[0]?.prompt ?? '', /## Отчёт имплементатора `review\.implement`\n\nСделал: добавил проверку прав/);
+    assert.match(readFileSync(join(dir, 'participants', 'aggregator', 'prompt.txt'), 'utf8'), /свежий агент .*шаг не назвал имплементатора/);
   });
 
   // Сценарий: «Бэкенд имплементатора с форком, но без схемы» (backend-structured-output)
-  it('бэкенд имплементатора с форком, но без схемы: mode fresh, reason no_schema', async () => {
+  it('бэкенд имплементатора без схемы: mode fresh, reason no_schema', async () => {
     const project = defendRepo();
     const impl = implementer(undefined, { capabilities: { structuredOutput: false } });
     const def = defender();
@@ -586,7 +641,7 @@ describe('review-defend: свежий защитник', () => {
 
     assert.equal(result.status, 'success');
     assert.deepEqual(defenseOf(result).lines[0], { kind: 'defender', mode: 'fresh', implementer: 'review.implement', agent: 'def', reason: 'no_schema' });
-    assert.ok(impl.invocations.every((invocation) => invocation.forkFrom === undefined), 'форка нет');
+    assert.equal(impl.invocations.length, 1, 'сессия имплементатора не продолжается');
     assert.match(readFileSync(join(defenseOf(result).dir, 'participants', 'aggregator', 'prompt.txt'), 'utf8'), /не умеет ответ по схеме/);
   });
 
@@ -602,7 +657,7 @@ describe('review-defend: свежий защитник', () => {
     assert.equal(security.invocations.length, 0);
   });
 
-  it('у записи имплементатора нет сессии: reason no_session', async () => {
+  it('у записи имплементатора нет сессии: reason no_session, текстовый выход имплементатора в промпте', async () => {
     const project = defendRepo();
     // Бэкенд сам выдаёт нить, но не назвал её: сессии у шага нет.
     const impl = implementer(undefined, { capabilities: { forkSessions: true, sessionIdSource: 'backend' } });
@@ -611,10 +666,11 @@ describe('review-defend: свежий защитник', () => {
 
     assert.equal(result.status, 'success');
     assert.deepEqual(defenseOf(result).lines[0], { kind: 'defender', mode: 'fresh', implementer: 'review.implement', agent: 'def', reason: 'no_session' });
-    assert.equal(def.invocations.length, 2);
+    assert.equal(def.invocations.length, 1);
+    assert.match(def.invocations[0]?.prompt ?? '', /## Отчёт имплементатора `review\.implement`\n\nСделал: добавил проверку прав/);
   });
 
-  it('свежий защитник на бэкенде без сессий: каждый ход несёт задание и всю ветку', async () => {
+  it('свежий защитник на бэкенде без сессий: каждый ход несёт задание и всю переписку', async () => {
     const strategy = STRATEGY().replace('  - id: tests\n    agent: rev-1\n', '');
     const project = defendRepo({ implementer: null, strategy });
     const def = defender(() => 'dispute', { capabilities: { sessions: false } });
@@ -623,7 +679,7 @@ describe('review-defend: свежий защитник', () => {
     assert.equal(result.status, 'success');
     const second = def.invocations[1]?.prompt ?? '';
     assert.match(second, /проверь дифф/);
-    assert.match(second, /## Ветка защиты/);
+    assert.match(second, /## Переписка защиты/);
     assert.match(second, /#### m1 — Защитник, раунд 1/);
     assert.match(second, /#### m2 — Ревьюер `security`, раунд 1/);
     const degraded = readEvents(result.journal.paths).flatMap((event) =>
@@ -634,9 +690,9 @@ describe('review-defend: свежий защитник', () => {
 });
 
 describe('review-defend: бюджет и повтор агрегатора', () => {
-  it('перейдённый бюджет обрывает все ветки: шаг budget_exceeded без агрегатора', async () => {
+  it('перейдённый бюджет обрывает защиту: шаг budget_exceeded без агрегатора', async () => {
     // Ревьюеры — 40 токенов, ход защитника — ещё 20: потолок 50 перейдён до
-    // ходов ревьюеров, какая бы ветка ни шла первой.
+    // ходов ревьюеров.
     const project = defendRepo({ stepExtra: '        budget: { tokens: 50 }\n' });
     const impl = implementer(() => 'dispute');
     const security = reviewer('security');
@@ -663,7 +719,7 @@ describe('review-defend: бюджет и повтор агрегатора', () 
 
     assert.equal(result.status, 'success');
     assert.equal(agg.invocations.length, 2);
-    assert.equal(defenseTurns(impl).length, 2, 'защита не повторяется');
+    assert.equal(defenseTurns(impl).length, 1, 'защита не повторяется');
     assert.match(agg.invocations[1]?.prompt ?? '', /Статус: accepted/);
     assert.match(agg.invocations[1]?.prompt ?? '', /Прошлая попытка не прошла проверку/);
     assert.equal(defenseOf(result).lines.filter((line) => line.kind === 'outcome').length, 1);
@@ -757,9 +813,71 @@ jobs:
   });
 });
 
-describe('review-defend: имплементатор, переиспользованный при возобновлении', () => {
-  it('форк берёт сессию имплементатора из исходного прогона', async () => {
-    const project = defendRepo({ body: CROSS_JOB('build.implement').replace(/  other:\n[\s\S]*?(?=  review:)/, '') });
+describe('review-defend: имплементатор в работе-предке', () => {
+  const SINGLE = CROSS_JOB('build.implement').replace(/  other:\n[\s\S]*?(?=  review:)/, '');
+
+  // Сценарий: «Имплементатор в том же дереве другой работы»
+  it('предок без группы, единственное ревью: защищает сама сессия, запись build не меняется', async () => {
+    const project = defendRepo({ body: SINGLE });
+    const impl = implementer();
+    const result = await run(project, { impl, 'rev-0': reviewer('security'), 'rev-1': reviewer('tests'), agg: verdict(), def: defender() });
+
+    assert.equal(result.status, 'success');
+    assert.deepEqual(defenseOf(result).lines[0], { kind: 'defender', mode: 'resume', implementer: 'build.implement', agent: 'impl' });
+    const session = impl.invocations[0]?.sessionId;
+    assert.equal(impl.invocations[1]?.sessionId, session);
+    assert.equal(impl.invocations[1]?.resumeSession, true);
+    const build = readStatus(result.journal.paths).jobs.find((job) => job.id === 'build')?.steps[0];
+    assert.equal(build?.session, session);
+    assert.equal(build?.attempts.length, 1);
+  });
+
+  // Сценарий: «Два ревью одного имплементатора»
+  it('два ревью называют одного имплементатора: каждый защитник — форк с причиной shared', async () => {
+    const body = `${SINGLE}  review2:
+    needs: [build]
+    steps:
+      - id: review-diff
+        review: ./strategies/panel.yml
+        prompt: проверь дифф
+        output_schema: verdict.json
+        implementer: build.implement
+`;
+    const project = defendRepo({ body });
+    const impl = implementer();
+    const result = await run(project, { impl, 'rev-0': reviewer('security'), 'rev-1': reviewer('tests'), agg: verdict(), def: defender() });
+
+    assert.equal(result.status, 'success');
+    for (const job of ['review', 'review2']) {
+      assert.deepEqual(defenseOf(result, job).lines[0], { kind: 'defender', mode: 'fork', implementer: 'build.implement', agent: 'impl', reason: 'shared' });
+    }
+    const session = impl.invocations[0]?.sessionId;
+    const forks = impl.invocations.slice(1);
+    assert.equal(forks.length, 2, 'по одному форку на шаг');
+    assert.ok(forks.every((invocation) => invocation.forkFrom === session && invocation.sessionId !== session));
+  });
+
+  it('работа имплементатора в session_group: форк с причиной shared', async () => {
+    const project = defendRepo({ body: SINGLE.replace('  build:\n', '  build:\n    session_group: g\n') });
+    const result = await run(project, { impl: implementer(), 'rev-0': reviewer('security'), 'rev-1': reviewer('tests'), agg: verdict(), def: defender() });
+    assert.equal(result.status, 'success');
+    assert.equal(defenseOf(result).lines[0]?.reason, 'shared');
+  });
+
+  it('форк нужен, а бэкенд его не умеет: свежий защитник с причиной no_fork', async () => {
+    const project = defendRepo({ body: SINGLE.replace('  build:\n', '  build:\n    session_group: g\n') });
+    const impl = implementer(undefined, { capabilities: { forkSessions: false } });
+    const def = defender();
+    const result = await run(project, { impl, 'rev-0': reviewer('security'), 'rev-1': reviewer('tests'), agg: verdict(), def });
+    assert.equal(result.status, 'success');
+    assert.deepEqual(defenseOf(result).lines[0], { kind: 'defender', mode: 'fresh', implementer: 'build.implement', agent: 'def', reason: 'no_fork' });
+    assert.equal(impl.invocations.length, 1);
+    assert.equal(def.invocations.length, 1);
+  });
+
+  // Сценарий: «Переиспользованный имплементатор»
+  it('имплементатор переиспользован при возобновлении: один форк сессии исходного прогона с причиной reused', async () => {
+    const project = defendRepo({ body: SINGLE });
     const backends = () => ({ impl: implementer(), 'rev-0': reviewer('security'), 'rev-1': reviewer('tests'), agg: verdict(), def: defender() });
     const first = backends();
     const source = await run(project, first);
@@ -783,9 +901,10 @@ describe('review-defend: имплементатор, переиспользов�
     });
     assert.equal(resumed.status, 'success');
     const forks = second.impl.invocations;
-    assert.equal(forks.length, 2, 'имплементатор не исполнялся — только ходы форков');
-    assert.ok(forks.every((invocation) => invocation.forkFrom === sourceSession));
-    assert.deepEqual(defenseOf(resumed).lines[0], { kind: 'defender', mode: 'fork', implementer: 'build.implement', agent: 'impl' });
+    assert.equal(forks.length, 1, 'имплементатор не исполнялся — только ход форка');
+    assert.equal(forks[0]?.forkFrom, sourceSession);
+    assert.notEqual(forks[0]?.sessionId, sourceSession, 'сессия исходного прогона не получает сообщений');
+    assert.deepEqual(defenseOf(resumed).lines[0], { kind: 'defender', mode: 'fork', implementer: 'build.implement', agent: 'impl', reason: 'reused' });
   });
 });
 
@@ -838,7 +957,7 @@ describe('review-defend: форк в адаптерах и исполнении 
   const agentStep = (overrides: Partial<AgentStep> = {}): AgentStep =>
     ({
       kind: 'agent', id: 'turn', index: 1, env: {}, context: [], contextInherit: true, contextExclude: [], timeoutMs: 5_000,
-      expect: [], attempts: { max: 2, escalation: [] }, agent: 'fake', session: 'step/defender/security', prompt: 'ход',
+      expect: [], attempts: { max: 2, escalation: [] }, agent: 'fake', session: 'step/defender', prompt: 'ход',
       forkFrom: 'S', ...overrides,
     }) as AgentStep;
 
@@ -892,7 +1011,7 @@ describe('review-defend: форк в адаптерах и исполнении 
   });
 });
 
-describe('named-workspace-trees: форк защитника только из дерева имплементатора', () => {
+describe('named-workspace-trees: сессия имплементатора только из его дерева', () => {
   const withTrees = (body: string, buildTree?: string): string =>
     body
       .replace('name: p\n', 'name: p\nworkspace: { mode: worktree, trees: [main, b] }\n')
@@ -900,18 +1019,18 @@ describe('named-workspace-trees: форк защитника только из �
       .replace('  build:\n', `  build:\n${buildTree === undefined ? '' : `    workspace: { tree: ${buildTree} }\n`}`);
   const backends = () => ({ impl: implementer(), 'rev-0': reviewer('security'), 'rev-1': reviewer('tests'), agg: verdict(), def: defender() });
 
-  it('из той же работы в worktree: форк', async () => {
+  it('из той же работы в worktree: сама сессия', async () => {
     const project = defendRepo();
     writeFileSync(project.path('burnex.yml'), readFileSync(project.path('burnex.yml'), 'utf8').replace('name: p\n', 'name: p\nworkspace: { mode: worktree }\n'));
     gitCommit(project.root, 'worktree');
     const result = await run(project, backends());
     assert.equal(result.status, 'success');
-    assert.equal(defenseOf(result).lines[0]?.mode, 'fork');
+    assert.equal(defenseOf(result).lines[0]?.mode, 'resume');
   });
 
   // Сценарий: «Имплементатор в том же дереве другой работы» — у build два
   // потомка, а каталог всё равно один.
-  it('из другой работы того же дерева при развилке: форк, каталог один', async () => {
+  it('из другой работы того же дерева при развилке: сама сессия, каталог один', async () => {
     const project = defendRepo({ body: withTrees(CROSS_JOB('build.implement')) });
     const result = await run(project, backends());
     assert.equal(result.status, 'success');
@@ -919,7 +1038,7 @@ describe('named-workspace-trees: форк защитника только из �
     const path = (id: string) => jobs.find((job) => job.id === id)?.workspace?.path;
     assert.equal(path('review'), path('build'));
     assert.equal(path('docs'), path('build'));
-    assert.deepEqual(defenseOf(result).lines[0], { kind: 'defender', mode: 'fork', implementer: 'build.implement', agent: 'impl' });
+    assert.deepEqual(defenseOf(result).lines[0], { kind: 'defender', mode: 'resume', implementer: 'build.implement', agent: 'impl' });
   });
 
   // Сценарий: «Имплементатор в другом дереве»
@@ -931,7 +1050,7 @@ describe('named-workspace-trees: форк защитника только из �
     const all = backends();
     const result = await run(project, all);
     assert.equal(result.status, 'success');
-    assert.equal(all.impl.invocations.length, 1, 'имплементатор не форкается');
+    assert.equal(all.impl.invocations.length, 1, 'сессия имплементатора не продолжается');
     assert.deepEqual(defenseOf(result).lines[0], { kind: 'defender', mode: 'fresh', implementer: 'build.implement', agent: 'def', reason: 'other_tree' });
   });
 });

@@ -12,8 +12,11 @@ import {
 import {
   defendAggregatorPrompt,
   defenderCallBase,
+  defenderPrompt,
   findingsOf,
+  rebuttalPrompt,
   turnAgentStep,
+  turnCheckSchema,
   type DefenseRecord,
 } from '../../steps/review/defend.js';
 import {
@@ -21,6 +24,7 @@ import {
   aggregatorPrompt,
   participantStep,
   reviewerAgentStep,
+  reviewerTask,
   type ReviewerFindings,
 } from '../../steps/review/participants.js';
 import type { AttemptRecord, EventInput, ExpectReport, PredicateResult, StatusValue } from '../journal/schema.js';
@@ -31,8 +35,8 @@ export type { DefenderChoice } from './reviewDefense.js';
 /**
  * Исполнение шага `review` (`review-strategies`, design.md, решения 4–6):
  * ревьюеры параллельно, каждый в своей сессии, затем агрегатор, получающий все
- * находки. В режиме `defend` (`review-defend`) между ними идут ветки защиты
- * находок с имплементатором (`reviewDefense.ts`), и агрегатор получает каждую
+ * находки. В режиме `defend` (`review-defend`) между ними идут общие раунды
+ * защиты находок имплементатором (`reviewDefense.ts`), и агрегатор получает каждую
  * находку со статусом и перепиской. Каждый участник — агентский шаг
  * (`steps/review/participants.ts`, `steps/review/defend.ts`), запущенный тем
  * же исполнением, что и обычный агентский шаг прогона: вызывающий подаёт его
@@ -64,17 +68,13 @@ export interface ReviewStepOptions<O extends ParticipantOutcome> {
   readonly stepDir: string;
   readonly journal: ReviewJournal;
   /**
-   * Сколько ревьюеров (и веток защиты) идут одновременно —
+   * Сколько ревьюеров идут одновременно, в том числе с ответами защите, —
    * `limits.concurrency`. Вызовы бэкенда сверх того подчиняются общему счёту
    * мест бэкенда прогона, который держит запуск агента, а не шаг.
    */
   readonly concurrency: number;
-  /**
-   * Запустить участника как агентский шаг; `dir` — его каталог в журнале.
-   * `thread` — ветка защиты у хода защитника: расход всех веток ложится под
-   * участником `defender`, но у каждой ветки своя запись.
-   */
-  readonly runParticipant: (participant: ReviewParticipant, call: AgentStep, dir: string, thread?: string) => Promise<O>;
+  /** Запустить участника как агентский шаг; `dir` — его каталог в журнале. */
+  readonly runParticipant: (participant: ReviewParticipant, call: AgentStep, dir: string) => Promise<O>;
   /** Происхождение выбора агента участника — в его `step.json`. */
   readonly originOf?: (participant: string) => unknown;
   /**
@@ -87,13 +87,14 @@ export interface ReviewStepOptions<O extends ParticipantOutcome> {
   /** Возобновляется ли сессия агента — умеет ли его бэкенд сессии. Без значения — умеет. */
   readonly resumable?: (agent: string) => boolean;
   /**
-   * Защитник режима `defend`, выбранный один раз до веток (`review-defend`,
-   * решение 3): у вызывающего — записи шагов прогона и адаптеры.
+   * Защитник режима `defend`, выбранный один раз до раундов
+   * (`review-defend-shared-session`, решение 1): у вызывающего — записи шагов
+   * прогона и адаптеры.
    */
   readonly chooseDefender?: () => DefenderChoice;
 }
 
-/** Ветки защиты в каталоге шага (`review-defend`, решение 7). */
+/** Журнал защиты в каталоге шага (`review-defend`, решение 7). */
 export const DEFENSE_FILE = 'defense.ndjson';
 
 /** Каталог участника внутри каталога шага. */
@@ -106,9 +107,9 @@ export function replyDir(stepDir: string, participant: string, round: number): s
   return join(participantDir(stepDir, participant), 'rounds', String(round));
 }
 
-/** Каталог хода защитника ветки `thread` в раунде `round` (решение 7). */
-export function defenderTurnDir(stepDir: string, thread: string, round: number): string {
-  return join(participantDir(stepDir, DEFENDER_ID), thread, 'rounds', String(round));
+/** Каталог хода защитника в раунде `round` (`review-defend-shared-session`, решение 4). */
+export function defenderTurnDir(stepDir: string, round: number): string {
+  return replyDir(stepDir, DEFENDER_ID, round);
 }
 
 /**
@@ -161,8 +162,8 @@ export async function executeReviewStep<O extends ParticipantOutcome>(
 }
 
 /**
- * Режим `defend`: выбор защитника, ветки защиты по ревьюерам, давшим
- * находки, затем промпт агрегатора со статусами находок. Исход участника
+ * Режим `defend`: выбор защитника, общие раунды защиты находок ревьюеров,
+ * затем промпт агрегатора со статусами находок. Исход участника
  * вместо промпта — защиту оборвали отмена или бюджет, и агрегатора нет
  * (`review-defend`, решение 5).
  */
@@ -189,7 +190,7 @@ async function defend<O extends ParticipantOutcome>(
     ...(choice.record.reason === undefined ? {} : { reason: choice.record.reason }),
   });
 
-  // Ревьюер с пустым списком ветки не получает (решение 5).
+  // Ревьюер с пустым списком в защите не участвует.
   const branches = step.reviewers.flatMap((reviewer, index) => {
     const entry = findings[index];
     if (entry === undefined || 'failure' in entry) return [];
@@ -198,9 +199,8 @@ async function defend<O extends ParticipantOutcome>(
   });
   for (const branch of branches) for (const finding of branch.findings) record(finding);
 
-  // Ветка без сессии доступна, но дороже и беднее: каждый ход — новый
-  // процесс с заданием и всей перепиской ветки. Журнал называет такого
-  // участника, как называл ревьюера без сессии прежний режим обсуждения.
+  // Без сессии ход доступен, но дороже и беднее: каждый ход — новый процесс
+  // с заданием и всей перепиской.
   const resumable = (agent: string): boolean => options.resumable?.(agent) ?? true;
   const stateless = [
     ...(branches.length > 0 && !resumable(choice.participant.agent) ? [{ who: 'защитник', agent: choice.participant.agent }] : []),
@@ -211,27 +211,42 @@ async function defend<O extends ParticipantOutcome>(
       kind: 'backend.degraded',
       backend: agent,
       capability: 'sessions',
-      detail: `${who} шага ${options.job}/${step.id} защищает находки без сессии: каждый ход несёт задание и всю переписку ветки заново`,
+      detail: `${who} шага ${options.job}/${step.id} защищает находки без сессии: каждый ход несёт задание и всю переписку заново`,
     });
   }
 
+  const defender = choice.record;
   const result = await runDefense<O>({
     job: options.job,
     step,
     rounds: step.rounds ?? DEFAULT_DEFEND_ROUNDS,
-    defender: choice,
+    defenderAgent: choice.participant.agent,
+    defenderHasContext: defender.mode !== 'fresh',
     branches,
     concurrency: options.concurrency,
     resumable,
     budgetStop: () => options.budgetStop?.(),
     record,
     event: (input) => journal.event(input),
-    defend: (reviewer, round, prompt, check, carriesContext) => {
-      const dir = defenderTurnDir(options.stepDir, reviewer.id, round);
+    dialect: {
+      defenderPrompt: (turn) =>
+        defenderPrompt({
+          ...turn,
+          step,
+          defender,
+          ...(choice.implementerText === undefined ? {} : { implementerText: choice.implementerText }),
+          ...(choice.participant.prompt === undefined ? {} : { guidance: choice.participant.prompt }),
+        }),
+      rebuttalPrompt: (turn) => rebuttalPrompt({ ...turn, task: reviewerTask(step, turn.side.reviewer), defender }),
+      defenseCheck: (ids) => turnCheckSchema('defense', ids),
+      rebuttalCheck: (ids) => turnCheckSchema('rebuttal', ids),
+    },
+    defend: (round, prompt, check, carriesContext) => {
+      const dir = defenderTurnDir(options.stepDir, round);
       mkdirSync(dir, { recursive: true });
       const checkPath = journal.writeStepJson(dir, 'turn-check.schema.json', check);
-      const call = turnAgentStep(defenderCallBase(step, choice.participant, reviewer.id), 'defense', prompt, checkPath, carriesContext);
-      return runOne(options, choice.participant, choice.forkFrom === undefined ? call : { ...call, forkFrom: choice.forkFrom }, dir, round, reviewer.id);
+      const call = turnAgentStep(defenderCallBase(step, choice.participant), 'defense', prompt, checkPath, carriesContext);
+      return runOne(options, choice.participant, choice.forkFrom === undefined ? call : { ...call, forkFrom: choice.forkFrom }, dir, round);
     },
     rebut: (reviewer, round, prompt, check, carriesContext) => {
       const dir = replyDir(options.stepDir, reviewer.id, round);
@@ -291,10 +306,9 @@ async function runOne<O extends ParticipantOutcome>(
   call: AgentStep,
   dir: string,
   round?: number,
-  thread?: string,
 ): Promise<O> {
   const { journal, job, step } = options;
-  const turnFields = { ...(round === undefined ? {} : { round }), ...(thread === undefined ? {} : { thread }) };
+  const turnFields = round === undefined ? {} : { round };
   mkdirSync(dir, { recursive: true });
   journal.event({
     kind: 'review.participant.started',
@@ -306,7 +320,7 @@ async function runOne<O extends ParticipantOutcome>(
     ...(call.model === undefined ? {} : { model: call.model }),
   });
 
-  const outcome = await options.runParticipant(participant, call, dir, thread);
+  const outcome = await options.runParticipant(participant, call, dir);
 
   for (const [index, results] of outcome.results.entries()) {
     journal.writeExpectReport(dir, { attempt: index + 1, results: [...results] });
