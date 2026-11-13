@@ -12,6 +12,7 @@ import {
   mergeUsage,
   messagePrefix,
   sumUsage,
+  withCallCost,
   type McpServerStatus,
 } from '../../backend/types.js';
 import type { AgentStep, McpServers } from '../../document/model.js';
@@ -56,10 +57,18 @@ export interface SessionRegistry {
    * того же шага обязана начать разговор заново, а не повторить тот же отказ.
    */
   unseed(alias: string): void;
+  /**
+   * Запомнить нарастающую цену сессии `sessionId` на конец вызова — то, что
+   * сообщил бэкенд, считающий цену по всей сессии (`Usage.session_cost_usd`).
+   */
+  noteCost(sessionId: string, totalUsd: number): void;
+  /** Последняя известная нарастающая цена сессии, если она известна. */
+  costOf(sessionId: string): number | undefined;
 }
 
 export function createSessionRegistry(): SessionRegistry {
   const started = new Map<string, string>();
+  const costs = new Map<string, number>();
   return {
     acquire(alias) {
       const existing = started.get(alias);
@@ -76,6 +85,12 @@ export function createSessionRegistry(): SessionRegistry {
     },
     unseed(alias) {
       started.delete(alias);
+    },
+    noteCost(sessionId, totalUsd) {
+      costs.set(sessionId, totalUsd);
+    },
+    costOf(sessionId) {
+      return costs.get(sessionId);
     },
   };
 }
@@ -319,7 +334,7 @@ export async function executeAgentStep(options: AgentStepOptions): Promise<Agent
               // а не после выхода процесса, чтобы денежный потолок связал
               // попытку так же, как связывает сообщённую цену, — в этот же
               // момент (решение 5).
-              usage = priceUsage(mergeUsage(usage, event.usage), options.priceCatalog);
+              usage = priceUsage(mergeUsage(usage, callCost(event.usage)), options.priceCatalog);
               options.onUsage?.(usage, plan.attempt);
             }
             if (event.failed === true) failedByBackend = true;
@@ -342,6 +357,22 @@ export async function executeAgentStep(options: AgentStepOptions): Promise<Agent
             options.sessions.seed(alias, event.sessionId);
             break;
         }
+      };
+
+      // Сессия до вызова стоила: новая — ноль, продолжение — последнюю
+      // известную цену этой сессии, форк — исходной (`withCallCost`).
+      const callCost = (patch: Partial<Usage>): Partial<Usage> => {
+        const total = patch.session_cost_usd;
+        if (total === undefined) return patch;
+        const resumed = adapter.capabilities.sessions && session.resume;
+        const before = forking
+          ? options.sessions.costOf(step.forkFrom as string)
+          : resumed && sessionId !== undefined
+            ? options.sessions.costOf(sessionId)
+            : 0;
+        const owner = sessionId ?? session.id;
+        if (adapter.capabilities.sessions && owner !== undefined) options.sessions.noteCost(owner, total);
+        return withCallCost(patch, before);
       };
 
       const recordUsageDelta = (delta: Partial<Usage> | undefined, messageId: string | undefined): void => {

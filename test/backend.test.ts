@@ -1114,7 +1114,10 @@ describe('agent-backend: разбор потока', () => {
   it('parseLine читает цену судьи тем же полем total_cost_usd, что и цену шага', () => {
     const event = adapter.parseLine(resultLine({ tokensIn: 1, costUsd: 0.42 }));
     assert.equal(event.kind, 'result');
-    assert.equal(event.usage?.reported_cost_usd, 0.42);
+    // Сырое `total_cost_usd` нарастает по сессии: цену вызова из него выводит
+    // движок (`executeAgentStep`), зная прежнюю нарастающую цену сессии.
+    assert.equal(event.usage?.session_cost_usd, 0.42);
+    assert.equal(event.usage?.reported_cost_usd, undefined);
   });
 
   it('sumUsage складывает цену шага и судьи', () => {
@@ -1431,6 +1434,85 @@ describe('agent-backend: исполнение шага', () => {
     });
 
     assert.equal(backend.invocations[0]?.scratchDir, '/runs/r1/jobs/build/scratch');
+  });
+
+  // Claude сообщает `total_cost_usd` нарастающим по всей сессии: продолжение
+  // несёт цену всех прежних вызовов, а форк — ещё и исходной сессии.
+  it('цена продолжения сессии — разница с нарастающей ценой её прошлого вызова', async () => {
+    const dir = tempDir('backend-');
+    const totals = [0.49, 0.76];
+    const backend = createFakeBackend({ lines: (index) => [initLine(), resultLine({ tokensIn: 1, costUsd: totals[index] ?? 0 })] });
+    const sessions = createSessionRegistry();
+
+    const costs: Array<number | undefined> = [];
+    for (const id of ['implement', 'fix']) {
+      const result = await executeAgentStep({
+        step: makeAgentStep({ id, session: 'default' }),
+        adapter: backend.adapter,
+        cwd: dir,
+        stepDir: dir,
+        sessions,
+        buildPrompt: () => 'промпт',
+        env: () => ({ PATH: process.env.PATH ?? '' }),
+      });
+      costs.push(result.last?.usage.reported_cost_usd);
+    }
+
+    assert.equal(costs[0], 0.49);
+    assert.ok(Math.abs((costs[1] ?? 0) - 0.27) < 1e-9, `второй вызов стоит 0.27, а не ${costs[1]}`);
+  });
+
+  it('цена форка — разница с нарастающей ценой исходной сессии', async () => {
+    const dir = tempDir('backend-');
+    const totals = [0.49, 0.76];
+    const backend = createFakeBackend({
+      capabilities: { forkSessions: true },
+      lines: (index) => [initLine(), resultLine({ tokensIn: 1, costUsd: totals[index] ?? 0 })],
+    });
+    const sessions = createSessionRegistry();
+
+    const first = await executeAgentStep({
+      step: makeAgentStep({ id: 'implement', session: 'build' }),
+      adapter: backend.adapter,
+      cwd: dir,
+      stepDir: dir,
+      sessions,
+      buildPrompt: () => 'промпт',
+      env: () => ({ PATH: process.env.PATH ?? '' }),
+    });
+    const fork = await executeAgentStep({
+      step: { ...makeAgentStep({ id: 'defender', session: 'review/defender' }), forkFrom: first.sessionId as string },
+      adapter: backend.adapter,
+      cwd: dir,
+      stepDir: dir,
+      sessions,
+      buildPrompt: () => 'промпт',
+      env: () => ({ PATH: process.env.PATH ?? '' }),
+    });
+
+    assert.equal(backend.invocations[1]?.forkFrom, first.sessionId);
+    assert.ok(Math.abs((fork.last?.usage.reported_cost_usd ?? 0) - 0.27) < 1e-9);
+    assert.equal(fork.last?.usage.session_cost_usd, 0.76);
+  });
+
+  it('продолжение сессии с неизвестной прежней ценой записывает нарастающую цену как есть', async () => {
+    const dir = tempDir('backend-');
+    const backend = createFakeBackend({ lines: [initLine(), resultLine({ tokensIn: 1, costUsd: 0.76 })] });
+    const sessions = createSessionRegistry();
+    sessions.seed('default', 'from-other-run');
+
+    const result = await executeAgentStep({
+      step: makeAgentStep({ id: 'fix', session: 'default' }),
+      adapter: backend.adapter,
+      cwd: dir,
+      stepDir: dir,
+      sessions,
+      buildPrompt: () => 'промпт',
+      env: () => ({ PATH: process.env.PATH ?? '' }),
+    });
+
+    assert.equal(backend.invocations[0]?.resumeSession, true);
+    assert.equal(result.last?.usage.reported_cost_usd, 0.76, 'для потолка завысить лучше, чем занизить');
   });
 
   it('сохраняет промпт целиком и снимает расход из потока', async () => {

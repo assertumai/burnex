@@ -300,6 +300,18 @@ export function mergeUsage(base: Usage, patch: Partial<Usage> | undefined): Usag
 }
 
 /**
+ * Цена вызова из нарастающей цены сессии (`session_cost_usd`): минус то, что
+ * сессия стоила до него (`before`; у новой сессии — ноль). Неизвестная
+ * прежняя цена оставляет нарастающую как есть: для потолка завысить лучше,
+ * чем занизить. Запись без нарастающей цены не меняется.
+ */
+export function withCallCost(patch: Partial<Usage>, before: number | undefined): Partial<Usage> {
+  const total = patch.session_cost_usd;
+  if (total === undefined) return patch;
+  return { ...patch, reported_cost_usd: before === undefined ? total : Math.max(0, total - before) };
+}
+
+/**
  * Сложить расход двух независимых вызовов — шага и вызванного им судьи.
  * В отличие от `mergeUsage` (патч поверх того же потока), здесь складываются
  * показания двух разных процессов: несообщаемое поле остаётся несообщаемым,

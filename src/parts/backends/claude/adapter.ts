@@ -181,8 +181,11 @@ export function createClaudeAdapter(config: BackendConfig): BackendAdapter {
             : {
                 usage: {
                   ...usage,
+                  // `total_cost_usd` нарастает по всей сессии, а не по
+                  // процессу: продолжение несёт цену прежних вызовов, форк —
+                  // ещё и исходной сессии. Цену вызова выводит движок.
                   ...(typeof record.total_cost_usd === 'number'
-                    ? { reported_cost_usd: record.total_cost_usd }
+                    ? { session_cost_usd: record.total_cost_usd }
                     : {}),
                   ...readRateLimits(record),
                 },

@@ -9,6 +9,7 @@ import {
   emptyUsage,
   mergeUsage,
   messagePrefix,
+  withCallCost,
 } from '../../backend/types.js';
 import { judgeVerdictSchemaPath, parseVerdict } from '../../expect/verdict.js';
 import type { PredicateResult, Usage } from '../journal/schema.js';
@@ -222,7 +223,8 @@ async function callJudge(options: CallJudgeOptions): Promise<CallJudgeResult> {
       recordMessageUsage(event.usage);
     } else if (event.kind === 'result') {
       if (event.structured !== undefined) structured = event.structured;
-      usage = mergeUsage(usage, event.usage);
+      // Судья всегда начинает новую сессию: до вызова она не стоила ничего.
+      usage = mergeUsage(usage, event.usage === undefined ? undefined : withCallCost(event.usage, 0));
       if (event.refusal !== undefined) refusal = event.refusal;
     }
   };
