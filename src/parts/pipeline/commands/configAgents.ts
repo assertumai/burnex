@@ -131,7 +131,7 @@ export function renderAgentsReport(resolved: ResolvedConfig, expanded: ExpandedP
     for (const { step, participant } of job.steps.flatMap((entry) =>
       agentCallsOf(entry).map(({ id: participant, call }) => ({
         step: call,
-        participant: entry.kind === 'review' ? participant : undefined,
+        participant: entry.kind === 'review' || entry.kind === 'discuss' ? participant : undefined,
       })),
     )) {
       const id = participant === undefined ? `${job.id}/${step.id}` : `${job.id}/${step.id}/${participant}`;

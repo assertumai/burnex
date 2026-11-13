@@ -242,7 +242,7 @@ describe('step-kinds-registry: реестр видов шага', () => {
         ),
       (error: unknown) => {
         assert.ok(error instanceof BurnexError);
-        assert.equal(error.message, 'Имя вида шага prompt занято ключом встроенного вида шага agent, review');
+        assert.equal(error.message, 'Имя вида шага prompt занято ключом встроенного вида шага agent, review, discuss');
         return true;
       },
     );
@@ -406,7 +406,7 @@ describe('step-kinds-registry: разбор документа', () => {
       (error: unknown) => {
         assert.ok(error instanceof BurnexError);
         assert.match(error.message, /http_prob/);
-        assert.match(error.hint ?? '', /agent, decision, http_probe, review, run, script, uses/);
+        assert.match(error.hint ?? '', /agent, decision, discuss, http_probe, review, run, script, uses/);
         assert.equal(error.at, 'jobs.build.steps.0');
         return true;
       },

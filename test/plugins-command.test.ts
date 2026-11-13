@@ -104,9 +104,9 @@ describe('plugin-tree: burnex plugins печатает дерево со сло�
     const lines = outcome.stdout.split('\n');
     // Пять колонок дерева — на прежних четырёх строках. Первой стоит строка
     // `pipeline` (design.md `pipeline-owns-services`, Решение 1) с объявленными
-    // сервисами; каждая из восьми строк-потребителей движка (`backend-claude`,
+    // сервисами; каждая из девяти строк-потребителей движка (`backend-claude`,
     // `predicates`, `step-run`, `step-uses`, `step-script`, `step-agent`,
-    // `step-review`, `step-decision`) названа и запрошенным сервисом, и своим вкладом
+    // `step-review`, `step-discuss`, `step-decision`) названа и запрошенным сервисом, и своим вкладом
     // (Решение 2); следом — 25 строк команд (`cli-commands-as-rows`,
     // Решение 1), каждая со своим вкладом `commands: <имя>`, а доменные —
     // ещё и запрошенными сервисами пайплайна. Раздел встроенного вне строк
@@ -140,15 +140,18 @@ describe('plugin-tree: burnex plugins печатает дерево со сло�
     assert.match(lines[20] ?? '', /^8\s+step-review\s+встроенный\s+burnex:step-review\s+действует$/);
     assert.equal(lines[21], '    сервисы запрошены: steps (разрешён)');
     assert.equal(lines[22], '    вклады: steps: review');
-    assert.match(lines[23] ?? '', /^9\s+step-decision\s+встроенный\s+burnex:step-decision\s+действует$/);
+    assert.match(lines[23] ?? '', /^9\s+step-discuss\s+встроенный\s+burnex:step-discuss\s+действует$/);
     assert.equal(lines[24], '    сервисы запрошены: steps (разрешён)');
-    assert.equal(lines[25], '    вклады: steps: decision');
-    assert.match(lines[26] ?? '', /^10\s+secret-providers\s+встроенный\s+burnex:secret-providers\s+действует$/);
-    assert.equal(lines[27], '    сервисы запрошены: secretProviders (разрешён)');
-    assert.equal(lines[28], '    вклады: secretProviders: env-file, keychain');
+    assert.equal(lines[25], '    вклады: steps: discuss');
+    assert.match(lines[26] ?? '', /^10\s+step-decision\s+встроенный\s+burnex:step-decision\s+действует$/);
+    assert.equal(lines[27], '    сервисы запрошены: steps (разрешён)');
+    assert.equal(lines[28], '    вклады: steps: decision');
+    assert.match(lines[29] ?? '', /^11\s+secret-providers\s+встроенный\s+burnex:secret-providers\s+действует$/);
+    assert.equal(lines[30], '    сервисы запрошены: secretProviders (разрешён)');
+    assert.equal(lines[31], '    вклады: secretProviders: env-file, keychain');
 
-    let cursor = 29;
-    let place = 11;
+    let cursor = 32;
+    let place = 12;
     for (const row of COMMAND_ROWS) {
       cursor = assertCommandRowLines(lines, cursor, place, row.command.name);
       place += 1;
@@ -266,8 +269,8 @@ describe('plugin-tree: отказ загрузки не заслоняет де�
     // (`resolveConfig`, `reservedRowIds`) — они стоят в дереве раньше явных
     // строк ключа `plugins`, и применяются успешно: отказавшая явная строка
     // ещё не встретилась.
-    let cursor = 29;
-    let place = 11;
+    let cursor = 32;
+    let place = 12;
     for (const row of COMMAND_ROWS) {
       cursor = assertCommandRowLines(lines, cursor, place, row.command.name);
       place += 1;

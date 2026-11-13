@@ -60,6 +60,28 @@ function triggersToPlain(triggers: Triggers | undefined): Record<string, unknown
   };
 }
 
+/**
+ * Участник многоагентного шага в замке: агент, профиль, контекст профиля,
+ * фокус и дополнение к промпту. Происхождение выбора — в `burnex config
+ * --pipeline`, как у агентского шага.
+ */
+function participantToPlain(entry: ReviewParticipant): Record<string, unknown> {
+  return {
+    id: entry.id,
+    agent: entry.agent,
+    ...(entry.model === undefined ? {} : { model: entry.model }),
+    ...(entry.effort === undefined ? {} : { effort: entry.effort }),
+    ...(entry.profile === undefined ? {} : { profile: entry.profile }),
+    ...(entry.localProfile === true ? { local_profile: true } : {}),
+    ...(entry.profileContext === undefined ? {} : { profile_context: entry.profileContext }),
+    ...(entry.profileContextFingerprint === undefined
+      ? {}
+      : { profile_context_fingerprint: entry.profileContextFingerprint }),
+    ...(entry.focus === undefined ? {} : { focus: entry.focus }),
+    ...(entry.prompt === undefined ? {} : { prompt: entry.prompt }),
+  };
+}
+
 function stepToPlain(step: Step): Record<string, unknown> {
   const common = {
     id: step.id,
@@ -144,22 +166,7 @@ function stepToPlain(step: Step): Record<string, unknown> {
   if (step.kind === 'review') {
     // Стратегия — имя, слой, путь и отпечаток — и разрешённые участники:
     // замок называет, кто ревьюил, не заставляя читать файл стратегии
-    // (`review-strategies`, решение 7). Происхождение выбора каждого
-    // участника — в `burnex config --pipeline`, как у агентского шага.
-    const participant = (entry: ReviewParticipant): Record<string, unknown> => ({
-      id: entry.id,
-      agent: entry.agent,
-      ...(entry.model === undefined ? {} : { model: entry.model }),
-      ...(entry.effort === undefined ? {} : { effort: entry.effort }),
-      ...(entry.profile === undefined ? {} : { profile: entry.profile }),
-      ...(entry.localProfile === true ? { local_profile: true } : {}),
-      ...(entry.profileContext === undefined ? {} : { profile_context: entry.profileContext }),
-      ...(entry.profileContextFingerprint === undefined
-        ? {}
-        : { profile_context_fingerprint: entry.profileContextFingerprint }),
-      ...(entry.focus === undefined ? {} : { focus: entry.focus }),
-      ...(entry.prompt === undefined ? {} : { prompt: entry.prompt }),
-    });
+    // (`review-strategies`, решение 7).
     return {
       ...common,
       review: {
@@ -176,9 +183,33 @@ function stepToPlain(step: Step): Record<string, unknown> {
       ...(step.promptSource === undefined ? {} : { prompt_source: step.promptSource }),
       output_schema: step.outputSchemaPath,
       ...(step.permissions === undefined ? {} : { permissions: step.permissions }),
-      reviewers: step.reviewers.map(participant),
-      ...(step.aggregator === undefined ? {} : { aggregator: participant(step.aggregator) }),
-      ...(step.defender === undefined ? {} : { defender: participant(step.defender) }),
+      reviewers: step.reviewers.map(participantToPlain),
+      ...(step.aggregator === undefined ? {} : { aggregator: participantToPlain(step.aggregator) }),
+      ...(step.defender === undefined ? {} : { defender: participantToPlain(step.defender) }),
+      ...(step.unresolved === undefined ? {} : { unresolved: step.unresolved }),
+    };
+  }
+
+  if (step.kind === 'discuss') {
+    // Как у `review`: стратегия и разрешённые участники, автор и агрегатор
+    // (`discuss-step`, design.md, решение 8).
+    return {
+      ...common,
+      discuss: {
+        ref: step.strategy.ref,
+        ...(step.strategy.name === undefined ? {} : { name: step.strategy.name }),
+        ...(step.strategy.layer === undefined ? {} : { layer: step.strategy.layer }),
+        ...(step.strategy.path === undefined ? {} : { path: step.strategy.path }),
+        ...(step.strategy.fingerprint === undefined ? {} : { fingerprint: step.strategy.fingerprint }),
+        rounds: step.rounds,
+      },
+      prompt: step.prompt,
+      ...(step.promptSource === undefined ? {} : { prompt_source: step.promptSource }),
+      output_schema: step.outputSchemaPath,
+      ...(step.permissions === undefined ? {} : { permissions: step.permissions }),
+      participants: step.participants.map(participantToPlain),
+      ...(step.author === undefined ? {} : { author: participantToPlain(step.author) }),
+      ...(step.aggregator === undefined ? {} : { aggregator: participantToPlain(step.aggregator) }),
       ...(step.unresolved === undefined ? {} : { unresolved: step.unresolved }),
     };
   }

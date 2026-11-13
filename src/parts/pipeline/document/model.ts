@@ -609,7 +609,47 @@ export interface ReviewStep extends StepCommon {
   readonly unresolved?: ReviewStrategyUnresolved;
 }
 
-export type Step = AgentStep | RunStep | ScriptStep | PluginStep | ReviewStep;
+/**
+ * Псевдоним автора шага `discuss` (`discuss-step`, design.md, решение 2):
+ * каталог журнала, адрес `step_agents` `<работа>.<шаг>/author`, участник
+ * расхода. `id` участника `author` поэтому занят, как `aggregator`.
+ */
+export const AUTHOR_ID = 'author';
+
+/** Раунды защиты черновика по умолчанию (`rounds` стратегии обсуждения). */
+export const DEFAULT_DISCUSS_ROUNDS = 1;
+
+/**
+ * Шаг обсуждения (`discuss-step`): задача и форма итога — с шага, кто
+ * предлагает, сводит черновик и выносит итог — со стратегии обсуждения. Выход
+ * шага — выход агрегатора по `output_schema` с полями движка.
+ */
+export interface DiscussStep extends StepCommon {
+  readonly kind: 'discuss';
+  readonly prompt: string;
+  readonly promptSource?: string;
+  /** Схема шага как объявлена; поля движка домешиваются при исполнении. */
+  readonly outputSchemaPath: string;
+  readonly permissions?: Permissions;
+  readonly strategy: ReviewStrategyOrigin;
+  readonly rounds: number;
+  /** Пусто, пока стратегия не разрешилась. */
+  readonly participants: readonly ReviewParticipant[];
+  /** Нет, пока стратегия не разрешилась. */
+  readonly author?: ReviewParticipant;
+  /** Нет, пока стратегия не разрешилась. */
+  readonly aggregator?: ReviewParticipant;
+  readonly unresolved?: ReviewStrategyUnresolved;
+}
+
+/** Шаг, исполняемый несколькими агентами по стратегии: `review` либо `discuss`. */
+export type PanelStep = ReviewStep | DiscussStep;
+
+export function isPanelStep(step: { readonly kind: string }): step is PanelStep {
+  return step.kind === 'review' || step.kind === 'discuss';
+}
+
+export type Step = AgentStep | RunStep | ScriptStep | PluginStep | ReviewStep | DiscussStep;
 
 export interface JobOutput {
   readonly from?: string;

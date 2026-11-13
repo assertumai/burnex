@@ -40,6 +40,7 @@ import type {
   Step,
   Substitution,
 } from '../document/model.js';
+import { isPanelStep } from '../document/model.js';
 import type { Graph } from './graph.js';
 import { cabinetDir } from '../../../kernel/dirs.js';
 
@@ -626,7 +627,7 @@ function checkWaitingStepKind(
  * освобождать её от потолка прогона без собственного потолка так же нельзя.
  */
 function callsModel(step: Step): boolean {
-  return step.kind === 'agent' || step.kind === 'review' || step.expect.some((predicate) => predicate.kind === 'judge');
+  return step.kind === 'agent' || isPanelStep(step) || step.expect.some((predicate) => predicate.kind === 'judge');
 }
 
 export function lintPipeline(expanded: ExpandedPipeline, given: LintOptions): Diagnostic[] {
@@ -779,7 +780,7 @@ export function lintPipeline(expanded: ExpandedPipeline, given: LintOptions): Di
     checkLaneSubstitutions(job, lanes, laneOf, substitutions, pipeline.file, push);
     checkEnv(job.env, envDenyMatchers, pipeline.envDeny, job.source, `${at}.env`, push);
 
-    if (job.context.length > 0 && !job.steps.some((step) => step.kind === 'agent' || step.kind === 'review')) {
+    if (job.context.length > 0 && !job.steps.some((step) => step.kind === 'agent' || isPanelStep(step))) {
       push({
         severity: 'warning',
         message: `У работы ${job.id} объявлен context, но нет агентских шагов`,
@@ -1636,13 +1637,14 @@ function checkStep(
   }
 
   if (step.kind === 'review') checkReviewStep(job, step, at, options, push);
+  if (step.kind === 'discuss') checkDiscussStep(job, step, at, options, push);
 
   // Участник шага `review` проверяется тем же кодом, что агентский шаг:
   // адрес называет участника, а место ключа — шаг `review` (агента участнику
   // объявляет стратегия, а не документ).
   for (const { id, call } of agentCallsOf(step)) {
-    const address = step.kind === 'review' ? `${job.id}/${step.id}/${id}` : `${job.id}/${step.id}`;
-    const agentAt = step.kind === 'review' ? `${at}.review` : `${at}.agent`;
+    const address = isPanelStep(step) ? `${job.id}/${step.id}/${id}` : `${job.id}/${step.id}`;
+    const agentAt = isPanelStep(step) ? `${at}.${step.kind}` : `${at}.agent`;
     const backend = options.config.backends[call.agent];
     if (backend === undefined) {
       push({
@@ -1676,7 +1678,7 @@ function checkStep(
   }
 
   if (
-    (step.kind === 'agent' || step.kind === 'run' || step.kind === 'script' || step.kind === 'review') &&
+    (step.kind === 'agent' || step.kind === 'run' || step.kind === 'script' || isPanelStep(step)) &&
     step.outputSchemaPath !== undefined
   ) {
     // Схему выхода шага `uses` объявляет манифест, а не место вызова: ключа
@@ -1881,6 +1883,53 @@ function checkReviewStep(
     push({
       severity: 'warning',
       message: `Стратегия ревью ${step.strategy.name ?? step.strategy.ref} перекрывает профиль ${name} настроек своим`,
+      file: step.strategy.path ?? job.source,
+      at: `profiles.${name}`,
+      hint: `Участники стратегии исполняются её профилем; профиль настроек объявлен в ${shadowed.file}`,
+    });
+  }
+}
+
+/**
+ * Шаг `discuss` (`discuss-step`): промах стратегии обсуждения, стратегия
+ * только из домашнего слоя и локальный профиль, перекрывающий профиль
+ * настроек, — теми же словами, что у шага `review`.
+ */
+function checkDiscussStep(
+  job: Job,
+  step: Extract<Step, { kind: 'discuss' }>,
+  at: string,
+  options: ResolvedLintOptions,
+  push: (diagnostic: Diagnostic) => void,
+): void {
+  if (step.unresolved !== undefined) {
+    push({
+      severity: 'error',
+      message: `Шаг ${job.id}/${step.id}: ${describeStrategyUnresolved(step.unresolved, 'стратегия обсуждения')}`,
+      file: step.unresolved.reason === 'invalid' ? step.unresolved.path : job.source,
+      at: step.unresolved.reason === 'invalid' && step.unresolved.at !== undefined ? step.unresolved.at : `${at}.discuss`,
+    });
+    return;
+  }
+  if (step.strategy.layer === 'home') {
+    push({
+      severity: 'warning',
+      message: `Шаг ${job.id}/${step.id} зависит от стратегии обсуждения ${step.strategy.name ?? step.strategy.ref} домашнего слоя`,
+      file: job.source,
+      at: `${at}.discuss`,
+      hint: `Стратегия найдена только в ${step.strategy.path ?? '~/.burnex/discussion-strategies/'}: на другой машине прогон её не найдёт — положите её в .burnex/discussion-strategies/ проекта`,
+    });
+  }
+  const reported = new Set<string>();
+  for (const participant of [...step.participants, ...(step.author === undefined ? [] : [step.author]), ...(step.aggregator === undefined ? [] : [step.aggregator])]) {
+    const name = participant.profile;
+    if (participant.localProfile !== true || name === undefined || reported.has(name)) continue;
+    const shadowed = options.config.agents[name];
+    if (shadowed === undefined) continue;
+    reported.add(name);
+    push({
+      severity: 'warning',
+      message: `Стратегия обсуждения ${step.strategy.name ?? step.strategy.ref} перекрывает профиль ${name} настроек своим`,
       file: step.strategy.path ?? job.source,
       at: `profiles.${name}`,
       hint: `Участники стратегии исполняются её профилем; профиль настроек объявлен в ${shadowed.file}`,

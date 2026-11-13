@@ -1,5 +1,5 @@
 import { packagedSchemaPath } from '../../domain/package-schema.js';
-import { AGGREGATOR_ID, DEFENDER_ID, type AgentStep, type ReviewParticipant, type ReviewStep, type Step } from '../../document/model.js';
+import { AGGREGATOR_ID, AUTHOR_ID, DEFENDER_ID, type AgentStep, type DiscussStep, type PanelStep, type ReviewParticipant, type ReviewStep, type Step } from '../../document/model.js';
 
 /**
  * Участники шага `review` как агентские шаги (`review-strategies`, design.md,
@@ -15,7 +15,7 @@ export function reviewFindingsSchemaPath(): string {
 }
 
 /** Псевдоним сессии участника: `<шаг>/<участник>` — сессии живут только внутри шага. */
-export function participantSession(step: ReviewStep, participantId: string): string {
+export function participantSession(step: { readonly id: string }, participantId: string): string {
   return `${step.id}/${participantId}`;
 }
 
@@ -72,8 +72,11 @@ export function aggregatorPrompt(step: ReviewStep, findings: readonly ReviewerFi
     .join('\n\n');
 }
 
-/** Общая часть вызова участника: бэкенд, модель, сессия, права, контекст шага и профиля. */
-export function participantStep(step: ReviewStep, participant: ReviewParticipant): Omit<AgentStep, 'prompt' | 'outputSchemaPath' | 'expect' | 'attempts'> {
+/**
+ * Общая часть вызова участника многоагентного шага (`review`, `discuss`):
+ * бэкенд, модель, сессия, права, контекст шага и профиля.
+ */
+export function participantStep(step: PanelStep, participant: ReviewParticipant): Omit<AgentStep, 'prompt' | 'outputSchemaPath' | 'expect' | 'attempts'> {
   return {
     id: step.id,
     index: step.index,
@@ -144,7 +147,28 @@ function freshDefenderAgentStep(step: ReviewStep, defender: ReviewParticipant): 
   };
 }
 
-/** Участник по `id`: ревьюер, `aggregator` либо `defender`. */
+/**
+ * Вызовы шага `discuss` для проверок до исполнения: участники (ход
+ * предложения), автор (ход черновика) и агрегатор (итог по схеме шага).
+ * Настоящие ходы собирает исполнение (`steps/discuss/discuss.ts`).
+ */
+function discussCallsOf(step: DiscussStep): readonly ParticipantCall[] {
+  if (step.author === undefined || step.aggregator === undefined) return [];
+  const call = (participant: ReviewParticipant, schema: string, outputSchemaPath = packagedSchemaPath(schema)): AgentStep => ({
+    ...participantStep(step, participant),
+    prompt: step.prompt,
+    outputSchemaPath,
+    expect: [{ kind: 'schema', path: outputSchemaPath }],
+    attempts: { max: 2, escalation: [{ includeFailure: true }] },
+  });
+  return [
+    ...step.participants.map((participant) => ({ id: participant.id, call: call(participant, 'discuss-proposal') })),
+    { id: AUTHOR_ID, call: call(step.author, 'discuss-draft') },
+    { id: AGGREGATOR_ID, call: { ...call(step.aggregator, 'discuss-draft', step.outputSchemaPath), expect: step.expect, attempts: step.attempts } },
+  ];
+}
+
+/** Участник по `id`: ревьюер, `aggregator`, `defender` либо участник и `author` шага `discuss`. */
 export interface ParticipantCall {
   readonly id: string;
   readonly call: AgentStep;
@@ -163,6 +187,7 @@ export interface ParticipantCall {
  */
 export function agentCallsOf(step: Step): readonly ParticipantCall[] {
   if (step.kind === 'agent') return [{ id: step.id, call: step }];
+  if (step.kind === 'discuss') return discussCallsOf(step);
   if (step.kind !== 'review' || step.aggregator === undefined) return [];
   return [
     ...step.reviewers.map((reviewer) => ({ id: reviewer.id, call: reviewerAgentStep(step, reviewer) })),

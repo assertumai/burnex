@@ -1,0 +1,42 @@
+{
+  "title": "burnex discuss rebuttal",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "text": {
+      "type": "string"
+    },
+    "responses": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "finding": {
+            "type": "string"
+          },
+          "stance": {
+            "type": "string",
+            "enum": [
+              "maintain",
+              "withdraw"
+            ]
+          },
+          "text": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "finding",
+          "stance",
+          "text"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": [
+    "text",
+    "responses"
+  ],
+  "additionalProperties": false
+}

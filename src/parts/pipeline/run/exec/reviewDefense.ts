@@ -3,11 +3,9 @@ import type {
   DefenderRecord,
   DefenseMessageRecord,
   DefensePayload,
-  DefenseRecord,
-  DefenseSide,
-  FindingRecord,
   FindingStatus,
   RebuttalPayload,
+  SettledRecord,
   Severity,
 } from '../../steps/review/defend.js';
 import type { EventInput } from '../journal/schema.js';
@@ -42,42 +40,69 @@ export interface DefenderChoice {
   readonly implementerText?: string;
 }
 
+/**
+ * Пункт спора: находка ревьюера либо возражение участника обсуждения. `by` —
+ * сторона, которой пункт принадлежит; серьёзность есть только у находок.
+ */
+export interface DefenseItem {
+  readonly id: string;
+  readonly by: string;
+  readonly severity?: Severity;
+}
+
 /** Сторона защиты: участник и его пункты в порядке выхода. */
-export interface DefenseBranch {
+export interface DefenseBranch<I extends DefenseItem = DefenseItem> {
   readonly reviewer: ReviewParticipant;
-  readonly findings: readonly FindingRecord[];
+  readonly findings: readonly I[];
+}
+
+/** Сторона в ходе: её пункты и те, что ещё открыты. */
+export interface DefenseSideOf<I extends DefenseItem> {
+  readonly reviewer: ReviewParticipant;
+  readonly findings: readonly I[];
+  readonly open: readonly I[];
 }
 
 /** Ход защитника: открытые пункты всех сторон и переписка до него. */
-export interface DefenderTurn {
+export interface DefenderTurn<I extends DefenseItem> {
   readonly round: number;
   /** Сессия защитника возобновляется: прежние ходы уже в ней. */
   readonly resumed: boolean;
-  readonly sides: readonly DefenseSide[];
+  readonly sides: readonly DefenseSideOf<I>[];
   readonly severities: ReadonlyMap<string, Severity>;
   readonly messages: readonly DefenseMessageRecord[];
 }
 
 /** Ход стороны: её открытые пункты и переписка, включая ход защитника раунда. */
-export interface SideTurn {
+export interface SideTurn<I extends DefenseItem> {
   readonly round: number;
   readonly resumed: boolean;
-  readonly side: DefenseSide;
+  readonly side: DefenseSideOf<I>;
   readonly severities: ReadonlyMap<string, Severity>;
   readonly messages: readonly DefenseMessageRecord[];
 }
 
 /** Слова защиты: промпты ходов и проверочные схемы по открытым id. */
-export interface DefenseDialect {
-  defenderPrompt(turn: DefenderTurn): string;
-  rebuttalPrompt(turn: SideTurn): string;
+export interface DefenseDialect<I extends DefenseItem> {
+  defenderPrompt(turn: DefenderTurn<I>): string;
+  rebuttalPrompt(turn: SideTurn<I>): string;
   defenseCheck(openIds: readonly string[]): unknown;
   rebuttalCheck(openIds: readonly string[]): unknown;
 }
 
-export interface DefenseOptions<O extends ParticipantOutcome> {
+/** Записи защиты, которые пишет сама механика раундов. */
+export type DefenseLogRecord = DefenseMessageRecord | SettledRecord;
+
+export interface DefenseOptions<O extends ParticipantOutcome, I extends DefenseItem> {
   readonly job: string;
   readonly step: { readonly id: string };
+  /**
+   * Семейство событий: `review.message|settled` у шага `review`,
+   * `discuss.message|settled` у шага `discuss`.
+   */
+  readonly events?: 'review' | 'discuss';
+  /** Id защитника в репликах и событиях: `defender` у ревью, `author` у обсуждения. */
+  readonly defenderId?: string;
   readonly rounds: number;
   /** Агент защитника: возобновляется ли его сессия. */
   readonly defenderAgent: string;
@@ -87,26 +112,26 @@ export interface DefenseOptions<O extends ParticipantOutcome> {
    */
   readonly defenderHasContext: boolean;
   /** Стороны в порядке стратегии: участники, давшие хотя бы один пункт. */
-  readonly branches: readonly DefenseBranch[];
+  readonly branches: readonly DefenseBranch<I>[];
   readonly concurrency: number;
   /** Возобновляется ли сессия агента — умеет ли его бэкенд сессии. */
   readonly resumable: (agent: string) => boolean;
   /** Исход `budget_exceeded`, если бюджет шага перейдён, иначе ничего. */
   readonly budgetStop: () => O | undefined;
-  /** Записать строку `defense.ndjson`. */
-  readonly record: (record: DefenseRecord) => void;
+  /** Записать строку журнала защиты. */
+  readonly record: (record: DefenseLogRecord) => void;
   readonly event: (input: EventInput) => void;
-  readonly dialect: DefenseDialect;
+  readonly dialect: DefenseDialect<I>;
   /** Ход защитника в раунде `round`. */
   readonly defend: (round: number, prompt: string, check: unknown, carriesContext: boolean) => Promise<O>;
   /** Ход стороны `reviewer` в раунде `round`. */
   readonly rebut: (reviewer: ReviewParticipant, round: number, prompt: string, check: unknown, carriesContext: boolean) => Promise<O>;
 }
 
-/** Итог находки после защиты. */
+/** Итог пункта после защиты; серьёзность — только у находок. */
 export interface SettledState {
   readonly status: FindingStatus;
-  readonly severity: Severity;
+  readonly severity?: Severity;
 }
 
 export interface DefenseResult<O extends ParticipantOutcome> {
@@ -116,10 +141,14 @@ export interface DefenseResult<O extends ParticipantOutcome> {
   readonly stopped?: O;
 }
 
-export async function runDefense<O extends ParticipantOutcome>(options: DefenseOptions<O>): Promise<DefenseResult<O>> {
+export async function runDefense<O extends ParticipantOutcome, I extends DefenseItem>(options: DefenseOptions<O, I>): Promise<DefenseResult<O>> {
   const messages: DefenseMessageRecord[] = [];
   const settled = new Map<string, SettledState>();
-  const severities = new Map(options.branches.flatMap(({ findings }) => findings.map((finding) => [finding.id, finding.severity] as const)));
+  const discuss = options.events === 'discuss';
+  const defenderId = options.defenderId ?? DEFENDER_ID;
+  const severities = new Map<string, Severity>(
+    options.branches.flatMap(({ findings }) => findings.flatMap((finding) => (finding.severity === undefined ? [] : [[finding.id, finding.severity] as const]))),
+  );
   /** Открытые пункты стороны; выбывшая сторона из карты удаляется. */
   const open = new Map(options.branches.map((branch) => [branch.reviewer.id, [...branch.findings]]));
   let stopped: O | undefined;
@@ -132,7 +161,7 @@ export async function runDefense<O extends ParticipantOutcome>(options: DefenseO
     messages.push(record);
     options.record(record);
     options.event({
-      kind: 'review.message',
+      kind: discuss ? 'discuss.message' : 'review.message',
       job: options.job,
       step: options.step.id,
       participant: record.from,
@@ -157,9 +186,10 @@ export async function runDefense<O extends ParticipantOutcome>(options: DefenseO
     const list = open.get(side);
     if (list === undefined || !list.some((finding) => finding.id === id)) return;
     open.set(side, list.filter((finding) => finding.id !== id));
-    settled.set(id, { status, severity: severities.get(id) ?? 'info' });
-    options.record({ kind: 'settled', finding: id, status, severity: severities.get(id) ?? 'info', round });
-    options.event({ kind: 'review.settled', job: options.job, step: options.step.id, finding: id, status });
+    const severity = severities.get(id);
+    settled.set(id, { status, ...(severity === undefined ? {} : { severity }) });
+    options.record({ kind: 'settled', finding: id, status, ...(severity === undefined ? {} : { severity }), round });
+    options.event({ kind: discuss ? 'discuss.settled' : 'review.settled', job: options.job, step: options.step.id, finding: id, status });
   };
   /** Последнее слово за стороной: её открытые — `contested`, и она выбывает. */
   const contest = (side: string): void => {
@@ -181,7 +211,7 @@ export async function runDefense<O extends ParticipantOutcome>(options: DefenseO
     stopped = stop;
     return true;
   };
-  const sides = (): DefenseSide[] =>
+  const sides = (): DefenseSideOf<I>[] =>
     options.branches.flatMap(({ reviewer, findings }) => {
       const list = open.get(reviewer.id) ?? [];
       return list.length === 0 ? [] : [{ reviewer, findings, open: list }];
@@ -206,7 +236,7 @@ export async function runDefense<O extends ParticipantOutcome>(options: DefenseO
     );
     if (halts(defense)) break;
     const payload = defense.status === 'success' ? (defense.structured as DefensePayload | undefined) : undefined;
-    write(DEFENDER_ID, undefined, defense, payload?.text, payload?.responses ?? []);
+    write(defenderId, undefined, defense, payload?.text, payload?.responses ?? []);
     // Ход защитника без ответа кончает защиту: открытые всех — `contested`.
     if (payload === undefined) break;
     for (const response of payload.responses) {

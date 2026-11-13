@@ -116,9 +116,12 @@ import type {
   ReviewParticipant,
   ImplementerRef,
 } from './model.js';
-import { AGGREGATOR_ID, DEFAULT_TREE, DEFENDER_ID, OWN_TREE } from './model.js';
+import { AGGREGATOR_ID, AUTHOR_ID, DEFAULT_DISCUSS_ROUNDS, DEFAULT_TREE, DEFENDER_ID, OWN_TREE } from './model.js';
 import { buildGraph } from '../domain/graph.js';
 import { resolveReviewStrategy, type StrategyChoice } from './reviewStrategy.js';
+import { resolveDiscussionStrategy } from './discussionStrategy.js';
+import { engineFieldsConflict } from '../steps/discuss/discuss.js';
+import type { AgentProfile } from '../config/agentProfiles.js';
 
 /**
  * Пространства, чьи значения известны только в прогоне. Экспортировано для
@@ -1617,15 +1620,15 @@ function parseScriptStep(raw: RawStep, ctx: BuiltinStepParseContext): StepParseR
  * настоящий, а не позиция «последнего» в списке видов.
  */
 function isAgentStepRaw(raw: Record<string, unknown>): boolean {
-  // `prompt` объявляет и шаг `review`: различает их ключ `review`, которого у
-  // агентского шага нет, — тем же приёмом, каким `uses` отличается от
-  // `script`. Без этой оговорки снятая строка `step-review` отдала бы шаг
-  // `review:` агентскому виду, а не отказу о виде вне состава.
-  return 'prompt' in raw && !('review' in raw);
+  // `prompt` объявляют и шаги `review` и `discuss`: различает их ключ вида,
+  // которого у агентского шага нет, — тем же приёмом, каким `uses`
+  // отличается от `script`. Без этой оговорки снятая строка `step-review`
+  // отдала бы шаг `review:` агентскому виду, а не отказу о виде вне состава.
+  return 'prompt' in raw && !('review' in raw) && !('discuss' in raw);
 }
 
 function parseAgentStep(raw: RawStep, ctx: BuiltinStepParseContext): StepParseResult {
-  if (!('prompt' in raw) || 'review' in raw) throw new Error('parseAgentStep: раскрытие вызвано на шаге без ключа prompt');
+  if (!('prompt' in raw) || 'review' in raw || 'discuss' in raw) throw new Error('parseAgentStep: раскрытие вызвано на шаге без ключа prompt');
   const { common, scope, substitutions, at, declaringFile, config, defaults } = ctx;
   const promptKey = `${at}.prompt`;
   const prompt = readPrompt(raw.prompt, declaringFile, scope, promptKey);
@@ -1700,6 +1703,63 @@ function isReviewStepRaw(raw: Record<string, unknown>): boolean {
   return 'review' in raw;
 }
 
+/** Узнать шаг `discuss` среди уже провалидированных документом (`toStep`). */
+function isDiscussStepRaw(raw: Record<string, unknown>): boolean {
+  return 'discuss' in raw;
+}
+
+/**
+ * Раскрыватель участников многоагентного шага (`review`, `discuss`): участник
+ * стратегии раскрывается в агента тем же `resolveAgentChoice`, что агентский
+ * шаг, — слой стратегии на месте слоя «шаг», локальные профили стратегии
+ * поверх профилей настроек (одноимённый перекрывают). Происхождение выбора
+ * пишется в `origins` под `id` участника.
+ */
+function strategyParticipants(
+  ctx: BuiltinStepParseContext,
+  profiles: Readonly<Record<string, AgentProfile>>,
+  origins: Map<string, ParticipantOrigins>,
+): (id: string, entryKey: string, choice: StrategyChoice) => ReviewParticipant {
+  const { config, defaults } = ctx;
+  const strategyConfig: Config = { ...config, agents: { ...config.agents, ...profiles } };
+  return (id, entryKey, choice) => {
+    const stepEntry = Object.hasOwn(defaults.stepEntries ?? {}, entryKey) ? defaults.stepEntries?.[entryKey] : undefined;
+    const resolved = resolveAgentChoice({
+      config: strategyConfig,
+      step: {
+        // Участник без `agent` — профиль `default` с его собственными
+        // `model`/`model_tier`/`effort` (design.md, решение 1).
+        agent: choice.agent ?? DEFAULT_PROFILE,
+        model: choice.model,
+        tier: choice.tier,
+        effort: choice.effort,
+      },
+      doc: defaults.document,
+      pipelineEntry: defaults.pipelineEntry,
+      stepEntry,
+    });
+    recordEntryUsage(defaults.entryUsage, config, {
+      pipeline: defaults.pipelineEntry === undefined ? undefined : defaults.entryKeys.pipeline,
+      step: stepEntry === undefined ? undefined : `${defaults.entryKeys.stepPrefix}.${entryKey}`,
+    }, resolved);
+    origins.set(id, { agentOrigin: resolved.agentOrigin, modelOrigin: resolved.modelOrigin, effortOrigin: resolved.effortOrigin });
+    const { profile } = resolved;
+    const local = profile !== undefined && Object.hasOwn(profiles, profile.name);
+    const profileContext = profile === undefined
+      ? []
+      : toContext(profile.context, local ? `profiles.${profile.name}.context` : `agents.${profile.name}.context`);
+    return {
+      id,
+      agent: resolved.agent,
+      ...(resolved.model === undefined ? {} : { model: resolved.model }),
+      ...(resolved.effort === undefined ? {} : { effort: resolved.effort }),
+      ...(profile === undefined ? {} : { profile: profile.name }),
+      ...(local ? { localProfile: true as const } : {}),
+      ...(profileContext.length === 0 ? {} : { profileContext, ...profileContextFingerprintOf(profileContext) }),
+    };
+  };
+}
+
 /**
  * Шаг `review` (`review-strategies`, design.md, решения 2, 3 и 8): стратегия
  * разрешается по слоям, участники раскрываются в агентов тем же
@@ -1740,46 +1800,8 @@ function parseReviewStep(raw: RawStep, ctx: BuiltinStepParseContext): StepParseR
     };
   }
   const { strategy } = resolution;
-  // Локальные профили видны только участникам этой стратегии: поверх профилей
-  // настроек, одноимённый перекрывают (design.md, решение 1).
-  const strategyConfig: Config = { ...config, agents: { ...config.agents, ...strategy.profiles } };
   const origins = new Map<string, ParticipantOrigins>();
-  const participant = (id: string, entryKey: string, choice: StrategyChoice): ReviewParticipant => {
-    const stepEntry = Object.hasOwn(defaults.stepEntries ?? {}, entryKey) ? defaults.stepEntries?.[entryKey] : undefined;
-    const resolved = resolveAgentChoice({
-      config: strategyConfig,
-      step: {
-        // Участник без `agent` — профиль `default` с его собственными
-        // `model`/`model_tier`/`effort` (design.md, решение 1).
-        agent: choice.agent ?? DEFAULT_PROFILE,
-        model: choice.model,
-        tier: choice.tier,
-        effort: choice.effort,
-      },
-      doc: defaults.document,
-      pipelineEntry: defaults.pipelineEntry,
-      stepEntry,
-    });
-    recordEntryUsage(defaults.entryUsage, config, {
-      pipeline: defaults.pipelineEntry === undefined ? undefined : defaults.entryKeys.pipeline,
-      step: stepEntry === undefined ? undefined : `${defaults.entryKeys.stepPrefix}.${entryKey}`,
-    }, resolved);
-    origins.set(id, { agentOrigin: resolved.agentOrigin, modelOrigin: resolved.modelOrigin, effortOrigin: resolved.effortOrigin });
-    const { profile } = resolved;
-    const local = profile !== undefined && Object.hasOwn(strategy.profiles, profile.name);
-    const profileContext = profile === undefined
-      ? []
-      : toContext(profile.context, local ? `profiles.${profile.name}.context` : `agents.${profile.name}.context`);
-    return {
-      id,
-      agent: resolved.agent,
-      ...(resolved.model === undefined ? {} : { model: resolved.model }),
-      ...(resolved.effort === undefined ? {} : { effort: resolved.effort }),
-      ...(profile === undefined ? {} : { profile: profile.name }),
-      ...(local ? { localProfile: true as const } : {}),
-      ...(profileContext.length === 0 ? {} : { profileContext, ...profileContextFingerprintOf(profileContext) }),
-    };
-  };
+  const participant = strategyParticipants(ctx, strategy.profiles, origins);
 
   const reviewers = strategy.reviewers.map((reviewer) => ({
     ...participant(reviewer.id, `${raw.id}/${reviewer.id}`, reviewer),
@@ -1809,6 +1831,82 @@ function parseReviewStep(raw: RawStep, ctx: BuiltinStepParseContext): StepParseR
       reviewers,
       aggregator,
       ...(defender === undefined ? {} : { defender }),
+    },
+    participantOrigins: origins,
+  };
+}
+
+/**
+ * Шаг `discuss` (`discuss-step`, design.md, решения 1, 7 и 8): стратегия
+ * обсуждения разрешается по слоям, участники, автор и агрегатор раскрываются
+ * тем же `resolveAgentChoice`, что у шага `review`. `output_schema` обязана
+ * описывать объект без полей движка: их шаг добавит к итогу сам. Промах
+ * стратегии — `unresolved` шага, как у `review`.
+ */
+function parseDiscussStep(raw: RawStep, ctx: BuiltinStepParseContext): StepParseResult {
+  if (!('discuss' in raw)) throw new Error('parseDiscussStep: раскрытие вызвано на шаге без ключа discuss');
+  const { common, scope, substitutions, at, declaringFile, config, defaults, stepRoots } = ctx;
+  const promptKey = `${at}.prompt`;
+  const prompt = readPrompt(raw.prompt, declaringFile, scope, promptKey);
+  recordPromptSubstitutions(substitutions, promptKey, prompt.substitutions);
+  const outputSchemaPath = resolveSchemaPath(raw.output_schema, declaringFile, `${at}.output_schema`);
+  let declared: unknown;
+  try {
+    declared = JSON.parse(readFileSync(outputSchemaPath, 'utf8'));
+  } catch (error) {
+    throw new BurnexError(`output_schema шага discuss не читается как JSON: ${(error as Error).message}`, { file: declaringFile, at: `${at}.output_schema` });
+  }
+  const conflict = engineFieldsConflict(declared);
+  if (conflict !== undefined) {
+    throw new BurnexError(conflict, {
+      file: declaringFile,
+      at: `${at}.output_schema`,
+      hint: 'Поля agreed, unresolved и changed_by_aggregator шаг discuss добавляет к итогу сам: уберите их из схемы',
+    });
+  }
+
+  const base = {
+    ...common,
+    kind: 'discuss' as const,
+    prompt: prompt.text,
+    ...(prompt.source === undefined ? {} : { promptSource: prompt.source }),
+    outputSchemaPath,
+    ...(raw.permissions !== undefined
+      ? { permissions: toPermissions(raw.permissions) }
+      : defaults.permissions === undefined
+        ? {}
+        : { permissions: defaults.permissions }),
+  };
+
+  const resolution = resolveDiscussionStrategy(
+    raw.discuss,
+    declaringFile,
+    { project: stepRoots.project, home: stepRoots.home },
+    Object.keys(config.backends),
+  );
+  if ('unresolved' in resolution) {
+    return { step: { ...base, strategy: resolution.origin, rounds: DEFAULT_DISCUSS_ROUNDS, participants: [], unresolved: resolution.unresolved } };
+  }
+  const { strategy } = resolution;
+  const origins = new Map<string, ParticipantOrigins>();
+  const participant = strategyParticipants(ctx, strategy.profiles, origins);
+  const role = (id: string, entryKey: string, choice: StrategyChoice & { readonly prompt?: string }): ReviewParticipant => ({
+    ...participant(id, entryKey, choice),
+    ...(choice.prompt === undefined ? {} : { prompt: choice.prompt }),
+  });
+  return {
+    step: {
+      ...base,
+      strategy: strategy.origin,
+      rounds: strategy.rounds,
+      participants: strategy.participants.map((entry) => ({
+        ...participant(entry.id, `${raw.id}/${entry.id}`, entry),
+        ...(entry.focus === undefined ? {} : { focus: entry.focus }),
+      })),
+      // Адреса `step_agents`: `<работа>.<шаг>/author` — автору,
+      // `<работа>.<шаг>` — агрегатору, как у шага `review`.
+      author: role(AUTHOR_ID, `${raw.id}/${AUTHOR_ID}`, strategy.author),
+      aggregator: role(AGGREGATOR_ID, raw.id, strategy.aggregator),
     },
     participantOrigins: origins,
   };
@@ -2274,6 +2372,11 @@ export const REVIEW_STEP_KIND: NativeStepKind = {
   title: 'Ревью',
   native: { test: isReviewStepRaw, parse: parseReviewStep },
 };
+export const DISCUSS_STEP_KIND: NativeStepKind = {
+  name: 'discuss',
+  title: 'Обсуждение',
+  native: { test: isDiscussStepRaw, parse: parseDiscussStep },
+};
 
 /**
  * Те же четыре формы в каноническом порядке строк дефолта (`src/parts/rows.ts`,
@@ -2290,6 +2393,7 @@ const BUILTIN_STEP_KINDS_IN_ROW_ORDER: readonly NativeStepKind[] = [
   SCRIPT_STEP_KIND,
   AGENT_STEP_KIND,
   REVIEW_STEP_KIND,
+  DISCUSS_STEP_KIND,
 ];
 
 /**
@@ -3137,20 +3241,22 @@ function collectUnusedAgentEntries(
       const found = matched.flatMap((job) => job.steps.filter((step) => step.id === stepId));
       if (found.length === 0) {
         out.push({ key, kind: 'step_agents', files, reason: { kind: 'no_step' } });
-      } else if (reviewer !== undefined && !found.some((step) => step.kind === 'review')) {
+      } else if (reviewer !== undefined && !found.some((step) => step.kind === 'review' || step.kind === 'discuss')) {
         out.push({ key, kind: 'step_agents', files, reason: { kind: 'not_review' } });
       } else if (
         reviewer !== undefined &&
         !found.some(
           (step) =>
-            step.kind === 'review' &&
-            (step.reviewers.some((entry) => entry.id === reviewer) ||
-              // `<шаг>/defender` — свежий защитник режима `defend` (`review-defend`).
-              (reviewer === DEFENDER_ID && step.defender !== undefined)),
+            (step.kind === 'review' &&
+              (step.reviewers.some((entry) => entry.id === reviewer) ||
+                // `<шаг>/defender` — свежий защитник режима `defend` (`review-defend`).
+                (reviewer === DEFENDER_ID && step.defender !== undefined))) ||
+            // `<шаг>/<участник>` и `<шаг>/author` шага `discuss` (`discuss-step`).
+            (step.kind === 'discuss' && (step.participants.some((entry) => entry.id === reviewer) || reviewer === AUTHOR_ID)),
         )
       ) {
         out.push({ key, kind: 'step_agents', files, reason: { kind: 'no_reviewer' } });
-      } else if (!found.some((step) => step.kind === 'agent' || step.kind === 'review')) {
+      } else if (!found.some((step) => step.kind === 'agent' || step.kind === 'review' || step.kind === 'discuss')) {
         out.push({ key, kind: 'step_agents', files, reason: { kind: 'not_agent' } });
       } else {
         out.push({ key, kind: 'step_agents', files, reason: lost(key) });

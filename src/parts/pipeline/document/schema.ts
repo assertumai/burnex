@@ -229,10 +229,11 @@ function declaredByManifest(key: string) {
  * «неизвестный ключ» там, где ключ известен формату — только объявляется в
  * другом месте. Тот же приём, что `declaredByManifest`.
  */
-function declaredByStrategy(key: string) {
+function declaredByStrategy(key: string, kind: 'review' | 'discuss' = 'review') {
+  const strategy = kind === 'review' ? 'стратегия ревью' : 'стратегия обсуждения';
   return z
-    .never({ error: `ключ ${key} на шаге review не объявляется: участников и их агентов объявляет стратегия ревью` })
-    .describe('Участников шага review и их агентов объявляет стратегия ревью, а не шаг')
+    .never({ error: `ключ ${key} на шаге ${kind} не объявляется: участников и их агентов объявляет ${strategy}` })
+    .describe(`Участников шага ${kind} и их агентов объявляет ${strategy}, а не шаг`)
     .optional();
 }
 
@@ -281,15 +282,16 @@ export const STEP_COMMON_KEYS: readonly string[] = [
 
 /** Ключ встроенного вида шага → вид(ы) шага, которым он принадлежит (design.md, решение 3). */
 export const BUILTIN_STEP_KIND_KEY_OWNERS: Readonly<Record<string, readonly string[]>> = {
-  prompt: ['agent', 'review'],
+  prompt: ['agent', 'review', 'discuss'],
   review: ['review'],
+  discuss: ['discuss'],
   implementer: ['review'],
   agent: ['agent'],
   model: ['agent'],
   effort: ['agent'],
   model_tier: ['agent'],
   session: ['agent'],
-  permissions: ['agent', 'review'],
+  permissions: ['agent', 'review', 'discuss'],
   mcp: ['agent'],
   run: ['run'],
   on_fail: ['run', 'script', 'uses'],
@@ -297,7 +299,7 @@ export const BUILTIN_STEP_KIND_KEY_OWNERS: Readonly<Record<string, readonly stri
   args: ['script', 'uses'],
   runner: ['script', 'uses'],
   input: ['script', 'uses'],
-  output_schema: ['agent', 'run', 'script', 'uses', 'review'],
+  output_schema: ['agent', 'run', 'script', 'uses', 'review', 'discuss'],
   uses: ['uses'],
   with: ['uses'],
   external: ['agent', 'run', 'script', 'uses'],
@@ -395,7 +397,7 @@ export interface PluginStepKindKeys {
  * с ним константы модуля (`StepSchema`, `PipelineDocumentSchema`, …) и схема,
  * поставляемая пакетом, остаются byte-в-byte прежними.
  */
-export const DEFAULT_NATIVE_STEP_KINDS: readonly string[] = ['agent', 'run', 'script', 'uses', 'review'];
+export const DEFAULT_NATIVE_STEP_KINDS: readonly string[] = ['agent', 'run', 'script', 'uses', 'review', 'discuss'];
 
 /**
  * Совпал ли поданный состав видов внутренней формы с дефолтным — по составу, а
@@ -728,6 +730,33 @@ export function buildDocumentSchemas(
     .strict();
 
   /**
+   * Шаг `discuss` (`discuss-step`, design.md, решение 1): задача и форма
+   * итога — с шага, участники, автор и агрегатор — со стратегии обсуждения.
+   * `output_schema` обязательна: выход шага — проектный документ агрегатора.
+   */
+  const DiscussStepSchema = z
+    .object({
+      ...StepCommonShape,
+      discuss: z.string().min(1).regex(/\S/).describe('Стратегия обсуждения: имя либо ./путь/к/файлу.yml'),
+      prompt: z.string(),
+      output_schema: z.string(),
+      permissions: PermissionsSchema.optional(),
+      agent: declaredByStrategy('agent', 'discuss'),
+      model: declaredByStrategy('model', 'discuss'),
+      model_tier: declaredByStrategy('model_tier', 'discuss'),
+      effort: declaredByStrategy('effort', 'discuss'),
+      session: z
+        .never({ error: 'ключ session на шаге discuss не объявляется: сессии участников живут только внутри шага' })
+        .describe('Сессии участников шага discuss живут только внутри шага')
+        .optional(),
+      implementer: z
+        .never({ error: 'ключ implementer на шаге discuss не объявляется: черновик защищает автор стратегии' })
+        .describe('У шага discuss нет имплементатора: черновик защищает автор стратегии')
+        .optional(),
+    })
+    .strict();
+
+  /**
    * Плагинный вид шага занимает перечень ключей — своё имя, если не объявил
    * собственную форму записи, либо объявленные `document.keys` (design.md
    * изменения `step-kind-document-contract`, Решение 1, Решение 3) — рядом с
@@ -765,11 +794,11 @@ export function buildDocumentSchemas(
   // Имя без ветви — именованный отказ сборки (design.md, Решение 4), а не
   // молчаливый пропуск: иначе опечатка в имени, поданном `buildDocumentSchemas`,
   // тихо сузила бы объединение и разбилась о шаг много позже, дампом ветвей.
-  const NATIVE_STEP_KIND_NAMES = ['agent', 'run', 'script', 'uses', 'review'] as const;
+  const NATIVE_STEP_KIND_NAMES = ['agent', 'run', 'script', 'uses', 'review', 'discuss'] as const;
   for (const name of nativeStepKinds) {
     if (!(NATIVE_STEP_KIND_NAMES as readonly string[]).includes(name)) {
       throw new BurnexError(`Вид шага ${name} не имеет ветви схемы документа: неизвестный внутренний вид`, {
-        hint: 'Внутренние виды шага — agent, run, script, uses, review; проверьте имя, поданное buildDocumentSchemas',
+        hint: 'Внутренние виды шага — agent, run, script, uses, review, discuss; проверьте имя, поданное buildDocumentSchemas',
       });
     }
   }
@@ -793,6 +822,7 @@ export function buildDocumentSchemas(
     nativeStepKinds.includes('script') ? ScriptStepSchema : z.never(),
     nativeStepKinds.includes('uses') ? UsesStepSchema : z.never(),
     nativeStepKinds.includes('review') ? ReviewStepSchema : z.never(),
+    nativeStepKinds.includes('discuss') ? DiscussStepSchema : z.never(),
     ...pluginStepKinds.map((kind) => PluginStepSchema(kind.keys)),
   ]);
 
@@ -1010,6 +1040,7 @@ export function buildDocumentSchemas(
     AgentStepSchema,
     UsesStepSchema,
     ReviewStepSchema,
+    DiscussStepSchema,
     StepSchema,
     BudgetSchema,
     McpSchema,
@@ -1046,6 +1077,7 @@ export type RawStep = z.infer<BuiltinSchemas['StepSchema']>;
 export type RawAgentStep = z.infer<BuiltinSchemas['AgentStepSchema']>;
 export type RawUsesStep = z.infer<BuiltinSchemas['UsesStepSchema']>;
 export type RawReviewStep = z.infer<BuiltinSchemas['ReviewStepSchema']>;
+export type RawDiscussStep = z.infer<BuiltinSchemas['DiscussStepSchema']>;
 /** Предикат в документе: встроенная ветвь либо ключ, внесённый плагином. */
 export type RawBuiltinPredicate = z.infer<typeof BuiltinPredicateSchema>;
 export type RawPredicate = RawBuiltinPredicate | Readonly<Record<string, unknown>>;

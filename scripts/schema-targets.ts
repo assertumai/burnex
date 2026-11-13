@@ -3,6 +3,7 @@ import type { z } from 'zod';
 import { PipelineDocumentSchema, JobDocumentSchema, StepManifestSchema } from '../src/parts/pipeline/document/schema.js';
 import { PluginsPatchDocumentSchema, RawConfigSchema } from '../src/parts/pipeline/config/schema.js';
 import { ReviewStrategySchema } from '../src/parts/pipeline/document/reviewStrategy.js';
+import { DiscussionStrategySchema } from '../src/parts/pipeline/document/discussionStrategy.js';
 import { PluginManifestSchema } from '../src/kernel/tree/manifest.js';
 import { BacklogItemSchema, BacklogSlotsResponseSchema } from '../src/parts/pipeline/domain/backlog/schema.js';
 import { RouteDocumentSchema } from '../src/parts/ui/routesFile.js';
@@ -51,6 +52,12 @@ export const SCHEMA_TARGETS: readonly SchemaTarget[] = [
     file: 'schema/plugins-patch.schema.json',
     schema: PluginsPatchDocumentSchema,
     title: 'burnex plugins patch',
+    io: 'input',
+  },
+  {
+    file: 'schema/discussion-strategy.schema.json',
+    schema: DiscussionStrategySchema,
+    title: 'burnex discussion strategy',
     io: 'input',
   },
   {

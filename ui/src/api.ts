@@ -217,7 +217,7 @@ export interface AttemptModel {
 
 export interface StepSnapshot {
   readonly id: string;
-  readonly kind: 'agent' | 'run' | 'script' | 'plugin' | 'review';
+  readonly kind: 'agent' | 'run' | 'script' | 'plugin' | 'review' | 'discuss';
   readonly agent?: string;
   /** Модель, объявленная определением. */
   readonly model?: string;
@@ -410,7 +410,7 @@ export interface AgentEntryView {
 
 export interface PipelineStepView {
   readonly id: string;
-  readonly kind: 'agent' | 'run' | 'script' | 'plugin' | 'review';
+  readonly kind: 'agent' | 'run' | 'script' | 'plugin' | 'review' | 'discuss';
   readonly agent?: string;
   /** Модель, которой шаг исполнится. Отсутствует у шага без модели ни на одном слое. */
   readonly model?: string;

@@ -18,6 +18,7 @@ import {
   turnAgentStep,
   turnCheckSchema,
   type DefenseRecord,
+  type FindingRecord,
 } from '../../steps/review/defend.js';
 import {
   aggregatorAgentStep,
@@ -216,7 +217,7 @@ async function defend<O extends ParticipantOutcome>(
   }
 
   const defender = choice.record;
-  const result = await runDefense<O>({
+  const result = await runDefense<O, FindingRecord>({
     job: options.job,
     step,
     rounds: step.rounds ?? DEFAULT_DEFEND_ROUNDS,

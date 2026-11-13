@@ -232,12 +232,12 @@ function buildStrategy(
 }
 
 /** Текст промаха стратегии — для отказа прогона и подсказки линта. */
-export function describeStrategyUnresolved(unresolved: ReviewStrategyUnresolved): string {
+export function describeStrategyUnresolved(unresolved: ReviewStrategyUnresolved, what = 'стратегия ревью'): string {
   switch (unresolved.reason) {
     case 'not_found':
-      return `стратегия ревью ${unresolved.name} не найдена; искали: ${unresolved.searched.join(', ')}`;
+      return `${what} ${unresolved.name} не найдена; искали: ${unresolved.searched.join(', ')}`;
     case 'invalid':
-      return `стратегия ревью ${unresolved.path}${unresolved.at === undefined ? '' : ` (${unresolved.at})`}: ${unresolved.detail}`;
+      return `${what} ${unresolved.path}${unresolved.at === undefined ? '' : ` (${unresolved.at})`}: ${unresolved.detail}`;
     case 'name_mismatch':
       return `стратегия ${unresolved.path} объявляет name: ${unresolved.declared}, а ищется по имени ${unresolved.name}`;
   }

@@ -42,7 +42,7 @@ export function stepsMissingExternal(pipeline: Pick<Pipeline, 'jobs'>): string[]
     for (const step of job.steps) {
       // Шаг `review` действует только чтением (`review-strategies`, design.md,
       // Non-Goals): объявлять ему `external` нечего, как и плагинному виду.
-      if (step.kind === 'plugin' || step.kind === 'review') continue;
+      if (step.kind === 'plugin' || step.kind === 'review' || step.kind === 'discuss') continue;
       if (step.external === undefined) undeclared.push(stepAddress(job.id, step.id));
     }
   }

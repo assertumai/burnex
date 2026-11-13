@@ -19,7 +19,7 @@ import { parse as parseYaml } from 'yaml';
 
 export interface LockStep {
   readonly id: string;
-  readonly kind: 'agent' | 'run' | 'script' | 'plugin' | 'review';
+  readonly kind: 'agent' | 'run' | 'script' | 'plugin' | 'review' | 'discuss';
   /** Бэкенд агентского шага. */
   readonly agent?: string;
   /** Модель, если шаг её назвал; иначе действует модель бэкенда. */
@@ -243,7 +243,8 @@ function toStep(value: unknown): LockStep | undefined {
   // ключ сверх общей части и есть имя плагинного вида (design.md, решение 3).
   const review = reviewOf(record);
   const isReview = review !== undefined;
-  const isBuiltin = scriptPath !== undefined || prompt !== undefined || record.run !== undefined || isReview;
+  const isDiscuss = asRecord(record.discuss) !== undefined;
+  const isBuiltin = scriptPath !== undefined || prompt !== undefined || record.run !== undefined || isReview || isDiscuss;
   const pluginKindName = isBuiltin ? undefined : pluginKindKey(record);
 
   return {
@@ -253,6 +254,8 @@ function toStep(value: unknown): LockStep | undefined {
         ? 'script'
         : isReview
           ? 'review'
+          : isDiscuss
+            ? 'discuss'
           : prompt !== undefined
           ? 'agent'
           : pluginKindName !== undefined

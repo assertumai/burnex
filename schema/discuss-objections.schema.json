@@ -1,0 +1,56 @@
+{
+  "title": "burnex discuss objections",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "summary": {
+      "type": "string"
+    },
+    "objections": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "target": {
+            "type": "string"
+          },
+          "weight": {
+            "type": "string",
+            "enum": [
+              "blocking",
+              "preference"
+            ]
+          },
+          "title": {
+            "type": "string"
+          },
+          "breaks": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "alternative": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "target",
+          "weight",
+          "title",
+          "breaks",
+          "alternative"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": [
+    "summary",
+    "objections"
+  ],
+  "additionalProperties": false
+}

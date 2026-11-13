@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 
 import { packagedSchemaPath } from '../../domain/package-schema.js';
 import { DEFENDER_ID, type AgentStep, type ReviewParticipant, type ReviewStep } from '../../document/model.js';
+import type { DefenseSideOf } from '../../run/exec/reviewDefense.js';
 import { participantStep } from './participants.js';
 
 /**
@@ -92,13 +93,16 @@ export interface DefenseMessageRecord {
   readonly failure?: string;
 }
 
-/** Закрытие находки: пишется в момент закрытия, `contested` — в конце ветки. */
+/**
+ * Закрытие пункта: пишется в момент закрытия, `contested` — в конце защиты.
+ * `finding` — id пункта: находки ревьюера либо возражения участника обсуждения.
+ */
 export interface SettledRecord {
   readonly kind: 'settled';
   readonly finding: string;
   readonly status: FindingStatus;
-  /** Итоговая серьёзность — с учётом `revise` ревьюера. */
-  readonly severity: Severity;
+  /** Итоговая серьёзность находки — с учётом `revise` ревьюера; у возражений нет. */
+  readonly severity?: Severity;
   readonly round: number;
 }
 
@@ -354,11 +358,7 @@ export interface DefenseStepView {
 }
 
 /** Ревьюер в защите: его находки и те, что ещё открыты. */
-export interface DefenseSide {
-  readonly reviewer: ReviewParticipant;
-  readonly findings: readonly FindingRecord[];
-  readonly open: readonly FindingRecord[];
-}
+export type DefenseSide = DefenseSideOf<FindingRecord>;
 
 export interface DefenderPromptOptions {
   readonly step: DefenseStepView;

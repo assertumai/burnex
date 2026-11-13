@@ -39,6 +39,7 @@ import { resolveLate, type JobScopeEntry, type LateWithheld } from '../document/
 import { ExitCode, BurnexError, isBurnexError, type ExitCodeValue } from '../../../kernel/errors.js';
 import { createSessionRegistry, executeAgentStep } from './exec/agentStep.js';
 import { executeReviewStep, type DefenderChoice } from './exec/reviewStep.js';
+import { executeDiscussStep } from './exec/discussStep.js';
 import { defenderSession, type ForkReason, type FreshReason } from '../steps/review/defend.js';
 import { agentCallsOf } from '../steps/review/participants.js';
 import { describeStrategyUnresolved } from '../document/reviewStrategy.js';
@@ -98,6 +99,7 @@ import { describeScriptUnresolved } from '../document/expand.js';
 import type {
   AgentStep,
   ReviewStep,
+  DiscussStep,
   ReviewParticipant,
   ImplementerRef,
   ContextEntry,
@@ -109,7 +111,7 @@ import type {
   ScriptUnresolved,
   Step,
 } from '../document/model.js';
-import { DEFENDER_ID } from '../document/model.js';
+import { DEFENDER_ID, isPanelStep } from '../document/model.js';
 import type {
   AwaitingDecision,
   BudgetExceededState,
@@ -1182,7 +1184,7 @@ function agentCallsIn(pipeline: Pipeline): { job: Job; step: Step; call: AgentSt
         job,
         step,
         call,
-        address: step.kind === 'review' ? `${job.id}/${step.id}/${id}` : `${job.id}/${step.id}`,
+        address: isPanelStep(step) ? `${job.id}/${step.id}/${id}` : `${job.id}/${step.id}`,
       })),
     ),
   );
@@ -2594,6 +2596,7 @@ async function runJobSteps(
       if (
         (step.kind === 'agent' ||
           step.kind === 'review' ||
+          step.kind === 'discuss' ||
           (step.kind === 'run' && step.outputSchemaPath !== undefined) ||
           step.kind === 'script' ||
           step.kind === 'plugin') &&
@@ -2728,10 +2731,12 @@ async function runJobSteps(
     const outcome: StepOutcome =
       exceeded !== undefined
         ? { status: 'budget_exceeded', reason: describeExceeded(exceeded), attempts: [], results: [], exceeded }
-        : context.mode === 'shadow' && step.kind !== 'plugin' && step.kind !== 'review' && step.external === true
+        : context.mode === 'shadow' && step.kind !== 'plugin' && !isPanelStep(step) && step.external === true
           ? runShadowStep(step, job, context, stepDirPath)
           : step.kind === 'review'
           ? await runReviewStep(step, job, context, stepDirPath, sessionKey, jobContextSent, budgetScopes, changedPaths)
+          : step.kind === 'discuss'
+          ? await runDiscussStep(step, job, context, stepDirPath, sessionKey, jobContextSent, budgetScopes, changedPaths)
           : step.kind === 'run' || step.kind === 'script'
           ? await runCommandStep(
               step,
@@ -2889,8 +2894,10 @@ async function runJobSteps(
 
     if (
       (step.kind === 'agent' ||
-        // Выход шага `review` — вердикт агрегатора (`review-strategies`).
+        // Выход шага `review` — вердикт агрегатора (`review-strategies`),
+        // шага `discuss` — проектный документ агрегатора (`discuss-step`).
         step.kind === 'review' ||
+        step.kind === 'discuss' ||
         (step.kind === 'run' && step.outputSchemaPath !== undefined) ||
         step.kind === 'script' ||
         // Структурированный выход шага плагинного вида — то, что вернул
@@ -4109,6 +4116,67 @@ async function runReviewStep(
 }
 
 /**
+ * Шаг `discuss` (`discuss-step`): участники, автор и агрегатор исполняются как
+ * агентские шаги этим же `runAgentStep` — каждый в своём каталоге журнала и
+ * своей сессии `<шаг>/<участник>`, с расходом под своим именем.
+ */
+async function runDiscussStep(
+  step: DiscussStep,
+  job: Job,
+  context: RunContext,
+  stepDirPath: string,
+  sessionKey: (agent: string, alias: string) => string,
+  jobContextSent: Set<string>,
+  budgetScopes: () => BudgetScope[],
+  changedPaths: () => readonly string[] | undefined,
+): Promise<StepOutcome> {
+  if (step.unresolved !== undefined || step.aggregator === undefined) {
+    return {
+      status: 'failed',
+      reason: step.unresolved === undefined ? 'стратегия обсуждения не разрешена' : describeStrategyUnresolved(step.unresolved, 'стратегия обсуждения'),
+      attempts: [],
+      results: [],
+    };
+  }
+  // Сессии участников живут только внутри шага: повтор шага в следующем
+  // проходе цикла начинает их заново, с полным контекстом.
+  for (const { call } of agentCallsOf(step)) {
+    const key = sessionKey(call.agent, call.session);
+    context.sessions.unseed(key);
+    jobContextSent.delete(key);
+    for (const sent of [...context.pipelineContextSent]) {
+      if (sent === key || sent.startsWith(`${key}\0`)) context.pipelineContextSent.delete(sent);
+    }
+  }
+  return executeDiscussStep<StepOutcome>({
+    step,
+    job: job.id,
+    stepDir: stepDirPath,
+    journal: context.journal,
+    concurrency: context.config.limits.concurrency,
+    runParticipant: (participant, call, dir) => {
+      // Участник вызывается не раз, и номера его попыток начинаются заново:
+      // прежний расход запечатывается, а не затирается.
+      context.usage.sealStep(job.id, step.id, participant.id);
+      return runAgentStep(call, job, context, dir, context.sessions, sessionKey, jobContextSent, budgetScopes, changedPaths, participant.id);
+    },
+    resumable: (agent) => adapterOf(agent, context).capabilities.sessions,
+    budgetStop: () => {
+      const exceeded = context.usage.check(budgetScopes());
+      return exceeded === undefined
+        ? undefined
+        : { status: 'budget_exceeded', reason: describeExceeded(exceeded), attempts: [], results: [], exceeded };
+    },
+    originOf: (participant) => {
+      const key = `${job.id}/${step.id}/${participant}`;
+      const agent = context.expanded.agentOrigins.get(key);
+      if (agent === undefined) return undefined;
+      return { agent, model: context.expanded.modelOrigins.get(key), effort: context.expanded.effortOrigins.get(key) };
+    },
+  });
+}
+
+/**
  * Выбор защитника режима `defend` (`review-defend-shared-session`, решение 1).
  * Первое подходящее:
  * - `resume` — сама сессия имплементатора: шаг назвал имплементатора из
@@ -4238,7 +4306,7 @@ function implementerText(context: RunContext, jobId: string, stepId: string, rec
 
 /** Задание шага без блока контекста — вход судьи на командном или плагинном шаге. */
 export function describeStepTask(step: Step, registry: Registry): string {
-  if (step.kind === 'agent' || step.kind === 'review') return step.prompt;
+  if (step.kind === 'agent' || isPanelStep(step)) return step.prompt;
   if (step.kind === 'script') return (step.resolved?.argv ?? [step.path, ...step.args]).join(' ');
   if (step.kind === 'plugin') {
     const contribution = registry.steps.get(step.name);

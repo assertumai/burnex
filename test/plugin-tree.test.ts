@@ -107,6 +107,7 @@ describe('plugin-tree: свёртка трёх слоёв', () => {
         ['step-script', 'burnex:step-script', true],
         ['step-agent', 'burnex:step-agent', true],
         ['step-review', 'burnex:step-review', true],
+        ['step-discuss', 'burnex:step-discuss', true],
         ['step-decision', 'burnex:step-decision', true],
         ['secret-providers', 'burnex:secret-providers', true],
         ['home-extra', './home-extra.mjs', true],
@@ -114,8 +115,8 @@ describe('plugin-tree: свёртка трёх слоёв', () => {
       ],
     );
     assert.deepEqual(config.pluginTree[0]?.source, { kind: 'builtin' });
-    assert.deepEqual(config.pluginTree[10]?.source, { kind: 'file', path: place.homePatchPath });
-    assert.deepEqual(config.pluginTree[11]?.source, { kind: 'file', path: place.projectPatchPath });
+    assert.deepEqual(config.pluginTree[11]?.source, { kind: 'file', path: place.homePatchPath });
+    assert.deepEqual(config.pluginTree[12]?.source, { kind: 'file', path: place.projectPatchPath });
   });
 
   it('конфигурация без единого plugins.patch.yml сворачивается в прежний состав и порядок', () => {
@@ -129,7 +130,7 @@ describe('plugin-tree: свёртка трёх слоёв', () => {
 
     assert.deepEqual(
       config.pluginTree.map((row) => row.id),
-      ['pipeline', 'backend-claude', 'predicates', 'step-run', 'step-uses', 'step-script', 'step-agent', 'step-review', 'step-decision', 'secret-providers', './g.mjs', './p.mjs'],
+      ['pipeline', 'backend-claude', 'predicates', 'step-run', 'step-uses', 'step-script', 'step-agent', 'step-review', 'step-discuss', 'step-decision', 'secret-providers', './g.mjs', './p.mjs'],
     );
     // `Config.plugins` — модули, и только они: `burnex:backend-claude`
     // модулем не является и `resolveModulePath` не разрешается, поэтому в
@@ -147,7 +148,7 @@ describe('plugin-tree: свёртка трёх слоёв', () => {
 
     assert.deepEqual(
       config.pluginTree.map((row) => row.id),
-      ['pipeline', 'backend-claude', 'predicates', 'step-run', 'step-uses', 'step-script', 'step-agent', 'step-review', 'step-decision', 'secret-providers', 'home-only'],
+      ['pipeline', 'backend-claude', 'predicates', 'step-run', 'step-uses', 'step-script', 'step-agent', 'step-review', 'step-discuss', 'step-decision', 'secret-providers', 'home-only'],
     );
   });
 });
@@ -208,6 +209,7 @@ describe('plugin-tree: строки поставки вызывающего', ()
       ['step-script', 'burnex:step-script', true],
       ['step-agent', 'burnex:step-agent', true],
       ['step-review', 'burnex:step-review', true],
+      ['step-discuss', 'burnex:step-discuss', true],
       ['step-decision', 'burnex:step-decision', true],
       ['secret-providers', 'burnex:secret-providers', true],
       ['ui-shell', 'burnex:ui-shell', true],
@@ -224,7 +226,7 @@ describe('plugin-tree: строки поставки вызывающего', ()
     assert.deepEqual(config.pluginTree, withoutRows.pluginTree);
     assert.deepEqual(
       config.pluginTree.map((row) => row.id),
-      ['pipeline', 'backend-claude', 'predicates', 'step-run', 'step-uses', 'step-script', 'step-agent', 'step-review', 'step-decision', 'secret-providers'],
+      ['pipeline', 'backend-claude', 'predicates', 'step-run', 'step-uses', 'step-script', 'step-agent', 'step-review', 'step-discuss', 'step-decision', 'secret-providers'],
     );
   });
 });
@@ -249,7 +251,7 @@ describe('plugin-tree: замена строки патчем', () => {
     // Порядок остался прежним — b стоит на своём месте, между a и c.
     assert.deepEqual(
       config.pluginTree.map((row) => row.id),
-      ['pipeline', 'backend-claude', 'predicates', 'step-run', 'step-uses', 'step-script', 'step-agent', 'step-review', 'step-decision', 'secret-providers', 'a', 'b', 'c'],
+      ['pipeline', 'backend-claude', 'predicates', 'step-run', 'step-uses', 'step-script', 'step-agent', 'step-review', 'step-discuss', 'step-decision', 'secret-providers', 'a', 'b', 'c'],
     );
     const b = config.pluginTree.find((row) => row.id === 'b');
     assert.equal(b?.use, './b2.mjs');
@@ -289,7 +291,7 @@ describe('plugin-tree: вставка строки по позиции', () => {
     });
     assert.deepEqual(
       config.pluginTree.map((row) => row.id),
-      ['pipeline', 'backend-claude', 'a', 'predicates', 'step-run', 'step-uses', 'step-script', 'step-agent', 'step-review', 'step-decision', 'secret-providers'],
+      ['pipeline', 'backend-claude', 'a', 'predicates', 'step-run', 'step-uses', 'step-script', 'step-agent', 'step-review', 'step-discuss', 'step-decision', 'secret-providers'],
     );
   });
 
@@ -301,7 +303,7 @@ describe('plugin-tree: вставка строки по позиции', () => {
     });
     assert.deepEqual(
       config.pluginTree.map((row) => row.id),
-      ['pipeline', 'my-backends', 'backend-claude', 'predicates', 'step-run', 'step-uses', 'step-script', 'step-agent', 'step-review', 'step-decision', 'secret-providers'],
+      ['pipeline', 'my-backends', 'backend-claude', 'predicates', 'step-run', 'step-uses', 'step-script', 'step-agent', 'step-review', 'step-discuss', 'step-decision', 'secret-providers'],
     );
   });
 
@@ -565,7 +567,7 @@ describe('plugin-tree: фабрики строк поставки при заг�
         // `src/parts/load.ts`.
         assert.equal(
           hint,
-          'Пакет поставляет: burnex:pipeline, burnex:backend-claude, burnex:predicates, burnex:step-run, burnex:step-uses, burnex:step-script, burnex:step-agent, burnex:step-review, burnex:step-decision, burnex:secret-providers, burnex:ui-shell',
+          'Пакет поставляет: burnex:pipeline, burnex:backend-claude, burnex:predicates, burnex:step-run, burnex:step-uses, burnex:step-script, burnex:step-agent, burnex:step-review, burnex:step-discuss, burnex:step-decision, burnex:secret-providers, burnex:ui-shell',
         );
         return true;
       },
@@ -712,9 +714,9 @@ describe('plugin-tree: ключ plugins как сокращённая форма
 
     assert.deepEqual(
       config.pluginTree.map((row) => row.id),
-      ['pipeline', 'backend-claude', 'predicates', 'step-run', 'step-uses', 'step-script', 'step-agent', 'step-review', 'step-decision', 'secret-providers', './shared.mjs'],
+      ['pipeline', 'backend-claude', 'predicates', 'step-run', 'step-uses', 'step-script', 'step-agent', 'step-review', 'step-discuss', 'step-decision', 'secret-providers', './shared.mjs'],
     );
-    assert.deepEqual(config.pluginTree[10]?.source, { kind: 'file', path: place.globalPath });
+    assert.deepEqual(config.pluginTree[11]?.source, { kind: 'file', path: place.globalPath });
 
     const { registry } = await loadPlugins(config, { projectRoot: place.root });
     assert.equal(registry.plugins.length, 1);
@@ -1055,7 +1057,7 @@ describe('plugin-tree: потребитель и пользовательски�
       [...registry.predicates.keys()].filter((name) => name !== 'always_ok').sort(),
       [...DEFAULT_NATIVE_PREDICATES].sort(),
     );
-    assert.deepEqual([...registry.steps.keys()], ['run', 'uses', 'script', 'agent', 'review', 'decision']);
+    assert.deepEqual([...registry.steps.keys()], ['run', 'uses', 'script', 'agent', 'review', 'discuss', 'decision']);
   });
 
   it('пользовательский плагин, ждущий steps, применённый впереди pipeline, получает сервис и вносит вклад', async () => {
