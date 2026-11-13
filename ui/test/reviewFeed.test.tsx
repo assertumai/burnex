@@ -6,7 +6,7 @@ import { afterEach, describe, it } from 'node:test';
 import type { Context } from 'cordis';
 import { renderToStaticMarkup } from 'react-dom/server';
 
-import { ReviewFeedView, defenderLine, initials, runningLabels, stanceLabel, type ReviewSelection } from '../src/components/ReviewFeed';
+import { ALL_TAB, ReviewFeedView, defenderLine, displayId, entriesForTab, initials, reviewerTabs, roleLabel, runningLabels, stanceLabel, type ReviewSelection } from '../src/components/ReviewFeed';
 import { fetchReviewFeed, fetchStepOutput, type ReviewFeed, type ReviewFeedEntry, type ReviewFeedParticipant } from '../src/api';
 import { bindRouterKernel } from '../src/router';
 
@@ -135,10 +135,11 @@ const DEFEND: ReviewFeed = {
   done: true,
 };
 
-function render(feed: ReviewFeed, selected?: ReviewSelection): string {
+function render(feed: ReviewFeed, selected?: ReviewSelection, initialTab?: string): string {
   return renderToStaticMarkup(
     <ReviewFeedView
       feed={feed}
+      {...(initialTab === undefined ? {} : { initialTab })}
       address="proj/run-1"
       jobId="review"
       stepId="check"
@@ -407,5 +408,59 @@ describe('review-defend: запросы ленты и хода участник�
     assert.equal(query.get('participant'), 'defender');
     assert.equal(query.get('thread'), 'security');
     assert.equal(query.get('round'), '2');
+  });
+});
+
+describe('лента ревью: вкладки по ревьюерам', () => {
+  it('вкладки — All и по ревьюеру в порядке участников, без защитника и судьи', () => {
+    assert.deepEqual(reviewerTabs(DEFEND), ['security', 'tests', 'style']);
+    const tabs = /<div[^>]*role="tablist"[^>]*>([\s\S]*?)<\/div>/.exec(render(DEFEND))?.[1] ?? '';
+    assert.deepEqual([...tabs.matchAll(/<button[^>]*>([^<]*)<\/button>/g)].map((match) => match[1]), ['All', 'security', 'tests', 'style']);
+  });
+
+  it('вкладка ревьюера: защитник, его находки и ветка; ни чужих веток, ни итога, ни вердикта', () => {
+    const kinds = entriesForTab(DEFEND.entries, 'security').map((entry) => `${entry.kind}${'participant' in entry ? `:${entry.participant}` : ''}`);
+    assert.deepEqual(kinds, ['defender', 'findings:security', 'reply:defender', 'reply:security']);
+    assert.deepEqual(entriesForTab(DEFEND.entries, 'style').map((entry) => entry.kind), ['defender', 'failure']);
+    assert.equal(entriesForTab(DEFEND.entries, ALL_TAB), DEFEND.entries);
+  });
+
+  it('выбранная вкладка рисует только ветку ревьюера, а сводка — только его находки и раунды', () => {
+    const html = render(DEFEND, undefined, 'tests');
+    const feed = text(log(html));
+    assert.match(feed, /tests summary/);
+    assert.doesNotMatch(feed, /security summary/);
+    assert.doesNotMatch(feed, /Defense finished/);
+    assert.doesNotMatch(feed, /fix the injection/);
+    const side = text(html.split('<aside')[1] ?? '');
+    assert.match(side, /tests\.1/);
+    assert.doesNotMatch(side, /security\.1/);
+  });
+
+  it('с одним ревьюером вкладок нет', () => {
+    const feed: ReviewFeed = { ...DEFEND, participants: [participant('security', 0), DEFENDER, participant('aggregator', 3)] };
+    assert.doesNotMatch(render(feed), /role="tablist"/);
+  });
+
+  it('во вкладке ревьюера «пишет» — только он и защитник в его ветке', () => {
+    const running = [
+      participant('security', 0, { running: true, sessions: [{ running: true }] }),
+      participant('tests', 1, { running: true, sessions: [{ running: true }] }),
+      participant('defender', 4, { running: true, sessions: [{ thread: 'tests', round: 1, running: true }] }, true),
+    ];
+    assert.deepEqual(runningLabels(running, 'tests'), ['tests is reviewing…', 'defender is answering tests in round 1…']);
+    assert.deepEqual(runningLabels(running, 'security'), ['security is reviewing…']);
+  });
+});
+
+describe('лента ревью: итог называется судьёй', () => {
+  it('роль aggregator и умолчательный id показываются как judge', () => {
+    assert.equal(roleLabel('aggregator'), 'judge');
+    assert.equal(roleLabel('reviewer'), 'reviewer');
+    assert.equal(displayId('aggregator'), 'judge');
+    assert.equal(displayId('verdict-bot'), 'verdict-bot');
+    const html = text(render(DEFEND));
+    assert.match(html, /judge judge/);
+    assert.doesNotMatch(html, /aggregator/);
   });
 });

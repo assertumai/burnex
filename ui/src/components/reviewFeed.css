@@ -5,7 +5,7 @@
 
 .review-feed {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 15rem;
+  grid-template-columns: minmax(0, 64rem) 15rem;
   gap: 1rem;
   margin-top: .6rem;
 }
@@ -13,6 +13,10 @@
 @media (max-width: 960px) {
   .review-feed { grid-template-columns: minmax(0, 1fr); }
 }
+
+/* Переписка не растягивается на всю ширину: на широком экране реплики
+   справа уезжали бы далеко от ветки слева. Сводка стоит сразу за ней. */
+.review-tabs { margin-bottom: .6rem; }
 
 .participant-c0 { --participant: var(--participant-0); }
 .participant-c1 { --participant: var(--participant-1); }

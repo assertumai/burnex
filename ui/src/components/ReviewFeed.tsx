@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type JSX, type ReactNode } from 'react';
 
-import { Alert, AlertDescription, Badge, Button, EmptyState, type BadgeVariant } from '@burnex/ui';
+import { Alert, AlertDescription, Badge, Button, EmptyState, Tabs, TabsList, TabsTrigger, type BadgeVariant } from '@burnex/ui';
 import {
   fetchReviewFeed,
   type ReviewFeed,
@@ -26,6 +26,8 @@ import './reviewFeed.css';
  * design.md, решение 8): ревьюеры слева со своими находками, под находками —
  * ветка защиты; защитник и вердикт агрегатора — справа, на противоположной
  * стороне. Рядом — панель находок со статусами, раундов веток и расхода.
+ * Ревьюеров больше одного — над лентой вкладки «All» и по ревьюеру: вкладка
+ * показывает ветку одного ревьюера и сводку по его находкам.
  *
  * Данные — модель ленты, собранная демоном из журнала шага
  * (`GET /api/review-feed`). Пока шаг идёт, она перечитывается раз в секунду —
@@ -69,6 +71,51 @@ export function initials(id: string): string {
   const words = id.split(/[-_.\s]+/).filter((word) => word !== '');
   const letters = words.length > 1 ? `${words[0]?.[0] ?? ''}${words[1]?.[0] ?? ''}` : id.slice(0, 2);
   return letters.toUpperCase();
+}
+
+/**
+ * Итог ревью в интерфейсе называется судьёй: роль `aggregator` журнала и
+ * участник с умолчательным id `aggregator` показываются как `judge`. Данные и
+ * ключ стратегии не меняются.
+ */
+export function roleLabel(role: string | undefined): string {
+  if (role === undefined) return 'reviewer';
+  return role === 'aggregator' ? 'judge' : role;
+}
+
+export function displayId(id: string): string {
+  return id === 'aggregator' ? 'judge' : id;
+}
+
+/** Вкладка ленты: все сообщения либо ветка одного ревьюера. */
+export const ALL_TAB = 'all';
+
+/** Ревьюеры, по которым ленту можно разложить на вкладки, в порядке участников. */
+export function reviewerTabs(feed: Pick<ReviewFeed, 'participants'>): string[] {
+  return feed.participants.filter((participant) => participant.role === 'reviewer').map((participant) => participant.id);
+}
+
+/**
+ * Записи вкладки ревьюера: строка о защитнике (кто ему отвечает), его
+ * находки или отказ и его ветка защиты. Итог защиты и вердикт — общие, они
+ * только во вкладке «All».
+ */
+export function entriesForTab(entries: readonly ReviewFeedEntry[], tab: string): readonly ReviewFeedEntry[] {
+  if (tab === ALL_TAB) return entries;
+  return entries.filter((entry) => {
+    switch (entry.kind) {
+      case 'defender':
+        return true;
+      case 'findings':
+      case 'failure':
+        return entry.participant === tab;
+      case 'reply':
+        return entry.thread === tab;
+      case 'outcome':
+      case 'verdict':
+        return false;
+    }
+  });
 }
 
 function colorClass(participant: ReviewFeedParticipant | undefined): string {
@@ -116,11 +163,11 @@ function Avatar({
     <button
       type="button"
       className={`review-avatar ${colorClass(participant)}`}
-      aria-label={`Open the turn of ${id}`}
-      title={`Open the turn of ${id}`}
+      aria-label={`Open the turn of ${displayId(id)}`}
+      title={`Open the turn of ${displayId(id)}`}
       onClick={() => onSelect(selection ?? { participant: id })}
     >
-      {initials(id)}
+      {initials(displayId(id))}
     </button>
   );
 }
@@ -128,8 +175,8 @@ function Avatar({
 function Who({ participant, id }: { readonly participant: ReviewFeedParticipant | undefined; readonly id: string }): JSX.Element {
   return (
     <>
-      <span className={`review-name ${colorClass(participant)}`}>{id}</span>
-      <span className="kind">{participant?.role ?? 'reviewer'}</span>
+      <span className={`review-name ${colorClass(participant)}`}>{displayId(id)}</span>
+      <span className="kind">{roleLabel(participant?.role)}</span>
       {participant?.agent === undefined ? null : (
         <span className="kind dim">
           {participant.agent}
@@ -308,38 +355,50 @@ function OpenTurn({
 }
 
 function sessionLabel(participant: ReviewFeedParticipant, session: ReviewFeedSession): string {
-  if (participant.role === 'aggregator') return `${participant.id} is writing the verdict…`;
-  if (session.thread !== undefined) return `${participant.id} is answering ${session.thread} in round ${session.round ?? '?'}…`;
+  const id = displayId(participant.id);
+  if (participant.role === 'aggregator') return `${id} is writing the verdict…`;
+  if (session.thread !== undefined) return `${id} is answering ${session.thread} in round ${session.round ?? '?'}…`;
   return session.round === undefined
-    ? `${participant.id} is reviewing…`
-    : `${participant.id} is answering the defender in round ${session.round}…`;
+    ? `${id} is reviewing…`
+    : `${id} is answering the defender in round ${session.round}…`;
 }
 
-/** Кто пишет прямо сейчас: по строке на начатый вызов — ветки защитника идут параллельно. */
-export function runningLabels(participants: readonly ReviewFeedParticipant[]): string[] {
+/**
+ * Кто пишет прямо сейчас: по строке на начатый вызов — ветки защитника идут
+ * параллельно. Во вкладке ревьюера — только он сам и защитник в его ветке.
+ */
+export function runningLabels(participants: readonly ReviewFeedParticipant[], tab: string = ALL_TAB): string[] {
   return participants.flatMap((participant) => {
     if (!participant.running) return [];
-    const sessions = participant.sessions.filter((session) => session.running);
+    if (tab !== ALL_TAB && participant.role !== 'defender' && participant.id !== tab) return [];
+    const sessions = participant.sessions.filter(
+      (session) => session.running && (tab === ALL_TAB || participant.role !== 'defender' || session.thread === tab),
+    );
+    if (tab !== ALL_TAB && participant.role === 'defender' && sessions.length === 0) return [];
     return sessions.length === 0 ? [sessionLabel(participant, { running: true })] : sessions.map((session) => sessionLabel(participant, session));
   });
 }
 
 function SidePanel({
   feed,
+  tab,
   stepUsage,
   asOf,
 }: {
   readonly feed: ReviewFeed;
+  readonly tab: string;
   readonly stepUsage: UsageSnapshot | undefined;
   readonly asOf: string | undefined;
 }): JSX.Element {
+  const findings = tab === ALL_TAB ? feed.findings : feed.findings.filter((finding) => finding.by === tab);
+  const threads = tab === ALL_TAB ? feed.threads : feed.threads.filter((thread) => thread.reviewer === tab);
   return (
     <aside className="review-side" aria-label="Review summary">
-      {feed.findings.length === 0 ? null : (
+      {findings.length === 0 ? null : (
         <section>
           <h4>Findings</h4>
           <ul>
-            {feed.findings.map((finding) => (
+            {findings.map((finding) => (
               <li key={finding.id} title={finding.title}>
                 <span className="mono">{finding.id}</span>{' '}
                 <Badge variant={STATUS[finding.status].variant}>{STATUS[finding.status].label}</Badge>{' '}
@@ -349,11 +408,11 @@ function SidePanel({
           </ul>
         </section>
       )}
-      {feed.threads.length === 0 ? null : (
+      {threads.length === 0 ? null : (
         <section>
           <h4>Rounds</h4>
           <ul>
-            {feed.threads.map((thread) => {
+            {threads.map((thread) => {
               const reviewer = feed.participants.find((participant) => participant.id === thread.reviewer);
               return (
                 <li key={thread.reviewer} className={thread.settled ? 'settled' : undefined}>
@@ -373,7 +432,7 @@ function SidePanel({
         <ul>
           {feed.participants.map((participant) => (
             <li key={participant.id}>
-              <span className={`review-name ${colorClass(participant)}`}>{participant.id}</span>{' '}
+              <span className={`review-name ${colorClass(participant)}`}>{displayId(participant.id)}</span>{' '}
               <span className="kind">
                 {fmtTokens(participant.usage.billableTokens)} · {fmtDuration(participant.usage.wallclockMs)} ·{' '}
                 <Cost usd={participant.usage.costUsd} source={participant.usage.costSource} asOf={asOf} />
@@ -398,7 +457,7 @@ function SidePanel({
 function selectionTitle(selection: ReviewSelection): string {
   const thread = selection.thread === undefined ? '' : ` · on ${selection.thread}`;
   const round = selection.round === undefined ? '' : ` · round ${selection.round}`;
-  return `Turn of ${selection.participant}${thread}${round}`;
+  return `Turn of ${displayId(selection.participant)}${thread}${round}`;
 }
 
 function ParticipantTurn({
@@ -427,7 +486,7 @@ function ParticipantTurn({
     ref.current?.scrollIntoView({ block: 'start' });
   }, [selection.participant, selection.round, selection.thread]);
   return (
-    <section ref={ref} className="review-turn" aria-label={`Turn of ${selection.participant}`}>
+    <section ref={ref} className="review-turn" aria-label={`Turn of ${displayId(selection.participant)}`}>
       <header className="review-bubble-head">
         <b>{selectionTitle(selection)}</b>
         {session?.status === undefined ? null : <span className="kind">{session.status}</span>}
@@ -459,8 +518,8 @@ function ParticipantTurn({
 
 function legacyNotice(feed: ReviewFeed): string {
   return feed.legacyMode === 'discussion'
-    ? 'This step ran in the retired discussion mode — showing the participants and the aggregator output.'
-    : 'This step’s journal has no review record — showing the participants and the aggregator output.';
+    ? 'This step ran in the retired discussion mode — showing the participants and the judge output.'
+    : 'This step’s journal has no review record — showing the participants and the judge output.';
 }
 
 /** Лента по готовой модели — без сети: её рисуют и тесты статическим рендером. */
@@ -474,6 +533,7 @@ export function ReviewFeedView({
   asOf,
   selected,
   onSelect,
+  initialTab = ALL_TAB,
   navigate = () => undefined,
 }: {
   readonly feed: ReviewFeed;
@@ -485,10 +545,18 @@ export function ReviewFeedView({
   readonly asOf?: string | undefined;
   readonly selected: ReviewSelection | undefined;
   readonly onSelect: (selection: ReviewSelection | undefined) => void;
+  /** Вкладка при первом рендере — для тестов статическим рендером. */
+  readonly initialTab?: string;
   readonly navigate?: (href: string) => void;
 }): JSX.Element {
   const participants = new Map(feed.participants.map((participant) => [participant.id, participant]));
-  const running = runningLabels(feed.participants);
+  const reviewers = reviewerTabs(feed);
+  // Вкладки — когда ревьюеров больше одного: с одним «All» и его вкладка совпадают.
+  const tabbed = !feed.legacy && reviewers.length > 1;
+  const [chosen, setTab] = useState(initialTab);
+  const tab = tabbed && (chosen === ALL_TAB || reviewers.includes(chosen)) ? chosen : ALL_TAB;
+  const entries = entriesForTab(feed.entries, tab);
+  const running = runningLabels(feed.participants, tab);
 
   return (
     <div className="review-feed">
@@ -514,8 +582,20 @@ export function ReviewFeedView({
             ))}
           </ul>
         ) : null}
+        {tabbed ? (
+          <Tabs value={tab} onValueChange={setTab} className="review-tabs">
+            <TabsList aria-label="Review threads">
+              <TabsTrigger value={ALL_TAB}>All</TabsTrigger>
+              {reviewers.map((reviewer) => (
+                <TabsTrigger key={reviewer} value={reviewer} className={colorClass(participants.get(reviewer))}>
+                  {reviewer}
+                </TabsTrigger>
+              ))}
+            </TabsList>
+          </Tabs>
+        ) : null}
         <ol className="review-log" role="log" aria-live={feed.done ? 'off' : 'polite'} aria-label="Review feed">
-          {feed.entries.map((entry, index) => (
+          {entries.map((entry, index) => (
             <EntryView
               key={`${entry.kind}-${entry.kind === 'reply' ? entry.messageId : 'participant' in entry ? entry.participant : index}`}
               entry={entry}
@@ -530,7 +610,7 @@ export function ReviewFeedView({
             </li>
           ))}
         </ol>
-        {feed.entries.length === 0 && running.length === 0 && !feed.legacy ? (
+        {entries.length === 0 && running.length === 0 && !feed.legacy ? (
           <EmptyState title="No messages yet" description="The reviewers have not written anything so far." />
         ) : null}
         {selected === undefined ? null : (
@@ -545,7 +625,7 @@ export function ReviewFeedView({
           />
         )}
       </div>
-      <SidePanel feed={feed} stepUsage={stepUsage} asOf={asOf} />
+      <SidePanel feed={feed} tab={tab} stepUsage={stepUsage} asOf={asOf} />
     </div>
   );
 }
