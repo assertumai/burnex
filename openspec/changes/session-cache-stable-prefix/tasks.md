@@ -3,7 +3,7 @@
 - [x] 1.1 `schemaInPrefix` в `BackendCapabilities`, помощник `callSchemaMode`
 - [x] 1.2 `agentStep.ts` выбирает режим через `callSchemaMode`; судья не меняется
 - [x] 1.3 Claude объявляет `schemaFromText` и `schemaInPrefix`
-- [x] 1.4 Тесты: шаг на бэкенде с сессиями, без сессий, судья, адаптер без флага
+- [x] 1.4 Тесты: шаг на бэкенде с сессиями, без сессий, адаптер без флага (код судьи не менялся)
 
 ## 2. Опция `user_mcp`
 
@@ -17,4 +17,4 @@
 - [x] 3.1 `docs/config.md` (`user_mcp`), `docs/plugins.md` (возможности)
 - [x] 3.2 Пометка о пересмотре в `review-defend-shared-session/proposal.md`
 - [x] 3.3 `npm run check`, `openspec validate --strict`
-- [ ] 3.4 Живой замер тестового пайплайна `defend`: до и после, с `user_mcp: false` и без
+- [x] 3.4 Живой замер тестового пайплайна `defend`: до и после, с `user_mcp: false` и без
