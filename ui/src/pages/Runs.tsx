@@ -57,6 +57,8 @@ import {
 import { SortHeader } from '../SortHeader';
 import { RunLaunchDialog } from '../components/RunLaunchDialog';
 import { ShadowBadge } from '../components/ShadowBadge';
+import { RunPublication } from '../components/RunPublication';
+import { RunColumns, useRunColumns } from '../components/RunColumns';
 import './runs.css';
 
 /**
@@ -520,6 +522,7 @@ export function Runs({
   readonly navigate: (href: string) => void;
 }): JSX.Element {
   const now = Date.now();
+  const { hidden, setHidden, visible } = useRunColumns();
   const [filters, setFilters] = useState<RunFilters>(EMPTY_FILTERS);
   const [order, setOrder] = useState<SortOrder>(DEFAULT_SORT);
   const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
@@ -676,6 +679,7 @@ export function Runs({
       <VersionSkewBanner overview={overview} />
 
       <div className="filters">
+        <RunColumns hidden={hidden} setHidden={setHidden} />
         <Select
           value={filters.project ?? ALL}
           onValueChange={(value) => setFilters((current) => setProjectFilter(current, fromSelectValue(value)))}
@@ -766,13 +770,15 @@ export function Runs({
                   aria-label="Select all visible runs"
                 />
               </TableHead>
-              <TableHead>Project</TableHead>
-              <TableHead>Name</TableHead>
-              <TableHead>Status</TableHead>
-              <SortHeader label="Started" metric="startedAt" order={order} onSort={onSort} />
-              <SortHeader label="Duration" metric="duration" order={order} onSort={onSort} className="num" />
-              <SortHeader label="Cost" metric="cost" order={order} onSort={onSort} className="num" />
-              <SortHeader label="Tokens" metric="tokens" order={order} onSort={onSort} className="num" />
+              <TableHead hidden={!visible('project')}>Project</TableHead>
+              <TableHead hidden={!visible('name')}>Name</TableHead>
+              <TableHead hidden={!visible('status')}>Status</TableHead>
+              <TableHead hidden={!visible('description')}>Description</TableHead>
+              <TableHead hidden={!visible('result')}>Result</TableHead>
+              {visible('startedAt') && <SortHeader label="Started" metric="startedAt" order={order} onSort={onSort} />}
+              {visible('duration') && <SortHeader label="Duration" metric="duration" order={order} onSort={onSort} className="num" />}
+              {visible('cost') && <SortHeader label="Cost" metric="cost" order={order} onSort={onSort} className="num" />}
+              {visible('tokens') && <SortHeader label="Tokens" metric="tokens" order={order} onSort={onSort} className="num" />}
               <TableHead />
             </TableRow>
           </TableHeader>
@@ -792,6 +798,7 @@ export function Runs({
                     ) : null}
                   </TableCell>
                   <TableCell
+                    hidden={!visible('project')}
                     className={row.projectPath === undefined ? 'project unknown-path' : 'project'}
                     title={row.projectPath ?? unknownPathLabel(row.projectKey)}
                   >
@@ -805,7 +812,7 @@ export function Runs({
                         : lastPathSegment(row.projectPath)}
                     </span>
                   </TableCell>
-                  <TableCell>
+                  <TableCell hidden={!visible('name')}>
                     {/* Маршрут страницы прогона отключён — строка остаётся
                         на месте не-ссылкой с названной причиной, общим видом
                         витрины (`ui-routes`, Решение 8). */}
@@ -824,7 +831,7 @@ export function Runs({
                       <div className="run-id">{run.shortId}</div>
                     </TargetLink>
                   </TableCell>
-                  <TableCell>
+                  <TableCell hidden={!visible('status')}>
                     <div className="marks">
                       <Badge variant={statusBadgeVariant(run.status)}>{run.status ?? 'unknown'}</Badge>
                       {run.swept ? <Badge>swept</Badge> : null}
@@ -844,10 +851,12 @@ export function Runs({
                       )}
                     </div>
                   </TableCell>
-                  <TableCell className="small">{fmtTime(run.startedAt)}</TableCell>
-                  <TableCell className="num">{fmtDuration(runDuration(run, now))}</TableCell>
-                  <TableCell className="num"><Cost usd={run.usage?.costUsd ?? null} source={run.usage?.costSource} asOf={run.usage?.costCatalogAsOf} /></TableCell>
-                  <TableCell className="num">
+                  <TableCell hidden={!visible('description')}><RunPublication text={run.description} /></TableCell>
+                  <TableCell hidden={!visible('result')}><RunPublication text={run.result} /></TableCell>
+                  <TableCell hidden={!visible('startedAt')} className="small">{fmtTime(run.startedAt)}</TableCell>
+                  <TableCell hidden={!visible('duration')} className="num">{fmtDuration(runDuration(run, now))}</TableCell>
+                  <TableCell hidden={!visible('cost')} className="num"><Cost usd={run.usage?.costUsd ?? null} source={run.usage?.costSource} asOf={run.usage?.costCatalogAsOf} /></TableCell>
+                  <TableCell hidden={!visible('tokens')} className="num">
                     <TokenCell run={run} />
                   </TableCell>
                   <TableCell className="num">

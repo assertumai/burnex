@@ -48,6 +48,8 @@
   status.json           # текущее состояние, достаточно для возобновления
   events.ndjson         # поток событий для UI и постмортема
   usage.json            # агрегат расхода
+  run-description.json  # опубликованное описание текущей работы (JSON-строка)
+  run-result.json       # опубликованные результаты (JSON-строка)
   decisions/            # по файлу на ожидание шага decision, см. docs/decisions.md
     <wait_id>.json
   engine/               # снимок движка — только когда он установлен из правимого дерева

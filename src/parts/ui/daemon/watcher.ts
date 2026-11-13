@@ -7,6 +7,7 @@ import { isAbandoned, readOwner } from '../../pipeline/domain/lockfile.js';
 import { runPaths, usageDatabasePath, usageStorePath } from '../../pipeline/run/journal/paths.js';
 import { buildBacklog, lockPathOf, type BacklogOverview } from '../backlog.js';
 import { BOARD_FILE } from '../boardFile.js';
+import { RUN_DATA_KEYS, runDataPath } from '../../pipeline/run/journal/runData.js';
 import { buildOverview, type Overview, type RunOverview } from '../overview.js';
 import { buildWidgets, projectWidgetVersions, type WidgetsOverview } from '../widgets.js';
 import { buildProposals, proposalsDirFingerprint, type ProposalsOverview } from '../proposals.js';
@@ -373,6 +374,12 @@ function fingerprint(
         // его появление останется незамеченным до первой записи состояния.
       }
       parts.push(`${project.key}/${runId}:${mtime}:${existsSync(paths.jobs) ? '1' : '0'}`);
+      for (const key of RUN_DATA_KEYS) {
+        try {
+          const stat = statSync(runDataPath(paths.dir, key), { bigint: true });
+          parts.push(`${key}:${stat.ino}:${stat.mtimeNs}:${stat.size}`);
+        } catch { parts.push(`${key}:-`); }
+      }
     }
   }
   return {

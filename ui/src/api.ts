@@ -101,6 +101,8 @@ export interface DecisionRecord {
 }
 
 export interface RunOverview {
+  readonly description?: string;
+  readonly result?: string;
   readonly runId: string;
   readonly shortId: string;
   readonly pipeline: string;

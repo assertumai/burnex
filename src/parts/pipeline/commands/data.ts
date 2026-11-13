@@ -8,6 +8,7 @@ import { ExitCode, BurnexError, type ExitCodeValue } from '../../../kernel/error
 import { readEngineEnv } from '../../../kernel/env-names.js';
 import { commandRow } from '../../../kernel/cli/commandRow.js';
 import type { ParsedArgs } from '../../../kernel/cli/args.js';
+import { runRunDataCommand } from './runData.js';
 
 /**
  * `burnex data set|merge|get` — публикация произвольных данных работой по
@@ -55,6 +56,7 @@ export function runDataCommand(
   write: (line: string) => void,
   env: Readonly<Record<string, string | undefined>> = process.env,
 ): ExitCodeValue {
+  if (args.flags['run'] === true) return runRunDataCommand(args, write, env);
   const [action, key, value] = args.positional;
   const dir = jobDirFromEnv(env);
 
@@ -165,6 +167,7 @@ export const row = commandRow(
         'опубликовать данные работы, видимые в витрине и подстановкой ${jobs.<работа>.data.<ключ>}: set|merge|get',
       positional: ['action', 'key', 'value'],
       flags: {
+        run: { kind: 'boolean', description: 'поля прогона description и result вместо данных работы' },
         json: {
           kind: 'string',
           description: 'merge: объект вида {"ключ": "значение"}, дописываемый поверх опубликованного',

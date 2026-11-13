@@ -20,6 +20,7 @@ import type {
   UsageReport,
 } from '../pipeline/run/journal/schema.js';
 import { readUsageStore } from '../pipeline/run/journal/usageStore.js';
+import { readRunData } from '../pipeline/run/journal/runData.js';
 
 /**
  * Обзор всего, что происходит: проекты корня прогонов и их прогоны.
@@ -30,6 +31,8 @@ import { readUsageStore } from '../pipeline/run/journal/usageStore.js';
  */
 
 export interface RunOverview {
+  readonly description?: string;
+  readonly result?: string;
   readonly runId: string;
   readonly shortId: string;
   readonly pipeline: string;
@@ -296,6 +299,7 @@ function readRun(
 
   return {
     runId,
+    ...readRunData(paths.dir),
     shortId,
     pipeline,
     ...(pipelineFile === undefined ? {} : { pipelineFile }),

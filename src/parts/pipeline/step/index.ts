@@ -5,17 +5,18 @@ import { BurnexError } from '../../../kernel/errors.js';
 import { envName, readEngineEnv } from '../../../kernel/env-names.js';
 import { mergeJobData } from '../run/journal/data.js';
 import { atomicWrite } from '../run/journal/writer.js';
+import { publishRunData, type RunData } from '../run/journal/runData.js';
 
 /**
  * Библиотека шага `burnex/step`: тонкая обвязка над контрактом файлов
  * (`docs/pipeline-format.md`, раздел `script`), а не второй способ его
- * исполнить. Пять функций, ровно то, что контракт уже обещает: `input()`
+ * исполнить. `input()`
  * читает `input.json`, `output()` пишет `output.json`, `publish()` зовёт тот
  * же писатель, что и `burnex data`, `log()` — обычный `console.log`,
- * `exec()` — дочерний процесс без оболочки.
+ * `exec()` — дочерний процесс без оболочки, `publishRun()` — описание и результаты прогона.
  *
  * Работает по одним лишь `BURNEX_INPUT`, `BURNEX_OUTPUT` и
- * `BURNEX_JOB_DIR` (design.md, решение 10): ни путей, ни идентификаторов
+ * `BURNEX_JOB_DIR` и `BURNEX_RUN_DIR`: ни путей, ни идентификаторов
  * аргументами не принимает, и потому годится в любом процессе, унаследовавшем
  * окружение шага, — не только в самом файле скрипта.
  */
@@ -51,6 +52,11 @@ export function publish(keyOrValues: string | Readonly<Record<string, string>>, 
   const dir = requireEnv('JOB_DIR');
   const patch = typeof keyOrValues === 'string' ? { [keyOrValues]: value ?? '' } : keyOrValues;
   mergeJobData(dir, patch);
+}
+
+/** Publish current activity or results to the run list. Links use Markdown or plain HTTP(S) URLs. */
+export function publishRun(values: RunData): void {
+  publishRunData(requireEnv('RUN_DIR'), values);
 }
 
 /** Строка в лог шага — `stdout`, тот же поток, что и у самого скрипта. */
