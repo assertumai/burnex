@@ -127,6 +127,10 @@ export const RawBackendSchema = z
     // strict_permissions: флаг говорит, что о бэкенде объявили, возможность
     // адаптера — что он умеет, и расходиться они могут (design.md, решение 6).
     mcp: z.boolean().optional(),
+    // Желание, а не возможность: `false` просит адаптер запустить агента без
+    // MCP-серверов и коннекторов пользователя (`session-cache-stable-prefix`).
+    // Умолчание `true` — окружение пользователя не трогается.
+    user_mcp: z.boolean().optional(),
     permissions: RawPermissionsSchema.optional(),
     env: z.record(z.string(), z.string()).optional(),
     credentials: z.record(CredentialNameSchema, RawCredentialSchema).optional(),

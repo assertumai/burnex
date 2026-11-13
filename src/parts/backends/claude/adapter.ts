@@ -42,6 +42,9 @@ function withDataCommand(allow: readonly string[] | undefined, strict: boolean):
   return [...declared, DATA_COMMAND_PERMISSION];
 }
 
+/** Переменная Claude Code, отключающая коннекторы claude.ai пользователя. */
+export const USER_CONNECTORS_ENV = 'ENABLE_CLAUDEAI_MCP_SERVERS';
+
 /**
  * Адаптер Claude Code.
  *
@@ -68,6 +71,14 @@ export function createClaudeAdapter(config: BackendConfig): BackendAdapter {
       // Claude Code 2.1.312): форк помнит исходный диалог и получает
       // выданный движком id; под той же настройкой, что сессии.
       forkSessions: config.sessions,
+      // `--json-schema` становится инструментом `StructuredOutput` в начале
+      // запроса: в сессии схему держит движок текстом, иначе каждая смена
+      // схемы переписывала бы кеш (`session-cache-stable-prefix`).
+      schemaFromText: true,
+      schemaInPrefix: true,
+      // `user_mcp: false` — `--strict-mcp-config` и
+      // `ENABLE_CLAUDEAI_MCP_SERVERS=false` (решение 3).
+      isolateUserMcp: true,
     },
 
     launch(invocation: AgentInvocation): LaunchSpec {
@@ -127,6 +138,17 @@ export function createClaudeAdapter(config: BackendConfig): BackendAdapter {
         command.push('--mcp-config', JSON.stringify({ mcpServers: toMcpConfig(invocation.mcpServers) }));
       }
 
+      // Без MCP и коннекторов пользователя — только по явной просьбе
+      // (`user_mcp: false`); серверы шага идут через `--mcp-config` и остаются.
+      // Явное значение переменной в `backends.claude.env` сильнее.
+      if (config.userMcp === false) {
+        if (!command.includes('--strict-mcp-config')) command.push('--strict-mcp-config');
+        return {
+          command,
+          stdin: invocation.prompt,
+          env: { [USER_CONNECTORS_ENV]: 'false', ...config.env },
+        };
+      }
       return { command, stdin: invocation.prompt, env: config.env };
     },
 

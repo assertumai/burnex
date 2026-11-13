@@ -60,6 +60,33 @@ export interface BackendCapabilities {
    * главнее нативная. Необязательное поле: отсутствие — «не умеет».
    */
   readonly schemaFromText?: boolean;
+  /**
+   * Нативная схема входит в начало запроса (у Claude Code `--json-schema` —
+   * инструмент `StructuredOutput`): новая или другая схема заставляет бэкенд
+   * заново записать историю сессии в кеш. Тогда агентский вызов в сессии
+   * держит схему текстом (`session-cache-stable-prefix`, решение 1).
+   */
+  readonly schemaInPrefix?: boolean;
+  /**
+   * Адаптер умеет исполнить `user_mcp: false` — запустить агента без
+   * MCP-серверов и коннекторов пользователя (`session-cache-stable-prefix`,
+   * решение 3).
+   */
+  readonly isolateUserMcp?: boolean;
+}
+
+/**
+ * Режим схемы для агентского вызова (шаг, участник `review`, ход защиты):
+ * на бэкенде с сессиями, чья нативная схема входит в начало запроса, — текст,
+ * иначе тот же выбор, что `structuredOutputMode`. Судья сюда не ходит: его
+ * сессия всегда новая, и нативная схема кеша не ломает.
+ */
+export function callSchemaMode(capabilities: BackendCapabilities): 'native' | 'text' | undefined {
+  const mode = structuredOutputMode(capabilities);
+  if (mode === 'native' && capabilities.schemaInPrefix === true && capabilities.schemaFromText === true && capabilities.sessions) {
+    return 'text';
+  }
+  return mode;
 }
 
 /**

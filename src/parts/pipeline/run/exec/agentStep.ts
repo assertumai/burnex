@@ -6,12 +6,12 @@ import type { BackendAdapter, BackendRefusal } from '../../backend/types.js';
 import type { BackendSlots } from '../../backend/slots.js';
 import {
   BACKEND_REFUSAL_PREDICATE,
+  callSchemaMode,
   describeRefusal,
   emptyUsage,
   extractRefusal,
   mergeUsage,
   messagePrefix,
-  structuredOutputMode,
   sumUsage,
   type McpServerStatus,
 } from '../../backend/types.js';
@@ -203,9 +203,11 @@ export async function executeAgentStep(options: AgentStepOptions): Promise<Agent
   const { step, adapter } = options;
   const evaluate = options.evaluate ?? evaluateDefault;
   // Схему держит движок, а не CLI (`backend-structured-output`, решение 2):
-  // она уходит в промпт, а не адаптеру, и проверяется по итоговому тексту.
+  // она уходит в промпт, а не адаптеру, и проверяется по итоговому тексту. В
+  // сессии так же и при нативной схеме, входящей в начало запроса: иначе
+  // смена схемы между ходами переписывала бы кеш (`session-cache-stable-prefix`).
   const textSchema =
-    step.outputSchemaPath !== undefined && structuredOutputMode(adapter.capabilities) === 'text'
+    step.outputSchemaPath !== undefined && callSchemaMode(adapter.capabilities) === 'text'
       ? step.outputSchemaPath
       : undefined;
   const records: AttemptRecord[] = [];

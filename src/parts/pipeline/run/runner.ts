@@ -713,6 +713,7 @@ export async function runPipeline(options: RunOptions): Promise<RunResult> {
   requireStrictPermissionsSupport(context);
   requireMcpSupport(context);
   requireStructuredOutputSupport(context);
+  requireUserMcpIsolation(context);
   requireEffortSupport(context);
 
   /**
@@ -1353,6 +1354,40 @@ function requireStructuredOutputSupport(context: RunContext): void {
         );
       }
     }
+  }
+}
+
+/**
+ * `user_mcp: false` — явная просьба запускать агента без MCP-серверов и
+ * коннекторов пользователя. Адаптер, который её не исполняет, дал бы ложное
+ * ощущение изоляции: прогон останавливается до первой работы, тем же
+ * приёмом, что `requireMcpSupport` (`session-cache-stable-prefix`, решение 3).
+ * Проверяются бэкенды агентских вызовов и судей пайплайна.
+ */
+function requireUserMcpIsolation(context: RunContext): void {
+  const used = new Map<string, string>();
+  for (const { job, call } of agentCallsIn(context.expanded.pipeline)) {
+    if (!used.has(call.agent)) used.set(call.agent, job.source);
+  }
+  for (const job of context.expanded.pipeline.jobs) {
+    for (const step of job.steps) {
+      for (const predicate of step.expect ?? []) {
+        if (predicate.kind !== 'judge') continue;
+        const backend = predicate.agent ?? context.config.defaults.agent;
+        if (!used.has(backend)) used.set(backend, job.source);
+      }
+    }
+  }
+  for (const [backend, file] of used) {
+    if (context.config.backends[backend]?.userMcp !== false) continue;
+    if (adapterOf(backend, context).capabilities.isolateUserMcp === true) continue;
+    throw new BurnexError(
+      `Бэкенд ${backend} не умеет запускать агента без MCP-серверов пользователя, а конфигурация задаёт backends.${backend}.user_mcp: false`,
+      {
+        file,
+        hint: `Снимите backends.${backend}.user_mcp либо назначьте шагам бэкенд, который умеет изоляцию`,
+      },
+    );
   }
 }
 
