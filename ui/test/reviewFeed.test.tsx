@@ -6,7 +6,7 @@ import { afterEach, describe, it } from 'node:test';
 import type { Context } from 'cordis';
 import { renderToStaticMarkup } from 'react-dom/server';
 
-import { ALL_TAB, ReviewFeedView, defenderLine, displayId, entriesForTab, initials, reviewerTabs, roleLabel, runningLabels, stanceLabel, type ReviewSelection } from '../src/components/ReviewFeed';
+import { ALL_TAB, ReviewFeedView, defenderLine, displayId, verdictToken, entriesForTab, initials, reviewerTabs, roleLabel, runningLabels, stanceLabel, type ReviewSelection } from '../src/components/ReviewFeed';
 import { fetchReviewFeed, fetchStepOutput, type ReviewFeed, type ReviewFeedEntry, type ReviewFeedParticipant } from '../src/api';
 import { bindRouterKernel } from '../src/router';
 
@@ -462,5 +462,17 @@ describe('лента ревью: итог называется судьёй', ()
     const html = text(render(DEFEND));
     assert.match(html, /judge judge/);
     assert.doesNotMatch(html, /aggregator/);
+  });
+});
+
+describe('лента ревью: вердикт судьи', () => {
+  it('метка вердикта — в бейдже, текст вердикта — абзацем, не в бейдже', () => {
+    assert.equal(verdictToken('request_changes'), 'request_changes');
+    assert.equal(verdictToken('Принято одно замечание: echo непереносим'), undefined);
+    const long = 'Принято одно замечание (minor): echo непереносим';
+    const html = render({ ...DEFEND, entries: [{ ...VERDICT, verdict: long }] });
+    assert.match(html, /<p class="review-text">Принято одно замечание \(minor\): echo непереносим<\/p>/);
+    assert.doesNotMatch(html, /verdict: Принято/);
+    assert.match(text(render(DEFEND)), /verdict: request_changes/);
   });
 });

@@ -320,10 +320,13 @@ function EntryView({
             <header className="review-bubble-head">
               <Who participant={participant} id={entry.participant} />
               <Badge variant={entry.status === 'success' ? 'success' : 'destructive'}>
-                verdict{entry.verdict === undefined ? '' : `: ${entry.verdict}`}
+                verdict{verdictToken(entry.verdict) === undefined ? '' : `: ${entry.verdict}`}
               </Badge>
               <OpenTurn selection={{ participant: entry.participant }} onSelect={onSelect} />
             </header>
+            {entry.verdict === undefined || verdictToken(entry.verdict) !== undefined ? null : (
+              <p className="review-text">{entry.verdict}</p>
+            )}
             {entry.reason === undefined ? null : <p className="review-text dim">{entry.reason}</p>}
             {entry.summary === undefined ? null : <p className="review-text">{entry.summary}</p>}
             {entry.output === undefined ? null : (
@@ -338,6 +341,14 @@ function EntryView({
       );
     }
   }
+}
+
+/**
+ * Вердикт-метка (`approve`, `request_changes`) уходит в бейдж; вердикт-текст —
+ * обычным абзацем: в бейдже он не переносится и вылезает за пузырь.
+ */
+export function verdictToken(verdict: string | undefined): string | undefined {
+  return verdict !== undefined && /^[\w.-]{1,40}$/.test(verdict) ? verdict : undefined;
 }
 
 function OpenTurn({
