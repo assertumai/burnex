@@ -1396,6 +1396,157 @@ export async function fetchReviewFeed(options: {
   return json<ReviewFeed>(await fetch(`/api/review-feed?${query.toString()}`));
 }
 
+/**
+ * Лента шага `discuss` (`render-design`, design.md, решение 6): зеркало
+ * `DiscussFeed` (`src/parts/ui/discussFeed.ts`) и ответа
+ * `GET /api/discuss-feed`.
+ */
+export type DiscussPhaseName = 'proposals' | 'draft' | 'objections' | 'defense' | 'aggregate';
+export type DiscussPhaseState = 'pending' | 'running' | 'done' | 'skipped';
+export type DiscussObjectionStatus = 'open' | 'accepted' | 'withdrawn' | 'contested' | 'note';
+
+export interface DiscussFeedCall {
+  readonly phase: DiscussPhaseName;
+  readonly round?: number;
+  readonly retry?: true;
+  readonly status?: StatusValue;
+  readonly reason?: string;
+  readonly running: boolean;
+  readonly stdout?: JournalFileRef;
+  readonly output?: JournalFileRef;
+}
+
+export interface DiscussFeedParticipant {
+  readonly id: string;
+  readonly role: 'participant' | 'author' | 'aggregator';
+  readonly agent?: string;
+  readonly model?: string;
+  readonly focus?: string;
+  readonly color: number;
+  readonly running: boolean;
+  readonly calls: readonly DiscussFeedCall[];
+  readonly usage: ReviewFeedParticipant['usage'];
+}
+
+export interface DiscussFeedProposal {
+  readonly participant: string;
+  readonly status?: StatusValue;
+  readonly reason?: string;
+  readonly summary?: string;
+  readonly approach?: string;
+}
+
+export interface DiscussFeedDraftDecision {
+  readonly id: string;
+  readonly question: string;
+  readonly choice: string;
+  readonly rationale: string;
+  readonly options: readonly { readonly by: string; readonly summary: string }[];
+}
+
+export interface DiscussFeedDiagram {
+  readonly id: string;
+  readonly title: string;
+  readonly source: string;
+  readonly decisions: readonly string[];
+}
+
+export interface DiscussFeedDraft {
+  readonly summary: string;
+  readonly decisions: readonly DiscussFeedDraftDecision[];
+  readonly diagrams: readonly DiscussFeedDiagram[];
+  readonly risks: readonly { readonly risk: string; readonly mitigation: string }[];
+}
+
+export interface DiscussFeedObjection {
+  readonly id: string;
+  readonly by: string;
+  readonly target: string;
+  readonly weight: 'blocking' | 'preference';
+  readonly title: string;
+  readonly breaks?: string;
+  readonly alternative?: string;
+  readonly status: DiscussObjectionStatus;
+  readonly round?: number;
+}
+
+export interface DiscussFeedResponse {
+  readonly objection: string;
+  readonly stance: string;
+  readonly text: string;
+  readonly evidence?: string;
+  readonly change?: { readonly choice: string; readonly rationale: string };
+}
+
+export interface DiscussFeedMessage {
+  readonly id: string;
+  readonly from: string;
+  readonly round: number;
+  readonly text: string;
+  readonly responses: readonly DiscussFeedResponse[];
+  readonly invalid?: true;
+  readonly failure?: string;
+}
+
+/** Документ `burnex:design-doc` с полями движка шага `discuss`. */
+export interface DesignDocument {
+  readonly title: string;
+  readonly summary: string;
+  readonly decisions: readonly {
+    readonly id: string;
+    readonly question: string;
+    readonly choice: string;
+    readonly rationale: string;
+    readonly rejected: readonly { readonly by: string; readonly summary: string; readonly reason: string }[];
+  }[];
+  readonly diagrams: readonly (DiscussFeedDiagram & { readonly kind: 'mermaid' })[];
+  readonly risks: readonly { readonly risk: string; readonly mitigation: string }[];
+  readonly open_questions: readonly string[];
+  readonly agreed?: boolean;
+  readonly unresolved?: readonly string[];
+  readonly changed_by_aggregator?: readonly string[];
+}
+
+export interface DiscussFeed {
+  readonly rounds: number;
+  readonly phases: readonly { readonly name: DiscussPhaseName; readonly state: DiscussPhaseState }[];
+  readonly participants: readonly DiscussFeedParticipant[];
+  readonly proposals: readonly DiscussFeedProposal[];
+  readonly draft?: DiscussFeedDraft;
+  readonly objections: readonly DiscussFeedObjection[];
+  readonly messages: readonly DiscussFeedMessage[];
+  readonly outcome?: { readonly accepted: number; readonly withdrawn: number; readonly contested: number; readonly preference: number };
+  readonly document?: DesignDocument;
+  readonly output?: unknown;
+  readonly documentError?: string;
+  readonly done: boolean;
+  readonly reusedFrom?: { readonly runId: string; readonly available: boolean };
+}
+
+export async function fetchDiscussFeed(options: {
+  readonly address: string;
+  readonly jobId: string;
+  readonly stepId: string;
+  readonly pass?: number;
+}): Promise<DiscussFeed> {
+  const query = new URLSearchParams({ run: options.address, job: options.jobId, step: options.stepId });
+  if (options.pass !== undefined) query.set('pass', String(options.pass));
+  return json<DiscussFeed>(await fetch(`/api/discuss-feed?${query.toString()}`));
+}
+
+/** Адрес скачивания итога шага `discuss` в офлайн-HTML или OpenSpec `design.md`. */
+export function designRenderUrl(options: {
+  readonly address: string;
+  readonly jobId: string;
+  readonly stepId: string;
+  readonly format: 'html' | 'openspec';
+  readonly pass?: number;
+}): string {
+  const query = new URLSearchParams({ run: options.address, job: options.jobId, step: options.stepId, format: options.format });
+  if (options.pass !== undefined) query.set('pass', String(options.pass));
+  return `/api/design-render?${query.toString()}`;
+}
+
 export async function fetchPipelines(): Promise<PipelinesOverview> {
   return json<PipelinesOverview>(await fetch('/api/pipelines'));
 }

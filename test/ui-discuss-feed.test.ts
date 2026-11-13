@@ -269,4 +269,13 @@ describe('маршруты ленты discuss и рендера документ
     assert.equal(wrong.code, 422);
     assert.match(wrong.body, /burnex:design-doc/);
   });
+
+  it('/api/vendor/mermaid.js отдаёт бандл Mermaid из сборки', async (t) => {
+    const { runsRoot } = seed();
+    const server = await startServer(t, runsRoot);
+    const bundle = await fetch(server, '/api/vendor/mermaid.js');
+    assert.equal(bundle.code, 200);
+    assert.match(String(bundle.headers['content-type']), /text\/javascript/);
+    assert.match(bundle.body, /globalThis\["mermaid"\]/);
+  });
 });

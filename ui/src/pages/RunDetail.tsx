@@ -20,6 +20,7 @@ import { Cost } from '../components/Cost';
 import { FileView } from '../components/FileView';
 import { JobGraph } from '../components/JobGraph';
 import { StepOutput } from '../components/StepOutput';
+import { DiscussFeedPanel } from '../components/DiscussFeed';
 import { ReviewFeedPanel } from '../components/ReviewFeed';
 import { ShadowBadge } from '../components/ShadowBadge';
 import { TargetLink } from '../routeLink';
@@ -233,6 +234,18 @@ function Step({
       */}
       {step.kind === 'review' ? (
         <ReviewFeedPanel
+          key={outputKey}
+          address={address}
+          jobId={jobId}
+          stepId={step.id}
+          pass={pass}
+          stepUsage={step.usage}
+          asOf={asOf}
+          navigate={navigate}
+        />
+      ) : step.kind === 'discuss' ? (
+        /* Шаг `discuss` — документом и лентой обсуждения (`render-design`). */
+        <DiscussFeedPanel
           key={outputKey}
           address={address}
           jobId={jobId}

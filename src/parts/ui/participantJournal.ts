@@ -117,7 +117,7 @@ export function readCall(dir: string): CallRecord | undefined {
 
 export function fileRef(runDir: string, path: string): JournalFileRef | undefined {
   try {
-    return { name: 'stdout.log', path: relative(runDir, path), bytes: statSync(path).size };
+    return { name: basename(path), path: relative(runDir, path), bytes: statSync(path).size };
   } catch {
     return undefined;
   }

@@ -58,6 +58,8 @@ export interface DiscussFeedCall {
   readonly running: boolean;
   /** Сырой `stdout.log` вызова — путь относительно каталога прогона. */
   readonly stdout?: JournalFileRef;
+  /** Разобранный ход вызова — `output.json`. */
+  readonly output?: JournalFileRef;
 }
 
 export interface DiscussFeedParticipant {
@@ -409,7 +411,9 @@ export function readDiscussFeed(paths: RunPaths, jobId: string, stepId: string, 
   const done = !alive || stepFinished;
   const reused = ownDir === undefined ? undefined : reusedSource(paths, jobId, stepId, ownDir);
   const stepDir = reused === undefined ? ownDir : reused.stepDir;
-  const stdoutOf = (path: string): JournalFileRef | undefined => (reused === undefined ? fileRef(paths.dir, path) : undefined);
+  // Файлы вызова открываются по пути в каталоге этого прогона; файлы
+  // исходного прогона так не адресовать.
+  const refOf = (path: string): JournalFileRef | undefined => (reused === undefined && existsSync(path) ? fileRef(paths.dir, path) : undefined);
   const usage = participantUsage(reused?.paths ?? paths, jobId, stepId);
 
   const log = readLog(stepDir === undefined ? [] : (readNdjson(join(stepDir, DISCUSS_FILE)) ?? []));
@@ -424,7 +428,8 @@ export function readDiscussFeed(paths: RunPaths, jobId: string, stepId: string, 
   const callAt = (dir: string, phase: DiscussPhaseName, extra: { round?: number; retry?: true } = {}): DiscussFeedCall | undefined => {
     if (!existsSync(dir)) return undefined;
     const call = readCall(dir);
-    const stdout = stdoutOf(join(dir, 'stdout.log'));
+    const stdout = refOf(join(dir, 'stdout.log'));
+    const output = refOf(join(dir, 'output.json'));
     return {
       phase,
       ...extra,
@@ -432,6 +437,7 @@ export function readDiscussFeed(paths: RunPaths, jobId: string, stepId: string, 
       ...(call?.reason === undefined ? {} : { reason: call.reason }),
       running: call === undefined && alive,
       ...(stdout === undefined ? {} : { stdout }),
+      ...(output === undefined ? {} : { output }),
     };
   };
   const roundCalls = (dir: string): DiscussFeedCall[] =>

@@ -128,7 +128,7 @@ export function entriesForTab(entries: readonly ReviewFeedEntry[], tab: string):
   });
 }
 
-function colorClass(participant: ReviewFeedParticipant | undefined): string {
+export function colorClass(participant: { readonly color: number } | undefined): string {
   return `participant-c${(participant?.color ?? 0) % PALETTE_SIZE}`;
 }
 
@@ -698,18 +698,20 @@ export function ReviewFeedView({
 
 /**
  * Шаг переиспользован при возобновлении: лента — из исходного прогона, а если
- * его уже нет, от неё остался вердикт.
+ * его уже нет, от неё остался итог (вердикт ревью или документ обсуждения).
  */
-function ReusedNotice({
+export function ReusedNotice({
   runId,
   available,
   address,
   navigate,
+  subject = 'review',
 }: {
   readonly runId: string;
   readonly available: boolean;
   readonly address: string;
   readonly navigate: (href: string) => void;
+  readonly subject?: 'review' | 'discussion';
 }): JSX.Element {
   const projectKey = address.slice(0, address.lastIndexOf('/'));
   return (
@@ -720,8 +722,8 @@ function ReusedNotice({
           {runId}
         </TargetLink>
         {available
-          ? ' — the review is shown from that run.'
-          : ' — that run is no longer available, so only the verdict is shown.'}
+          ? ` — the ${subject} is shown from that run.`
+          : ` — that run is no longer available, so only the ${subject === 'review' ? 'verdict' : 'document'} is shown.`}
       </AlertDescription>
     </Alert>
   );

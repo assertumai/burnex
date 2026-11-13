@@ -1,4 +1,4 @@
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { join } from 'node:path';
 
@@ -7,7 +7,7 @@ import { z } from 'zod';
 import { resolveConfig } from '../../../pipeline/config/resolve.js';
 import { runPaths, type RunPaths } from '../../../pipeline/run/journal/paths.js';
 import { findStepDir, isRunAlive, listProjects } from '../../../pipeline/run/journal/reader.js';
-import { DESIGN_FORMATS, isDesignFormat, parseDesignDocument, renderDesign } from '../../../pipeline/render/designDoc.js';
+import { DESIGN_FORMATS, isDesignFormat, mermaidBundlePath, parseDesignDocument, renderDesign } from '../../../pipeline/render/designDoc.js';
 import { planResume, readSourceRun } from '../../../pipeline/run/resumePlan.js';
 import { isBurnexError } from '../../../../kernel/errors.js';
 import { INVALID, readBody, readNonNegativeInt, sendJson } from '../../daemon/http.js';
@@ -337,6 +337,29 @@ const handleResume: ApiHandler = async (req, res, env) => {
   sendJson(res, 202, { ok: true });
 };
 
+/**
+ * `GET /api/vendor/mermaid.js`: бандл Mermaid, поставляемый пакетом
+ * (`dist/vendor/`, `render-design`, design.md, решение 8). Витрина — одна
+ * страница, и встраивать в неё 5 МБ ради диаграмм шага `discuss` дорого:
+ * она подгружает бандл отсюда, только когда показывает диаграмму.
+ */
+const handleMermaidBundle: ApiHandler = (_req, res) => {
+  let text: string;
+  try {
+    text = readFileSync(mermaidBundlePath(), 'utf8');
+  } catch {
+    sendJson(res, 404, { error: 'The Mermaid bundle is not part of this build — rebuild burnex' });
+    return;
+  }
+  res.writeHead(200, {
+    'content-type': 'text/javascript; charset=utf-8',
+    'content-length': Buffer.byteLength(text),
+    // Бандл меняется только с релизом, а релиз перезапускает демон.
+    'cache-control': 'private, max-age=3600',
+  });
+  res.end(text);
+};
+
 export const row = screenRow(declaration.id, ['screens', 'api'], (ctx) => {
   ctx.api.register('POST', '/api/run/resume', handleResume);
   ctx.screens.register(declaration);
@@ -346,4 +369,5 @@ export const row = screenRow(declaration.id, ['screens', 'api'], (ctx) => {
   ctx.api.register('GET', '/api/review-feed', handleReviewFeed);
   ctx.api.register('GET', '/api/discuss-feed', handleDiscussFeed);
   ctx.api.register('GET', '/api/design-render', handleDesignRender);
+  ctx.api.register('GET', '/api/vendor/mermaid.js', handleMermaidBundle);
 });

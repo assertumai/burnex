@@ -39,9 +39,10 @@ Mermaid внутри документа, их отрисовку в витрин
     `agreed`, `unresolved`, `changed_by_aggregator`;
   - кнопки скачать HTML и OpenSpec `design.md` (тот же рендер, что у
     команды).
-- `GET /api/discuss-feed` и `GET /api/design-render` демона.
-- Mermaid в витрине загружается лениво, отдельным чанком, только когда
-  документ с диаграммами открыт.
+- `GET /api/discuss-feed`, `GET /api/design-render` и `GET /api/vendor/mermaid.js` демона.
+- Mermaid в витрине загружается лениво, только когда на экране есть
+  диаграмма: демон отдаёт тот же бандл (`GET /api/vendor/mermaid.js`), что
+  встраивает офлайн-HTML. Страница витрины не растёт.
 - Общие помощники чтения журнала участников (`readCall`, `readNdjson`,
   `reusedSource` и др.) выносятся из `reviewFeed.ts` в общий модуль: ими
   пользуются обе ленты.

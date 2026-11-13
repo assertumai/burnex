@@ -1,0 +1,68 @@
+/*
+ * Шаг `discuss` (`render-design`): строка фаз, документ с диаграммами и
+ * лента обсуждения. Пузыри, аватары и панель сводки — из reviewFeed.css.
+ */
+
+.discuss-phases {
+  list-style: none;
+  margin: 0 0 .6rem;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: .35rem;
+}
+.discuss-phases li + li::before { content: '→'; color: var(--muted-foreground); margin-right: .35rem; }
+
+.discuss-avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: default;
+}
+
+.discuss-objection + .discuss-objection { margin-top: .5rem; padding-top: .45rem; border-top: 1px dashed var(--border); }
+
+.discuss-participant { padding-bottom: .35rem; }
+.discuss-focus { overflow-wrap: anywhere; }
+.discuss-calls { display: flex; flex-wrap: wrap; gap: .25rem; margin-top: .25rem; }
+.discuss-call { height: auto; padding: .1rem .45rem; font-size: .75rem; }
+
+.design-doc { display: flex; flex-direction: column; gap: .5rem; }
+.design-doc h3 { margin: 0; font-size: 1.1rem; }
+.design-doc h4 { margin: .8rem 0 .2rem; font-size: .8rem; text-transform: uppercase; letter-spacing: .04em; color: var(--muted-foreground); }
+.design-doc-head { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; }
+.design-doc-downloads { margin-left: auto; display: flex; gap: .6rem; font-size: .85rem; }
+.design-text, .design-choice { margin: .25rem 0 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.design-choice { font-weight: 600; }
+.design-decisions { margin: 0; padding-left: 0; list-style: none; display: flex; flex-direction: column; gap: .5rem; }
+.design-decision {
+  padding: .5rem .7rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--card);
+}
+.design-decision-head { display: flex; flex-wrap: wrap; align-items: center; gap: .4rem; }
+.design-decision details ul { margin: .25rem 0 0; padding-left: 1.1rem; font-size: .85rem; }
+.design-list { margin: 0; padding-left: 1.1rem; display: flex; flex-direction: column; gap: .25rem; }
+
+.design-diagram {
+  margin: 0;
+  padding: .5rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--card);
+}
+.design-diagram figcaption { font-size: .85rem; margin-bottom: .35rem; }
+
+.mermaid-diagram { overflow-x: auto; text-align: center; }
+.mermaid-diagram svg { max-width: 100%; height: auto; }
+.mermaid-source {
+  margin: 0;
+  padding: .5rem .7rem;
+  overflow-x: auto;
+  font-family: var(--mono);
+  font-size: .8rem;
+  background: var(--muted);
+  border-radius: var(--radius);
+}
+.mermaid-error { margin: .3rem 0 0; font-size: .8rem; color: var(--destructive); }
