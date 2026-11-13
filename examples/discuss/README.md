@@ -44,3 +44,8 @@ cd "$T" && burnex lint /путь/к/burnex/examples/discuss/burnex.yml && burnex
   `discuss.message`, `discuss.settled`, `discuss.finished` со счётом и `agreed`;
 - `usage.json` → `jobs.design.steps.discuss.participants` — расход
   `pragmatist`, `skeptic`, `author` и `aggregator`.
+- `artifacts/design.html` — офлайн-страница документа с отрисованными
+  диаграммами (открывается без сети), `artifacts/design.md` — тот же
+  документ разделами OpenSpec `design.md`;
+- витрина (`burnex up`) — у шага `discuss` вкладки «Document» с диаграммами и
+  ссылками скачать HTML и `design.md` и «Discussion» с лентой обсуждения.

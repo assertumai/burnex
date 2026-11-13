@@ -2,7 +2,8 @@
 # предлагают подход, автор сводит черновик с точками решения и диаграммой
 # Mermaid, участники возражают по точкам, автор защищает черновик, агрегатор
 # выносит проектный документ по встроенной схеме burnex:design-doc. Работа
-# report печатает, согласован ли итог. Как запускать и что сверить — README.md.
+# report печатает, согласован ли итог, и рендерит документ в офлайн-HTML и
+# OpenSpec design.md. Как запускать и что сверить — README.md.
 #
 # Вызовов модели — от шести (возражений нет) до девяти.
 
@@ -39,3 +40,9 @@ jobs:
     steps:
       - id: echo
         run: [sh, -c, 'printf "agreed=%s\n" "${jobs.design.output.agreed}"']
+      # Итог работы design лежит в artifacts/design.json; рендер — тем же
+      # движком, что исполняет прогон (`node "$BURNEX_BIN"`, а не голый burnex).
+      - id: html
+        run: [sh, -c, 'node "$BURNEX_BIN" render design "$BURNEX_ARTIFACTS/design.json" --format html --out "$BURNEX_ARTIFACTS/design.html"']
+      - id: design-md
+        run: [sh, -c, 'node "$BURNEX_BIN" render design "$BURNEX_ARTIFACTS/design.json" --format openspec --out "$BURNEX_ARTIFACTS/design.md"']

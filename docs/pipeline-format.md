@@ -2216,6 +2216,34 @@ source, decisions }]`, `risks[{ risk, mitigation }]`, `open_questions`.
 получает в каждом ходе задание и переписку заново; журнал отмечает это
 событием `backend.degraded`.
 
+**Витрина.** В деталях прогона шаг `discuss` показывается своей панелью:
+строка фаз (`proposals → draft → objections → defense → document`),
+участники с бэкендом, моделью, расходом и кнопками своих вызовов (открывают
+`output.json` и `stdout.log` хода), вкладки «Document» и «Discussion».
+«Document» — итог с пометками `agreed`, `unresolved` и
+`changed_by_aggregator`, решениями, отклонёнными вариантами, диаграммами
+Mermaid и ссылками скачать HTML и `design.md`. «Discussion» — предложения,
+черновик автора, возражения с весом и исходом и реплики раундов. Пока шаг
+идёт, лента дополняется раз в секунду. Mermaid витрина подгружает с демона
+(`/api/vendor/mermaid.js`) только при показе диаграммы.
+
+**Рендер документа** — команда `burnex render design <файл> --format
+html|openspec [--out <путь>]`. Вход — явный путь к JSON формы
+`burnex:design-doc`: `output.json` шага, файл выхода работы
+`artifacts/<работа>.json` либо любой файл той же формы; поля движка
+необязательны. `html` — один самодостаточный файл без сетевых ссылок: стили и
+Mermaid встроены (около 5,5 МБ при диаграммах, без диаграмм — без скрипта),
+битая диаграмма остаётся исходником с текстом ошибки. `openspec` — Markdown с
+разделами шаблона OpenSpec `design.md` (`Context`, `Decisions`, `Diagrams`,
+`Risks / Trade-offs`, `Open Questions`), диаграммы — блоками ` ```mermaid `.
+Без `--out` результат идёт в stdout. Одинаковый вход даёт одинаковые байты.
+Из пайплайна — обычным шагом `run`:
+
+```yaml
+- id: html
+  run: [sh, -c, 'burnex render design "$BURNEX_ARTIFACTS/design.json" --format html --out "$BURNEX_ARTIFACTS/design.html"']
+```
+
 ### decision
 
 ```yaml
