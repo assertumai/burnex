@@ -52,6 +52,8 @@ export interface LockStep {
   readonly secrets?: readonly string[];
   /** Разрешённая стратегия шага `review` — у шага этого вида. */
   readonly review?: LockReview;
+  /** Разрешённая стратегия шага `discuss` — у шага этого вида. */
+  readonly discuss?: LockDiscuss;
   readonly context: readonly string[];
 }
 
@@ -81,6 +83,18 @@ export interface LockReview {
   readonly defender?: LockReviewParticipant;
 }
 
+/**
+ * Стратегия шага `discuss` в замке: раунды защиты и участники в порядке
+ * стратегии, затем автор и агрегатор. Порядок нужен ленте шага
+ * (`render-design`): цвет участника — по его позиции.
+ */
+export interface LockDiscuss {
+  readonly rounds?: number;
+  readonly participants: readonly LockReviewParticipant[];
+  readonly author?: LockReviewParticipant;
+  readonly aggregator?: LockReviewParticipant;
+}
+
 function reviewParticipant(value: unknown): LockReviewParticipant | undefined {
   const record = asRecord(value);
   const id = asString(record?.id);
@@ -93,6 +107,23 @@ function reviewParticipant(value: unknown): LockReviewParticipant | undefined {
     ...(agent === undefined ? {} : { agent }),
     ...(model === undefined ? {} : { model }),
     ...(focus === undefined ? {} : { focus }),
+  };
+}
+
+function discussOf(record: Record<string, unknown>): LockDiscuss | undefined {
+  const strategy = asRecord(record.discuss);
+  if (strategy === undefined) return undefined;
+  const rounds = strategy.rounds;
+  const participants = Array.isArray(record.participants)
+    ? record.participants.map(reviewParticipant).filter((entry): entry is LockReviewParticipant => entry !== undefined)
+    : [];
+  const author = reviewParticipant(record.author);
+  const aggregator = reviewParticipant(record.aggregator);
+  return {
+    ...(typeof rounds === 'number' ? { rounds } : {}),
+    participants,
+    ...(author === undefined ? {} : { author }),
+    ...(aggregator === undefined ? {} : { aggregator }),
   };
 }
 
@@ -243,7 +274,8 @@ function toStep(value: unknown): LockStep | undefined {
   // ключ сверх общей части и есть имя плагинного вида (design.md, решение 3).
   const review = reviewOf(record);
   const isReview = review !== undefined;
-  const isDiscuss = asRecord(record.discuss) !== undefined;
+  const discuss = discussOf(record);
+  const isDiscuss = discuss !== undefined;
   const isBuiltin = scriptPath !== undefined || prompt !== undefined || record.run !== undefined || isReview || isDiscuss;
   const pluginKindName = isBuiltin ? undefined : pluginKindKey(record);
 
@@ -276,6 +308,7 @@ function toStep(value: unknown): LockStep | undefined {
     ...(pluginKindName === undefined ? {} : { pluginKindName, pluginFields: record[pluginKindName] }),
     ...(secretNames === undefined ? {} : { secrets: secretNames }),
     ...(review === undefined ? {} : { review }),
+    ...(discuss === undefined ? {} : { discuss }),
     context: contextLabels(record.context),
   };
 }

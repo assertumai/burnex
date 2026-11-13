@@ -1,16 +1,20 @@
 import { existsSync } from 'node:fs';
+import type { IncomingMessage, ServerResponse } from 'node:http';
+import { join } from 'node:path';
 
 import { z } from 'zod';
 
 import { resolveConfig } from '../../../pipeline/config/resolve.js';
-import { runPaths } from '../../../pipeline/run/journal/paths.js';
-import { isRunAlive, listProjects } from '../../../pipeline/run/journal/reader.js';
+import { runPaths, type RunPaths } from '../../../pipeline/run/journal/paths.js';
+import { findStepDir, isRunAlive, listProjects } from '../../../pipeline/run/journal/reader.js';
+import { DESIGN_FORMATS, isDesignFormat, parseDesignDocument, renderDesign } from '../../../pipeline/render/designDoc.js';
 import { planResume, readSourceRun } from '../../../pipeline/run/resumePlan.js';
 import { isBurnexError } from '../../../../kernel/errors.js';
 import { INVALID, readBody, readNonNegativeInt, sendJson } from '../../daemon/http.js';
-import { readJournalFile } from '../../file.js';
+import { readJournalFile, readJournalJson } from '../../file.js';
 import { parseRunAddress, snapshotOrRecord } from '../../runAddress.js';
 import { isSafeSegment } from '../../routes.js';
+import { readDiscussFeed } from '../../discussFeed.js';
 import { readReviewFeed } from '../../reviewFeed.js';
 import { readStepOutput } from '../../stepOutput.js';
 import { screenRow, type ApiHandler } from '../registry.js';
@@ -157,12 +161,20 @@ const handleStepOutput: ApiHandler = (req, res, env) => {
   }
 };
 
+interface StepAddress {
+  readonly url: URL;
+  readonly paths: RunPaths;
+  readonly jobId: string;
+  readonly stepId: string;
+  readonly query: { readonly pass?: number };
+}
+
 /**
- * Лента шага `review` (`review-defend`, design.md, решение 8): модель,
- * собранная из журнала шага. Витрина опрашивает её, пока `done` не настал, —
- * тем же приёмом, что вывод шага.
+ * Адрес шага прогона из запроса (`run`, `job`, `step`, `pass`) — общий для
+ * лент шагов и рендера документа. Неверный адрес получает ответ здесь же,
+ * и тогда возвращается `undefined`.
  */
-const handleReviewFeed: ApiHandler = (req, res, env) => {
+function stepAddress(req: IncomingMessage, res: ServerResponse, runsRoot: string): StepAddress | undefined {
   const url = new URL(req.url ?? '/', 'http://internal');
   const parsed = parseRunAddress(url.searchParams.get('run'));
   const jobId = url.searchParams.get('job');
@@ -171,33 +183,87 @@ const handleReviewFeed: ApiHandler = (req, res, env) => {
     sendJson(res, 400, {
       error: 'Parameters run=<project>/<run>, job and step (single layout segments) are required',
     });
-    return;
+    return undefined;
   }
 
-  const paths = runPaths(env.runsRoot, parsed.key, parsed.runId);
+  const paths = runPaths(runsRoot, parsed.key, parsed.runId);
   if (!existsSync(paths.dir)) {
     sendJson(res, 404, { error: `Run ${parsed.runId} not found` });
-    return;
+    return undefined;
   }
 
   const pass = readNonNegativeInt(url, 'pass');
   if (pass === INVALID || pass === 0) {
     sendJson(res, 400, { error: 'pass must be a positive integer' });
+    return undefined;
+  }
+  return { url, paths, jobId, stepId, query: pass === undefined ? {} : { pass } };
+}
+
+/**
+ * Лента шага с несколькими агентами — `review` (`review-defend`, design.md,
+ * решение 8) или `discuss` (`render-design`, решение 7): модель, собранная
+ * из журнала шага. Витрина опрашивает её, пока `done` не настал, — тем же
+ * приёмом, что вывод шага.
+ */
+function feedHandler(what: string, read: (address: StepAddress) => unknown): ApiHandler {
+  return (req, res, env) => {
+    const address = stepAddress(req, res, env.runsRoot);
+    if (address === undefined) return;
+    try {
+      const feed = read(address);
+      if (feed === undefined) {
+        sendJson(res, 404, { error: `Step ${address.jobId}/${address.stepId} has no ${what} record` });
+        return;
+      }
+      sendJson(res, 200, feed);
+    } catch (error) {
+      // Та же гонка с удалением прогона, что у `handleStepOutput`.
+      const message = isBurnexError(error) ? error.message : `The ${what} feed cannot be read`;
+      sendJson(res, isBurnexError(error) ? 400 : 404, { error: message });
+    }
+  };
+}
+
+const handleReviewFeed = feedHandler('review', ({ paths, jobId, stepId, query }) => readReviewFeed(paths, jobId, stepId, query));
+const handleDiscussFeed = feedHandler('discuss', ({ paths, jobId, stepId, query }) => readDiscussFeed(paths, jobId, stepId, query));
+
+/**
+ * `GET /api/design-render`: итог шага в офлайн-HTML или OpenSpec `design.md`
+ * тем же рендером, что у `burnex render design` (`render-design`,
+ * design.md, решение 7). Ответ — вложение для скачивания.
+ */
+const handleDesignRender: ApiHandler = (req, res, env) => {
+  const address = stepAddress(req, res, env.runsRoot);
+  if (address === undefined) return;
+  const format = address.url.searchParams.get('format') ?? '';
+  if (!isDesignFormat(format)) {
+    sendJson(res, 400, { error: `format must be one of: ${DESIGN_FORMATS.join(', ')}` });
     return;
   }
-
-  try {
-    const feed = readReviewFeed(paths, jobId, stepId, pass === undefined ? {} : { pass });
-    if (feed === undefined) {
-      sendJson(res, 404, { error: `Step ${jobId}/${stepId} has no review record` });
-      return;
-    }
-    sendJson(res, 200, feed);
-  } catch (error) {
-    // Та же гонка с удалением прогона, что у `handleStepOutput`.
-    const message = isBurnexError(error) ? error.message : 'Review feed cannot be read';
-    sendJson(res, isBurnexError(error) ? 400 : 404, { error: message });
+  const dir = findStepDir(address.paths, address.jobId, address.stepId, undefined, undefined, address.query.pass);
+  const output = dir === undefined ? undefined : readJournalJson(join(dir, 'output.json'));
+  if (output === undefined) {
+    sendJson(res, 404, { error: `Step ${address.jobId}/${address.stepId} has no output` });
+    return;
   }
+  let text: string;
+  try {
+    text = renderDesign(parseDesignDocument(output), format);
+  } catch (error) {
+    if (!isBurnexError(error)) throw error;
+    const at = error.at === undefined ? '' : ` (${error.at})`;
+    sendJson(res, 422, { error: `${error.message}${at}` });
+    return;
+  }
+  const filename = `${address.jobId}-${address.stepId}${format === 'html' ? '.html' : '.design.md'}`;
+  res.writeHead(200, {
+    'content-type': format === 'html' ? 'text/html; charset=utf-8' : 'text/markdown; charset=utf-8',
+    'content-length': Buffer.byteLength(text),
+    'content-disposition': `attachment; filename="${filename}"`,
+    'cache-control': 'no-store',
+  });
+  res.end(text);
 };
 
 const ResumeBodySchema = z.object({ run: z.string().min(1), from: z.string().min(1) }).strict();
@@ -278,4 +344,6 @@ export const row = screenRow(declaration.id, ['screens', 'api'], (ctx) => {
   ctx.api.register('GET', '/api/file', handleFile);
   ctx.api.register('GET', '/api/step-output', handleStepOutput);
   ctx.api.register('GET', '/api/review-feed', handleReviewFeed);
+  ctx.api.register('GET', '/api/discuss-feed', handleDiscussFeed);
+  ctx.api.register('GET', '/api/design-render', handleDesignRender);
 });
