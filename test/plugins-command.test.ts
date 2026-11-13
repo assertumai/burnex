@@ -239,7 +239,7 @@ describe('plugin-tree: отказ загрузки не заслоняет де�
     const lines = outcome.stdout.split('\n');
     // Вклады соседних строк по-прежнему называются — отказ одной строки не
     // теряет их (`plugin-introspection`, «Осмотр после отказа загрузки»); за
-    // строкой `pipeline` и восемью строками-потребителями идёт явная строка
+    // строкой `pipeline` и девятью строками-потребителями идёт явная строка
     // `./plugins/нет.mjs` (отказавшая, останавливает применение — строка не
     // каталожная), а следом — вторая явная строка и все 25 строк команд:
     // применение до них не дошло, каждая напечатана «не загружалась».
@@ -261,9 +261,11 @@ describe('plugin-tree: отказ загрузки не заслоняет де�
     assert.match(lines[20] ?? '', /действует/);
     assert.equal(lines[22], '    вклады: steps: review');
     assert.match(lines[23] ?? '', /действует/);
-    assert.equal(lines[25], '    вклады: steps: decision');
-    assert.match(lines[26] ?? '', /действует/); // secret-providers
-    assert.equal(lines[28], '    вклады: secretProviders: env-file, keychain');
+    assert.equal(lines[25], '    вклады: steps: discuss');
+    assert.match(lines[26] ?? '', /действует/);
+    assert.equal(lines[28], '    вклады: steps: decision');
+    assert.match(lines[29] ?? '', /действует/); // secret-providers
+    assert.equal(lines[31], '    вклады: secretProviders: env-file, keychain');
 
     // Семя дерева называет строки команд наравне со строками движка
     // (`resolveConfig`, `reservedRowIds`) — они стоят в дереве раньше явных

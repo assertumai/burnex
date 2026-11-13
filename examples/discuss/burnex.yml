@@ -1,0 +1,41 @@
+# Шаг discuss: два участника на разных бэкендах (Codex и Claude) независимо
+# предлагают подход, автор сводит черновик с точками решения и диаграммой
+# Mermaid, участники возражают по точкам, автор защищает черновик, агрегатор
+# выносит проектный документ по встроенной схеме burnex:design-doc. Работа
+# report печатает, согласован ли итог. Как запускать и что сверить — README.md.
+#
+# Вызовов модели — от шести (возражений нет) до девяти.
+
+version: 1
+kind: pipeline
+name: discuss-example
+
+workspace:
+  mode: cwd
+
+budget:
+  tokens: 1500k
+  wallclock: 30m
+
+jobs:
+  design:
+    description: Обсуждение подхода к ограничению частоты входа
+    output: { from: discuss }
+    steps:
+      - id: discuss
+        discuss: ./strategy.yml
+        prompt: |
+          Спроектируй ограничение частоты попыток входа для небольшого HTTP-сервиса на Node.js:
+          не больше 5 неудачных попыток за 15 минут на пару «пользователь + IP», после чего вход
+          блокируется до конца окна. Сервис запускается в 2–4 экземплярах за балансировщиком,
+          общего хранилища, кроме PostgreSQL, нет. Кода в каталоге нет — нужно решение, а не реализация.
+        output_schema: burnex:design-doc
+        permissions: { allow: [Read] }
+        timeout: 15m
+        budget: { tokens: 1200k }
+
+  report:
+    needs: [design]
+    steps:
+      - id: echo
+        run: [sh, -c, 'printf "agreed=%s\n" "${jobs.design.output.agreed}"']

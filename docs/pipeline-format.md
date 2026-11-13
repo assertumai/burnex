@@ -2054,6 +2054,134 @@ Claude форкает `--resume <id> --fork-session --session-id <новый>`, 
 Бэкенд без сессий (`sessions: false`) прежних ходов не помнит: свежий
 защитник и ревьюер получают в каждом ходе задание и всю переписку заново.
 
+### discuss
+
+Обсуждение фичи несколькими агентами до реализации: шаг объявляет задачу и
+форму итога, а **стратегия обсуждения** — кто предлагает подход, кто сводит
+черновик и кто выносит итог.
+
+```yaml
+steps:
+  - id: design
+    discuss: design-panel                   # имя стратегии либо ./путь/к/файлу.yml
+    prompt: file:../prompts/feature.md
+    output_schema: burnex:design-doc        # встроенная схема проектного документа или своя
+    permissions: { enforce: strict, allow: [Read, Grep, Glob] }
+    expect:
+      - judge: "Каждое требование задачи покрыто решением или открытым вопросом"
+```
+
+Обязательны `discuss`, `prompt` и `output_schema`; допустимы `permissions`,
+`context`, `context_inherit`, `context_exclude`, `expect`, `timeout`,
+`attempts`, `budget`. Ключи `agent`, `model`, `model_tier`, `effort`,
+`session` и `implementer` шаг отклоняет: участников объявляет стратегия, их
+сессии живут только внутри шага. Выход шага — документ агрегатора, так что
+`output.from` и `${jobs.*.output.*}` работают как у агентского шага.
+
+Стратегия — документ `kind: discussion-strategy`
+(`schema/discussion-strategy.schema.json`), слои те же, что у стратегий ревью:
+явный путь, затем `.burnex/discussion-strategies/<имя>.yml` проекта, затем
+`~/.burnex/discussion-strategies/<имя>.yml`. Найденная по имени обязана
+объявлять тот же `name`.
+
+```yaml
+version: 1
+kind: discussion-strategy
+name: design-panel
+profiles:                       # локальные профили, как у стратегии ревью
+  deep: { backend: claude, model_tier: deep }
+participants:                   # независимые предложения и возражения к черновику
+  - id: pragmatist
+    agent: codex
+    focus: "Минимум новых сущностей"
+  - id: skeptic
+    agent: deep
+    focus: file:./skeptic.md
+author:                         # сводит черновик и защищает его; без блока — профиль default
+  agent: deep
+  prompt: Своди честно, отклонённые варианты не теряй.
+aggregator:                     # решает спорное и пишет итог; без блока — профиль default
+  agent: claude
+  model_tier: deep
+rounds: 1                       # раундов защиты черновика, 1–5, по умолчанию 1
+```
+
+Незнакомое поле, `model` рядом с `model_tier`, повторный `id`, `id` участника
+`author` или `aggregator`, `rounds` вне диапазона — ошибка разбора с путём
+ключа. `step_agents.<p>.<работа>.<шаг>` выбирает агента агрегатору,
+`…/<участник>` — участнику, `…/author` — автору.
+
+**Фазы.**
+
+1. **Предложения.** Участники параллельно (не больше `limits.concurrency`) и
+   независимо — друг друга не видят — получают задание шага, контекст шага и
+   свой `focus` и отвечают по `schema/discuss-proposal.schema.json`: суть,
+   подход, ключевые решения, риски, диаграммы Mermaid. Сбой части участников
+   терпим: автор и агрегатор получают их id и причины. Если не дошло ни одного
+   предложения, шаг проваливается без автора.
+2. **Черновик.** Автор — отдельная роль, своих предложений не подаёт — сводит
+   предложения в один черновик (`schema/discuss-draft.schema.json`): точки
+   решения `d1, d2, …` с вариантами участников (`by` — id участника, давшего
+   предложение, либо `author`), выбором и обоснованием, диаграммы Mermaid
+   `g1, g2, …` со ссылками на решения, риски. Схема проверки хода ограничивает
+   `by`; сквозную нумерацию и ссылки диаграмм проверяет движок после хода и при
+   нарушении повторяет ход один раз в той же сессии с перечнем нарушений.
+   Негодный черновик проваливает шаг.
+3. **Возражения.** Каждый участник, давший предложение, получает черновик в
+   своей сессии (своё предложение он уже помнит) и возражает по точкам
+   (`schema/discuss-objections.schema.json`): `target` — id решения или
+   диаграммы, `weight` — `blocking` или `preference`; у `blocking`
+   обязательны `breaks` (что сломается) и `alternative`. Id возражения —
+   `<участник>.<n>`. Пожелания (`preference`) идут агрегатору заметками, без
+   спора.
+4. **Защита черновика** — общие раунды, как у режима `defend` шага `review`:
+   автор одним ходом отвечает на открытые блокирующие возражения всех
+   участников (`schema/discuss-defense.schema.json`: `accept`, `dispute`,
+   `clarify`; у `accept` обязательна правка `change { choice, rationale }`),
+   затем участники параллельно — `maintain` или `withdraw`
+   (`schema/discuss-rebuttal.schema.json`). Черновик между раундами не
+   меняется: принятая правка живёт в `change`. Открытое после `rounds` —
+   `contested`; сбой автора делает `contested` все открытые, сбой участника —
+   только его. Если блокирующих нет, защиты нет.
+5. **Итог.** Агрегатор получает черновик, каждое блокирующее возражение со
+   статусом, перепиской и правкой, пожелания и участников без предложения и
+   пишет документ по `output_schema` шага.
+
+**Поля движка.** Схему шага разбор дополняет полями `agreed` (boolean),
+`unresolved` (`[{ decision, reason }]`) и `changed_by_aggregator` (id
+решений) — в `properties` и `required` корня, так что схема с
+`additionalProperties: false` остаётся рабочей. Корень схемы, не описывающий
+объект, и схема, сама объявляющая одно из этих полей, — отказ разбора у
+`output_schema`. Поверх схемы движок требует: при `agreed: true` список
+`unresolved` пуст, id в `unresolved[].decision` и `changed_by_aggregator` —
+решения черновика; нарушение — непройденная попытка. Агрегатору запрещено
+сшивать несовместимое: если решение спорной точки затрагивает другие и
+согласованно их не пересобрать, он ставит `agreed: false`. Работа реализации
+может опираться на это поле: `if: ${jobs.design.output.agreed}`.
+
+`burnex:design-doc` (`schema/design-doc.schema.json`) — встроенная схема
+документа: `title`, `summary`, `decisions[{ id, question, choice, rationale,
+rejected[{ by, summary, reason }] }]`, `diagrams[{ id, title, kind: mermaid,
+source, decisions }]`, `risks[{ risk, mitigation }]`, `open_questions`.
+
+Попытки шага (`attempts`) повторяют только агрегатора с теми же фазами 1–4.
+`expect` шага, в том числе `judge`, проверяет его выход. Бюджет шага общий и
+проверяется перед каждым ходом и перед каждой фазой.
+
+**Журнал** — `discuss.ndjson` в каталоге шага: строки `proposal` (участник и
+исход), `draft`, `objection`, реплики защиты `message` (форма A2A, `from` —
+`author` либо участник), `settled` и последней — `outcome` со счётом
+`accepted`, `withdrawn`, `contested` и `preference`. Каталоги ходов:
+`participants/<участник>/` (предложение), `…/objections/`,
+`…/rounds/<r>/`, `participants/author/draft/` (и `draft/retry/`),
+`participants/author/rounds/<r>/`, `participants/aggregator/` — там же
+`output.schema.json`, схема итога с полями движка. События: `discuss.phase`
+(фаза и граница), `discuss.participant.started|finished` (фаза и раунд),
+`discuss.message`, `discuss.settled`, `discuss.finished` (счёт и `agreed`).
+Расход разложен по участникам, `author` и `aggregator`. Бэкенд без сессий
+получает в каждом ходе задание и переписку заново; журнал отмечает это
+событием `backend.degraded`.
+
 ### decision
 
 ```yaml

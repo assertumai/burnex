@@ -1,0 +1,21 @@
+version: 1
+kind: discussion-strategy
+name: strategy
+description: Прагматик на Codex и скептик на Claude предлагают подход; автор и агрегатор — Claude
+participants:
+  - id: pragmatist
+    agent: codex
+    model_tier: balance
+    focus: Минимум новых сущностей, самое простое решение, которое выдержит требования
+  - id: skeptic
+    agent: claude
+    model_tier: balance
+    focus: Отказы, конкурентный доступ, обратная совместимость и то, что сломается первым
+author:
+  agent: claude
+  model_tier: balance
+  prompt: Своди честно; отклонённые варианты участников не теряй.
+aggregator:
+  agent: claude
+  model_tier: balance
+rounds: 1
