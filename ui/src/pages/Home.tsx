@@ -2,6 +2,7 @@ import type { JSX, ReactNode } from 'react';
 
 import { declaration as agentsDeclaration } from '../../../src/parts/ui/screens/agents/declaration.ts';
 import { declaration as reviewStrategiesDeclaration } from '../../../src/parts/ui/screens/review-strategies/declaration.ts';
+import { declaration as discussionStrategiesDeclaration } from '../../../src/parts/ui/screens/discussion-strategies/declaration.ts';
 import { declaration as backlogDeclaration } from '../../../src/parts/ui/screens/backlog/declaration.ts';
 import { declaration as cleanupDeclaration } from '../../../src/parts/ui/screens/cleanup/declaration.ts';
 import { declaration as decisionsDeclaration } from '../../../src/parts/ui/screens/decisions/declaration.ts';
@@ -170,6 +171,11 @@ export const SECTIONS: readonly SectionGroup[] = [
         target: screenTarget(reviewStrategiesDeclaration.id),
         title: reviewStrategiesDeclaration.title,
         description: 'Who reviews a review: step, with which agent and how the verdict is reached; project and personal strategies.',
+      },
+      {
+        target: screenTarget(discussionStrategiesDeclaration.id),
+        title: discussionStrategiesDeclaration.title,
+        description: 'Who proposes, drafts and decides in a discuss: step, with which agent and how many defense rounds.',
       },
       {
         target: screenTarget(secretsDeclaration.id),

@@ -456,6 +456,8 @@ export interface PipelineStepView {
     readonly layer?: 'project' | 'home' | 'explicit';
     readonly path?: string;
   };
+  /** Стратегия шага `discuss:` — той же формы. */
+  readonly discussStrategy?: PipelineStepView['reviewStrategy'];
 }
 
 export interface PipelineJobView {
@@ -2129,8 +2131,13 @@ export interface ReviewStrategiesOverview {
   readonly generatedAt: string;
 }
 
+/** Стратегии вида по адресу API (`/api/review-strategies`, `/api/discussion-strategies`). */
+export async function fetchStrategies(api: string): Promise<ReviewStrategiesOverview> {
+  return json<ReviewStrategiesOverview>(await fetch(api));
+}
+
 export async function fetchReviewStrategies(): Promise<ReviewStrategiesOverview> {
-  return json<ReviewStrategiesOverview>(await fetch('/api/review-strategies'));
+  return fetchStrategies('/api/review-strategies');
 }
 
 /** Отказ записи стратегии: текст разбора движка и путь ключа для поля формы. */
@@ -2143,13 +2150,15 @@ export class StrategySaveError extends Error {
   }
 }
 
-export async function saveReviewStrategy(request: {
+export interface SaveStrategyRequest {
   readonly layer: StrategyLayer;
   readonly name: string;
   readonly document: Record<string, unknown>;
   readonly create?: boolean;
-}): Promise<void> {
-  const response = await fetch('/api/review-strategies', {
+}
+
+export async function saveStrategy(api: string, request: SaveStrategyRequest): Promise<void> {
+  const response = await fetch(api, {
     method: 'PUT',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify(request),
@@ -2159,7 +2168,15 @@ export async function saveReviewStrategy(request: {
   throw new StrategySaveError(data.error ?? `Daemon responded ${response.status}`, data.at);
 }
 
-export async function deleteReviewStrategy(layer: StrategyLayer, name: string): Promise<void> {
+export async function saveReviewStrategy(request: SaveStrategyRequest): Promise<void> {
+  return saveStrategy('/api/review-strategies', request);
+}
+
+export async function deleteStrategy(api: string, layer: StrategyLayer, name: string): Promise<void> {
   const query = new URLSearchParams({ layer, name });
-  await json<{ ok: true }>(await fetch(`/api/review-strategies?${query.toString()}`, { method: 'DELETE' }));
+  await json<{ ok: true }>(await fetch(`${api}?${query.toString()}`, { method: 'DELETE' }));
+}
+
+export async function deleteReviewStrategy(layer: StrategyLayer, name: string): Promise<void> {
+  return deleteStrategy('/api/review-strategies', layer, name);
 }
