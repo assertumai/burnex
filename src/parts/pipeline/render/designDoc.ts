@@ -8,6 +8,7 @@ import type { ErrorObject, ValidateFunction } from 'ajv';
 import { BurnexError } from '../../../kernel/errors.js';
 import { findPackageRoot } from '../../../kernel/packageRoot.js';
 import { packagedSchemaPath } from '../domain/package-schema.js';
+import { repairMermaidLabels } from './mermaidRepair.js';
 
 /**
  * Рендеры проектного документа `burnex:design-doc` (`render-design`,
@@ -224,6 +225,7 @@ pre.mermaid { text-align: center; background: transparent; border: none; white-s
 `;
 
 const MERMAID_BOOT = `
+var repairMermaidLabels = ${repairMermaidLabels.toString()};
 (async function () {
   var dark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
   mermaid.initialize({ startOnLoad: false, securityLevel: 'strict', theme: dark ? 'dark' : 'default' });
@@ -233,6 +235,15 @@ const MERMAID_BOOT = `
     try {
       await mermaid.parse(block.textContent);
     } catch (error) {
+      // Частая ошибка агентов — подпись \`A[/путь]\` без кавычек: чиним и пробуем снова.
+      var repaired = repairMermaidLabels(block.textContent);
+      if (repaired !== block.textContent) {
+        try {
+          await mermaid.parse(repaired);
+          block.textContent = repaired;
+          continue;
+        } catch (ignored) {}
+      }
       block.classList.remove('mermaid');
       var message = document.createElement('p');
       message.className = 'diagram-error';

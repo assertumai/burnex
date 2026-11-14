@@ -1,6 +1,8 @@
 import { useEffect, useId, useState, type JSX } from 'react';
 import type { Mermaid } from 'mermaid';
 
+import { repairMermaidLabels } from '../../../src/parts/pipeline/render/mermaidRepair.ts';
+
 /**
  * Диаграмма Mermaid в витрине (`render-design`, design.md, решение 8).
  *
@@ -56,7 +58,21 @@ export function MermaidDiagram({ source, title }: { readonly source: string; rea
     setSvg(undefined);
     setError(undefined);
     loadMermaid()
-      .then((mermaid) => mermaid.render(id, source))
+      .then(async (mermaid) => {
+        try {
+          return await mermaid.render(id, source);
+        } catch (failure) {
+          // Частая ошибка агентов — подпись `A[/путь]` без кавычек: чиним и
+          // пробуем снова; не помогло — показываем исходную ошибку.
+          const repaired = repairMermaidLabels(source);
+          if (repaired === source) throw failure;
+          try {
+            return await mermaid.render(`${id}r`, repaired);
+          } catch {
+            throw failure;
+          }
+        }
+      })
       .then((result) => {
         if (alive) setSvg(result.svg);
       })

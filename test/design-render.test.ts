@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { describe, it } from 'node:test';
 
 import { tempDir } from './tmp.js';
+import { repairMermaidLabels } from '../src/parts/pipeline/render/mermaidRepair.js';
 import { parseArgs } from '../src/kernel/cli/args.js';
 import { BurnexError } from '../src/kernel/errors.js';
 import { row, runRenderCommand } from '../src/parts/pipeline/commands/render.js';
@@ -140,3 +141,23 @@ describe('design-render: команда burnex render', () => {
     assert.throws(run(['design', 'bad.json', '--format', 'html']), /не разбирается как JSON/);
   });
 });
+
+describe('design-render: починка подписей Mermaid', () => {
+  it('подпись с / или \\ без закрытия фигуры берётся в кавычки, настоящие фигуры и прочее не трогаются', () => {
+    assert.equal(
+      repairMermaidLabels('  TS -->|git show| SC[/burnex/schema/x.y.z/*.json]\n  SC --> A'),
+      '  TS -->|git show| SC["/burnex/schema/x.y.z/*.json"]\n  SC --> A',
+    );
+    assert.equal(repairMermaidLabels('X[\\path "q"]'), 'X["\\path #quot;q#quot;"]');
+    for (const intact of ['A[/trap/]', 'A[\\trap\\]', 'A[/par\\]', 'A["/quoted"]', 'A[text/with/slash]', 'A[(db)]']) {
+      assert.equal(repairMermaidLabels(intact), intact);
+    }
+  });
+
+  it('офлайн-HTML встраивает починку и пробует её после отказа разбора', () => {
+    const html = renderDesignHtml(doc(), 'window.mermaid = {};');
+    assert.match(html, /var repairMermaidLabels = function repairMermaidLabels\(source\)/);
+    assert.match(html, /await mermaid\.parse\(repaired\)/);
+  });
+});
+
