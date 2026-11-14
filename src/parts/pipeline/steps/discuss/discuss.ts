@@ -322,6 +322,17 @@ export function participantTask(step: DiscussStep, participant: ReviewParticipan
   return joinParts([step.prompt, participant.focus === undefined ? undefined : `## Твой фокус\n\n${participant.focus}`]);
 }
 
+/**
+ * Правило подписей Mermaid для всех, кто пишет диаграммы. Без кавычек
+ * Mermaid читает `/`, `\\`, скобки и прочие знаки в начале или внутри текста
+ * узла как разметку формы (`A[/путь]` — трапеция без закрытия), и диаграмма
+ * не отрисуется ни в витрине, ни в HTML. Синтаксис движок не проверяет
+ * (design.md `discuss-step`, риски) — правило в промпте.
+ */
+export const MERMAID_LABEL_RULE =
+  'В Mermaid текст каждого узла и подпись ребра бери в двойные кавычки: `A["/burnex/schema/*.json"]`, `A -->|"push в main"| B`. ' +
+  'Без кавычек символы `/ \\ ( ) [ ] { } < > | # ;` Mermaid читает как разметку и диаграмму не рисует; кавычку внутри текста пиши `#quot;`.';
+
 const PROPOSAL_FORM = [
   '## Форма ответа',
   '',
@@ -329,6 +340,7 @@ const PROPOSAL_FORM = [
   'Отдай предложение по схеме: `summary` — суть в двух-трёх фразах, `approach` — как устроить реализацию,',
   '`decisions` — ключевые решения `{ question, choice, rationale }`, `risks` — риски,',
   '`diagrams` — диаграммы Mermaid `{ title, kind: "mermaid", source }`, если они проясняют подход (пустой список — тоже ответ).',
+  MERMAID_LABEL_RULE,
   'Файлы не правь: шаг discuss — про обсуждение, реализацию сделают следующие шаги.',
 ].join('\n');
 
@@ -358,6 +370,7 @@ const DRAFT_FORM = [
   '  он, а не остальные. Отклонённые варианты не теряй: по ним участники будут возражать.',
   '- Несовместимые архитектуры не смешивай: корневая точка выбирает одну, другая уходит в отклонённые варианты.',
   '- `diagrams` — диаграммы Mermaid `g1, g2, …` по порядку, `decisions` — id решений, которые диаграмма показывает.',
+  `  ${MERMAID_LABEL_RULE}`,
   '- `risks` — риски с мерами.',
   'Ответь черновиком по схеме. Файлы не правь.',
 ].join('\n');
@@ -590,6 +603,7 @@ export function aggregatePrompt(options: {
       'поставь `agreed: false` и перечисли несогласованное в `unresolved` (`decision` — id решения черновика, `reason`).',
       'Решения, которые ты изменил, хотя их никто не оспаривал и автор не принимал правку, перечисли в `changed_by_aggregator`.',
       '`agreed: true` — только если несогласованного нет. Диаграммы — Mermaid, со ссылками на id решений. Файлы не правь.',
+      MERMAID_LABEL_RULE,
     ].join('\n'),
   ]);
 }

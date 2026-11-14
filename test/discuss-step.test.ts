@@ -13,7 +13,7 @@ import { parseDiscussionStrategyFile } from '../src/parts/pipeline/document/disc
 import { lintPipeline } from '../src/parts/pipeline/domain/lint.js';
 import { findStepDir, readEvents, readUsage } from '../src/parts/pipeline/run/journal/reader.js';
 import { runPipeline, type RunResult } from '../src/parts/pipeline/run/runner.js';
-import { draftProblems, withEngineFields } from '../src/parts/pipeline/steps/discuss/discuss.js';
+import { draftProblems, MERMAID_LABEL_RULE, withEngineFields } from '../src/parts/pipeline/steps/discuss/discuss.js';
 import { gitCommit, gitInit, makeProject, testBaseEnv, type Project } from './helpers.js';
 import { tempDir } from './tmp.js';
 
@@ -324,6 +324,9 @@ describe('discuss-step: фазы', () => {
     const draftPrompt = calls(auth, 'draft')[0]?.prompt ?? '';
     assert.match(draftPrompt, /— Участник `pragmatist` \(p-a\), фокус: минимум сущностей\n\nпредложение pragmatist/);
     assert.match(draftPrompt, /## Указания стратегии\n\nСводи честно\./);
+    // Правило кавычек Mermaid — у всех, кто пишет диаграммы: без него `A[/путь]` ломает отрисовку.
+    assert.ok((calls(pa, 'proposal')[0]?.prompt ?? '').includes(MERMAID_LABEL_RULE));
+    assert.ok(draftPrompt.includes(MERMAID_LABEL_RULE));
     // Возражения — в сессии участника, без повторного предложения.
     const objections = calls(pa, 'objections')[0];
     assert.equal(objections?.resumeSession, true);
@@ -339,6 +342,7 @@ describe('discuss-step: фазы', () => {
     assert.equal(calls(pa, 'rebuttal').length + calls(pb, 'rebuttal').length, 0, 'принятое возражение ответа участника не требует');
     // Агрегатор: черновик, правка автора, пожелание.
     const aggPrompt = calls(agg, 'aggregate')[0]?.prompt ?? '';
+    assert.ok(aggPrompt.includes(MERMAID_LABEL_RULE));
     assert.match(aggPrompt, /Статус: accepted/);
     assert.match(aggPrompt, /Правка: \*\*sqlite\*\* — конкурентная запись/);
     assert.match(aggPrompt, /## Пожелания участников\n\n- skeptic\.1 \(d2\): лучше yaml — yaml/);
