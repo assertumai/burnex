@@ -1,3 +1,5 @@
+import { probeAppServer } from './appServerCapabilities.js';
+import { connectAppServer } from './appServerProtocol.js';
 import { BurnexError } from '../../../plugin/index.js';
 import { effectivePermissions } from '../../pipeline/surface.js';
 import type {
@@ -103,6 +105,26 @@ export function createCodexAdapter(config: BackendConfig): BackendAdapter {
       }
 
       // `-` — промпт со stdin: контекст легко перерастает предел аргументов.
+      const requested = config.env?.BURNEX_CODEX_TRANSPORT;
+      if (requested === 'app-server' || requested === 'auto') {
+        const capability = probeAppServer(config.command, config.env);
+        if (capability.supported) {
+          // Reuse all config overrides, including required MCP and sandbox. Exec-only
+          // options are carried by RPC (model, outputSchema) or process cwd.
+          const rpcCommand = [config.command, 'app-server', '--ignore-user-config'];
+          for (let i = 0; i < command.length; i++) {
+            if (command[i] === '-c') rpcCommand.push('-c', command[++i]!);
+          }
+          return { command: rpcCommand, stdin: '', env: config.env, transport: 'app-server-stdio',
+            diagnostic: `${capability.version}: ${capability.reason}`,
+            connect: (channel) => connectAppServer({ ...invocation,
+              ...(model === undefined ? {} : { model }) }, channel) };
+        }
+        if (requested === 'app-server') throw new BurnexError(`Codex app-server unavailable: ${capability.version}: ${capability.reason}`);
+        command.push('-');
+        return { command, stdin: invocation.prompt, env: config.env, transport: 'exec',
+          diagnostic: `${capability.version}: fallback: ${capability.reason}` };
+      }
       command.push('-');
       return { command, stdin: invocation.prompt, env: config.env };
     },
@@ -131,7 +153,7 @@ export function createCodexAdapter(config: BackendConfig): BackendAdapter {
         case 'item.completed':
           return completedItem(record.item);
         case 'turn.completed':
-          return { kind: 'usage', usage: readUsage(record.usage) };
+          return { kind: 'usage', scope: 'thread', usage: readUsage(record.usage) };
         case 'turn.failed':
           return failure((record.error as Record<string, unknown> | undefined)?.message);
         case 'error':
@@ -275,7 +297,7 @@ function readUsage(raw: unknown): Partial<Usage> {
   const output = num('output_tokens');
 
   return {
-    ...(input === undefined ? {} : { tokens_in: Math.max(0, input - (cached ?? 0)) }),
+    ...(input === undefined ? {} : { tokens_in: Math.max(0, input - (cached ?? 0) - (written ?? 0)) }),
     ...(cached === undefined ? {} : { cache_read: cached }),
     ...(written === undefined ? {} : { cache_write: written }),
     ...(output === undefined ? {} : { tokens_out: output }),

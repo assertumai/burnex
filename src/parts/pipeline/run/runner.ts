@@ -1,3 +1,5 @@
+import { assertAttemptsSafeToResume } from './journal/attemptRecovery.js';
+import { acquireAttemptLease } from './journal/attemptLease.js';
 import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { cpSync, existsSync, readFileSync, readdirSync, rmSync, rmdirSync } from 'node:fs';
@@ -283,6 +285,15 @@ export function resolveExitCode(
 }
 
 export async function runPipeline(options: RunOptions): Promise<RunResult> {
+  if (options.resume !== undefined) assertAttemptsSafeToResume(options.resume.source.paths.jobs,
+    options.resume.plan.steps.find((entry) => entry.decision.kind === 'rerun' || entry.decision.kind === 'continue')?.job);
+  // Fence concurrent resumes of the same source, including library callers.
+  const release = options.resume === undefined ? undefined : acquireAttemptLease(options.resume.source.paths.dir);
+  try { return await runPipelineOwned(options); }
+  finally { release?.(); }
+}
+
+async function runPipelineOwned(options: RunOptions): Promise<RunResult> {
   const { pipeline } = options.expanded;
   const { config } = options;
 
@@ -3644,6 +3655,9 @@ async function runAgentStep(
   // разбор по журналу насчитает усечений больше, чем их было.
   let noteTruncationReported = false;
 
+  let lastUsageRefresh = 0;
+  let usageRefreshTimer: NodeJS.Timeout | undefined;
+  attemptResources.defer('снятие таймера live usage', () => { clearTimeout(usageRefreshTimer); });
   let result: Awaited<ReturnType<typeof executeAgentStep>>;
   try {
     result = await executeAgentStep({
@@ -3864,11 +3878,24 @@ async function runAgentStep(
         return results;
       },
       ...(context.priceCatalog === undefined ? {} : { priceCatalog: context.priceCatalog }),
+      cacheReadWeight: config.backends[step.agent]?.cacheReadWeight ?? 1,
+      onCheckpoint: () => context.refreshStatus(),
       onUsage: (current, attempt) => {
         context.usage.record(job.id, step.id, attempt, current, participant);
         const found = context.usage.check(budgetScopes(), current);
         exceeded ??= found;
         abort.trigger(found);
+        if (Date.now() - lastUsageRefresh >= 1000) {
+          lastUsageRefresh = Date.now();
+          context.refreshStatus();
+        } else if (usageRefreshTimer === undefined) {
+          usageRefreshTimer = setTimeout(() => {
+            usageRefreshTimer = undefined;
+            lastUsageRefresh = Date.now();
+            context.refreshStatus();
+          }, 1000 - (Date.now() - lastUsageRefresh));
+          usageRefreshTimer.unref();
+        }
       },
       onUnparsed: (line) =>
         journal.event({ kind: 'backend.unparsed', job: job.id, step: step.id, line }),

@@ -1853,9 +1853,9 @@ module.exports = function (input) {
   начавшаяся раньше, чем первая его сообщила, заводит свою — у бэкенда, чей
   идентификатор выдаёт движок, этой гонки нет, потому что идентификатор
   известен ещё до запуска. Ограничение неустранимо в этой форме контракта.
-- **Расход Codex не обрывает шаг по ходу.** Поток несёт расход одним итогом
-  на турн, и потолок срабатывает по завершении турна, а не внутри него —
-  раздел «Второй бэкенд».
+- **Расход Codex в exec не обрывает шаг по ходу.** Exec несёт расход одним итогом
+  на турн. Проверенный app-server за feature flag поддерживает live budget —
+  раздел «Codex: live usage и stdio app-server».
 - **Плагин в том же пакете — не настоящая дистанция вытянутой руки.**
   Близость к ядру ограничена механически (`src/parts/backends/codex/**`
   пропускает только встроенные модули Node, `../../plugin/index.js` и
@@ -1864,3 +1864,66 @@ module.exports = function (input) {
   `no-restricted-imports` в `eslint.config.js`), но полностью дистанцию это не
   заменяет: модуль всё равно собирается той же сборкой и живёт в том же
   репозитории, что и ядро.
+
+### Codex: live usage и stdio app-server
+
+По умолчанию остаётся `codex exec --json`. Для проверки нового транспорта:
+
+```yaml
+backends:
+  codex:
+    env:
+      BURNEX_CODEX_TRANSPORT: auto
+```
+
+`auto` выполняет offline capability probe и выбирает app-server только при
+подтверждённых `--ignore-user-config`, JSON Schema usage и RPC-методах
+initialize, thread start/resume/fork/read, turn start/interrupt. В остальных
+случаях используется exec; версия и причина fallback сохраняются в checkpoint.
+`BURNEX_CODEX_TRANSPORT: app-server` требует совместимости и явно отказывает
+при её отсутствии. Неизвестные возможности не считаются поддержанными.
+
+Локальная проверка 14 ноября 2026: `codex-cli 0.169.0` содержит cumulative
+usage schema, но не принимает `app-server --ignore-user-config`. Поэтому
+`auto` этой версии выбирает exec. Полный путь app-server проверяется
+синтетическим CLI из `test/fixtures/codex/app-server.mjs`, без API-вызовов.
+Совместимость с реальным CLI, поддерживающим изоляцию, ещё требует отдельной
+проверки перед включением транспорта по умолчанию.
+
+App-server запускается отдельно для каждой попытки по stdio. Сохраняются
+конфигурационные overrides sandbox, effort и обязательных MCP, политика
+`approvalPolicy: never`; модель и output schema передаются RPC. Неожиданный
+запрос approval/client tool завершает попытку отказом. Отмена сначала
+отправляет `turn/interrupt`, затем по grace period применяется SIGKILL группы.
+Ошибка после начала turn не вызывает повторный запуск через exec.
+
+`LaunchSpec.connect(channel)` — необязательный двусторонний контракт адаптера.
+Соединение принадлежит одному вызову: `receive(line)` принимает строки,
+`interrupt()` запрашивает отмену, `channel.send()` пишет JSONL,
+`channel.emit()` передаёт BackendEvent, `channel.close()` закрывает stdin.
+Синхронный `emit(session_started)` сохраняет session ID до отправки turn/start.
+Обычные `launch()/parseLine()` продолжают работать без connect.
+
+Аддитивное событие `usage` сохраняет прежний смысл. Необязательный
+`scope: 'thread'` указывает cumulative финал exec. Для потоковых показаний
+добавлено `usage_snapshot` с `scope: 'thread'`, `sessionId`, необязательным
+`turnId`, `usage` и `baseline: true` для исходного измерения. `usage` содержит
+взаимоисключающие категории Burnex: обычный input уже без cache read/write.
+Нормализатор вычитает baseline покомпонентно и заменяет итог попытки.
+Повторы не увеличивают итог, регрессия или смена сессии отмечают учёт incomplete.
+`last`, `totalTokens` и размер context window не тарифицируются отдельно;
+reasoning уже входит в output. Цена пересчитывается на всей попытке при каждом
+обновлении. Показания после model reroute не приписываются прежней модели:
+такой turn завершается явным отказом с сохранением последнего измерения.
+
+У новой сессии baseline нулевой, у resume/fork app-server использует replay
+до turn/start. Если replay не пришёл до барьера thread/read, расход остаётся
+неизвестным. Exec использует baseline из реестра сессий текущего runner;
+после перезапуска runner он может отсутствовать. В этом случае исторический
+thread total не записывается как расход новой попытки. Exec по-прежнему
+не сообщает точный usage до turn.completed.
+
+Монотонный рост публичных token counters сам по себе не позволяет отличить
+все возможные synthetic context-count события. Уменьшения/разрывы помечаются
+incomplete; этот транспорт не является гарантией точности биллинга при
+неразличимых пересчётах со стороны CLI.

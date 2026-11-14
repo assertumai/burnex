@@ -1,3 +1,4 @@
+import { attemptFingerprint } from '../../pipeline/run/journal/attemptRecovery.js';
 import { existsSync, statSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
@@ -373,7 +374,7 @@ function fingerprint(
         // Прогон без состояния: он всё равно должен попасть в отпечаток, иначе
         // его появление останется незамеченным до первой записи состояния.
       }
-      parts.push(`${project.key}/${runId}:${mtime}:${existsSync(paths.jobs) ? '1' : '0'}`);
+      parts.push(`${project.key}/${runId}:${mtime}:${existsSync(paths.jobs) ? '1' : '0'}:${attemptFingerprint(paths.jobs)}`);
       for (const key of RUN_DATA_KEYS) {
         try {
           const stat = statSync(runDataPath(paths.dir, key), { bigint: true });

@@ -74,6 +74,8 @@ export type {
   BackendRefusal,
   BackendRefusalClass,
   LaunchSpec,
+  BackendChannel,
+  BackendConnection,
   ModelDiscovery,
   PermissionDenial,
   ProbeOutput,

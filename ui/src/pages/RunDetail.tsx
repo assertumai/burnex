@@ -156,6 +156,15 @@ function Step({
         {attemptModelsNote(step) === undefined ? null : (
           <span className="kind dim">{attemptModelsNote(step)}</span>
         )}
+        {step.activeAttempt === undefined ? null : (
+          <span className="kind dim">
+            {step.activeAttempt.processState} · usage {step.activeAttempt.usage_state}
+            {step.activeAttempt.billable_tokens === undefined ? null : <> · checkpoint {fmtTokens(step.activeAttempt.billable_tokens)}</>}
+            {step.activeAttempt.usage?.cost_usd === undefined ? null : <> · <Cost usd={step.activeAttempt.usage.cost_usd} source={step.activeAttempt.usage.cost_source} asOf={asOf} /></>}
+            {step.activeAttempt.last_usage_at === undefined ? '' : ` · last usage ${step.activeAttempt.last_usage_at}`}
+            {step.activeAttempt.diagnostic === undefined ? '' : ` · ${step.activeAttempt.diagnostic}`}
+          </span>
+        )}
         {step.attempts > 1 ? <span className="kind">attempts: {step.attempts}</span> : null}
         {/*
           Длительность шага и его расход — разные величины: первая говорит,

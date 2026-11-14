@@ -1,3 +1,4 @@
+import { readActiveAttempt, attemptProcessState, type ActiveAttempt } from '../pipeline/run/journal/activeAttempt.js';
 import { existsSync, readdirSync, statSync } from 'node:fs';
 import { join, relative } from 'node:path';
 
@@ -70,6 +71,7 @@ export interface AttemptModel {
 }
 
 export interface StepSnapshot {
+  readonly activeAttempt?: ActiveAttempt & { processState: ReturnType<typeof attemptProcessState> };
   readonly id: string;
   readonly kind: 'agent' | 'run' | 'script' | 'plugin' | 'review' | 'discuss';
   readonly agent?: string;
@@ -374,6 +376,8 @@ function buildStep(
   const dir = findStepDir(paths, jobId, id);
   const kind = definition?.kind ?? record?.kind ?? 'run';
   const breakdown = kind === 'agent' ? contextBreakdown(dir) : undefined;
+  const active = readActiveAttempt(dir);
+  const processState = active === undefined ? undefined : attemptProcessState(active);
   const ownAwaiting = awaiting?.find((item) => item.job === jobId && item.step === id);
 
   return {
@@ -383,7 +387,11 @@ function buildStep(
     ...(record?.reason === undefined ? {} : { reason: record.reason }),
     ...(ownAwaiting === undefined ? {} : { awaiting: ownAwaiting }),
     ...(record?.decision === undefined ? {} : { decision: record.decision }),
-    attempts: record?.attempts.length ?? 0,
+    ...(active === undefined ? {} : { activeAttempt: { ...active, processState: processState!,
+      usage_state: processState === 'lost' || processState === 'unknown' ? 'incomplete' as const : active.usage_state } }),
+    ...(active?.state === 'running' ? { status: processState === 'lost' ? 'failed' as const : 'running' as const,
+      startedAt: active.started_at } : {}),
+    attempts: Math.max(record?.attempts.length ?? 0, active?.attempt ?? 0),
     ...(record?.attempts[0]?.started_at === undefined
       ? {}
       : { startedAt: record.attempts[0].started_at }),
@@ -558,7 +566,7 @@ export function buildSnapshot(paths: RunPaths, projectKeyValue: string): RunSnap
     if (!ids.includes(record.id)) ids.push(record.id);
   }
 
-  const jobs = ids.map((id) =>
+  const jobSnapshots = ids.map((id) =>
     buildJob(
       paths,
       definitions.find((job) => job.id === id),
@@ -571,11 +579,15 @@ export function buildSnapshot(paths: RunPaths, projectKeyValue: string): RunSnap
     ),
   );
 
+  const jobs = jobSnapshots.map((job) => job.status === 'running' &&
+    job.steps.some((step) => step.activeAttempt?.processState === 'lost')
+    ? { ...job, status: 'failed' as const, reason: 'Backend and runner processes lost; inspect checkpoint before resuming' } : job);
+  const lost = jobs.some((job) => job.steps.some((step) => step.activeAttempt?.processState === 'lost'));
   return {
     runId: paths.runId,
     projectKey: projectKeyValue,
     pipeline: status?.pipeline ?? '',
-    ...(status?.status === undefined ? {} : { status: status.status }),
+    ...(status?.status === undefined ? {} : { status: lost && status.status === 'running' ? 'failed' as const : status.status }),
     jobs,
     graph: layoutJobs(
       jobs.map((job) => ({
