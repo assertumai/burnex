@@ -1,7 +1,7 @@
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
 import assert from 'node:assert/strict';
-import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, writeFileSync } from 'node:fs';
 import { hostname } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -108,6 +108,21 @@ describe('offline app-server compatibility and lifecycle', () => {
     assert.match(fallback.diagnostic!, /fallback/);
     assert.throws(() => createCodexAdapter({ ...config, env: { BURNEX_CODEX_TRANSPORT: 'app-server', FAKE_INCOMPATIBLE: '1' } }).launch(invocation), /unavailable/);
     assert.equal(createCodexAdapter({ ...config, env: {} }).launch(invocation).connect, undefined);
+  });
+  it('supports a verified explicit isolated home without inventing a CLI flag', () => {
+    const home = tempDir('codex-isolated-home-');
+    const env = { BURNEX_CODEX_TRANSPORT: 'app-server', BURNEX_CODEX_ISOLATED_HOME: home, FAKE_INCOMPATIBLE: '1' };
+    const capability = probeAppServer(cli, env);
+    assert.equal(capability.supported, true);
+    assert.equal(capability.isolation, 'isolated-home');
+    const launch = createCodexAdapter({ ...config, env }).launch({ cwd: '/unused', prompt: 'test', resumeSession: false });
+    assert.equal(launch.command.includes('--ignore-user-config'), false);
+    assert.equal(launch.env?.CODEX_HOME, realpathSync(home));
+    const exec = createCodexAdapter({ ...config, env: { BURNEX_CODEX_ISOLATED_HOME: home } }).launch({ cwd: '/unused', prompt: 'test', resumeSession: false });
+    assert.equal(exec.connect, undefined);
+    assert.equal(exec.env?.CODEX_HOME, realpathSync(home));
+    writeFileSync(join(home, 'config.toml'), '[mcp_servers.personal]\ncommand="never-start"\n');
+    assert.throws(() => probeAppServer(cli, env), /must not contain config.toml/);
   });
   it('retains sandbox, mandatory MCP, model, effort and output schema routing', () => {
     const launch = createCodexAdapter(config).launch({ cwd: '/unused', prompt: 'test', resumeSession: false,
@@ -327,4 +342,20 @@ it('SIGKILL runner preserves the durable ledger and leaves ownership fenced', as
     assert.equal(attemptProcessState(checkpoint), 'lost');
     assert.throws(() => acquireAttemptLease(dir), /lease exists/);
   } finally { child.kill('SIGKILL'); }
+});
+
+
+it('normalizes sanitized snapshots captured from real Codex 0.169.0', () => {
+  const fixturePath = fileURLToPath(new URL('../../test/fixtures/codex/app-server-0.169.0-smoke.json', import.meta.url));
+  const fixture = JSON.parse(readFileSync(fixturePath, 'utf8')) as { scenarios: Array<{
+    mode: string; baseline: Partial<Usage>; snapshots: Array<Partial<Usage>>; expectedAttempt: Partial<Usage>;
+  }> };
+  for (const scenario of fixture.scenarios) {
+    const ledger = new UsageNormalizer();
+    ledger.accept({ kind: 'usage_snapshot', scope: 'thread', sessionId: scenario.mode, baseline: true, usage: scenario.baseline });
+    let actual: Partial<Usage> | undefined;
+    for (const usage of scenario.snapshots) actual = ledger.accept({ kind: 'usage_snapshot', scope: 'thread', sessionId: scenario.mode, usage }) ?? actual;
+    assert.deepEqual(actual, scenario.expectedAttempt, scenario.mode);
+    assert.equal(ledger.uncertain, false, scenario.mode);
+  }
 });

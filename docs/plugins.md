@@ -1876,19 +1876,51 @@ backends:
       BURNEX_CODEX_TRANSPORT: auto
 ```
 
-`auto` выполняет offline capability probe и выбирает app-server только при
-подтверждённых `--ignore-user-config`, JSON Schema usage и RPC-методах
-initialize, thread start/resume/fork/read, turn start/interrupt. В остальных
-случаях используется exec; версия и причина fallback сохраняются в checkpoint.
-`BURNEX_CODEX_TRANSPORT: app-server` требует совместимости и явно отказывает
-при её отсутствии. Неизвестные возможности не считаются поддержанными.
+`auto` выполняет offline capability probe и выбирает app-server при
+подтверждённой JSON Schema usage, RPC-методах initialize, thread
+start/resume/fork/read, turn start/interrupt и одном из способов изоляции:
+нативный `--ignore-user-config` либо явно заданный отдельный Codex home.
+В остальных случаях используется exec; версия и причина fallback сохраняются
+в checkpoint. `BURNEX_CODEX_TRANSPORT: app-server` требует совместимости и
+явно отказывает при её отсутствии.
 
-Локальная проверка 14 ноября 2026: `codex-cli 0.169.0` содержит cumulative
-usage schema, но не принимает `app-server --ignore-user-config`. Поэтому
-`auto` этой версии выбирает exec. Полный путь app-server проверяется
-синтетическим CLI из `test/fixtures/codex/app-server.mjs`, без API-вызовов.
-Совместимость с реальным CLI, поддерживающим изоляцию, ещё требует отдельной
-проверки перед включением транспорта по умолчанию.
+У Codex 0.169.0 нет флага `app-server --ignore-user-config`, но реальный
+stdio-протокол проверен 14 ноября 2026 с отдельным home. Для такого запуска:
+
+```yaml
+backends:
+  codex:
+    env:
+      BURNEX_CODEX_TRANSPORT: app-server
+      BURNEX_CODEX_ISOLATED_HOME: /absolute/path/to/dedicated-codex-home
+```
+
+Каталог должен существовать и отличаться от обычного пользовательского
+`CODEX_HOME`. В нём не должно быть `config.toml`, `profiles`, `AGENTS.md` или
+`AGENTS.override.md`; проверка повторяется при каждом запуске даже при
+кешировании capability probe. Авторизацию отдельного home нужно подготовить
+заранее. Burnex не копирует credentials и не изменяет пользовательский home.
+Явные настройки Burnex и project/system configuration продолжают применяться,
+как и при exec с `--ignore-user-config`. При переключении на exec используется
+тот же отдельный home, чтобы сохранить доступ к созданным в нём thread.
+Без отдельного home режим `auto` на 0.169.0 по-прежнему выбирает exec.
+
+Реальный smoke test на 0.169.0 / gpt-6.1-sol подтвердил:
+
+- turn с двумя безопасными shell-вызовами дал три usage-обновления до завершения;
+- resume вычел baseline: ordinary input 3195 − 3005 = 190,
+  cached input 56064 − 41344 = 14720, output 111 − 96 = 15;
+- fork также исключил унаследованный расход;
+- RPC interrupt завершил turn как interrupted без SIGKILL, сохранив incomplete usage;
+- штатный `createCodexAdapter` с отдельным home завершил structured-output
+  запрос успешно, checkpoint получил completed/closed, RPC errors отсутствовали.
+
+Числовые snapshots без account data, prompt, ответов и session IDs сохранены
+в `test/fixtures/codex/app-server-0.169.0-smoke.json` и проверяются regression-тестом.
+Эксперимент использовал временную копию file-based авторизации; она удалена
+после проверки. Пользовательские config и рабочие деревья не изменялись.
+Это проверка basic lifecycle, usage, resume/fork и interrupt; compaction,
+реальные required MCP и credential refresh в этом эксперименте не проверялись.
 
 App-server запускается отдельно для каждой попытки по stdio. Сохраняются
 конфигурационные overrides sandbox, effort и обязательных MCP, политика

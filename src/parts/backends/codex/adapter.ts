@@ -1,3 +1,4 @@
+import { isolatedAppServerHome } from './appServerIsolation.js';
 import { probeAppServer } from './appServerCapabilities.js';
 import { connectAppServer } from './appServerProtocol.js';
 import { BurnexError } from '../../../plugin/index.js';
@@ -50,6 +51,8 @@ export function createCodexAdapter(config: BackendConfig): BackendAdapter {
     },
 
     launch(invocation: AgentInvocation): LaunchSpec {
+      const isolatedHome = isolatedAppServerHome(config.env);
+      const launchEnv = isolatedHome === undefined ? config.env : { ...config.env, CODEX_HOME: isolatedHome };
       // У формы `resume` нет `-s`, `-C` и `--add-dir`, поэтому всё, что можно,
       // передаётся переопределением `-c` — одинаково для новой нити и для
       // продолжения (design.md, решение 2). Рабочий каталог задаёт движок
@@ -111,22 +114,23 @@ export function createCodexAdapter(config: BackendConfig): BackendAdapter {
         if (capability.supported) {
           // Reuse all config overrides, including required MCP and sandbox. Exec-only
           // options are carried by RPC (model, outputSchema) or process cwd.
-          const rpcCommand = [config.command, 'app-server', '--ignore-user-config'];
+          const rpcCommand = [config.command, 'app-server', '--stdio',
+            ...(capability.isolation === 'native-flag' ? ['--ignore-user-config'] : [])];
           for (let i = 0; i < command.length; i++) {
             if (command[i] === '-c') rpcCommand.push('-c', command[++i]!);
           }
-          return { command: rpcCommand, stdin: '', env: config.env, transport: 'app-server-stdio',
+          return { command: rpcCommand, stdin: '', env: launchEnv, transport: 'app-server-stdio',
             diagnostic: `${capability.version}: ${capability.reason}`,
             connect: (channel) => connectAppServer({ ...invocation,
               ...(model === undefined ? {} : { model }) }, channel) };
         }
         if (requested === 'app-server') throw new BurnexError(`Codex app-server unavailable: ${capability.version}: ${capability.reason}`);
         command.push('-');
-        return { command, stdin: invocation.prompt, env: config.env, transport: 'exec',
+        return { command, stdin: invocation.prompt, env: launchEnv, transport: 'exec',
           diagnostic: `${capability.version}: fallback: ${capability.reason}` };
       }
       command.push('-');
-      return { command, stdin: invocation.prompt, env: config.env };
+      return { command, stdin: invocation.prompt, env: launchEnv };
     },
 
     parseLine(line: string): BackendEvent {
