@@ -1,13 +1,14 @@
 name: docs
 
-# Сайт документации (website/, Starlight): в PR — сборка и проверка ссылок,
-# в main — ещё и публикация на GitHub Pages одним артефактом.
+# Сайт документации (website/, Starlight): в PR — сборка, проверка контраста
+# палитры и ссылок, в main — ещё и публикация на GitHub Pages одним артефактом.
+# Палитра и маскот сайта берутся из ui/src/, пример главной — из examples/home/.
 on:
   push:
     branches: [main]
-    paths: ['docs/**', 'README.md', 'website/**', '.github/workflows/docs.yml']
+    paths: ['docs/**', 'README.md', 'website/**', 'examples/home/**', 'ui/src/styles.css', 'ui/src/assets/**', '.github/workflows/docs.yml']
   pull_request:
-    paths: ['docs/**', 'README.md', 'website/**', '.github/workflows/docs.yml']
+    paths: ['docs/**', 'README.md', 'website/**', 'examples/home/**', 'ui/src/styles.css', 'ui/src/assets/**', '.github/workflows/docs.yml']
   workflow_dispatch:
 
 permissions:

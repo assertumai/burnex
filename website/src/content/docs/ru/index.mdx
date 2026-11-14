@@ -1,0 +1,58 @@
+---
+title: Burnex
+description: Агентская разработка — по рельсам. burnex исполняет YAML-пайплайн шаг за шагом — код, человек и агенты делают каждый своё.
+template: splash
+editUrl: false
+hero:
+  title: Агентская разработка — по рельсам
+  tagline: burnex исполняет YAML-пайплайн шаг за шагом — всё детерминированное делает код, решения в гейтах принимает человек, а Claude, Codex или Cursor берут только те шаги, где без модели не обойтись.
+  image:
+    file: ../../../assets/brand/burnex-mark.png
+    alt: Маскот burnex — угольный голем с раскалённой трещиной
+  actions:
+    - text: Первый прогон
+      link: /burnex/ru/start/first-run/
+      icon: right-arrow
+      variant: primary
+    - text: Как это работает
+      link: /burnex/ru/start/how-it-works/
+      variant: secondary
+    - text: GitHub
+      link: https://github.com/assertumai/burnex
+      icon: external
+      variant: minimal
+---
+
+import { Card, CardGrid, Code, LinkCard } from '@astrojs/starlight/components';
+import HowItWorks from '../../../components/HowItWorks.astro';
+import example from '../../../../../examples/home/burnex.yml?raw';
+
+<CardGrid>
+	<Card title="Детерминированное — кодом" icon="setting">
+		Порядок работ, ветвления, повторы и бюджеты вычисляет движок из объявленного графа, а не модель по ходу дела. `burnex lint` ловит циклы, битые ссылки и цикл без предела до первого потраченного токена.
+	</Card>
+	<Card title="Любой агент, любая роль" icon="puzzle">
+		Claude, Codex и Cursor могут работать в одном пайплайне: один пишет, другой ревьюит, третий сводит обсуждение. Агент — тип шага, а не оркестратор.
+	</Card>
+	<Card title="Контракт на каждом шаге" icon="approve-check">
+		Выход агента проходит проверки, которые вы объявили, — схему, тесты, ограничения правок; что не прошло, дальше не идёт. Контекст агента тоже объявлен: `burnex context` покажет, что именно увидит шаг.
+	</Card>
+	<Card title="Человек там, где нужен, и видит всё" icon="comment-alt">
+		Шаг `decision` останавливает прогон и ждёт решения, с дедлайном и исходом по умолчанию. `burnex up` показывает прогоны живьём, каждый шаг пишется в журнал.
+	</Card>
+</CardGrid>
+
+<HowItWorks />
+
+## Так выглядит пайплайн
+
+Claude чинит код, пока `npm test` не станет зелёным, правки — только в `src/`. Codex ревьюит дифф и отвечает по схеме. Человек принимает или отклоняет.
+
+<Code code={example} lang="yaml" title="burnex.yml" mark={[8, 14, 22, 28]} />
+
+Рядом с файлом лежит схема ответа ревьюера `schemas/review.json`. Codex подключается одной строкой в `~/.burnex/config.yml` — [как подключить](/burnex/ru/guides/backends/). Пример целиком — в [examples/home](https://github.com/assertumai/burnex/tree/main/examples/home).
+
+<CardGrid>
+	<LinkCard title="Первый прогон" description="Установить burnex и запустить первый пайплайн." href="/burnex/ru/start/first-run/" />
+	<LinkCard title="Понятия" description="Восемь коротких страниц: работы, шаги, контракты, агенты, человек." href="/burnex/ru/concepts/pipeline/" />
+</CardGrid>

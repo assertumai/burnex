@@ -1,5 +1,9 @@
 node_modules/
 dist/
 .astro/
-# Генерируется scripts/sync-docs.mjs из docs/ и README.md
-src/content/docs/
+# Сгенерировано npm run sync: справочник из docs/, токены и маскот из ui/.
+src/content/docs/ru/reference/
+src/styles/tokens.css
+src/assets/brand/
+public/favicon.png
+public/apple-touch-icon.png

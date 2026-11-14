@@ -1,0 +1,25 @@
+---
+// 404 в общей раскладке Starlight (без переопределения компонентов), с маскотом.
+import StarlightPage from '@astrojs/starlight/components/StarlightPage.astro';
+import mark from '../assets/brand/burnex-mark.png';
+
+const home = `${import.meta.env.BASE_URL}ru/`;
+---
+
+<StarlightPage
+	frontmatter={{
+		title: 'Страница не найдена',
+		template: 'splash',
+		pagefind: false,
+		editUrl: false,
+		hero: {
+			title: 'Тут ничего не горит',
+			tagline: 'Такой страницы нет — возможно, она переехала в «Справочник» или была переименована.',
+			image: { file: mark, alt: '' },
+			actions: [
+				{ text: 'На главную', link: home, variant: 'primary' },
+				{ text: 'Первый прогон', link: `${home}start/first-run/`, variant: 'minimal' },
+			],
+		},
+	}}
+/>

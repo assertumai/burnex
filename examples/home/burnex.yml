@@ -1,0 +1,28 @@
+version: 1
+kind: pipeline
+name: fix-review-ship
+budget: { tokens: 1M, wallclock: 30m }  # потолок на весь прогон
+
+jobs:
+  fix:
+    until: { max_iterations: 3, check: [{ cmd: npm test }] }  # гейт кодом: тесты
+    steps:
+      - id: repair
+        agent: claude
+        prompt: Почини падающие тесты. Сами тесты не меняй.
+        permissions: { mode: acceptEdits }
+        expect: [{ changed_only: ["src/**"] }]                # правки только в src/
+  review:
+    needs: [fix]
+    steps:
+      - id: check
+        agent: codex                                           # второй агент — ревьюер
+        prompt: Проверь дифф починки — нет ли регрессий и обхода тестов?
+        permissions: { mode: read-only }
+        output_schema: ./schemas/review.json                   # выход по схеме
+        expect: [{ schema: ./schemas/review.json }]
+  ship:
+    needs: [review]
+    steps:
+      - id: approve
+        decision: { prompt: Принять починку?, outcomes: { approve: continue, deny: reject } }

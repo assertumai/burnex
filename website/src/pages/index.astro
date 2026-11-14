@@ -1,0 +1,29 @@
+---
+// Корень /burnex/ ведёт на язык по умолчанию. Пока только русский — на /ru/;
+// с запуском английского сюда встанет /en/ (decisions d12 этапа docs-site).
+// Страница статическая (GitHub Pages): meta refresh, canonical и видимые
+// ссылки на случай отключённой переадресации; фон в цвет темы, без белой вспышки.
+const target = `${import.meta.env.BASE_URL}ru/`;
+const canonical = new URL(target, Astro.site).href;
+---
+
+<!doctype html>
+<html lang="ru">
+	<head>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<meta http-equiv="refresh" content={`0; url=${target}`} />
+		<link rel="canonical" href={canonical} />
+		<meta name="robots" content="noindex" />
+		<title>Burnex</title>
+		<style>
+			:root { color-scheme: light dark; background: #f7f3ee; color: #221d19; }
+			@media (prefers-color-scheme: dark) { :root { background: #141210; color: #efe9e2; } }
+			body { font: 16px/1.5 system-ui, sans-serif; display: grid; place-items: center; min-height: 100vh; margin: 0; }
+			a { color: inherit; }
+		</style>
+	</head>
+	<body>
+		<p><a href={target}>Русский</a> · <span title="Скоро">English</span></p>
+	</body>
+</html>

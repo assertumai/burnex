@@ -1,0 +1,157 @@
+/*
+ * Тема сайта «Ember» — та же, что у веб-UI burnex. Значения не пишутся здесь:
+ * --bx-* генерирует scripts/sync-brand.mjs из ui/src/styles.css (tokens.css),
+ * а этот файл раскладывает их по шкале Starlight. Starlight красит сайдбар,
+ * рамки, код и врезки через gray-1..7, поэтому переназначается вся шкала,
+ * иначе в деталях остаются холодные серые.
+ *
+ * Оранжевый — сигнал, не фон: ссылки, основная кнопка, активный пункт, фокус,
+ * трещина маскота. Ссылки светлой темы — #9a4212 (--accent-foreground), а не
+ * #c2561a: у второго на бумажном фоне контраст 4.1, ниже AA (check-contrast.mjs).
+ */
+
+:root,
+:root[data-theme='dark'] {
+	--sl-color-white: color-mix(in srgb, var(--bx-foreground) 70%, #fff);
+	--sl-color-gray-1: var(--bx-foreground);
+	--sl-color-gray-2: color-mix(in srgb, var(--bx-foreground) 85%, var(--bx-muted-foreground));
+	--sl-color-gray-3: var(--bx-muted-foreground);
+	--sl-color-gray-4: color-mix(in srgb, var(--bx-muted-foreground) 55%, var(--bx-background));
+	--sl-color-gray-5: var(--bx-border);
+	--sl-color-gray-6: var(--bx-card);
+	--sl-color-black: var(--bx-background);
+
+	--sl-color-accent-low: var(--bx-accent);
+	--sl-color-accent: var(--bx-primary);
+	--sl-color-accent-high: var(--bx-accent-foreground);
+
+	--sl-color-bg-nav: var(--bx-sidebar);
+	--sl-color-bg-sidebar: var(--bx-sidebar);
+	--sl-color-hairline: var(--bx-border);
+	--sl-color-hairline-light: var(--bx-border);
+	--sl-color-backdrop-overlay: rgb(0 0 0 / 60%);
+}
+
+:root[data-theme='light'] {
+	--sl-color-white: var(--bx-foreground);
+	--sl-color-gray-1: var(--bx-foreground);
+	--sl-color-gray-2: color-mix(in srgb, var(--bx-foreground) 85%, var(--bx-muted-foreground));
+	--sl-color-gray-3: var(--bx-muted-foreground);
+	--sl-color-gray-4: color-mix(in srgb, var(--bx-muted-foreground) 60%, var(--bx-background));
+	--sl-color-gray-5: var(--bx-border);
+	--sl-color-gray-6: var(--bx-muted);
+	--sl-color-gray-7: var(--bx-sidebar);
+	--sl-color-black: var(--bx-background);
+
+	--sl-color-accent-low: var(--bx-accent);
+	--sl-color-accent: var(--bx-accent-foreground);
+	--sl-color-accent-high: color-mix(in srgb, var(--bx-accent-foreground) 75%, #000);
+
+	--sl-color-bg-nav: var(--bx-sidebar);
+	--sl-color-bg-sidebar: var(--bx-sidebar);
+	--sl-color-hairline: var(--bx-border);
+	--sl-color-hairline-light: var(--bx-border);
+	--sl-color-hairline-shade: var(--bx-border);
+	--sl-color-backdrop-overlay: rgb(0 0 0 / 45%);
+}
+
+/* Шрифты — IBM Plex, как в приложении; файлы самохостятся через @fontsource. */
+:root {
+	--sl-font: 'IBM Plex Sans';
+	--sl-font-mono: 'IBM Plex Mono';
+}
+
+h1, h2, h3, h4,
+.sl-markdown-content :is(h1, h2, h3, h4) {
+	font-weight: 700;
+	letter-spacing: -0.02em;
+}
+
+/* Основная кнопка — цвет кнопки приложения (--primary), а не цвет ссылок. */
+.sl-link-button.primary,
+.sl-link-button.primary:hover {
+	background: var(--bx-primary);
+	border-color: var(--bx-primary);
+	color: var(--bx-primary-foreground);
+}
+.sl-link-button.primary {
+	font-weight: 600;
+}
+
+/* Знак в шапке — маскот на плашке в тон акцента, как .brand-mark витрины:
+   на тёмной шапке почти чёрный уголёк иначе сливается с фоном. */
+.site-title img {
+	width: 2rem;
+	height: 2rem;
+	padding: 0.15rem;
+	border-radius: 8px;
+	background: color-mix(in srgb, var(--bx-primary) 22%, transparent);
+}
+.site-title {
+	font-weight: 700;
+	letter-spacing: -0.02em;
+}
+
+/* Маскот в hero: PNG 256 px, поэтому не крупнее 160 px CSS (до вектора). */
+.hero > img,
+.hero .hero-image {
+	width: min(10rem, 40vw);
+	height: auto;
+	padding: 1rem;
+	border-radius: 28px;
+	background: color-mix(in srgb, var(--bx-primary) 22%, transparent);
+}
+:root[data-theme='dark'] .hero > img {
+	box-shadow: 0 0 6rem 1rem color-mix(in srgb, var(--bx-primary) 18%, transparent);
+}
+
+/* Карточки ценности: тёплая подложка и рамка вместо иконочного цвета Starlight. */
+.card {
+	background: var(--bx-card);
+	border-color: var(--bx-border);
+	border-radius: 12px;
+}
+.card .icon {
+	color: var(--bx-primary);
+}
+
+/* Выделенные строки примера на главной (mark Expressive Code). */
+.expressive-code .ec-line.mark {
+	--tmLineBgCol: color-mix(in srgb, var(--bx-primary) 14%, transparent);
+	--tmLineBrdCol: var(--bx-primary);
+}
+
+/* Баннер предварительной версии — сигнал, а не сирена: тихая акцентная
+   подложка (пара --accent-foreground на --accent проверяется на контраст). */
+:root {
+	--sl-color-banner-bg: var(--bx-accent);
+	--sl-color-banner-text: var(--bx-accent-foreground);
+}
+
+/* Mermaid (astro-mermaid, темы default/dark по data-theme): узлы, рёбра и
+   подписи — в токенах бренда. Стили диаграммы встроены в SVG селектором по
+   id, поэтому перекрываются через !important. */
+pre.mermaid svg .node :is(rect, polygon, circle, ellipse, path) {
+	fill: var(--bx-card) !important;
+	stroke: var(--bx-primary) !important;
+}
+pre.mermaid svg :is(.flowchart-link, .edgePath path) {
+	stroke: var(--bx-muted-foreground) !important;
+}
+pre.mermaid svg :is(marker path, .arrowheadPath) {
+	fill: var(--bx-muted-foreground) !important;
+	stroke: var(--bx-muted-foreground) !important;
+}
+pre.mermaid svg :is(.nodeLabel, .edgeLabel, .label, .cluster-label) {
+	color: var(--bx-foreground) !important;
+	fill: var(--bx-foreground) !important;
+	font-family: var(--__sl-font);
+}
+pre.mermaid svg :is(.edgeLabel, .edgeLabel rect, .labelBkg) {
+	background-color: var(--bx-background) !important;
+	fill: var(--bx-background) !important;
+}
+pre.mermaid svg .cluster rect {
+	fill: var(--bx-muted) !important;
+	stroke: var(--bx-border) !important;
+}

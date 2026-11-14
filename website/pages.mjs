@@ -1,23 +1,63 @@
-// Публичные страницы сайта. Исходники остаются в docs/ (на них ссылаются
-// сообщения lint и агенты); scripts/sync-docs.mjs кладёт их в контент Starlight.
-// Чего здесь нет — внутренние записки, на сайт не попадают.
+// Состав сайта.
+//
+// Рукописный слой (главная, Начало, Понятия, Руководства) лежит в Git прямо в
+// src/content/docs/ru/. Справочник — спецификация из docs/ как есть: исходники
+// остаются в docs/ (на них ссылаются сообщения lint и агенты), а
+// scripts/sync-docs.mjs кладёт их в gitignored src/content/docs/ru/reference/.
+// Остальное в docs/ — внутренние записки, на сайт не попадает.
 
 export const repo = 'https://github.com/assertumai/burnex';
 export const branch = 'main';
+export const base = '/burnex/';
+export const locale = 'ru';
 
-/** Главная — README.md из корня репозитория. */
-export const home = { slug: '', source: 'README.md' };
+/** Справочник: имя файла в docs/ без .md → страница ru/reference/<имя>. */
+export const reference = [
+	'pipeline-format',
+	'config',
+	'run-layout',
+	'decisions',
+	'plugins',
+	'packages',
+	'knowledge',
+	'install',
+];
 
-/** Разделы боковой навигации; slug страницы = имя файла в docs/ без .md. */
+/** Таблица «исходник → slug сайта (с локалью)» для синхронизации и ссылок. */
+export const pages = reference.map((name) => ({ source: `docs/${name}.md`, slug: `${locale}/reference/${name}` }));
+
+/** Рукописные разделы боковой навигации: slug без локали. */
 export const sections = [
-	{ label: 'Формат и конфигурация', pages: ['pipeline-format', 'config'] },
-	{ label: 'Прогоны', pages: ['run-layout', 'decisions', 'backlog', 'knowledge'] },
-	{ label: 'Расширения', pages: ['plugins', 'packages', 'ui-plugins', 'widgets', 'routes'] },
-	{ label: 'Для контрибьюторов', pages: ['testing', 'release'] },
+	{ label: 'Начало', items: ['start/first-run', 'start/how-it-works', 'start/examples'] },
+	{
+		label: 'Понятия',
+		items: [
+			'concepts/pipeline',
+			'concepts/steps',
+			'concepts/contracts',
+			'concepts/retries-and-budgets',
+			'concepts/agents',
+			'concepts/context',
+			'concepts/human',
+			'concepts/runs',
+		],
+	},
+	{
+		label: 'Руководства',
+		items: ['guides/fix-until-green', 'guides/second-opinion', 'guides/discussion', 'guides/backends', 'guides/from-stepcast'],
+	},
 ];
 
-/** Все страницы: путь исходника от корня репозитория → slug на сайте. */
-export const pages = [
-	home,
-	...sections.flatMap((s) => s.pages.map((slug) => ({ slug, source: `docs/${slug}.md` }))),
-];
+/**
+ * Адреса сайта до перехода на /ru/ (этап 1): страница справочника — на новое
+ * место, снятая с сайта — на исходник в GitHub.
+ */
+export const legacy = {
+	...Object.fromEntries(reference.map((name) => [`/${name}`, `${base}${locale}/reference/${name}/`])),
+	...Object.fromEntries(
+		['backlog', 'ui-plugins', 'widgets', 'routes', 'testing', 'release'].map((name) => [
+			`/${name}`,
+			`${repo}/blob/${branch}/docs/${name}.md`,
+		]),
+	),
+};

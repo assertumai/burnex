@@ -1,0 +1,70 @@
+---
+title: Первый прогон
+description: Установить burnex, запустить пайплайн без агентов, затем — с агентом.
+---
+
+import { Steps, Aside } from '@astrojs/starlight/components';
+
+Нужны `git`, `npm` и Node ≥ 22. Для агентских шагов — установленный и вошедший в аккаунт CLI агента: [Claude Code](https://docs.claude.com/en/docs/claude-code) встроен, Codex и Cursor подключаются плагином ([как](/burnex/ru/guides/backends/)).
+
+<Steps>
+
+1. **Установите burnex.**
+
+   ```bash
+   curl -fsSL https://raw.githubusercontent.com/assertumai/burnex/main/scripts/install.sh | bash -s -- --ref main
+   ```
+
+   Скрипт собирает burnex в `~/.burnex/releases/` и кладёт команду `burnex` в `~/.local/bin`. Флаг `--ref main` нужен, пока в репозитории нет релизных тегов. Если `~/.local/bin` нет в `PATH`, скрипт напечатает строку `export PATH=…` — выполните её.
+
+2. **Создайте пайплайн** в корне любого git-репозитория.
+
+   ```bash
+   burnex init
+   ```
+
+   Появятся `burnex.yml`, `.burnex/jobs/example.yml` и строка в `.gitignore`. В примере две работы из командных шагов — агенты пока не нужны.
+
+3. **Проверьте и запустите.**
+
+   ```bash
+   burnex lint burnex.yml && burnex run burnex.yml
+   ```
+
+   Ожидаемый вывод:
+
+   ```text
+   +0:00:00  прогон: начат — example
+   +0:00:00  build/check: шаг success (попытка 1) — 0 токенов, —, 0s
+   +0:00:00  example/hello: шаг success (попытка 1) — 0 токенов, —, 0s
+   +0:00:00  прогон: success (код 0)
+   прогон 0eb533: success
+   журнал: ~/.burnex/runs/<проект>/<время>-0eb533
+   ```
+
+4. **Добавьте агентский шаг.** Допишите работу в `burnex.yml`:
+
+   ```yaml
+     explain:
+       needs: [example]
+       steps:
+         - id: readme
+           agent: claude
+           prompt: Опиши в трёх предложениях, что делает этот репозиторий.
+           permissions: { mode: plan }
+   ```
+
+   и снова `burnex run burnex.yml`. Шаг агента появится в выводе с расходом токенов и ценой.
+
+5. **Посмотрите, что произошло.** `burnex status` — итог последнего прогона, `burnex up` — витрина в браузере: работы, шаги, промпты, вывод и расход.
+
+</Steps>
+
+<Aside type="caution" title="Два частых сбоя">
+
+- **`burnex: command not found`** — `~/.local/bin` нет в `PATH`. Выполните строку `export PATH=…`, которую напечатал установщик, и добавьте её в профиль оболочки.
+- **Агентский шаг падает сразу** — CLI агента не установлен или не вошёл в аккаунт. Запустите `claude` (или `codex`) вручную один раз; `burnex config` покажет, какие бэкенды видит движок.
+
+</Aside>
+
+Дальше — [как это работает](/burnex/ru/start/how-it-works/) и [пример с главной](/burnex/ru/start/examples/): починка до зелёных тестов, ревью вторым агентом и решение человека.

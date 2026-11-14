@@ -1,22 +1,17 @@
-// Кладёт публичные страницы из docs/ и README.md в контент Starlight
-// (src/content/docs — сгенерированный каталог, исключён из Git):
-// заголовок из первого «# …», ссылка «редактировать» на исходник,
-// баннер предварительной версии с SHA сборки.
+// Кладёт страницы справочника из docs/ в контент Starlight как есть
+// (src/content/docs/ru/reference — gitignored; очищается только он,
+// рукописные страницы рядом не трогаются): заголовок из первого «# …»,
+// ссылка «редактировать» на исходник в docs/, оглавление до h2.
 
-import { execFileSync } from 'node:child_process';
 import { mkdirSync, readFileSync, rmSync, writeFileSync, existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { branch, pages, repo } from '../pages.mjs';
+import { branch, locale, pages, repo } from '../pages.mjs';
 
 const website = join(dirname(fileURLToPath(import.meta.url)), '..');
 const root = join(website, '..');
-const out = join(website, 'src/content/docs');
-
-const sha = (process.env.GITHUB_SHA ?? git('rev-parse', 'HEAD')).slice(0, 7);
-const banner =
-	`Предварительная версия из <code>${branch}</code> (<a href="${repo}/commit/${sha}"><code>${sha}</code></a>): ` +
-	'описывает ещё не выпущенное поведение.';
+const content = join(website, 'src/content/docs');
+const out = join(content, locale, 'reference');
 
 const missing = pages.filter((p) => !existsSync(join(root, p.source)));
 if (missing.length) {
@@ -39,18 +34,10 @@ for (const page of pages) {
 		'---',
 		`title: ${JSON.stringify(heading[1])}`,
 		`editUrl: ${JSON.stringify(`${repo}/edit/${branch}/${page.source}`)}`,
-		'banner:',
-		`  content: ${JSON.stringify(banner)}`,
-		page.slug === '' ? 'tableOfContents: false' : null,
+		'tableOfContents: { maxHeadingLevel: 2 }',
 		'---',
-	]
-		.filter((line) => line !== null)
-		.join('\n');
-	writeFileSync(join(out, `${page.slug || 'index'}.md`), `${frontmatter}\n${body.replace(/^\s+/, '\n')}`);
+	].join('\n');
+	writeFileSync(join(content, `${page.slug}.md`), `${frontmatter}\n${body.replace(/^\s+/, '\n')}`);
 }
 
-console.log(`sync-docs: ${pages.length} страниц, ${sha}`);
-
-function git(...args) {
-	return execFileSync('git', args, { cwd: root, encoding: 'utf8' }).trim();
-}
+console.log(`sync-docs: справочник, ${pages.length} страниц`);

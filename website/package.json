@@ -3,15 +3,17 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "sync": "node scripts/sync-docs.mjs",
+    "sync": "node scripts/sync-brand.mjs && node scripts/sync-docs.mjs",
     "dev": "npm run sync && astro dev",
     "build": "npm run sync && astro build",
     "preview": "astro preview",
-    "check": "node scripts/check-links.mjs"
+    "check": "node scripts/check-contrast.mjs && node scripts/check-links.mjs"
   },
   "dependencies": {
     "@astrojs/markdown-remark": "^7.3.9",
     "@astrojs/starlight": "^0.43.1",
+    "@fontsource/ibm-plex-mono": "^5.3.0",
+    "@fontsource/ibm-plex-sans": "^5.3.0",
     "astro": "^7.4.12",
     "astro-mermaid": "^2.2.0",
     "mermaid": "^12.3.0",

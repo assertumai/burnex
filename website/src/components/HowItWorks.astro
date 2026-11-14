@@ -1,0 +1,172 @@
+---
+// Схема «как работает» для главной — своя SVG, а не Mermaid: рисуется сразу,
+// в цветах темы (CSS-переменные) и с подписями-пропсами под перевод.
+// Семь узлов; форма узла — тип шага: код — прямоугольник, агент — капсула,
+// человек — шестиугольник. Полная схема — на странице «Как это работает».
+interface Props {
+	labels?: Partial<typeof ru>;
+}
+const ru = {
+	title: 'Как исполняется пайплайн burnex',
+	yaml: 'burnex.yml',
+	lint: 'lint до запуска',
+	engine: 'Движок',
+	engineSub: 'порядок, бюджеты',
+	code: 'Код',
+	codeSub: 'тесты, сборка',
+	agent: 'Агент',
+	agentSub: 'Claude, Codex, Cursor',
+	human: 'Человек',
+	humanSub: 'decision',
+	gate: 'expect',
+	journal: 'Журнал',
+	journalSub: 'и витрина',
+	pass: 'прошло',
+	retry: 'не прошло → повтор в пределах попыток и бюджета, иначе отказ',
+	decide: 'решение: дальше или стоп',
+};
+const t = { ...ru, ...Astro.props.labels };
+---
+
+<figure class="how">
+	<svg viewBox="0 -30 760 304" role="img" aria-labelledby="how-title">
+		<title id="how-title">{t.title}</title>
+		<defs>
+			<marker id="how-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+				<path d="M0 0 L10 5 L0 10 z" class="arrow-head"></path>
+			</marker>
+		</defs>
+
+		<!-- рёбра -->
+		<path class="edge" d="M140 148 H168" marker-end="url(#how-arrow)"></path>
+		<path class="edge" d="M272 140 C290 140 290 55 308 55" marker-end="url(#how-arrow)"></path>
+		<path class="edge" d="M272 148 H308" marker-end="url(#how-arrow)"></path>
+		<path class="edge" d="M272 156 C290 156 290 240 308 240" marker-end="url(#how-arrow)"></path>
+		<path class="edge" d="M442 55 C470 55 470 140 488 140" marker-end="url(#how-arrow)"></path>
+		<path class="edge" d="M442 148 H486" marker-end="url(#how-arrow)"></path>
+		<path class="edge pass" d="M576 148 H616" marker-end="url(#how-arrow)"></path>
+		<text class="edge-label pass" x="596" y="140" text-anchor="middle">{t.pass}</text>
+		<path class="edge fail" d="M532 104 V-8 H221 V116" marker-end="url(#how-arrow)"></path>
+		<text class="edge-label fail" x="376" y="-14" text-anchor="middle">{t.retry}</text>
+		<path class="edge human" d="M448 240 H680 V178" marker-end="url(#how-arrow)"></path>
+		<text class="edge-label human" x="564" y="258" text-anchor="middle">{t.decide}</text>
+
+		<!-- узлы -->
+		<g class="node doc">
+			<path d="M16 118 H120 L138 136 V178 H16 Z"></path>
+			<text x="77" y="145" text-anchor="middle" class="mono">{t.yaml}</text>
+			<text x="77" y="164" text-anchor="middle" class="sub">{t.lint}</text>
+		</g>
+		<g class="node engine">
+			<rect x="170" y="118" width="102" height="60" rx="6"></rect>
+			<text x="221" y="145" text-anchor="middle" class="strong">{t.engine}</text>
+			<text x="221" y="164" text-anchor="middle" class="sub">{t.engineSub}</text>
+		</g>
+		<g class="node code">
+			<rect x="310" y="26" width="132" height="58" rx="2"></rect>
+			<text x="376" y="51" text-anchor="middle" class="strong">{t.code}</text>
+			<text x="376" y="70" text-anchor="middle" class="sub">{t.codeSub}</text>
+		</g>
+		<g class="node agent">
+			<rect x="310" y="119" width="132" height="58" rx="29"></rect>
+			<text x="376" y="144" text-anchor="middle" class="strong">{t.agent}</text>
+			<text x="376" y="163" text-anchor="middle" class="sub">{t.agentSub}</text>
+		</g>
+		<g class="node human">
+			<path d="M326 211 H432 L448 240 L432 269 H326 L310 240 Z"></path>
+			<text x="379" y="236" text-anchor="middle" class="strong">{t.human}</text>
+			<text x="379" y="255" text-anchor="middle" class="sub mono">{t.humanSub}</text>
+		</g>
+		<g class="node gate">
+			<path d="M532 104 L576 148 L532 192 L488 148 Z"></path>
+			<text x="532" y="153" text-anchor="middle" class="mono strong">{t.gate}</text>
+		</g>
+		<g class="node journal">
+			<rect x="618" y="118" width="126" height="60" rx="6"></rect>
+			<text x="681" y="145" text-anchor="middle" class="strong">{t.journal}</text>
+			<text x="681" y="164" text-anchor="middle" class="sub">{t.journalSub}</text>
+		</g>
+	</svg>
+</figure>
+
+<style>
+	.how {
+		margin: 2rem 0;
+		padding: 1rem;
+		border: 1px solid var(--bx-border);
+		border-radius: 14px;
+		background: var(--bx-card);
+		overflow-x: auto;
+	}
+	svg {
+		display: block;
+		width: 100%;
+		min-width: 560px;
+		height: auto;
+		font-family: var(--__sl-font);
+	}
+	text {
+		font-size: 14px;
+		fill: var(--bx-foreground);
+	}
+	.strong {
+		font-weight: 600;
+	}
+	.sub {
+		font-size: 12px;
+		fill: var(--bx-muted-foreground);
+	}
+	.mono {
+		font-family: var(--__sl-font-mono);
+	}
+	.node > :first-child {
+		fill: var(--bx-background);
+		stroke: var(--bx-border);
+		stroke-width: 1.5;
+	}
+	.code > :first-child {
+		stroke: var(--bx-participant-2);
+	}
+	.agent > :first-child {
+		stroke: var(--bx-participant-1);
+	}
+	.human > :first-child {
+		stroke: var(--bx-participant-0);
+	}
+	.gate > :first-child {
+		fill: color-mix(in srgb, var(--bx-primary) 16%, var(--bx-background));
+		stroke: var(--bx-primary);
+		stroke-width: 2;
+	}
+	.edge {
+		fill: none;
+		stroke: var(--bx-muted-foreground);
+		stroke-width: 1.5;
+	}
+	.edge.pass {
+		stroke: var(--bx-status-success);
+	}
+	.edge.fail {
+		stroke: var(--bx-status-failed);
+		stroke-dasharray: 5 4;
+	}
+	.edge.human {
+		stroke: var(--bx-participant-0);
+	}
+	.arrow-head {
+		fill: var(--bx-muted-foreground);
+	}
+	.edge-label {
+		font-size: 12px;
+		fill: var(--bx-muted-foreground);
+	}
+	.edge-label.pass {
+		fill: var(--bx-status-success);
+	}
+	.edge-label.human {
+		fill: var(--bx-participant-0);
+	}
+	.edge-label.fail {
+		fill: var(--bx-status-failed);
+	}
+</style>

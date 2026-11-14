@@ -1,0 +1,48 @@
+---
+title: Примеры
+description: Готовые пайплайны из каталога examples/ — что показывает каждый.
+---
+
+import { LinkCard, CardGrid } from '@astrojs/starlight/components';
+
+Все примеры лежат в [examples/](https://github.com/assertumai/burnex/tree/main/examples) и проходят `burnex lint`. Запуск — `burnex run examples/<имя>/burnex.yml` из корня проекта.
+
+<CardGrid>
+	<LinkCard
+		title="home — починка, ревью, решение"
+		description="Пример с главной: Claude чинит до зелёного npm test, Codex ревьюит дифф по схеме, человек принимает."
+		href="https://github.com/assertumai/burnex/tree/main/examples/home"
+	/>
+	<LinkCard
+		title="minimal — первые агентские шаги"
+		description="Общая сессия двух шагов, выход работы по схеме, передача выхода в следующую работу, разбор отказа."
+		href="https://github.com/assertumai/burnex/tree/main/examples/minimal"
+	/>
+	<LinkCard
+		title="decision — гейт человека"
+		description="Прогон останавливается между проверкой и применением и ждёт burnex decide: дальше, отклонить или заново."
+		href="https://github.com/assertumai/burnex/tree/main/examples/decision"
+	/>
+	<LinkCard
+		title="review — ревью несколькими агентами"
+		description="Два ревьюера на Codex и Claude, агрегатор выносит вердикт по схеме; режим defend — с защитой находок."
+		href="https://github.com/assertumai/burnex/tree/main/examples/review"
+	/>
+	<LinkCard
+		title="discuss — проектирование обсуждением"
+		description="Участники на разных бэкендах предлагают подход, автор сводит черновик, агрегатор пишет проектный документ."
+		href="https://github.com/assertumai/burnex/tree/main/examples/discuss"
+	/>
+	<LinkCard
+		title="acceptance — цикл until"
+		description="Детерминированный цикл: ровно две итерации, проверка журнала скриптом."
+		href="https://github.com/assertumai/burnex/tree/main/examples/acceptance"
+	/>
+	<LinkCard
+		title="packages и plugins — расширение"
+		description="Пакет с пайплайном, шагом и виджетом; плагины с предикатом, видом шага и командой."
+		href="https://github.com/assertumai/burnex/tree/main/examples/packages/hello"
+	/>
+</CardGrid>
+
+Сам burnex развивается собственным пайплайном: петля [self-improve](https://github.com/assertumai/burnex/blob/main/.burnex/pipelines/self-improve.yml) берёт улучшение из очереди, заводит под него спецификацию, реализует до зелёной сборки, ревьюит отдельной сессией и коммитит.
