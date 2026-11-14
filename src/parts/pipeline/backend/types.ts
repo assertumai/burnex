@@ -376,6 +376,7 @@ export function sumUsage(base: Usage, addition: Usage): Usage {
   const peak = maxOptional(base.peak_prefix_tokens, addition.peak_prefix_tokens);
   return {
     backend: base.backend,
+    ...((addition.pricing ?? base.pricing) === undefined ? {} : { pricing: addition.pricing ?? base.pricing }),
     ...(base.model === undefined ? {} : { model: base.model }),
     tokens_in: sumNullable(base.tokens_in, addition.tokens_in),
     tokens_out: sumNullable(base.tokens_out, addition.tokens_out),
@@ -430,7 +431,7 @@ function maxOptional(a: number | undefined, b: number | undefined): number | und
  * означало бы выдать отсутствие данных за факт маленького обращения.
  */
 export function messagePrefix(delta: Partial<Usage> | undefined): number | undefined {
-  if (delta === undefined) return undefined;
+  if (delta === undefined || delta.pricing?.input_scope === 'turn') return undefined;
   const { tokens_in, cache_read, cache_write } = delta;
   if (tokens_in == null && cache_read == null && cache_write == null) return undefined;
   return (tokens_in ?? 0) + (cache_read ?? 0) + (cache_write ?? 0);
