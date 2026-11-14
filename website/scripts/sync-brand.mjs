@@ -3,7 +3,7 @@
 //   @media (prefers-color-scheme: dark) — тёмная) → src/styles/tokens.css
 //   с :root[data-theme='light'|'dark'], потому что Starlight переключает тему
 //   атрибутом, а не медиазапросом; имена получают префикс --bx-;
-// - маскот и favicon → src/assets/brand/ и public/.
+// - маскот (SVG со слоями .bx-eyes и .bx-crack) и favicon → src/assets/brand/ и public/.
 // Пропавший токен или файл останавливает сборку. Всё, что пишет скрипт, — в .gitignore.
 
 import { copyFileSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
@@ -66,7 +66,8 @@ if (import.meta.url === `file://${process.argv[1]}`) {
 
 	mkdirSync(join(website, 'src/assets/brand'), { recursive: true });
 	mkdirSync(join(website, 'public'), { recursive: true });
-	copyFileSync(join(ui, 'assets/burnex-mark.png'), join(website, 'src/assets/brand/burnex-mark.png'));
+	copyFileSync(join(ui, 'assets/burnex-mark.svg'), join(website, 'src/assets/brand/burnex-mark.svg'));
+	copyFileSync(join(ui, 'assets/burnex-mark.svg'), join(website, 'public/favicon.svg'));
 	copyFileSync(join(ui, 'assets/burnex-mark.png'), join(website, 'public/apple-touch-icon.png'));
 	copyFileSync(join(ui, 'assets/burnex-favicon.png'), join(website, 'public/favicon.png'));
 	console.log(`sync-brand: токенов ${themes.light.size}/${themes.dark.size}, маскот и favicon`);

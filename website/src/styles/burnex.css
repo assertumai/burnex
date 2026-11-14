@@ -92,17 +92,32 @@ h1, h2, h3, h4,
 	letter-spacing: -0.02em;
 }
 
-/* Маскот в hero: PNG 256 px, поэтому не крупнее 160 px CSS (до вектора). */
+/* Маскот в hero — вектор (ui/src/assets/burnex-mark.svg), поэтому крупно. */
 .hero > img,
-.hero .hero-image {
-	width: min(10rem, 40vw);
+.hero > .hero-html {
+	width: min(17rem, 60vw);
 	height: auto;
 	padding: 1rem;
-	border-radius: 28px;
+	border-radius: 32px;
 	background: color-mix(in srgb, var(--bx-primary) 22%, transparent);
+}
+.hero > .hero-html svg {
+	display: block;
+	width: 100%;
+	height: auto;
 }
 :root[data-theme='dark'] .hero > img {
 	box-shadow: 0 0 6rem 1rem color-mix(in srgb, var(--bx-primary) 18%, transparent);
+}
+
+/* 404 «Тут ничего не горит»: трещина и глаза маскота погашены. */
+.bx-out :is(.bx-crack, .bx-eyes) {
+	fill: var(--bx-muted-foreground);
+	opacity: 0.55;
+}
+.hero > .hero-html.bx-out,
+.hero > .hero-html:has(.bx-out) {
+	background: var(--bx-muted);
 }
 
 /* Карточки ценности: тёплая подложка и рамка вместо иконочного цвета Starlight. */

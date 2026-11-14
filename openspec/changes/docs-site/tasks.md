@@ -26,7 +26,7 @@
 - [x] 5.2 IBM Plex Sans/Mono через `@fontsource`
 - [x] 5.3 Маскот: знак в шапке, hero главной (≤160 px до вектора), страница 404
 - [x] 5.4 `check-contrast.mjs` (WCAG AA обеих тем) в `npm run check`
-- [ ] 5.5 Вектор маскота со слоем трещины → крупный hero, SVG-favicon, «погасшая трещина» на 404 (ждёт исходника)
+- [x] 5.5 Вектор маскота (`ui/src/assets/burnex-mark.svg`, слои `.bx-eyes` и `.bx-crack`) → крупный hero, SVG-favicon, «погасшая трещина» на 404
 - [ ] 5.6 Снапшоты Playwright главной и 404: 2 темы × 2 ширины
 
 ## 6. Этап 2: наполнение

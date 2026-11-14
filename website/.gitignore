@@ -6,4 +6,5 @@ src/content/docs/ru/reference/
 src/styles/tokens.css
 src/assets/brand/
 public/favicon.png
+public/favicon.svg
 public/apple-touch-icon.png

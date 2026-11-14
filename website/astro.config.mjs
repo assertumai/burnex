@@ -21,9 +21,13 @@ export default defineConfig({
 		starlight({
 			title: 'Burnex',
 			description: 'Агентская разработка — по рельсам: YAML-пайплайн, где код, человек и агенты делают каждый своё.',
-			logo: { src: './src/assets/brand/burnex-mark.png', alt: '' },
-			favicon: '/favicon.png',
-			head: [{ tag: 'link', attrs: { rel: 'apple-touch-icon', href: `${base}apple-touch-icon.png` } }],
+			logo: { src: './src/assets/brand/burnex-mark.svg', alt: '' },
+			favicon: '/favicon.svg',
+			head: [
+				// PNG — запасной значок для браузеров без SVG-favicon.
+				{ tag: 'link', attrs: { rel: 'icon', type: 'image/png', href: `${base}favicon.png` } },
+				{ tag: 'link', attrs: { rel: 'apple-touch-icon', href: `${base}apple-touch-icon.png` } },
+			],
 			// Явные локали без корневой: адреса /burnex/ru/… не придётся менять,
 			// когда появится английский (/burnex/en/…) и корень поведёт на него.
 			defaultLocale: locale,
