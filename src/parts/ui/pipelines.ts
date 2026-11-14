@@ -133,6 +133,8 @@ export interface PipelineStepView {
    * экран стратегий находит шаги, которые её используют.
    */
   readonly reviewStrategy?: ReviewStrategyView;
+  /** Стратегия шага `discuss:` — тем же видом: по пути файла экран стратегий обсуждения находит шаги. */
+  readonly discussStrategy?: ReviewStrategyView;
 }
 
 /** Ссылка шага на стратегию ревью без отпечатка: он для ключа шага, не для витрины. */
@@ -429,6 +431,7 @@ function toJobView(job: Job, pipelineName: string | undefined, ctx: ViewContext)
         ...(step.kind === 'script' && step.uses?.params !== undefined ? { usesParams: step.uses.params } : {}),
         ...(step.kind === 'plugin' ? pluginStepView(step, ctx.registry) : {}),
         ...(step.kind === 'review' ? { reviewStrategy: reviewStrategyView(step.strategy) } : {}),
+        ...(step.kind === 'discuss' ? { discussStrategy: reviewStrategyView(step.strategy) } : {}),
       };
     }),
   };

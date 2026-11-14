@@ -86,6 +86,13 @@ routes:
     target: { screen: screen-review-strategies }
     nav: { order: 7.5, group: config }
 
+  # Стратегии обсуждения шагов `discuss:` — тот же экран для документа
+  # `kind: discussion-strategy` (`ui-discussion-strategies`).
+  - id: screen-discussion-strategies
+    path: /discussion-strategies/:name?
+    target: { screen: screen-discussion-strategies }
+    nav: { order: 7.6, group: config }
+
   # Статусы секретов проектов: проба провайдеров на каждом открытии, значения
   # не показываются (`ui-secrets-screen`).
   - id: screen-secrets

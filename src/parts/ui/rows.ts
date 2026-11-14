@@ -9,6 +9,7 @@ import { row as packagesRow } from './screens/packages/server.js';
 import { row as pipelinesRow } from './screens/pipelines/server.js';
 import { row as proposalsRow } from './screens/proposals/server.js';
 import { row as reviewStrategiesRow } from './screens/review-strategies/server.js';
+import { row as discussionStrategiesRow } from './screens/discussion-strategies/server.js';
 import { row as routesRow } from './screens/routes/server.js';
 import { row as runRow } from './screens/run/server.js';
 import { row as runsRow } from './screens/runs/server.js';
@@ -56,6 +57,7 @@ export const SCREEN_ROWS: readonly BuiltinRow[] = [
   cleanupRow,
   agentsRow,
   reviewStrategiesRow,
+  discussionStrategiesRow,
   secretsRow,
   scheduleRow,
   systemRow,

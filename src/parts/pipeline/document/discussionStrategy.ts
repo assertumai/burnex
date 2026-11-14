@@ -110,8 +110,18 @@ export function resolveDiscussionStrategy(
   backendNames: readonly string[],
 ): DiscussionStrategyResolution {
   return resolveStrategyRef(ref, declaringFile, SUBDIR, roots, (located) =>
-    loadStrategyDocument(located, (text) => parseStrategyText(text, DiscussionStrategySchema, backendNames), buildStrategy),
+    loadDiscussionStrategy(located.ref, located.path, located.layer, backendNames),
   );
+}
+
+/** Прочитать стратегию по пути; найденная по имени обязана называть себя так же. */
+export function loadDiscussionStrategy(
+  ref: string,
+  path: string,
+  layer: 'project' | 'home' | 'explicit',
+  backendNames: readonly string[],
+): DiscussionStrategyResolution {
+  return loadStrategyDocument({ ref, layer, path }, (text) => parseStrategyText(text, DiscussionStrategySchema, backendNames), buildStrategy);
 }
 
 /** Разобрать файл стратегии обсуждения, отказав `BurnexError` с файлом и путём ключа. */
