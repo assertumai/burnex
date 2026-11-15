@@ -170,3 +170,12 @@ pre.mermaid svg .cluster rect {
 	fill: var(--bx-muted) !important;
 	stroke: var(--bx-border) !important;
 }
+
+/* Переключатель языков — сразу за значком GitHub, тема — после него
+   (в разметке Starlight порядок обратный: тема, затем язык). */
+.right-group > starlight-lang-select {
+	order: 1;
+}
+.right-group > starlight-theme-select {
+	order: 2;
+}

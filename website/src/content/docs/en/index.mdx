@@ -1,0 +1,58 @@
+---
+title: Burnex
+description: Deterministic pipelines for AI agents. burnex runs a YAML pipeline step by step — code, people and agents each do their own part.
+template: splash
+editUrl: false
+hero:
+  title: Deterministic pipelines for AI agents
+  tagline: burnex runs a YAML pipeline step by step — code does everything deterministic, people make the calls at gates, and Claude, Codex or Cursor take only the steps that truly need a model.
+  image:
+    file: ../../../assets/brand/burnex-mark.svg
+    alt: The burnex mascot — a coal golem with a glowing crack
+  actions:
+    - text: First run
+      link: /burnex/en/start/first-run/
+      icon: right-arrow
+      variant: primary
+    - text: How it works
+      link: /burnex/en/start/how-it-works/
+      variant: secondary
+    - text: GitHub
+      link: https://github.com/assertumai/burnex
+      icon: external
+      variant: minimal
+---
+
+import { Card, CardGrid, Code, LinkCard } from '@astrojs/starlight/components';
+import HowItWorks from '../../../components/HowItWorks.astro';
+import example from '../../../../../examples/home/burnex.en.yml?raw';
+
+<CardGrid>
+	<Card title="Deterministic work is code" icon="setting">
+		Job order, branching, retries and budgets are computed by the engine from the declared graph, not by a model on the fly. `burnex lint` catches cycles, broken references and unbounded loops before the first token is spent.
+	</Card>
+	<Card title="Any agent, any role" icon="puzzle">
+		Claude, Codex and Cursor can work in one pipeline: one writes, another reviews, a third consolidates a discussion. An agent is a step type, not the orchestrator.
+	</Card>
+	<Card title="A contract on every step" icon="approve-check">
+		Agent output goes through the checks you declared — schema, tests, edit boundaries; whatever fails does not move on. The agent's context is declared too: `burnex context` shows exactly what a step will see.
+	</Card>
+	<Card title="People where they matter, seeing everything" icon="comment-alt">
+		A `decision` step pauses the run and waits for a call, with a deadline and a default outcome. `burnex up` shows runs live, and every step is written to the run log.
+	</Card>
+</CardGrid>
+
+<HowItWorks />
+
+## What a pipeline looks like
+
+Claude fixes the code until `npm test` passes, editing only `src/`. Codex reviews the diff and answers by schema. A person accepts or rejects.
+
+<Code code={example} lang="yaml" title="burnex.yml" mark={[8, 14, 22, 28]} />
+
+The reviewer's answer schema `schemas/review.json` sits next to the file. Codex is enabled with one line in `~/.burnex/config.yml` — [how to connect it](/burnex/en/guides/backends/). The full example is in [examples/home](https://github.com/assertumai/burnex/tree/main/examples/home).
+
+<CardGrid>
+	<LinkCard title="First run" description="Install burnex and run your first pipeline." href="/burnex/en/start/first-run/" />
+	<LinkCard title="Concepts" description="Eight short pages: jobs, steps, contracts, agents, people." href="/burnex/en/concepts/pipeline/" />
+</CardGrid>

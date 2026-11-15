@@ -1,0 +1,28 @@
+version: 1
+kind: pipeline
+name: fix-review-ship
+budget: { tokens: 1M, wallclock: 30m }  # cap for the whole run
+
+jobs:
+  fix:
+    until: { max_iterations: 3, check: [{ cmd: npm test }] }  # code gate: the tests
+    steps:
+      - id: repair
+        agent: claude
+        prompt: Fix the failing tests. Do not change the tests themselves.
+        permissions: { mode: acceptEdits }
+        expect: [{ changed_only: ["src/**"] }]                # edits only in src/
+  review:
+    needs: [fix]
+    steps:
+      - id: check
+        agent: codex                                           # a second agent reviews
+        prompt: Check the fix diff for regressions or tests that were worked around.
+        permissions: { mode: read-only }
+        output_schema: ./schemas/review.json                   # output follows the schema
+        expect: [{ schema: ./schemas/review.json }]
+  ship:
+    needs: [review]
+    steps:
+      - id: approve
+        decision: { prompt: Accept the fix?, outcomes: { approve: continue, deny: reject } }

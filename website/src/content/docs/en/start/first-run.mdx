@@ -1,0 +1,70 @@
+---
+title: First run
+description: Install burnex, run a pipeline without agents, then with one.
+---
+
+import { Steps, Aside } from '@astrojs/starlight/components';
+
+You need `git`, `npm`, and Node ≥ 22. For agent steps, you also need the agent's CLI installed and signed in: [Claude Code](https://docs.claude.com/en/docs/claude-code) is built in, while Codex and Cursor are added via a plugin ([how](/burnex/en/guides/backends/)).
+
+<Steps>
+
+1. **Install burnex.**
+
+   ```bash
+   curl -fsSL https://raw.githubusercontent.com/assertumai/burnex/main/scripts/install.sh | bash -s -- --ref main
+   ```
+
+   The script builds burnex in `~/.burnex/releases/` and puts the `burnex` command in `~/.local/bin`. The `--ref main` flag is needed until the repository has release tags. If `~/.local/bin` isn't on your `PATH`, the script prints an `export PATH=…` line — run it.
+
+2. **Create a pipeline** at the root of any git repository.
+
+   ```bash
+   burnex init
+   ```
+
+   This creates `burnex.yml`, `.burnex/jobs/example.yml`, and a line in `.gitignore`. The example has two jobs made of command steps — no agents needed yet.
+
+3. **Check and run it.**
+
+   ```bash
+   burnex lint burnex.yml && burnex run burnex.yml
+   ```
+
+   Expected output (burnex prints its messages in Russian for now):
+
+   ```text
+   +0:00:00  прогон: начат — example
+   +0:00:00  build/check: шаг success (попытка 1) — 0 токенов, —, 0s
+   +0:00:00  example/hello: шаг success (попытка 1) — 0 токенов, —, 0s
+   +0:00:00  прогон: success (код 0)
+   прогон 0eb533: success
+   журнал: ~/.burnex/runs/<проект>/<время>-0eb533
+   ```
+
+4. **Add an agent step.** Append a job to `burnex.yml`:
+
+   ```yaml
+     explain:
+       needs: [example]
+       steps:
+         - id: readme
+           agent: claude
+           prompt: Describe in three sentences what this repository does.
+           permissions: { mode: plan }
+   ```
+
+   and run `burnex run burnex.yml` again. The agent step shows up in the output with its token usage and cost.
+
+5. **See what happened.** `burnex status` shows the outcome of the latest run; `burnex up` opens the web UI in your browser: jobs, steps, prompts, output, and spend.
+
+</Steps>
+
+<Aside type="caution" title="Two common failures">
+
+- **`burnex: command not found`** — `~/.local/bin` isn't on your `PATH`. Run the `export PATH=…` line the installer printed and add it to your shell profile.
+- **The agent step fails immediately** — the agent's CLI isn't installed or isn't signed in. Run `claude` (or `codex`) manually once; `burnex config` shows which backends the engine can see.
+
+</Aside>
+
+Next: [how it works](/burnex/en/start/how-it-works/) and [the example from the home page](/burnex/en/start/examples/): fixing until tests pass, review by a second agent, and a human decision.

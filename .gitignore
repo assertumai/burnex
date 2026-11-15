@@ -5,3 +5,4 @@ dist/
 # Playwright CLI output (may contain credentials)
 .playwright-cli/
 /output
+/mascots

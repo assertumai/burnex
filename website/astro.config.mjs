@@ -1,7 +1,7 @@
 import { defineConfig } from 'astro/config';
 import starlight from '@astrojs/starlight';
 import mermaid from 'astro-mermaid';
-import { base, branch, legacy, locale, reference, repo, sections } from './pages.mjs';
+import { base, branch, legacy, locale, locales, reference, referenceLabels, repo, sections } from './pages.mjs';
 import { remarkRepoLinks } from './scripts/remark-repo-links.mjs';
 
 export default defineConfig({
@@ -20,7 +20,7 @@ export default defineConfig({
 		mermaid({ theme: 'default', autoTheme: true }),
 		starlight({
 			title: 'Burnex',
-			description: 'Агентская разработка — по рельсам: YAML-пайплайн, где код, человек и агенты делают каждый своё.',
+			description: 'Deterministic pipelines for AI agents: a YAML pipeline where code, people and agents each do their own part.',
 			logo: { src: './src/assets/brand/burnex-mark.svg', alt: '' },
 			favicon: '/favicon.svg',
 			head: [
@@ -28,10 +28,10 @@ export default defineConfig({
 				{ tag: 'link', attrs: { rel: 'icon', type: 'image/png', href: `${base}favicon.png` } },
 				{ tag: 'link', attrs: { rel: 'apple-touch-icon', href: `${base}apple-touch-icon.png` } },
 			],
-			// Явные локали без корневой: адреса /burnex/ru/… не придётся менять,
-			// когда появится английский (/burnex/en/…) и корень поведёт на него.
+			// Явные языки без корневого: /burnex/en/… (по умолчанию) и /burnex/ru/…;
+			// переключатель стоит в шапке сразу за значком GitHub (burnex.css).
 			defaultLocale: locale,
-			locales: { ru: { label: 'Русский', lang: 'ru' } },
+			locales,
 			social: [{ icon: 'github', label: 'GitHub', href: repo }],
 			editLink: { baseUrl: `${repo}/edit/${branch}/website/` },
 			lastUpdated: false,
@@ -56,8 +56,17 @@ export default defineConfig({
 				},
 			},
 			sidebar: [
-				...sections.map((s) => ({ label: s.label, items: s.items })),
-				{ label: 'Справочник', collapsed: true, items: reference.map((name) => `reference/${name}`) },
+				...sections,
+				{
+					label: 'Reference',
+					translations: { ru: 'Справочник' },
+					collapsed: true,
+					items: reference.map((name) => ({
+						slug: `reference/${name}`,
+						label: referenceLabels[name].en,
+						translations: { ru: referenceLabels[name].ru },
+					})),
+				},
 			],
 		}),
 	],

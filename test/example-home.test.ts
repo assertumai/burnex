@@ -21,17 +21,20 @@ const ROOT = fileURLToPath(new URL('../../', import.meta.url));
 const EXAMPLE = join(ROOT, 'examples', 'home');
 
 describe('examples/home', () => {
-  it('burnex lint проходит без ошибок при подключённом плагине Codex', async () => {
-    const project = makeProject();
-    cpSync(EXAMPLE, project.root, { recursive: true });
-    writeFileSync(join(project.home, '.burnex', 'config.yml'), 'plugins:\n  - burnex/backends/codex\n');
+  // burnex.yml — русская главная и README, burnex.en.yml — английская главная.
+  for (const file of ['burnex.yml', 'burnex.en.yml']) {
+    it(`${file}: burnex lint проходит без ошибок при подключённом плагине Codex`, async () => {
+      const project = makeProject();
+      cpSync(EXAMPLE, project.root, { recursive: true });
+      writeFileSync(join(project.home, '.burnex', 'config.yml'), 'plugins:\n  - burnex/backends/codex\n');
 
-    const stdout: string[] = [];
-    const stderr: string[] = [];
-    const io: CliIo = { out: (line) => stdout.push(line), err: (line) => stderr.push(line), cwd: project.root };
-    const code = await withHome(project.home, () => runCli(['lint', 'burnex.yml'], io));
+      const stdout: string[] = [];
+      const stderr: string[] = [];
+      const io: CliIo = { out: (line) => stdout.push(line), err: (line) => stderr.push(line), cwd: project.root };
+      const code = await withHome(project.home, () => runCli(['lint', file], io));
 
-    assert.equal(code, ExitCode.ok, `${stdout.join('\n')}\n${stderr.join('\n')}`);
-    assert.match(stdout.join('\n'), /^ok: burnex\.yml/m);
-  });
+      assert.equal(code, ExitCode.ok, `${stdout.join('\n')}\n${stderr.join('\n')}`);
+      assert.match(stdout.join('\n'), new RegExp(`^ok: ${file.replaceAll('.', '\\.')}`, 'm'));
+    });
+  }
 });

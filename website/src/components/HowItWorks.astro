@@ -3,10 +3,30 @@
 // в цветах темы (CSS-переменные) и с подписями-пропсами под перевод.
 // Семь узлов; форма узла — тип шага: код — прямоугольник, агент — капсула,
 // человек — шестиугольник. Полная схема — на странице «Как это работает».
+// Язык подписей — язык страницы (Starlight), по умолчанию английский.
 interface Props {
-	labels?: Partial<typeof ru>;
+	labels?: Partial<typeof en>;
 }
-const ru = {
+const en = {
+	title: 'How a burnex pipeline runs',
+	yaml: 'burnex.yml',
+	lint: 'lint before the run',
+	engine: 'Engine',
+	engineSub: 'order, budgets',
+	code: 'Code',
+	codeSub: 'tests, build',
+	agent: 'Agent',
+	agentSub: 'Claude, Codex, Cursor',
+	human: 'Human',
+	humanSub: 'decision',
+	gate: 'expect',
+	journal: 'Run log',
+	journalSub: 'and web UI',
+	pass: 'passed',
+	retry: 'failed → retry within attempts and budget, otherwise fail',
+	decide: 'decision: continue or stop',
+};
+const ru: typeof en = {
 	title: 'Как исполняется пайплайн burnex',
 	yaml: 'burnex.yml',
 	lint: 'lint до запуска',
@@ -25,7 +45,8 @@ const ru = {
 	retry: 'не прошло → повтор в пределах попыток и бюджета, иначе отказ',
 	decide: 'решение: дальше или стоп',
 };
-const t = { ...ru, ...Astro.props.labels };
+const lang = Astro.locals.starlightRoute?.locale;
+const t = { ...(lang === 'ru' ? ru : en), ...Astro.props.labels };
 ---
 
 <figure class="how">

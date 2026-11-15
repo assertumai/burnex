@@ -6,22 +6,25 @@ import mark from '../assets/brand/burnex-mark.svg?raw';
 // Маскот встраивается разметкой, чтобы CSS погасил слои .bx-crack и .bx-eyes.
 const out = `<div class="bx-out">${mark.replace('aria-label="burnex"', 'aria-hidden="true"')}</div>`;
 
-const home = `${import.meta.env.BASE_URL}ru/`;
+// GitHub Pages отдаёт один 404.html на весь сайт — он на языке по умолчанию,
+// с кнопкой русской главной.
+const home = `${import.meta.env.BASE_URL}en/`;
 ---
 
 <StarlightPage
 	frontmatter={{
-		title: 'Страница не найдена',
+		title: 'Page not found',
 		template: 'splash',
 		pagefind: false,
 		editUrl: false,
 		hero: {
-			title: 'Тут ничего не горит',
-			tagline: 'Такой страницы нет — возможно, она переехала в «Справочник» или была переименована.',
+			title: 'Nothing is burning here',
+			tagline: 'This page does not exist — it may have moved to the Reference or been renamed.',
 			image: { html: out },
 			actions: [
-				{ text: 'На главную', link: home, variant: 'primary' },
-				{ text: 'Первый прогон', link: `${home}start/first-run/`, variant: 'minimal' },
+				{ text: 'Home', link: home, variant: 'primary' },
+				{ text: 'First run', link: `${home}start/first-run/`, variant: 'minimal' },
+				{ text: 'Русская версия', link: `${import.meta.env.BASE_URL}ru/`, variant: 'minimal' },
 			],
 		},
 	}}

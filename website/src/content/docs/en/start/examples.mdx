@@ -1,0 +1,48 @@
+---
+title: Examples
+description: Ready-made pipelines from the examples/ directory and what each one shows.
+---
+
+import { LinkCard, CardGrid } from '@astrojs/starlight/components';
+
+All examples live in [examples/](https://github.com/assertumai/burnex/tree/main/examples) and pass `burnex lint`. Run one with `burnex run examples/<name>/burnex.yml` from the project root.
+
+<CardGrid>
+	<LinkCard
+		title="home — fix, review, decide"
+		description="The example from the home page: Claude fixes until npm test is green, Codex reviews the diff against a schema, a human approves."
+		href="https://github.com/assertumai/burnex/tree/main/examples/home"
+	/>
+	<LinkCard
+		title="minimal — first agent steps"
+		description="A shared session across two steps, a schema-checked job output, passing that output to the next job, and analyzing a failure."
+		href="https://github.com/assertumai/burnex/tree/main/examples/minimal"
+	/>
+	<LinkCard
+		title="decision — a human gate"
+		description="The run stops between checking and applying and waits for burnex decide: continue, reject, or restart."
+		href="https://github.com/assertumai/burnex/tree/main/examples/decision"
+	/>
+	<LinkCard
+		title="review — multi-agent review"
+		description="Two reviewers on Codex and Claude, an aggregator delivers a schema-checked verdict; defend mode adds a defense of findings."
+		href="https://github.com/assertumai/burnex/tree/main/examples/review"
+	/>
+	<LinkCard
+		title="discuss — design by discussion"
+		description="Participants on different backends propose approaches, an author assembles a draft, an aggregator writes the design document."
+		href="https://github.com/assertumai/burnex/tree/main/examples/discuss"
+	/>
+	<LinkCard
+		title="acceptance — an until loop"
+		description="A deterministic loop: exactly two iterations, with the run log verified by a script."
+		href="https://github.com/assertumai/burnex/tree/main/examples/acceptance"
+	/>
+	<LinkCard
+		title="packages and plugins — extending burnex"
+		description="A package with a pipeline, a step, and a widget; plugins with a predicate, a step kind, and a command."
+		href="https://github.com/assertumai/burnex/tree/main/examples/packages/hello"
+	/>
+</CardGrid>
+
+burnex itself is developed with its own pipeline: the [self-improve](https://github.com/assertumai/burnex/blob/main/.burnex/pipelines/self-improve.yml) loop takes an improvement from the queue, writes a spec for it, implements it until the build is green, reviews it in a separate session, and commits.

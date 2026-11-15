@@ -1,17 +1,17 @@
-// Кладёт страницы справочника из docs/ в контент Starlight как есть
-// (src/content/docs/ru/reference — gitignored; очищается только он,
-// рукописные страницы рядом не трогаются): заголовок из первого «# …»,
-// ссылка «редактировать» на исходник в docs/, оглавление до h2.
+// Кладёт страницы справочника из docs/ в контент Starlight как есть, под
+// каждый язык (src/content/docs/<язык>/reference — gitignored; очищаются только
+// они, рукописные страницы рядом не трогаются): заголовок из первого «# …»,
+// ссылка «редактировать» на исходник в docs/, оглавление до h2. Справочник
+// пишется по-русски, поэтому в нерусских копиях первой строкой — врезка.
 
 import { mkdirSync, readFileSync, rmSync, writeFileSync, existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { branch, locale, pages, repo } from '../pages.mjs';
+import { branch, locales, pages, repo } from '../pages.mjs';
 
 const website = join(dirname(fileURLToPath(import.meta.url)), '..');
 const root = join(website, '..');
 const content = join(website, 'src/content/docs');
-const out = join(content, locale, 'reference');
 
 const missing = pages.filter((p) => !existsSync(join(root, p.source)));
 if (missing.length) {
@@ -19,8 +19,20 @@ if (missing.length) {
 	process.exit(1);
 }
 
-rmSync(out, { recursive: true, force: true });
-mkdirSync(out, { recursive: true });
+for (const lang of Object.keys(locales)) {
+	const out = join(content, lang, 'reference');
+	rmSync(out, { recursive: true, force: true });
+	mkdirSync(out, { recursive: true });
+}
+
+const russianOnly = [
+	':::note[In Russian]',
+	'The reference is the burnex specification, maintained in Russian next to the code',
+	'([`docs/`](https://github.com/assertumai/burnex/tree/main/docs)); an English version will follow.',
+	'The hand-written pages — Getting started, Concepts, Guides — are in English.',
+	':::',
+	'',
+].join('\n');
 
 for (const page of pages) {
 	const text = readFileSync(join(root, page.source), 'utf8');
@@ -37,7 +49,8 @@ for (const page of pages) {
 		'tableOfContents: { maxHeadingLevel: 2 }',
 		'---',
 	].join('\n');
-	writeFileSync(join(content, `${page.slug}.md`), `${frontmatter}\n${body.replace(/^\s+/, '\n')}`);
+	const note = page.lang === 'ru' ? '' : `\n${russianOnly}`;
+	writeFileSync(join(content, `${page.slug}.md`), `${frontmatter}\n${note}${body.replace(/^\s+/, '\n')}`);
 }
 
-console.log(`sync-docs: справочник, ${pages.length} страниц`);
+console.log(`sync-docs: справочник, ${pages.length} страниц на ${Object.keys(locales).length} языках`);
