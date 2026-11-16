@@ -67,6 +67,12 @@ name: self-improve-memory
 # кода и должны видеть/трогать дерево проекта напрямую.
 workspace:
   mode: worktree
+  # Каталог на работу: прежняя модель, под которую написаны inherit этого
+  # пайплайна и параллельность дорожек. С деревьями прогона
+  # (named-workspace-trees) умолчание — одно дерево main на прогон: inherit у
+  # работ, продолжающих его, — ошибка lint, а дорожки a и b шли бы в нём по
+  # очереди и видели правки друг друга.
+  scope: job
 
 # По числу дорожек: меньше — и вторая дожидалась бы свободного места
 # впустую, хотя обе не зависят друг от друга до merge.
@@ -154,6 +160,16 @@ jobs:
   # же плюс пути документов; propose — путь(и) документов и имя инструмента
   # для записи права; plan и review — путь(и) документов.
 
+  # Обсуждение пункта до описания изменения: участники предлагают подход и
+  # возражают черновику, итог и спорное — за арбитром (jobs/design.yml). Исходное
+  # дерево и условие слота — на голове полной дорожки; propose-a идёт следом.
+  design-a:
+    uses: ../jobs/design.yml
+    lane: a
+    needs: [slots]
+    workspace: { inherit: none }
+    if: "jobs.slots.output.lanes.a.filled == true"
+
   propose-a:
     uses: ../jobs/propose.yml
     with:
@@ -161,8 +177,7 @@ jobs:
       spec_rules: "${jobs.slots.output.lanes.a.repo.spec.rules}"
       spec_tool: "${jobs.slots.output.lanes.a.repo.spec.tool}"
     lane: a
-    needs: [slots]
-    workspace: { inherit: none }
+    needs: [design-a]
     # Неопределённое значение (слот не заполнен, а то и вовсе work slots не
     # дошла до успеха) сравнением с true даёт false — работа пропускается,
     # а не запускается на пустоте.
@@ -251,6 +266,16 @@ jobs:
 
   # --- Дорожка b: та же цепочка, те же файлы работ, те же параметры ---
 
+  # Обсуждение пункта до описания изменения: участники предлагают подход и
+  # возражают черновику, итог и спорное — за арбитром (jobs/design.yml). Исходное
+  # дерево и условие слота — на голове полной дорожки; propose-b идёт следом.
+  design-b:
+    uses: ../jobs/design.yml
+    lane: b
+    needs: [slots]
+    workspace: { inherit: none }
+    if: "jobs.slots.output.lanes.b.filled == true"
+
   propose-b:
     uses: ../jobs/propose.yml
     with:
@@ -258,8 +283,7 @@ jobs:
       spec_rules: "${jobs.slots.output.lanes.b.repo.spec.rules}"
       spec_tool: "${jobs.slots.output.lanes.b.repo.spec.tool}"
     lane: b
-    needs: [slots]
-    workspace: { inherit: none }
+    needs: [design-b]
     if: "jobs.slots.output.lanes.b.filled == true"
 
   plan-b:

@@ -1,0 +1,9 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Гейт обсуждения: итог согласован. agreed: false — агрегатор не смог согласованно собрать решения, пункт не реализуется",
+  "type": "object",
+  "required": ["agreed"],
+  "properties": {
+    "agreed": { "const": true }
+  }
+}

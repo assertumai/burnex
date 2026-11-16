@@ -32,9 +32,12 @@ output:
 steps:
   # Права только на чтение: работа ищет, но не правит. Отсутствие Edit и Write
   # делает это ограничением, а не просьбой в промпте.
+  # Панель вместо одного ревьюера (review-strategies/change-review.yml): два
+  # ревьюера ищут независимо, итог по прежней схеме сводит арбитр на старшей
+  # модели — он же решает, где ревьюеры разошлись. Участников и модели объявляет стратегия, поэтому
+  # agent и model у шага нет. expect и attempts относятся к агрегатору.
   - id: review-diff
-    agent: claude
-    model: opus
+    review: ../review-strategies/change-review.yml
     prompt: file:../prompts/review.md
     output_schema: ../schemas/review.json
     permissions:
@@ -46,7 +49,11 @@ steps:
         - Bash(git diff*)
         - Bash(git log*)
         - Bash(git status*)
-    timeout: 25m
+    timeout: 40m
+    # Два ревьюера и агрегатор; потолок не замерен живым заходом.
+    budget:
+      cost: $15
+      on_exceed: stop
     expect:
       - schema: ../schemas/review.json
       - changed_only: []

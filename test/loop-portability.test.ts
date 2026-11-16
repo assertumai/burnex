@@ -903,6 +903,10 @@ jobs:
     const structuredByInvocation = [
       { tasks: [{ id: 't1', title: 'demo', files: ['src/x.ts'], done_when: 'tests pass' }] },
       { changed_files: [], completed: ['t1'], remaining: [] },
+      // review — панель (review-strategies/change-review.yml): два ревьюера
+      // отвечают по встроенной схеме находок, итог по схеме шага — агрегатор.
+      { summary: 'замечаний нет', findings: [] },
+      { summary: 'замечаний нет', findings: [] },
       { findings: [] },
       { changed_files: [], completed: [], remaining: [] },
     ];
@@ -922,7 +926,7 @@ jobs:
     assert.equal(result.status, 'success');
     const status = readStatus(result.journal.paths);
     assert.equal(status.jobs.find((job) => job.id === 'fix-review-a')?.status, 'success');
-    assert.equal(backend.invocations.length, 4);
+    assert.equal(backend.invocations.length, 6);
 
     // Документы изменения дошли до агента: глоб раскрылся в чужом каталоге, а
     // не остался пустым, — иначе успех цепочки ничего бы не доказывал.

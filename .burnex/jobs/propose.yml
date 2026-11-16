@@ -39,6 +39,12 @@ steps:
       # Материалы, названные пунктом (`goal`/`details`): запись пункта выше
       # несёт только пути, а решения по замыслу принимаются по их содержимому.
       - item_refs: ${run.dir}/item-${job.lane}.json
+      # Итог обсуждения пункта (работа design, шаг discuss): решения, отклонённые
+      # варианты, риски. required: описание изменения без него завели бы мимо
+      # согласованного подхода.
+      - path: ${run.dir}/artifacts/design-${job.lane}.json
+        mode: inline
+        required: true
       - path: ${params.spec_rules}
         mode: inline
     output_schema: ../schemas/propose.json

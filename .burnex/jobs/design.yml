@@ -1,0 +1,57 @@
+# Работа: обсуждение пункта очереди несколькими агентами до описания изменения.
+#
+# Шаг discuss (стратегия discussion-strategies/item-design.yml): прагматик и
+# скептик независимо предлагают подход, автор сводит черновик, оба возражают,
+# итоговый проектный документ пишет арбитр на старшей модели — он же решает
+# точки, на которых участники не сошлись. Кто из участников идёт на каком
+# агенте, объявляет стратегия. Документ уходит в
+# artifacts/design-<дорожка>.json, откуда его читает propose.
+#
+# Гейт agreed — предикатом expect самого шага (schemas/design-agreed.json), а
+# не условием if у propose: пропуск по условию evaluateLane не считает отказом
+# (src/parts/pipeline/domain/lanes/lanes.ts), и дорожка, где всё после
+# обсуждения пропущено, сошла бы за готовую. Отказ шага делает дорожку
+# негодной; документ с unresolved остаётся в каталоге шага
+# (participants/aggregator/output.json). Отдельной работой гейт не заведён: при
+# scope: job каждая работа — ещё один засев дерева.
+#
+# Дорожка express обсуждения не проходит: её пункты малы по построению.
+
+version: 1
+kind: job
+name: design
+description: Обсудить подход к пункту очереди до описания изменения
+
+output:
+  from: discuss
+  schema: burnex:design-doc
+
+steps:
+  - id: discuss
+    discuss: ../discussion-strategies/item-design.yml
+    prompt: file:../prompts/discuss-item.md
+    context:
+      - path: ${run.dir}/item-${job.lane}.json
+        mode: inline
+      - item_refs: ${run.dir}/item-${job.lane}.json
+    output_schema: burnex:design-doc
+    # Только чтение: участники ищут и читают, дерево не меняется.
+    permissions:
+      enforce: strict
+      allow:
+        - Read
+        - Grep
+        - Glob
+        - Bash(git log*)
+        - Bash(git diff*)
+    timeout: 40m
+    # От шести вызовов модели (возражений нет) до девяти. Потолок не замерен
+    # живым заходом: первое обсуждение сверить по usage.json шага.
+    budget:
+      cost: $12
+      on_exceed: stop
+    # Попытка одна: повтор перезапустил бы только агрегатора с теми же фазами,
+    # а несошедшееся обсуждение он уже признал несшиваемым.
+    expect:
+      - changed_only: []
+      - schema: ../schemas/design-agreed.json
