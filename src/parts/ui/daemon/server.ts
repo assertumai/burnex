@@ -3,7 +3,7 @@ import { existsSync } from 'node:fs';
 import { homedir } from 'node:os';
 
 
-import { listProjects } from '../../pipeline/run/journal/reader.js';
+import { shownProjects } from '../projects.js';
 import { backfillUsageStore } from '../../pipeline/run/journal/usageStore.js';
 import { pruneOrphanProjects } from '../../pipeline/run/cleanup.js';
 import type { Config } from '../../pipeline/config/resolve.js';
@@ -210,7 +210,7 @@ async function handleWidgetModule(
   if (key === BUILTIN_WIDGETS_KEY) {
     file = resolveBuiltinWidgetFile(id);
   } else {
-    const project = listProjects(runsRoot).find((candidate) => candidate.key === key);
+    const project = shownProjects(runsRoot).find((candidate) => candidate.key === key);
     if (project?.path === undefined || !existsSync(project.path)) {
       sendWidgetNotFound(res);
       return;

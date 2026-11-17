@@ -1,7 +1,7 @@
 import { existsSync } from 'node:fs';
 import { z } from 'zod';
 
-import { listProjects } from '../../../pipeline/run/journal/reader.js';
+import { shownProjects } from '../../projects.js';
 import { readBody, sendJson } from '../../daemon/http.js';
 import { installBuiltinWidget, listBuiltinWidgets } from '../../widgets.js';
 import { screenRow, type ApiHandler } from '../registry.js';
@@ -43,7 +43,7 @@ const handleInstall: ApiHandler = async (req, res, env) => {
     return;
   }
 
-  const project = listProjects(env.runsRoot).find((entry) => entry.key === parsed.data.projectKey);
+  const project = shownProjects(env.runsRoot).find((entry) => entry.key === parsed.data.projectKey);
   if (project?.path === undefined || !existsSync(project.path)) {
     sendJson(res, 404, { error: 'Project not found' });
     return;

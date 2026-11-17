@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { findPackageRoot } from '../../kernel/packageRoot.js';
 import { buildPackageIndex, lookupInPackages, resourceLayers, type PackageResourcePath } from '../packages/index.js';
 
-import { listProjects } from '../pipeline/run/journal/reader.js';
+import { shownProjects } from './projects.js';
 import { isSafeSegment } from './routes.js';
 import { SHARED_MODULE_IMPORT_MAP, SHARED_MODULE_LIST, WIDGET_ERROR_EXPORT, WIDGET_STYLE_EXPORT } from './daemon/sharedModules.js';
 import { parseWidgetImports, unresolvedSharedNames, type UnresolvedSharedKind } from './widgetImports.js';
@@ -316,7 +316,7 @@ export function buildProjectWidgets(projectPath: string, options: WidgetSourceOp
  */
 export function buildWidgets(runsRoot: string, options: WidgetSourceOptions = {}): WidgetsOverview {
   const projects: ProjectWidgetsView[] = [];
-  for (const project of listProjects(runsRoot)) {
+  for (const project of shownProjects(runsRoot)) {
     if (project.path === undefined || !existsSync(project.path)) continue;
     projects.push({ projectKey: project.key, widgets: buildProjectWidgets(project.path, options) });
   }

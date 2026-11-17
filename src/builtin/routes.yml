@@ -100,6 +100,13 @@ routes:
     target: { screen: screen-secrets }
     nav: { order: 8, group: config }
 
+  # Реестр проектов витрины: остальные экраны показывают только добавленные
+  # сюда проекты (`src/parts/ui/projects.ts`).
+  - id: screen-projects
+    path: /projects
+    target: { screen: screen-projects }
+    nav: { order: 8.5, group: config }
+
   # Расписания пайплайнов: только просмотр, правка — в документе пайплайна
   # (`ui-schedule-view`).
   - id: screen-schedule

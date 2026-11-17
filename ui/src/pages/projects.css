@@ -1,0 +1,10 @@
+/* Экран «Projects»: таблица реестра. */
+.projects-table { width: 100%; border-collapse: collapse; font-size: .85rem; margin-top: .8rem; }
+.projects-table th,
+.projects-table td { text-align: left; vertical-align: middle; padding: .4rem .6rem; border-bottom: 1px solid var(--border); }
+.projects-table th { font-weight: 600; color: var(--muted-foreground); font-size: .76rem; }
+.projects-path { overflow-wrap: anywhere; }
+.projects-action { text-align: right; }
+@media (max-width: 720px) {
+  .projects-table { display: block; overflow-x: auto; }
+}

@@ -2180,3 +2180,43 @@ export async function deleteStrategy(api: string, layer: StrategyLayer, name: st
 export async function deleteReviewStrategy(layer: StrategyLayer, name: string): Promise<void> {
   return deleteStrategy('/api/review-strategies', layer, name);
 }
+
+/** Реестр проектов витрины: зеркало `src/parts/ui/projects.ts`. */
+export interface ProjectView {
+  readonly key: string;
+  readonly path: string;
+  readonly exists: boolean;
+  readonly runs: number;
+  readonly latestRun?: string;
+  readonly addedAt?: string;
+}
+
+export interface ProjectsOverview {
+  /** Реестр заведён: витрина показывает только `projects`. */
+  readonly registered: boolean;
+  readonly projects: readonly ProjectView[];
+  readonly generatedAt: string;
+}
+
+export async function fetchProjects(): Promise<ProjectsOverview> {
+  return json<ProjectsOverview>(await fetch('/api/projects'));
+}
+
+async function changeProjects(method: 'DELETE', body: unknown): Promise<ProjectsOverview> {
+  return json<ProjectsOverview>(
+    await fetch('/api/projects', {
+      method,
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(body),
+    }),
+  );
+}
+
+/** Демон открывает системный диалог выбора папки и добавляет выбранную; закрытый диалог ничего не меняет. */
+export async function pickProject(): Promise<ProjectsOverview> {
+  return json<ProjectsOverview>(await fetch('/api/projects/pick', { method: 'POST' }));
+}
+
+export async function removeProject(key: string): Promise<ProjectsOverview> {
+  return changeProjects('DELETE', { key });
+}

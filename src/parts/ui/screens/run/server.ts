@@ -6,7 +6,8 @@ import { z } from 'zod';
 
 import { resolveConfig } from '../../../pipeline/config/resolve.js';
 import { runPaths, type RunPaths } from '../../../pipeline/run/journal/paths.js';
-import { findStepDir, isRunAlive, listProjects } from '../../../pipeline/run/journal/reader.js';
+import { findStepDir, isRunAlive } from '../../../pipeline/run/journal/reader.js';
+import { shownProjects } from '../../projects.js';
 import { DESIGN_FORMATS, isDesignFormat, mermaidBundlePath, parseDesignDocument, renderDesign } from '../../../pipeline/render/designDoc.js';
 import { planResume, readSourceRun } from '../../../pipeline/run/resumePlan.js';
 import { isBurnexError } from '../../../../kernel/errors.js';
@@ -315,7 +316,7 @@ const handleResume: ApiHandler = async (req, res, env) => {
     return;
   }
 
-  const project = listProjects(env.runsRoot).find((entry) => entry.key === address.key);
+  const project = shownProjects(env.runsRoot).find((entry) => entry.key === address.key);
   if (project?.path === undefined) {
     sendJson(res, 400, { error: `Project ${address.key} is unknown to the projects.json index` });
     return;

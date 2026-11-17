@@ -9,7 +9,8 @@ import { nextOccurrence } from '../pipeline/domain/trigger/cron.js';
 import { displayInputs } from '../pipeline/document/displayInputs.js';
 import { expandPipeline } from '../pipeline/document/expand.js';
 import { runPaths } from '../pipeline/run/journal/paths.js';
-import { listProjects, listRuns, readManifestSoft, readStatusSoft } from '../pipeline/run/journal/reader.js';
+import { listRuns, readManifestSoft, readStatusSoft } from '../pipeline/run/journal/reader.js';
+import { shownProjects } from './projects.js';
 import type { RunManifest } from '../pipeline/run/journal/schema.js';
 import {
   projectSection,
@@ -259,7 +260,7 @@ export async function buildSchedule(
 
   // Последовательно, как в `buildPipelines`: параллельный импорт чужих
   // плагинов порядка не ускоряет, а карточки делает недетерминированными.
-  for (const project of listProjects(runsRoot)) {
+  for (const project of shownProjects(runsRoot)) {
     if (options.signal?.aborted === true) break;
     if (project.path === undefined || !existsSync(project.path)) continue;
     projects.push(await projectView(runsRoot, { key: project.key, path: project.path }, config, options, now));

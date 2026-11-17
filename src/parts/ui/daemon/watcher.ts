@@ -2,7 +2,8 @@ import { existsSync, statSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 
-import { listProjects, listRunsByKey } from '../../pipeline/run/journal/reader.js';
+import { listRunsByKey } from '../../pipeline/run/journal/reader.js';
+import { shownProjects } from '../projects.js';
 import { isAbandoned, readOwner } from '../../pipeline/domain/lockfile.js';
 import { runPaths, usageDatabasePath, usageStorePath } from '../../pipeline/run/journal/paths.js';
 import { buildBacklog, lockPathOf, type BacklogOverview } from '../backlog.js';
@@ -300,7 +301,7 @@ function fingerprint(
     }
   }
 
-  for (const project of listProjects(runsRoot)) {
+  for (const project of shownProjects(runsRoot)) {
     // Путь неизвестен — читать очередь неоткуда, как и в buildBacklog: такой
     // проект в очереди не покажется, а стало быть, отпечатывать по нему нечего.
     if (project.path !== undefined) {

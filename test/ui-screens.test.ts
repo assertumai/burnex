@@ -104,6 +104,7 @@ describe('ui-screens: состав экранов у демона', () => {
       'screen-home',
       'screen-packages',
       'screen-pipelines',
+      'screen-projects',
       'screen-proposals',
       'screen-review-strategies',
       'screen-routes',
@@ -126,6 +127,7 @@ describe('ui-screens: состав экранов у демона', () => {
       'screen-cleanup': '/api/usage-records',
       'screen-agents': '/api/models',
       'screen-secrets': '/api/secrets',
+      'screen-projects': '/api/projects',
       'screen-schedule': '/api/schedule',
       'screen-system': '/api/system',
       'screen-packages': '/api/packages',
@@ -349,7 +351,7 @@ describe('ui-screens: строка каркаса снята патчем', () =
     // нет. Без разбора этого случая первое же обращение к составу дало бы
     // `TypeError` мимо всякого разбора отказа и уронило бы демон.
     const rows = ['ui-shell', 'screen-home', 'screen-runs', 'screen-run', 'screen-pipelines', 'screen-widgets',
-      'screen-backlog', 'screen-scrum', 'screen-usage', 'screen-cleanup', 'screen-agents', 'screen-review-strategies', 'screen-discussion-strategies', 'screen-secrets', 'screen-schedule', 'screen-system',
+      'screen-backlog', 'screen-scrum', 'screen-usage', 'screen-cleanup', 'screen-agents', 'screen-review-strategies', 'screen-discussion-strategies', 'screen-secrets', 'screen-projects', 'screen-schedule', 'screen-system',
       'screen-routes', 'screen-decisions', 'screen-proposals', 'ui-dashboards', 'screen-packages', 'ui-run-launch'];
     writePatch(
       home,

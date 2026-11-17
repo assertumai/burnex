@@ -3,13 +3,13 @@ import { isAbsolute, relative } from 'node:path';
 
 import {
   isRunAlive,
-  listProjects,
   listRunsByKey,
   readManifestSoft,
   readStatusSoft,
   readUsageSoft,
   type JournalProblem,
 } from '../pipeline/run/journal/reader.js';
+import { shownProjects } from './projects.js';
 import { runPaths } from '../pipeline/run/journal/paths.js';
 import type {
   AwaitingDecision,
@@ -396,7 +396,7 @@ export function buildOverview(runsRoot: string, now: Date = new Date()): Overvie
   // Наличие строки в БД само по себе не возвращает удалённый run в список.
   const { records } = readUsageStore(runsRoot);
 
-  const projects = listProjects(runsRoot).map((project) => {
+  const projects = shownProjects(runsRoot).map((project) => {
     const { key } = project;
     const path = project.path ?? pathFromRecords(records, key);
     const runs = listRunsByKey(runsRoot, key).map((runId) =>

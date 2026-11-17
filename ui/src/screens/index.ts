@@ -7,6 +7,7 @@ import decisions from './decisions';
 import home from './home';
 import packages from './packages';
 import pipelines from './pipelines';
+import projects from './projects';
 import proposals from './proposals';
 import reviewStrategies from './review-strategies';
 import discussionStrategies from './discussion-strategies';
@@ -45,6 +46,7 @@ export const BUILTIN_SCREENS: Readonly<Record<string, ScreenPlugin>> = {
   'screen-review-strategies': reviewStrategies,
   'screen-discussion-strategies': discussionStrategies,
   'screen-secrets': secrets,
+  'screen-projects': projects,
   'screen-schedule': schedule,
   'screen-system': system,
   'screen-routes': routes,

@@ -4,7 +4,7 @@ import { z } from 'zod';
 
 import { resolveConfig } from '../../../pipeline/config/resolve.js';
 import { isBurnexError } from '../../../../kernel/errors.js';
-import { listProjects } from '../../../pipeline/run/journal/reader.js';
+import { shownProjects } from '../../projects.js';
 import type { ProposalRecord } from '../../../pipeline/domain/proposals/entry.js';
 import { acceptProposal, rejectProposal, resolveProposalTarget } from '../../../pipeline/domain/proposals/store.js';
 import { readBody, sendJson } from '../../daemon/http.js';
@@ -75,7 +75,7 @@ function deliveryMode(
 const handleGet: ApiHandler = (_req, res, env) => {
   const overview = env.watcher.currentProposals();
   const projectPaths = new Map(
-    listProjects(env.runsRoot)
+    shownProjects(env.runsRoot)
       .filter((project): project is { readonly key: string; readonly path: string } => project.path !== undefined)
       .map((project) => [project.key, project.path]),
   );
@@ -131,7 +131,7 @@ const handlePost: ApiHandler = async (req, res, env) => {
     return;
   }
 
-  const project = listProjects(env.runsRoot).find((entry) => entry.key === parsed.data.project);
+  const project = shownProjects(env.runsRoot).find((entry) => entry.key === parsed.data.project);
   if (project?.path === undefined) {
     sendJson(res, 400, { error: `Project ${parsed.data.project} is unknown to the projects.json index` });
     return;

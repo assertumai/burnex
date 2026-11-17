@@ -19,7 +19,7 @@ import {
   type LockWaitOptions,
 } from '../../../pipeline/domain/backlog/index.js';
 import { isBurnexError } from '../../../../kernel/errors.js';
-import { listProjects } from '../../../pipeline/run/journal/reader.js';
+import { shownProjects } from '../../projects.js';
 import { readBoardColumns, writeBoardColumns, BOARD_FILE } from '../../boardFile.js';
 import { readBody, sendJson } from '../../daemon/http.js';
 import { STATUS_PATTERN, isDroppable, withColumn } from '../../scrumView.js';
@@ -118,7 +118,7 @@ const handleMove: ApiHandler = async (req, res, env) => {
     return;
   }
 
-  const project = listProjects(env.runsRoot).find((entry) => entry.key === projectKey);
+  const project = shownProjects(env.runsRoot).find((entry) => entry.key === projectKey);
   if (project?.path === undefined) {
     sendJson(res, 400, { error: `Project ${projectKey} is unknown to the projects.json index` });
     return;
@@ -269,7 +269,7 @@ const handleEdit: ApiHandler = async (req, res, env) => {
 
   const { project: projectKey, slug, fields } = parsed.data;
 
-  const project = listProjects(env.runsRoot).find((entry) => entry.key === projectKey);
+  const project = shownProjects(env.runsRoot).find((entry) => entry.key === projectKey);
   if (project?.path === undefined) {
     sendJson(res, 400, { error: `Project ${projectKey} is unknown to the projects.json index` });
     return;
@@ -385,7 +385,7 @@ const handleAddColumn: ApiHandler = async (req, res, env) => {
 
   const { project: projectKey, id, title, index } = parsed.data;
 
-  const project = listProjects(env.runsRoot).find((entry) => entry.key === projectKey);
+  const project = shownProjects(env.runsRoot).find((entry) => entry.key === projectKey);
   if (project?.path === undefined) {
     sendJson(res, 400, { error: `Project ${projectKey} is unknown to the projects.json index` });
     return;

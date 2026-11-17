@@ -2,7 +2,7 @@ import { homedir } from 'node:os';
 import { relative } from 'node:path';
 import { z } from 'zod';
 
-import { listProjects } from '../../pipeline/run/journal/reader.js';
+import { shownProjects } from '../projects.js';
 import { packagedAddressName } from '../../../kernel/package-name.js';
 import { packagedPipelineNames } from '../../pipeline/domain/package-schema.js';
 import { listPipelineEntries } from '../../pipeline/domain/project/pipelines.js';
@@ -106,7 +106,7 @@ const handlePost: ApiHandler = async (req, res, env) => {
     return;
   }
 
-  const project = listProjects(env.runsRoot).find((entry) => entry.key === parsed.data.project);
+  const project = shownProjects(env.runsRoot).find((entry) => entry.key === parsed.data.project);
   if (project?.path === undefined) {
     sendJson(res, 400, { error: `Project ${parsed.data.project} is unknown to the projects.json index` });
     return;

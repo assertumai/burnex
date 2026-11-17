@@ -24,6 +24,7 @@ describe('ui-dashboard: группы бокового меню поставки'
       'screen-packages',
       'screen-agents',
       'screen-secrets',
+      'screen-projects',
       'screen-schedule',
       'screen-system',
     ]);

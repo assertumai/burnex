@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
-import { listProjects, readStatus } from '../../../pipeline/run/journal/reader.js';
+import { readStatus } from '../../../pipeline/run/journal/reader.js';
+import { shownProjects } from '../../projects.js';
 import { runPaths } from '../../../pipeline/run/journal/paths.js';
 import { isBurnexError } from '../../../../kernel/errors.js';
 import { selectAwaiting, validateDecision } from '../../../pipeline/run/decision.js';
@@ -61,7 +62,7 @@ const handlePost: ApiHandler = async (req, res, env) => {
     return;
   }
 
-  const project = listProjects(env.runsRoot).find((entry) => entry.key === address.key);
+  const project = shownProjects(env.runsRoot).find((entry) => entry.key === address.key);
   if (project?.path === undefined) {
     sendJson(res, 400, { error: `Project ${address.key} is unknown to the projects.json index` });
     return;

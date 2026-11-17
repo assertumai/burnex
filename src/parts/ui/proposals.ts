@@ -1,7 +1,7 @@
 import { existsSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { listProjects } from '../pipeline/run/journal/reader.js';
+import { shownProjects } from './projects.js';
 import type { ProposalRecord } from '../pipeline/domain/proposals/entry.js';
 import { proposalsDirPath, readProposalsDir, type ProposalsReadResult } from '../pipeline/domain/proposals/store.js';
 
@@ -28,7 +28,7 @@ export interface ProposalsOverview {
  */
 export function buildProposals(runsRoot: string): ProposalsOverview {
   const projects: ProjectProposalsView[] = [];
-  for (const project of listProjects(runsRoot)) {
+  for (const project of shownProjects(runsRoot)) {
     if (project.path === undefined || !existsSync(project.path)) continue;
     const result = readProposalsDir(project.path);
     projects.push({ projectKey: project.key, ...result });

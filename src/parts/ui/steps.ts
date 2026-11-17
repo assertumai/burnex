@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parse as parseYaml } from 'yaml';
 
-import { listProjects } from '../pipeline/run/journal/reader.js';
+import { shownProjects } from './projects.js';
 import { findPackageRoot } from '../pipeline/domain/package-schema.js';
 import { StepManifestSchema } from '../pipeline/document/schema.js';
 import { describeSchemaFailure } from '../../kernel/schema-failure.js';
@@ -156,7 +156,7 @@ export interface BuildStepsOptions {
 export function buildSteps(runsRoot: string, options: BuildStepsOptions = {}): StepsOverview {
   const home = options.home ?? homedir();
   const projects: ProjectStepsView[] = [];
-  for (const project of listProjects(runsRoot)) {
+  for (const project of shownProjects(runsRoot)) {
     if (project.path === undefined || !existsSync(project.path)) continue;
     projects.push({
       projectKey: project.key,

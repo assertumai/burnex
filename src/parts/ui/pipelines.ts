@@ -3,7 +3,7 @@ import { homedir } from 'node:os';
 import { relative } from 'node:path';
 
 import { listPipelineEntries, type PipelineEntry } from '../pipeline/domain/project/pipelines.js';
-import { listProjects } from '../pipeline/run/journal/reader.js';
+import { shownProjects } from './projects.js';
 import { expandPipeline } from '../pipeline/document/expand.js';
 import { displayInputs } from '../pipeline/document/displayInputs.js';
 import { isBurnexError, BurnexError } from '../../kernel/errors.js';
@@ -937,7 +937,7 @@ export async function buildPipelines(
   // кешируется) и стоит недетерминированного порядка карточек (design.md,
   // Решение 5). Событийный цикл при этом не блокируется — обработчик
   // `/api/pipelines` асинхронен.
-  for (const project of listProjects(runsRoot)) {
+  for (const project of shownProjects(runsRoot)) {
     // Проект, чей путь неизвестен, обходить негде: в указателе его нет.
     if (project.path === undefined || !existsSync(project.path)) continue;
     const found = await projectPipelines(project.key, project.path, config, options);

@@ -10,7 +10,8 @@ import { enginePackageRoot } from '../pipeline/document/packagePaths.js';
 import { buildStepEnv } from '../pipeline/run/exec/env.js';
 import { isUnpricedCall, loadPriceCatalog, type PriceCatalog } from '../pipeline/run/budget/priceCatalog.js';
 import { EventSchema } from '../pipeline/run/journal/schema.js';
-import { listProjects, listRunsByKey, readUsageSoft } from '../pipeline/run/journal/reader.js';
+import { listRunsByKey, readUsageSoft } from '../pipeline/run/journal/reader.js';
+import { shownProjects } from './projects.js';
 import { runPaths } from '../pipeline/run/journal/paths.js';
 import { resolveInstallMethod, type InferProbes } from '../install/infer.js';
 import { installManifestPath, burnexHome, type InstallManifest } from '../install/manifest.js';
@@ -289,7 +290,7 @@ function buildEngine(host: SystemHost): EngineView {
 /** Разбор журнала: отказы бэкендов из 20 новейших прогонов каждого проекта. */
 function collectRefusals(runsRoot: string): RefusalView[] {
   const found: RefusalView[] = [];
-  for (const project of listProjects(runsRoot)) {
+  for (const project of shownProjects(runsRoot)) {
     for (const runId of listRunsByKey(runsRoot, project.key).slice(0, REFUSAL_RUNS_PER_PROJECT)) {
       const paths = runPaths(runsRoot, project.key, runId);
       let text: string;

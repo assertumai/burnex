@@ -6,7 +6,7 @@ import { readBody, sendJson } from '../daemon/http.js';
 import { projectPipelines, type PipelineView } from '../pipelines.js';
 import { deleteStrategy, readStrategies, saveStrategy, StrategyRejected, type StrategyKind } from '../strategies.js';
 import { readSettings } from '../settings.js';
-import { listProjects } from '../../pipeline/run/journal/reader.js';
+import { shownProjects } from '../projects.js';
 import type { ScreenDeclaration } from './declaration.js';
 import { screenRow, type ApiHandler, type RequestEnv } from './registry.js';
 
@@ -27,7 +27,7 @@ async function backendNames(env: RequestEnv): Promise<readonly string[]> {
 async function pipelinesOf(env: RequestEnv): Promise<readonly PipelineView[]> {
   if (env.projectRoot === undefined || env.config === undefined) return [];
   const projectRoot = env.projectRoot;
-  const key = listProjects(env.runsRoot).find((project) => project.path === projectRoot)?.key ?? '';
+  const key = shownProjects(env.runsRoot).find((project) => project.path === projectRoot)?.key ?? '';
   const found = await projectPipelines(key, projectRoot, env.config, {
     ...(env.home === undefined ? {} : { home: env.home }),
     kernelCache: env.kernelCache,

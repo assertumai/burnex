@@ -9,7 +9,7 @@ import { displayInputs } from '../pipeline/document/displayInputs.js';
 import { expandPipeline } from '../pipeline/document/expand.js';
 import { backendsInUse } from '../pipeline/secrets/declaration.js';
 import type { SecretDeclaration } from '../pipeline/document/model.js';
-import { listProjects } from '../pipeline/run/journal/reader.js';
+import { shownProjects } from './projects.js';
 import {
   probeBackendCredential,
   probePipelineSecret,
@@ -261,7 +261,7 @@ export async function buildSecrets(
 
   // Последовательно, как в `buildPipelines`: параллельный импорт чужих
   // плагинов порядка не ускоряет, а карточки делает недетерминированными.
-  for (const project of listProjects(runsRoot)) {
+  for (const project of shownProjects(runsRoot)) {
     // Клиент ушёл — ответ уже некому отдавать, а следующий проект поднял бы плагины зря.
     if (options.signal?.aborted === true) break;
     if (project.path === undefined || !existsSync(project.path)) continue;
