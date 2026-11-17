@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-import type { BackendAdapter, BackendRefusal } from '../../backend/types.js';
+import type { BackendAdapter, BackendRefusal, BackendEvent, BackendConnection } from '../../backend/types.js';
 import type { BackendSlots } from '../../backend/slots.js';
 import {
   BACKEND_REFUSAL_PREDICATE,
@@ -22,6 +22,9 @@ import type { Masker } from '../journal/mask.js';
 import type { AttemptRecord, PredicateResult, StatusValue, Usage } from '../journal/schema.js';
 import { priceUsage, type PriceCatalog } from '../budget/priceCatalog.js';
 import { runAttempts, type AttemptPlan } from './attempts.js';
+import { acquireAttemptLease } from '../journal/attemptLease.js';
+import { createAttemptCheckpoint } from '../journal/activeAttempt.js';
+import { UsageNormalizer } from './usageNormalizer.js';
 import { runProcess, type ProcessResult } from './process.js';
 
 /**
@@ -66,11 +69,14 @@ export interface SessionRegistry {
   noteCost(sessionId: string, totalUsd: number): void;
   /** Последняя известная нарастающая цена сессии, если она известна. */
   costOf(sessionId: string): number | undefined;
+  usageOf(sessionId: string): Partial<Usage> | undefined;
+  noteUsage(sessionId: string, usage: Partial<Usage>): void;
 }
 
 export function createSessionRegistry(): SessionRegistry {
   const started = new Map<string, string>();
   const costs = new Map<string, number>();
+  const totals = new Map<string, Partial<Usage>>();
   return {
     acquire(alias) {
       const existing = started.get(alias);
@@ -91,6 +97,8 @@ export function createSessionRegistry(): SessionRegistry {
     noteCost(sessionId, totalUsd) {
       costs.set(sessionId, totalUsd);
     },
+    usageOf: (sessionId) => totals.get(sessionId),
+    noteUsage: (sessionId, usage) => { totals.set(sessionId, { ...usage }); },
     costOf(sessionId) {
       return costs.get(sessionId);
     },
@@ -139,9 +147,11 @@ export interface AgentStepOptions {
    * Нарастающий итог попытки и её номер. Номер обязателен: без него расход
    * ложится под чужую попытку, а замена по ключу стирает предыдущую.
    */
+  readonly onCheckpoint?: () => void;
   readonly onUsage?: (usage: Usage, attempt: number) => void;
   /** Каталог цен для оценки попытки, если бэкенд цену не сообщил. */
   readonly priceCatalog?: PriceCatalog;
+  readonly cacheReadWeight?: number;
   readonly onUnparsed?: (line: string) => void;
   /** Один вызов на каждый отказ бэкенда в разрешении на вызов инструмента. */
   readonly onPermissionDenied?: (plan: AttemptPlan, tool: string, input: unknown) => void;
@@ -215,6 +225,12 @@ function unavailableMcpServers(
 }
 
 export async function executeAgentStep(options: AgentStepOptions): Promise<AgentStepResult> {
+  const release = acquireAttemptLease(options.stepDir);
+  try { return await executeAgentStepOwned(options); }
+  finally { release(); }
+}
+
+async function executeAgentStepOwned(options: AgentStepOptions): Promise<AgentStepResult> {
   const { step, adapter } = options;
   const evaluate = options.evaluate ?? evaluateDefault;
   // Схему держит движок, а не CLI (`backend-structured-output`, решение 2):
@@ -293,6 +309,26 @@ export async function executeAgentStep(options: AgentStepOptions): Promise<Agent
       writePrompt(options.stepDir, suffix, prompt, options.masker);
 
       let usage = emptyUsage(adapter.name, resolvedModel, 0);
+      const normalizer = new UsageNormalizer();
+      const previousTotal = forking ? options.sessions.usageOf(step.forkFrom!)
+        : session.resume && session.id !== undefined ? options.sessions.usageOf(session.id) : undefined;
+      let execBaselineSet = false;
+      const checkpoint = createAttemptCheckpoint(options.stepDir, plan.attempt, adapter.name, launch.transport ?? 'exec');
+      checkpoint.update({ ...(sessionId === undefined ? {} : { session_id: sessionId }),
+        ...(launch.diagnostic === undefined ? {} : { diagnostic: launch.diagnostic }) }, true);
+      options.onCheckpoint?.();
+      let connection: BackendConnection | undefined;
+      let observedUsage = false;
+      const publishUsage = (): void => {
+        usage = priceUsage(usage, options.priceCatalog);
+        const tokensKnown = [usage.tokens_in, usage.tokens_out, usage.cache_read, usage.cache_write].some((value) => value !== null);
+        checkpoint.update({ usage, ...(tokensKnown ? { billable_tokens: Math.round((usage.tokens_in ?? 0) + (usage.tokens_out ?? 0) +
+          (usage.cache_write ?? 0) + (usage.cache_read ?? 0) * (options.cacheReadWeight ?? 1)) } : {}),
+          usage_state: normalizer.uncertain ? 'incomplete' : 'observed',
+          last_usage_at: new Date().toISOString(), ledger: normalizer.state() }, !observedUsage);
+        observedUsage = true;
+        options.onUsage?.(usage, plan.attempt);
+      };
       const seenUsageMessageIds = new Set<string>();
       let text: string | undefined;
       // Куски `text` текстового CLI; итоговый текст из них собирается после
@@ -311,11 +347,16 @@ export async function executeAgentStep(options: AgentStepOptions): Promise<Agent
         carry += chunk;
         const lines = carry.split('\n');
         carry = lines.pop() ?? '';
-        for (const line of lines) handleLine(line);
+        for (const line of lines) {
+          if (connection === undefined) handleLine(line); else connection.receive(line);
+        }
       };
 
       const handleLine = (line: string): void => {
-        const event = adapter.parseLine(line);
+        handleEvent(adapter.parseLine(line));
+      };
+      const handleEvent = (event: BackendEvent): void => {
+        checkpoint.update({ last_backend_event_at: new Date().toISOString() });
         switch (event.kind) {
           case 'init':
             backendInit = event.data;
@@ -325,6 +366,8 @@ export async function executeAgentStep(options: AgentStepOptions): Promise<Agent
             if (event.sessionId !== undefined) {
               sessionId = event.sessionId;
               options.sessions.seed(alias, event.sessionId);
+              checkpoint.update({ session_id: event.sessionId }, true);
+              options.onCheckpoint?.();
             }
             break;
           case 'tool_use':
@@ -334,7 +377,37 @@ export async function executeAgentStep(options: AgentStepOptions): Promise<Agent
             }
             recordUsageDelta(event.usage, event.messageId);
             break;
+          case 'usage_snapshot': {
+            const normalized = normalizer.accept(event);
+            if (!normalizer.uncertain) options.sessions.noteUsage(event.sessionId, event.usage);
+            checkpoint.update({ last_usage_at: new Date().toISOString(), ledger: normalizer.state(),
+              ...(normalizer.uncertain ? { usage_state: 'incomplete' } : {}),
+              ...(event.turnId === undefined ? {} : { turn_id: event.turnId }) });
+            if (normalized !== undefined) {
+              usage = mergeUsage(emptyUsage(adapter.name, resolvedModel, 0), normalized);
+              publishUsage();
+            }
+            break;
+          }
           case 'usage':
+            checkpoint.update({ last_usage_at: new Date().toISOString() });
+            if (event.scope === 'thread') {
+              if (sessionId === undefined) { normalizer.uncertain = true; break; }
+              if (!execBaselineSet) {
+                execBaselineSet = true;
+                const baseline = session.resume || forking ? previousTotal
+                  : { tokens_in: 0, tokens_out: 0, cache_read: 0, cache_write: 0 };
+                if (baseline !== undefined) normalizer.accept({ kind: 'usage_snapshot', scope: 'thread',
+                  sessionId, baseline: true, usage: baseline });
+              }
+              const normalized = normalizer.accept({ kind: 'usage_snapshot', scope: 'thread', sessionId, usage: event.usage });
+              if (!normalizer.uncertain) options.sessions.noteUsage(sessionId, event.usage);
+              if (normalized !== undefined) {
+                usage = mergeUsage(emptyUsage(adapter.name, resolvedModel, 0), normalized);
+                publishUsage();
+              }
+              break;
+            }
             recordUsageDelta(event.usage, event.messageId);
             break;
           case 'result':
@@ -346,7 +419,7 @@ export async function executeAgentStep(options: AgentStepOptions): Promise<Agent
               // попытку так же, как связывает сообщённую цену, — в этот же
               // момент (решение 5).
               usage = priceUsage(mergeUsage(usage, callCost(event.usage)), options.priceCatalog);
-              options.onUsage?.(usage, plan.attempt);
+              publishUsage();
             }
             if (event.failed === true) failedByBackend = true;
             if (event.refusal !== undefined) refusal = event.refusal;
@@ -366,6 +439,8 @@ export async function executeAgentStep(options: AgentStepOptions): Promise<Agent
           case 'session_started':
             sessionId = event.sessionId;
             options.sessions.seed(alias, event.sessionId);
+            checkpoint.update({ session_id: event.sessionId }, true);
+            options.onCheckpoint?.();
             break;
         }
       };
@@ -395,7 +470,7 @@ export async function executeAgentStep(options: AgentStepOptions): Promise<Agent
         const peak = messagePrefix(delta);
         const messageUsage = mergeUsage(emptyUsage(adapter.name, resolvedModel, 0), delta);
         usage = sumUsage(usage, peak === undefined ? messageUsage : { ...messageUsage, peak_prefix_tokens: peak });
-        options.onUsage?.(usage, plan.attempt);
+        publishUsage();
       };
 
       // Место бэкенда занято вокруг самого процесса: таймаут и детектор
@@ -415,7 +490,15 @@ export async function executeAgentStep(options: AgentStepOptions): Promise<Agent
           ...(options.onStall === undefined ? {} : { onStall: options.onStall }),
           stdoutPath: join(options.stepDir, `stdout${suffix}.log`),
           stderrPath: join(options.stepDir, `stderr${suffix}.log`),
-          onStdout: consume,
+          interactive: launch.connect !== undefined,
+          onSpawn: (pid, send, close) => {
+            checkpoint.update({ child: { pid, started_at: new Date().toISOString() } }, true);
+            connection = launch.connect?.({ send, emit: handleEvent, close });
+            options.onCheckpoint?.();
+          },
+          onInterrupt: () => { if (connection === undefined) return false; connection.interrupt(); return true; },
+          onStdout: (chunk) => { const written = checkpoint.update({ last_stdout_at: new Date().toISOString() }); consume(chunk); if (written) options.onCheckpoint?.(); },
+          onStderr: () => { if (checkpoint.update({ last_stderr_at: new Date().toISOString() })) options.onCheckpoint?.(); },
           ...(options.masker === undefined ? {} : { masker: options.masker }),
         });
       };
@@ -423,7 +506,9 @@ export async function executeAgentStep(options: AgentStepOptions): Promise<Agent
         ? await runBackendProcess()
         : await options.backendSlots.run(adapter.name, runBackendProcess);
 
-      if (carry.trim() !== '') handleLine(carry);
+      if (carry.trim() !== '') {
+        if (connection === undefined) handleLine(carry); else connection.receive(carry);
+      }
       if (text === undefined) {
         // Пустые куски по краям — отступы вывода CLI, а не часть ответа:
         // отсекаются с обеих сторон, внутренние (между абзацами) остаются.
@@ -436,6 +521,12 @@ export async function executeAgentStep(options: AgentStepOptions): Promise<Agent
       // потока её в событиях нет. Без этой записи учёт работы и шага остаётся
       // с нулевым временем, которое выглядит измерением, а не пробелом.
       options.onUsage?.(usage, plan.attempt);
+      checkpoint.update({ state: process_.outcome === 'exited' && process_.exitCode === 0 && !failedByBackend ? 'completed' : 'interrupted',
+        usage, ledger: normalizer.state(),
+        usage_state: normalizer.uncertain || failedByBackend || process_.outcome !== 'exited' || process_.exitCode !== 0
+          ? 'incomplete' : usage.tokens_in === null && usage.tokens_out === null ? 'unavailable' : 'closed',
+        exit_code: process_.exitCode, signal: process_.signal }, true);
+      options.onCheckpoint?.();
 
       const textCheck = textSchema === undefined ? undefined : structuredFromText(textSchema, text);
       if (textCheck !== undefined) structured = textCheck.structured;

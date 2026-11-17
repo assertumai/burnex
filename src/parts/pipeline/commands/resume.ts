@@ -1,3 +1,4 @@
+import { assertAttemptsSafeToResume } from '../run/journal/attemptRecovery.js';
 import { resolveConfig, type Config } from '../config/resolve.js';
 import { resolveConfigWithAgent } from '../config/agentOverride.js';
 import type { Registry } from '../../../kernel/registry.js';
@@ -52,6 +53,7 @@ export async function continueRestartChain(
   });
   for (const line of describePlan(plan)) write(line);
 
+  assertAttemptsSafeToResume(sourcePaths.jobs, from);
   const result = await runPipeline({
     expanded,
     config,
@@ -123,6 +125,8 @@ export async function runResumeCommand(
       write('пробный запуск: ничего не исполнено, прогон не создан');
       return ExitCode.ok;
     }
+
+    assertAttemptsSafeToResume(sourcePaths.jobs, from);
 
     // Отмена — тем же приёмом, что у `burnex run`: возобновлённый прогон
     // останавливается на шаге решения так же, как первый, и выйти из него

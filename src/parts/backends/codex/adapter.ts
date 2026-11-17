@@ -1,3 +1,6 @@
+import { isolatedAppServerHome } from './appServerIsolation.js';
+import { probeAppServer } from './appServerCapabilities.js';
+import { connectAppServer } from './appServerProtocol.js';
 import { BurnexError } from '../../../plugin/index.js';
 import { effectivePermissions } from '../../pipeline/surface.js';
 import type {
@@ -48,6 +51,8 @@ export function createCodexAdapter(config: BackendConfig): BackendAdapter {
     },
 
     launch(invocation: AgentInvocation): LaunchSpec {
+      const isolatedHome = isolatedAppServerHome(config.env);
+      const launchEnv = isolatedHome === undefined ? config.env : { ...config.env, CODEX_HOME: isolatedHome };
       // У формы `resume` нет `-s`, `-C` и `--add-dir`, поэтому всё, что можно,
       // передаётся переопределением `-c` — одинаково для новой нити и для
       // продолжения (design.md, решение 2). Рабочий каталог задаёт движок
@@ -103,8 +108,29 @@ export function createCodexAdapter(config: BackendConfig): BackendAdapter {
       }
 
       // `-` — промпт со stdin: контекст легко перерастает предел аргументов.
+      const requested = config.env?.BURNEX_CODEX_TRANSPORT;
+      if (requested === 'app-server' || requested === 'auto') {
+        const capability = probeAppServer(config.command, config.env);
+        if (capability.supported) {
+          // Reuse all config overrides, including required MCP and sandbox. Exec-only
+          // options are carried by RPC (model, outputSchema) or process cwd.
+          const rpcCommand = [config.command, 'app-server', '--stdio',
+            ...(capability.isolation === 'native-flag' ? ['--ignore-user-config'] : [])];
+          for (let i = 0; i < command.length; i++) {
+            if (command[i] === '-c') rpcCommand.push('-c', command[++i]!);
+          }
+          return { command: rpcCommand, stdin: '', env: launchEnv, transport: 'app-server-stdio',
+            diagnostic: `${capability.version}: ${capability.reason}`,
+            connect: (channel) => connectAppServer({ ...invocation,
+              ...(model === undefined ? {} : { model }) }, channel) };
+        }
+        if (requested === 'app-server') throw new BurnexError(`Codex app-server unavailable: ${capability.version}: ${capability.reason}`);
+        command.push('-');
+        return { command, stdin: invocation.prompt, env: launchEnv, transport: 'exec',
+          diagnostic: `${capability.version}: fallback: ${capability.reason}` };
+      }
       command.push('-');
-      return { command, stdin: invocation.prompt, env: config.env };
+      return { command, stdin: invocation.prompt, env: launchEnv };
     },
 
     parseLine(line: string): BackendEvent {
@@ -131,7 +157,7 @@ export function createCodexAdapter(config: BackendConfig): BackendAdapter {
         case 'item.completed':
           return completedItem(record.item);
         case 'turn.completed':
-          return { kind: 'usage', usage: readUsage(record.usage) };
+          return { kind: 'usage', scope: 'thread', usage: readUsage(record.usage) };
         case 'turn.failed':
           return failure((record.error as Record<string, unknown> | undefined)?.message);
         case 'error':
@@ -275,7 +301,7 @@ function readUsage(raw: unknown): Partial<Usage> {
   const output = num('output_tokens');
 
   return {
-    ...(input === undefined ? {} : { tokens_in: Math.max(0, input - (cached ?? 0)) }),
+    ...(input === undefined ? {} : { tokens_in: Math.max(0, input - (cached ?? 0) - (written ?? 0)) }),
     ...(cached === undefined ? {} : { cache_read: cached }),
     ...(written === undefined ? {} : { cache_write: written }),
     ...(output === undefined ? {} : { tokens_out: output }),

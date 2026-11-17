@@ -1853,9 +1853,9 @@ module.exports = function (input) {
   начавшаяся раньше, чем первая его сообщила, заводит свою — у бэкенда, чей
   идентификатор выдаёт движок, этой гонки нет, потому что идентификатор
   известен ещё до запуска. Ограничение неустранимо в этой форме контракта.
-- **Расход Codex не обрывает шаг по ходу.** Поток несёт расход одним итогом
-  на турн, и потолок срабатывает по завершении турна, а не внутри него —
-  раздел «Второй бэкенд».
+- **Расход Codex в exec не обрывает шаг по ходу.** Exec несёт расход одним итогом
+  на турн. Проверенный app-server за feature flag поддерживает live budget —
+  раздел «Codex: live usage и stdio app-server».
 - **Плагин в том же пакете — не настоящая дистанция вытянутой руки.**
   Близость к ядру ограничена механически (`src/parts/backends/codex/**`
   пропускает только встроенные модули Node, `../../plugin/index.js` и
@@ -1864,3 +1864,98 @@ module.exports = function (input) {
   `no-restricted-imports` в `eslint.config.js`), но полностью дистанцию это не
   заменяет: модуль всё равно собирается той же сборкой и живёт в том же
   репозитории, что и ядро.
+
+### Codex: live usage и stdio app-server
+
+По умолчанию остаётся `codex exec --json`. Для проверки нового транспорта:
+
+```yaml
+backends:
+  codex:
+    env:
+      BURNEX_CODEX_TRANSPORT: auto
+```
+
+`auto` выполняет offline capability probe и выбирает app-server при
+подтверждённой JSON Schema usage, RPC-методах initialize, thread
+start/resume/fork/read, turn start/interrupt и одном из способов изоляции:
+нативный `--ignore-user-config` либо явно заданный отдельный Codex home.
+В остальных случаях используется exec; версия и причина fallback сохраняются
+в checkpoint. `BURNEX_CODEX_TRANSPORT: app-server` требует совместимости и
+явно отказывает при её отсутствии.
+
+У Codex 0.169.0 нет флага `app-server --ignore-user-config`, но реальный
+stdio-протокол проверен 14 ноября 2026 с отдельным home. Для такого запуска:
+
+```yaml
+backends:
+  codex:
+    env:
+      BURNEX_CODEX_TRANSPORT: app-server
+      BURNEX_CODEX_ISOLATED_HOME: /absolute/path/to/dedicated-codex-home
+```
+
+Каталог должен существовать и отличаться от обычного пользовательского
+`CODEX_HOME`. В нём не должно быть `config.toml`, `profiles`, `AGENTS.md` или
+`AGENTS.override.md`; проверка повторяется при каждом запуске даже при
+кешировании capability probe. Авторизацию отдельного home нужно подготовить
+заранее. Burnex не копирует credentials и не изменяет пользовательский home.
+Явные настройки Burnex и project/system configuration продолжают применяться,
+как и при exec с `--ignore-user-config`. При переключении на exec используется
+тот же отдельный home, чтобы сохранить доступ к созданным в нём thread.
+Без отдельного home режим `auto` на 0.169.0 по-прежнему выбирает exec.
+
+Реальный smoke test на 0.169.0 / gpt-6.1-sol подтвердил:
+
+- turn с двумя безопасными shell-вызовами дал три usage-обновления до завершения;
+- resume вычел baseline: ordinary input 3195 − 3005 = 190,
+  cached input 56064 − 41344 = 14720, output 111 − 96 = 15;
+- fork также исключил унаследованный расход;
+- RPC interrupt завершил turn как interrupted без SIGKILL, сохранив incomplete usage;
+- штатный `createCodexAdapter` с отдельным home завершил structured-output
+  запрос успешно, checkpoint получил completed/closed, RPC errors отсутствовали.
+
+Числовые snapshots без account data, prompt, ответов и session IDs сохранены
+в `test/fixtures/codex/app-server-0.169.0-smoke.json` и проверяются regression-тестом.
+Эксперимент использовал временную копию file-based авторизации; она удалена
+после проверки. Пользовательские config и рабочие деревья не изменялись.
+Это проверка basic lifecycle, usage, resume/fork и interrupt; compaction,
+реальные required MCP и credential refresh в этом эксперименте не проверялись.
+
+App-server запускается отдельно для каждой попытки по stdio. Сохраняются
+конфигурационные overrides sandbox, effort и обязательных MCP, политика
+`approvalPolicy: never`; модель и output schema передаются RPC. Неожиданный
+запрос approval/client tool завершает попытку отказом. Отмена сначала
+отправляет `turn/interrupt`, затем по grace period применяется SIGKILL группы.
+Ошибка после начала turn не вызывает повторный запуск через exec.
+
+`LaunchSpec.connect(channel)` — необязательный двусторонний контракт адаптера.
+Соединение принадлежит одному вызову: `receive(line)` принимает строки,
+`interrupt()` запрашивает отмену, `channel.send()` пишет JSONL,
+`channel.emit()` передаёт BackendEvent, `channel.close()` закрывает stdin.
+Синхронный `emit(session_started)` сохраняет session ID до отправки turn/start.
+Обычные `launch()/parseLine()` продолжают работать без connect.
+
+Аддитивное событие `usage` сохраняет прежний смысл. Необязательный
+`scope: 'thread'` указывает cumulative финал exec. Для потоковых показаний
+добавлено `usage_snapshot` с `scope: 'thread'`, `sessionId`, необязательным
+`turnId`, `usage` и `baseline: true` для исходного измерения. `usage` содержит
+взаимоисключающие категории Burnex: обычный input уже без cache read/write.
+Нормализатор вычитает baseline покомпонентно и заменяет итог попытки.
+Повторы не увеличивают итог, регрессия или смена сессии отмечают учёт incomplete.
+`last`, `totalTokens` и размер context window не тарифицируются отдельно;
+reasoning уже входит в output. Цена пересчитывается на всей попытке при каждом
+обновлении. Показания после model reroute не приписываются прежней модели:
+такой turn завершается явным отказом с сохранением последнего измерения.
+
+У новой сессии baseline нулевой, у resume/fork app-server использует replay
+до turn/start. Если replay не пришёл до барьера thread/read, расход остаётся
+неизвестным. Exec использует baseline из реестра сессий текущего runner;
+после перезапуска runner он может отсутствовать. В этом случае исторический
+thread total не записывается как расход новой попытки. Exec по-прежнему
+не сообщает точный usage до turn.completed.
+
+Монотонный рост публичных token counters сам по себе не позволяет отличить
+все возможные synthetic context-count события. Уменьшения/разрывы помечаются
+incomplete; этот транспорт не является гарантией точности биллинга при
+неразличимых пересчётах со стороны CLI.

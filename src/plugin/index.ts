@@ -91,3 +91,6 @@ export type { ProcessOptions, ProcessResult, ProcessOutcome } from '../parts/pip
 
 export { ExitCode, BurnexError, isBurnexError } from '../kernel/errors.js';
 export type { ExitCodeValue } from '../kernel/errors.js';
+
+/** Scoped temporary storage for plugin capability probes. */
+export { withTempDir } from '../kernel/fs/tempDir.js';
