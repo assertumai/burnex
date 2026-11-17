@@ -8,7 +8,6 @@ import {
   Card,
   CardContent,
   CardFooter,
-  CardHeader,
   CardTitle,
   EmptyState,
   PageHeader,
@@ -107,88 +106,93 @@ export function JobCard({
       </div>
       {job.description === undefined ? null : <div className="desc">{job.description}</div>}
 
-      {job.steps.map((step) => (
-        <div key={step.id} className="step">
-          <div className="step-head">
-            <span className="job-name">{step.id}</span>
-            {/* Вид шага плагинного вида называется своим именем, а не словом
-                «plugin»: именно им шаг и объявлен в документе. */}
-            <span className="kind">{step.pluginKindName ?? step.kind}</span>
-            {step.pluginKindTitle === undefined ? null : (
-              <span className="kind">{step.pluginKindTitle}</span>
+      {/* Шаги сворачиваются отдельно от карточки: граф и выбор агента остаются
+          на виду, когда длинный список шагов не нужен. */}
+      <details className="job-steps">
+        <summary>{job.steps.length === 1 ? '1 step' : `${job.steps.length} steps`}</summary>
+        {job.steps.map((step) => (
+          <div key={step.id} className="step">
+            <div className="step-head">
+              <span className="job-name">{step.id}</span>
+              {/* Вид шага плагинного вида называется своим именем, а не словом
+                  «plugin»: именно им шаг и объявлен в документе. */}
+              <span className="kind">{step.pluginKindName ?? step.kind}</span>
+              {step.pluginKindTitle === undefined ? null : (
+                <span className="kind">{step.pluginKindTitle}</span>
+              )}
+              {step.pluginHasOutput !== true ? null : (
+                <span className="kind dim">has output</span>
+              )}
+              {step.agent === undefined ? null : (
+                <span className="kind">
+                  {step.agent}
+                  {step.model === undefined ? '' : ` · ${step.model}`}
+                  {step.effort === undefined ? '' : ` · effort ${step.effort}`}
+                </span>
+              )}
+              {step.scriptRunner === undefined ? null : <span className="kind">{step.scriptRunner}</span>}
+              {step.usesName === undefined ? null : (
+                <Badge>
+                  uses: {step.usesName}
+                  {step.usesLayer === undefined ? '' : ` · ${step.usesLayer}`}
+                </Badge>
+              )}
+              {step.modelOrigin === undefined ? null : (
+                <span className="kind dim model-origin">{modelOriginLabel(step.modelOrigin)}</span>
+              )}
+              {step.effortOrigin === undefined ? null : (
+                <span className="kind dim model-origin">{effortOriginLabel(step.effortOrigin)}</span>
+              )}
+              {step.agentOrigin === undefined ? null : (
+                <span className="kind dim model-origin">{agentOriginLabel(step.agentOrigin)}</span>
+              )}
+            </div>
+            {step.agentEntry?.mark === undefined ? null : (
+              <div className="ctx dim entry-mark">{entryMarkLabel(step.agentEntry.mark, agentPolicy)}</div>
             )}
-            {step.pluginHasOutput !== true ? null : (
-              <span className="kind dim">has output</span>
+            {step.kind !== 'agent' || choices === undefined || onApply === undefined ? null : (
+              <AgentSelector
+                key={JSON.stringify(step.agentEntry ?? null)}
+                target={{ pipeline, job: job.agentEntryJob, step: step.id }}
+                entry={step.agentEntry}
+                choices={choices}
+                busy={busy}
+                onApply={onApply}
+              />
             )}
-            {step.agent === undefined ? null : (
-              <span className="kind">
-                {step.agent}
-                {step.model === undefined ? '' : ` · ${step.model}`}
-                {step.effort === undefined ? '' : ` · effort ${step.effort}`}
-              </span>
+            {step.command === undefined ? null : <div className="ctx">$ {step.command}</div>}
+            {/* Имя занимает место пути на карточке (design.md, решение 13); путь и
+                раннер остаются доступны рядом, а не пропадают. */}
+            {step.scriptPath === undefined ? null : <div className="ctx">script: {step.scriptPath}</div>}
+            {step.usesParams === undefined ? null : (
+              <div className="ctx dim">with: {JSON.stringify(step.usesParams)}</div>
             )}
-            {step.scriptRunner === undefined ? null : <span className="kind">{step.scriptRunner}</span>}
-            {step.usesName === undefined ? null : (
-              <Badge>
-                uses: {step.usesName}
-                {step.usesLayer === undefined ? '' : ` · ${step.usesLayer}`}
-              </Badge>
+            {step.hasScriptInput !== true ? null : <div className="ctx dim">input declared</div>}
+            {step.scriptOutputSchemaPath === undefined ? null : (
+              <div className="ctx dim">output_schema: {step.scriptOutputSchemaPath}</div>
             )}
-            {step.modelOrigin === undefined ? null : (
-              <span className="kind dim model-origin">{modelOriginLabel(step.modelOrigin)}</span>
+            {/* Вид шага, которого действующий реестр не знает, показывается
+                причиной, а не пустой карточкой: имя вида уже названо в шапке. */}
+            {step.pluginUnknownReason === undefined ? null : (
+              <div className="ctx dim">{step.pluginUnknownReason}</div>
             )}
-            {step.effortOrigin === undefined ? null : (
-              <span className="kind dim model-origin">{effortOriginLabel(step.effortOrigin)}</span>
-            )}
-            {step.agentOrigin === undefined ? null : (
-              <span className="kind dim model-origin">{agentOriginLabel(step.agentOrigin)}</span>
+            {step.pluginFields === undefined || step.pluginFields.length === 0 ? null : (
+              <ul className="ctx-list">
+                {step.pluginFields.map((field) => (
+                  <li key={field.name}>
+                    <span className="job-name">{field.name}</span>
+                    {field.type === undefined ? null : <span className="kind">{field.type}</span>}
+                    {field.required ? <Badge>required</Badge> : null}
+                    {field.description === undefined ? null : (
+                      <div className="dim">{field.description}</div>
+                    )}
+                  </li>
+                ))}
+              </ul>
             )}
           </div>
-          {step.agentEntry?.mark === undefined ? null : (
-            <div className="ctx dim entry-mark">{entryMarkLabel(step.agentEntry.mark, agentPolicy)}</div>
-          )}
-          {step.kind !== 'agent' || choices === undefined || onApply === undefined ? null : (
-            <AgentSelector
-              key={JSON.stringify(step.agentEntry ?? null)}
-              target={{ pipeline, job: job.agentEntryJob, step: step.id }}
-              entry={step.agentEntry}
-              choices={choices}
-              busy={busy}
-              onApply={onApply}
-            />
-          )}
-          {step.command === undefined ? null : <div className="ctx">$ {step.command}</div>}
-          {/* Имя занимает место пути на карточке (design.md, решение 13); путь и
-              раннер остаются доступны рядом, а не пропадают. */}
-          {step.scriptPath === undefined ? null : <div className="ctx">script: {step.scriptPath}</div>}
-          {step.usesParams === undefined ? null : (
-            <div className="ctx dim">with: {JSON.stringify(step.usesParams)}</div>
-          )}
-          {step.hasScriptInput !== true ? null : <div className="ctx dim">input declared</div>}
-          {step.scriptOutputSchemaPath === undefined ? null : (
-            <div className="ctx dim">output_schema: {step.scriptOutputSchemaPath}</div>
-          )}
-          {/* Вид шага, которого действующий реестр не знает, показывается
-              причиной, а не пустой карточкой: имя вида уже названо в шапке. */}
-          {step.pluginUnknownReason === undefined ? null : (
-            <div className="ctx dim">{step.pluginUnknownReason}</div>
-          )}
-          {step.pluginFields === undefined || step.pluginFields.length === 0 ? null : (
-            <ul className="ctx-list">
-              {step.pluginFields.map((field) => (
-                <li key={field.name}>
-                  <span className="job-name">{field.name}</span>
-                  {field.type === undefined ? null : <span className="kind">{field.type}</span>}
-                  {field.required ? <Badge>required</Badge> : null}
-                  {field.description === undefined ? null : (
-                    <div className="dim">{field.description}</div>
-                  )}
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-      ))}
+        ))}
+      </details>
     </div>
   );
 }
@@ -222,6 +226,20 @@ function PipelineError({ pipeline }: { readonly pipeline: PipelineView }): JSX.E
   );
 }
 
+/**
+ * Шапка карточки — она же переключатель: карточка сворачивается до имени и
+ * файла (и строки про прогоны под ней), чтобы длинный список пайплайнов
+ * читался как оглавление.
+ */
+function PipelineSummary({ pipeline }: { readonly pipeline: PipelineView }): JSX.Element {
+  return (
+    <summary className="sc-card-header">
+      <CardTitle>{pipeline.name}</CardTitle>
+      <span className="mono small dim">{pipeline.file}</span>
+    </summary>
+  );
+}
+
 function PipelineCard({
   pipeline,
   runs,
@@ -246,13 +264,12 @@ function PipelineCard({
   if (pipeline.error !== undefined) {
     return (
       <Card className="pipeline-card">
-        <CardHeader>
-          <CardTitle>{pipeline.name}</CardTitle>
-          <span className="mono small dim">{pipeline.file}</span>
-        </CardHeader>
-        <CardContent>
-          <PipelineError pipeline={pipeline} />
-        </CardContent>
+        <details open>
+          <PipelineSummary pipeline={pipeline} />
+          <CardContent>
+            <PipelineError pipeline={pipeline} />
+          </CardContent>
+        </details>
       </Card>
     );
   }
@@ -262,10 +279,8 @@ function PipelineCard({
 
   return (
     <Card className="pipeline-card">
-      <CardHeader>
-        <CardTitle>{pipeline.name}</CardTitle>
-        <span className="mono small dim">{pipeline.file}</span>
-      </CardHeader>
+      <details open>
+      <PipelineSummary pipeline={pipeline} />
 
       <CardContent>
         <div className="meta">
@@ -339,6 +354,7 @@ function PipelineCard({
           />
         )}
       </CardContent>
+      </details>
 
       {/* Прогоны — на своём экране; здесь довольно счёта и последнего исхода. */}
       <CardFooter className="runs-note">

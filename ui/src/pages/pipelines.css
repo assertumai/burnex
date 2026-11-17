@@ -23,6 +23,22 @@
 .pipeline-card { margin-bottom: .8rem; }
 .pipeline-card .sc-card-header .mono { font-size: .8rem; }
 
+/*
+ * Сворачивание карточки и раздела шагов — родной <details>. Шапка карточки
+ * остаётся flex-строкой, поэтому штатный маркер пропадает и рисуется свой.
+ */
+.pipeline-card summary, .job-steps > summary { cursor: pointer; user-select: none; }
+.pipeline-card summary.sc-card-header::before, .job-steps > summary::before {
+  content: '▸';
+  display: inline-block;
+  width: 1em;
+  color: var(--muted-foreground);
+}
+.pipeline-card details[open] > summary.sc-card-header::before,
+.job-steps[open] > summary::before { content: '▾'; }
+.job-steps > summary { list-style: none; font-size: .85rem; color: var(--muted-foreground); margin-top: .4rem; }
+.job-steps > summary::-webkit-details-marker { display: none; }
+
 /* Строка про прогоны под карточкой: подчинена содержимому карточки. */
 .pipeline-card .sc-card-footer.runs-note { flex-wrap: wrap; gap: .3rem; font-size: .85rem; color: var(--muted-foreground); }
 
