@@ -57,6 +57,12 @@ export const UsageSchema = z
     tokens_out: z.number().nullable(),
     cache_read: z.number().nullable(),
     cache_write: z.number().nullable(),
+    pricing: z.object({
+      service_tier: z.enum(['standard', 'fast', 'flex', 'batch', 'ultrafast']).optional(),
+      context_tokens: z.number().nonnegative().optional(),
+      cache_ttl: z.enum(['30m', '12h']).optional(),
+      input_scope: z.enum(['request', 'turn']).optional(),
+    }).strict().optional(),
     wallclock_ms: z.number(),
     rate_limits: z
       .record(

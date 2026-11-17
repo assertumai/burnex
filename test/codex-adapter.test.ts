@@ -275,7 +275,7 @@ describe('codex-backend: разбор записанного потока', () =
   // Сценарий: «Расход турна»
   it('run1: turn.completed — расход с вычетом кеша из входных, без стоимости и окон', () => {
     const [usage] = ofKind(events(adapter, fixture('run1.jsonl')), 'usage');
-    assert.deepEqual(usage?.usage, { tokens_in: 35240 - 16640, cache_read: 16640, cache_write: 0, tokens_out: 303 });
+    assert.deepEqual(usage?.usage, { tokens_in: 35240 - 16640, cache_read: 16640, cache_write: 0, tokens_out: 303, pricing: { input_scope: 'turn', service_tier: 'standard' } });
     assert.equal(usage?.messageId, undefined);
   });
 
@@ -552,5 +552,23 @@ describe('codex-backend: исполнение шага на записанном
     assert.equal(backend.launches[1]?.sessionId, '01a07fb9-5e9f-74d0-8e7f-ea9dbfecdda3');
     assert.equal(backend.launches[1]?.resumeSession, true);
     assert.equal(second.sessionId, '01a07fb9-5e9f-74d0-8e7f-ea9dbfecdda3');
+  });
+});
+
+
+describe('codex pricing tier', () => {
+  it('explicitly requests Standard by default rather than a model default', () => {
+    assert.ok(createCodexAdapter(CONFIG).launch(invocation()).command.includes('service_tier="default"'));
+  });
+  it('uses the same tariff for CLI routing and usage pricing', () => {
+    for (const tier of ['fast', 'flex'] as const) {
+      const adapter = createCodexAdapter({ ...CONFIG, env: { BURNEX_CODEX_SERVICE_TIER: tier } });
+      assert.ok(adapter.launch(invocation()).command.includes(`service_tier="${tier === 'fast' ? 'priority' : 'flex'}"`));
+      const [event] = ofKind(events(adapter, fixture('run1.jsonl')), 'usage');
+      assert.equal(event?.usage?.pricing?.service_tier, tier);
+    }
+  });
+  it('rejects unrecognized modes rather than billing Standard', () => {
+    assert.throws(() => createCodexAdapter({ ...CONFIG, env: { BURNEX_CODEX_SERVICE_TIER: 'typo' } }), /неизвестный тариф/);
   });
 });

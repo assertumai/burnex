@@ -31,6 +31,11 @@ import type {
 export const SANDBOX_MODES = ['read-only', 'workspace-write', 'danger-full-access'] as const;
 
 export function createCodexAdapter(config: BackendConfig): BackendAdapter {
+  const requestedTier = config.env.BURNEX_CODEX_SERVICE_TIER ?? 'standard';
+  if (!['standard', 'fast', 'flex'].includes(requestedTier)) {
+    throw new BurnexError(`BURNEX_CODEX_SERVICE_TIER: неизвестный тариф ${requestedTier}; допустимы standard, fast, flex`);
+  }
+  const serviceTier = requestedTier as 'standard' | 'fast' | 'flex';
   return {
     name: 'codex',
     capabilities: {
@@ -68,6 +73,8 @@ export function createCodexAdapter(config: BackendConfig): BackendAdapter {
       // среде runner. Авторизация при этом сохраняется, а серверы,
       // явно объявленные шагом, ниже возвращаются переопределениями `-c`.
       command.push('--json', '--skip-git-repo-check', '--ignore-user-config');
+      // Keep the requested CLI routing and the catalog estimate in agreement.
+      command.push('-c', `service_tier=${tomlString(serviceTier === 'standard' ? 'default' : serviceTier === 'fast' ? 'priority' : 'flex')}`);
 
       const model = invocation.model ?? config.defaultModel;
       if (model !== undefined) command.push('-m', model);
@@ -131,7 +138,7 @@ export function createCodexAdapter(config: BackendConfig): BackendAdapter {
         case 'item.completed':
           return completedItem(record.item);
         case 'turn.completed':
-          return { kind: 'usage', usage: readUsage(record.usage) };
+          return { kind: 'usage', usage: readUsage(record.usage, serviceTier) };
         case 'turn.failed':
           return failure((record.error as Record<string, unknown> | undefined)?.message);
         case 'error':
@@ -263,7 +270,7 @@ function parseStructured(text: string): unknown {
  * `reasoning_output_tokens` уже входят в `output_tokens`. Стоимости и окон
  * лимитов поток не несёт — поля остаются несообщёнными.
  */
-function readUsage(raw: unknown): Partial<Usage> {
+function readUsage(raw: unknown, serviceTier: 'standard' | 'fast' | 'flex'): Partial<Usage> {
   if (typeof raw !== 'object' || raw === null) return {};
   const source = raw as Record<string, unknown>;
   const num = (key: string): number | undefined =>
@@ -275,7 +282,8 @@ function readUsage(raw: unknown): Partial<Usage> {
   const output = num('output_tokens');
 
   return {
-    ...(input === undefined ? {} : { tokens_in: Math.max(0, input - (cached ?? 0)) }),
+    pricing: { input_scope: 'turn', service_tier: serviceTier },
+    ...(input === undefined ? {} : { tokens_in: Math.max(0, input - (cached ?? 0) - (written ?? 0)) }),
     ...(cached === undefined ? {} : { cache_read: cached }),
     ...(written === undefined ? {} : { cache_write: written }),
     ...(output === undefined ? {} : { tokens_out: output }),
