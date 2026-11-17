@@ -39,5 +39,20 @@ echo "==> Собираю независимый релиз $VERSION"
 # дерева — путь разработки, а не установка.
 bash "$REPO_DIR/scripts/install.sh" --from-dir "$REPO_DIR" --name "$VERSION"
 
+# Каждый релиз — отдельный каталог с зависимостями (~50 МБ), и сам он не
+# исчезает. Остаются новый и два предыдущих: откат и прогоны, запущенные до
+# переключения current. Убираются только каталоги с именем этого скрипта
+# <ts>-<sha>; релизы установки install.sh (версия, ссылка) не трогаются.
+KEEP=3
+shopt -s nullglob
+LOCAL_RELEASES=("$RELEASES_DIR"/[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]T[0-9][0-9][0-9][0-9][0-9][0-9]Z-*)
+shopt -u nullglob
+# Имя начинается с метки времени UTC, поэтому порядок glob — хронологический.
+for ((i = 0; i < ${#LOCAL_RELEASES[@]} - KEEP; i++)); do
+  [ "${LOCAL_RELEASES[i]}" != "$RELEASES_DIR/$VERSION" ] || continue
+  echo "==> Убираю старый релиз ${LOCAL_RELEASES[i]##*/}"
+  rm -rf "${LOCAL_RELEASES[i]}"
+done
+
 echo "==> Готово: $RELEASES_DIR/current -> $RELEASES_DIR/$VERSION"
 echo "    Глобальный burnex (если настроен через bin-symlink) уже использует новую версию."
