@@ -12,6 +12,7 @@ import codexPlugin, {
 import type { BackendConfig } from '../src/parts/pipeline/surface.js';
 import type { AgentInvocation, BackendAdapter, BackendEvent } from '../src/parts/pipeline/backend/types.js';
 import { createSessionRegistry, executeAgentStep } from '../src/parts/pipeline/run/exec/agentStep.js';
+import { loadPriceCatalog } from '../src/parts/pipeline/run/budget/priceCatalog.js';
 import { BurnexError } from '../src/kernel/errors.js';
 import type { AgentStep } from '../src/parts/pipeline/document/model.js';
 import { tempDir } from './tmp.js';
@@ -275,7 +276,7 @@ describe('codex-backend: разбор записанного потока', () =
   // Сценарий: «Расход турна»
   it('run1: turn.completed — расход с вычетом кеша из входных, без стоимости и окон', () => {
     const [usage] = ofKind(events(adapter, fixture('run1.jsonl')), 'usage');
-    assert.deepEqual(usage?.usage, { tokens_in: 35240 - 16640, cache_read: 16640, cache_write: 0, tokens_out: 303 });
+    assert.deepEqual(usage?.usage, { tokens_in: 35240 - 16640, cache_read: 16640, cache_write: 0, tokens_out: 303, pricing: { input_scope: 'turn', requested_service_tier: 'standard' } });
     assert.equal(usage?.messageId, undefined);
   });
 
@@ -521,9 +522,11 @@ describe('codex-backend: исполнение шага на записанном
     const dir = tempDir('codex-');
     const backend = replaying((index) => fixture(index === 0 ? 'run1.jsonl' : 'run2.jsonl'));
     const sessions = createSessionRegistry();
+    const priceCatalog = loadPriceCatalog();
 
     const first = await executeAgentStep({
-      step: step({ id: 'first', outputSchemaPath: join(FIXTURES, 'schema.json') }),
+      step: step({ id: 'first', model: 'gpt-6-sol', outputSchemaPath: join(FIXTURES, 'schema.json') }),
+      priceCatalog,
       adapter: backend.adapter,
       cwd: dir,
       stepDir: dir,
@@ -536,11 +539,13 @@ describe('codex-backend: исполнение шага на записанном
     assert.deepEqual(first.last?.structured, { answer: 'Два плюс два — четыре.', n: 4 });
     assert.equal(first.last?.usage.tokens_in, 35240 - 16640);
     assert.equal(first.last?.usage.cache_read, 16640);
+    assert.ok(first.last?.usage.cost_usd);
     assert.deepEqual(first.last?.backendInit?.type, 'thread.started');
     assert.equal(backend.launches[0]?.sessionId, undefined);
 
     const second = await executeAgentStep({
-      step: step({ id: 'second' }),
+      step: step({ id: 'second', model: 'gpt-6-sol' }),
+      priceCatalog,
       adapter: backend.adapter,
       cwd: dir,
       stepDir: dir,
@@ -552,5 +557,44 @@ describe('codex-backend: исполнение шага на записанном
     assert.equal(backend.launches[1]?.sessionId, '01a07fb9-5e9f-74d0-8e7f-ea9dbfecdda3');
     assert.equal(backend.launches[1]?.resumeSession, true);
     assert.equal(second.sessionId, '01a07fb9-5e9f-74d0-8e7f-ea9dbfecdda3');
+    assert.equal(second.last?.usage.tokens_in, 18448 - 12032);
+    assert.equal(second.last?.usage.pricing?.input_scope, 'thread_or_turn');
+    assert.equal(second.last?.usage.cost_usd, undefined);
+    assert.equal(second.last?.usage.cost_incomplete, true);
+  });
+});
+
+
+describe('codex pricing tier', () => {
+  it('explicitly requests Standard by default rather than a model default', () => {
+    assert.ok(createCodexAdapter(CONFIG).launch(invocation()).command.includes('service_tier="default"'));
+  });
+  it('preserves the requested tariff separately from the effective tier', () => {
+    for (const tier of ['fast', 'flex'] as const) {
+      const adapter = createCodexAdapter({ ...CONFIG, env: { BURNEX_CODEX_SERVICE_TIER: tier } });
+      assert.ok(adapter.launch(invocation()).command.includes(`service_tier="${tier === 'fast' ? 'priority' : 'flex'}"`));
+      const [event] = ofKind(events(adapter, fixture('run1.jsonl')), 'usage');
+      assert.equal(event?.usage?.pricing?.requested_service_tier, tier);
+      assert.equal(event?.usage?.pricing?.service_tier, undefined);
+    }
+  });
+  it('rejects known unsupported model and service tier combinations', () => {
+    const fast = createCodexAdapter({ ...CONFIG, defaultModel: 'gpt-5.4-mini', env: { BURNEX_CODEX_SERVICE_TIER: 'fast' } });
+    assert.throws(() => fast.launch(invocation()), /gpt-5\.4-mini.*fast/);
+    assert.doesNotThrow(() => fast.launch(invocation({ model: 'gpt-6-sol' })));
+
+    const flex = createCodexAdapter({ ...CONFIG, env: { BURNEX_CODEX_SERVICE_TIER: 'flex' } });
+    for (const model of ['gpt-6.2-astra', 'gpt-6.2-sol']) {
+      assert.throws(() => flex.launch(invocation({ model })), /не поддерживает тариф flex/);
+    }
+  });
+  it('marks a fork as having ambiguous usage scope', () => {
+    const adapter = createCodexAdapter(CONFIG);
+    const line = fixture('run1.jsonl').find((line) => line.includes('"type":"turn.completed"'))!;
+    const event = adapter.parseLine(line, invocation({ forkFrom: 'thread-1' }));
+    assert.equal(event.kind === 'usage' && event.usage?.pricing?.input_scope, 'thread_or_turn');
+  });
+  it('rejects unrecognized modes rather than billing Standard', () => {
+    assert.throws(() => createCodexAdapter({ ...CONFIG, env: { BURNEX_CODEX_SERVICE_TIER: 'typo' } }), /неизвестный тариф/);
   });
 });

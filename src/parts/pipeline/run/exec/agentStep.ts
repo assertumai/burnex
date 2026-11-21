@@ -265,7 +265,7 @@ export async function executeAgentStep(options: AgentStepOptions): Promise<Agent
         adapter.capabilities.sessions &&
         adapter.capabilities.forkSessions === true &&
         !session.resume;
-      const launch = adapter.launch({
+      const invocation = {
         prompt,
         cwd: options.cwd,
         ...(resolvedModel === undefined ? {} : { model: resolvedModel }),
@@ -287,7 +287,8 @@ export async function executeAgentStep(options: AgentStepOptions): Promise<Agent
         ...(step.permissions === undefined ? {} : { permissions: step.permissions }),
         ...(step.mcp === undefined ? {} : { mcpServers: step.mcp }),
         ...(options.scratchDir === undefined ? {} : { scratchDir: options.scratchDir }),
-      });
+      };
+      const launch = adapter.launch(invocation);
 
       const suffix = plan.attempt === 1 ? '' : `.${plan.attempt}`;
       writePrompt(options.stepDir, suffix, prompt, options.masker);
@@ -315,7 +316,7 @@ export async function executeAgentStep(options: AgentStepOptions): Promise<Agent
       };
 
       const handleLine = (line: string): void => {
-        const event = adapter.parseLine(line);
+        const event = adapter.parseLine(line, invocation);
         switch (event.kind) {
           case 'init':
             backendInit = event.data;

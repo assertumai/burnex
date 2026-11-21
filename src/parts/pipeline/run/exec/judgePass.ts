@@ -179,7 +179,7 @@ async function callJudge(options: CallJudgeOptions): Promise<CallJudgeResult> {
   const textMode = structuredOutputMode(adapter.capabilities) === 'text';
   const prompt = textMode ? withSchemaSection(buildPrompt(options), judgeVerdictSchemaPath()) : buildPrompt(options);
 
-  const launch = adapter.launch({
+  const invocation = {
     prompt,
     cwd: options.cwd,
     ...(predicate.model === undefined ? {} : { model: predicate.model }),
@@ -192,7 +192,8 @@ async function callJudge(options: CallJudgeOptions): Promise<CallJudgeResult> {
     ...(adapter.capabilities.sessionIdSource === 'engine' ? { sessionId: randomUUID() } : {}),
     resumeSession: false,
     ...(textMode ? {} : { outputSchemaPath: judgeVerdictSchemaPath() }),
-  });
+  };
+  const launch = adapter.launch(invocation);
 
   const dir = options.journal.prepareJudgeCall(options.stepDir, options.callIndex);
   options.journal.writeStepFile(dir, 'prompt.txt', prompt);
@@ -220,7 +221,7 @@ async function callJudge(options: CallJudgeOptions): Promise<CallJudgeResult> {
   };
 
   const handle = (line: string): void => {
-    const event = adapter.parseLine(line);
+    const event = adapter.parseLine(line, invocation);
     // Сообщение с вызовом инструмента адаптер отдаёт как `tool_use`, а не как
     // `usage`, хотя расход в нём тот же (см. `src/parts/backends/claude/adapter.ts`).
     // Пропустить его значило бы занижать пик тем сильнее, чем больше судья

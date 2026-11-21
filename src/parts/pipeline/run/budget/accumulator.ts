@@ -264,7 +264,7 @@ export class UsageAccumulator {
       if (usage[field] === null) this.unreported.add(field);
     }
     if (usage.peak_prefix_tokens === undefined) this.unreported.add('peak_prefix_tokens');
-    if (effectiveCost(usage) === undefined) {
+    if (effectiveCost(usage) === undefined || usage.cost_incomplete === true) {
       this.costUnreportedAttempts.add(key);
     } else {
       this.costUnreportedAttempts.delete(key);
@@ -733,6 +733,9 @@ export class UsageAccumulator {
           costReportedAttempts: (priorAttempt?.costReportedAttempts ?? 0) + step.costReportedAttempts,
           costFromReported: (priorAttempt?.costFromReported ?? 0) + step.costFromReported,
           costFromCatalog: (priorAttempt?.costFromCatalog ?? 0) + step.costFromCatalog,
+          ...(this.costUnreportedAttempts.has(key) || priorAttempt?.cost_incomplete === true
+            ? { cost_incomplete: true }
+            : {}),
           ...(attemptPeak === undefined ? {} : { peak_prefix_tokens: attemptPeak }),
         });
         steps[stepId] = {
@@ -782,8 +785,9 @@ export class UsageAccumulator {
                   }),
               attempts: [...step.attempts.values()]
                 .sort((a, b) => (a.job_attempt ?? 0) - (b.job_attempt ?? 0) || a.attempt - b.attempt)
-                .map(({ costMicroUsd, costReportedAttempts, costFromReported, costFromCatalog, ...attempt }) => ({
+                .map(({ costMicroUsd, costReportedAttempts, costFromReported, costFromCatalog, cost_incomplete, ...attempt }) => ({
                   ...attempt,
+                  ...(costReportedAttempts > 0 && cost_incomplete === true ? { cost_incomplete: true } : {}),
                   ...costFields({ costMicroUsd, costReportedAttempts, costFromReported, costFromCatalog }),
                 })),
             },
