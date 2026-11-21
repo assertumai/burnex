@@ -18,6 +18,27 @@ describe('OpenAI pricing', () => {
       assert.ok(catalog.find('codex', name), name);
     }
   });
+  it('prices GPT-6.2 Astra and Sol with their published tiers', () => {
+    for (const [model, standard, fastLong, batch, ultrafast12h] of [
+      ['gpt-6.2-astra', 1.44, 5.36, 0.72, 4.92],
+      ['gpt-6.2-sol', 0.36, 1.34, 0.18, 1.23],
+    ] as const) {
+      const call = { ...usage, model };
+      assert.equal(priceUsage(call, catalog).cost_usd, standard, model);
+      assert.equal(priceUsage({
+        ...call, pricing: { service_tier: 'fast', context_tokens: 272_001 },
+      }, catalog).cost_usd, fastLong, model);
+      assert.equal(priceUsage({
+        ...call, pricing: { service_tier: 'batch' },
+      }, catalog).cost_usd, batch, model);
+      assert.equal(priceUsage({
+        ...call, pricing: { service_tier: 'ultrafast', cache_ttl: '12h' },
+      }, catalog).cost_usd, ultrafast12h, model);
+      assert.equal(priceUsage({
+        ...call, pricing: { service_tier: 'flex' },
+      }, catalog).cost_usd, undefined, model);
+    }
+  });
   it('keeps exactly 272K short; charges long output at 1.5x, not 2x', () => {
     assert.equal(estimateCostUsd(sol, { ...usage, pricing: { context_tokens: 272_000 } }), 0.36);
     assert.equal(estimateCostUsd(sol, { ...usage, pricing: { context_tokens: 272_001 } }), 0.67);
