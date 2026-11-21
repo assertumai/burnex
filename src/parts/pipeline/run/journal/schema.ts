@@ -61,7 +61,8 @@ export const UsageSchema = z
       service_tier: z.enum(['standard', 'fast', 'flex', 'batch', 'ultrafast']).optional(),
       context_tokens: z.number().nonnegative().optional(),
       cache_ttl: z.enum(['30m', '12h']).optional(),
-      input_scope: z.enum(['request', 'turn']).optional(),
+      input_scope: z.enum(['request', 'turn', 'thread_or_turn']).optional(),
+      requested_service_tier: z.enum(['standard', 'fast', 'flex', 'batch', 'ultrafast']).optional(),
     }).strict().optional(),
     wallclock_ms: z.number(),
     rate_limits: z
@@ -71,6 +72,8 @@ export const UsageSchema = z
       )
       .optional(),
     reported_cost_usd: z.number().optional(),
+    /** Часть расхода нельзя оценить, даже если в сумме есть цена других вызовов. */
+    cost_incomplete: z.literal(true).optional(),
     /**
      * Нарастающая цена сессии бэкенда на конец вызова — как её сообщает
      * бэкенд, считающий цену по всей сессии (Claude `total_cost_usd`; у
@@ -734,6 +737,8 @@ export const UsageAttemptReportSchema = z
     cost_usd: z.number().optional(),
     /** Источник цены; отсутствует у сводки прежней формы — тогда она сообщённая. */
     cost_source: CostSourceSchema.optional(),
+    /** Известная цена покрывает только часть вызовов попытки. */
+    cost_incomplete: z.literal(true).optional(),
     /** Наибольший префикс обращения этой попытки. См. `UsageSchema`. */
     peak_prefix_tokens: z.number().optional(),
   })

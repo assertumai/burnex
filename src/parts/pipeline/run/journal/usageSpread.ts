@@ -89,8 +89,8 @@ export function breakdownReport(report: UsageReport): ReportBreakdown {
     attemptsCount += 1;
     const model = attempt.model ?? UNKNOWN_MODEL;
     tokensByModel.set(model, (tokensByModel.get(model) ?? 0) + attempt.billable_tokens);
-    if (attempt.cost_usd === undefined) costUnreportedAttempts += 1;
-    else costByModel.set(model, (costByModel.get(model) ?? 0) + attempt.cost_usd);
+    if (attempt.cost_usd === undefined || attempt.cost_incomplete === true) costUnreportedAttempts += 1;
+    if (attempt.cost_usd !== undefined) costByModel.set(model, (costByModel.get(model) ?? 0) + attempt.cost_usd);
   }
 
   const tokenShares = spread(tokensByModel, report.total.billable_tokens, true);

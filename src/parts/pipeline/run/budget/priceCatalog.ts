@@ -128,10 +128,11 @@ export function loadPriceCatalog(path: string = priceCatalogPath()): PriceCatalo
 export function estimateCostUsd(
   entry: PriceEntry,
   usage: Pick<Usage, 'tokens_in' | 'tokens_out' | 'cache_read' | 'cache_write'> & Pick<Partial<Usage>, 'pricing'>,
-): number {
-  const tier = usage.pricing?.service_tier;
+): number | undefined {
+  if (usage.pricing?.input_scope === 'thread_or_turn') return undefined;
+  const tier = usage.pricing?.service_tier ?? usage.pricing?.requested_service_tier;
   const rates = tier === undefined || tier === 'standard' ? entry : entry.service_tiers?.[tier];
-  if (rates === undefined) throw new PriceCatalogError(`нет тарифа ${tier} для ${entry.model}`);
+  if (rates === undefined) return undefined;
   // CLI reports a whole agent turn, not individual API requests. Without a
   // request context size, applying long-context rates to the turn is a conservative estimate.
   const context = usage.pricing?.context_tokens ??
@@ -140,9 +141,7 @@ export function estimateCostUsd(
     ? rates.long_context : rates;
   const write = usage.pricing?.cache_ttl === '12h'
     ? selected.cache_write_12h : selected.cache_write;
-  if (write === undefined && (usage.cache_write ?? 0) > 0) {
-    throw new PriceCatalogError(`нет тарифа записи кеша 12h для ${entry.model}`);
-  }
+  if (write === undefined && (usage.cache_write ?? 0) > 0) return undefined;
   const micro =
     (usage.tokens_in ?? 0) * selected.input +
     (usage.tokens_out ?? 0) * selected.output +
@@ -164,13 +163,15 @@ export function priceUsage(usage: Usage, catalog: PriceCatalog | undefined): Usa
   if (usage.reported_cost_usd !== undefined) {
     return { ...usage, cost_usd: usage.reported_cost_usd, cost_source: 'reported' };
   }
+  if (usage.pricing?.input_scope === 'thread_or_turn') return { ...usage, cost_incomplete: true };
   if (catalog === undefined || usage.model === undefined) return usage;
   if (usage.tokens_in === null || usage.tokens_out === null) return usage;
   const entry = catalog.find(usage.backend, usage.model);
   if (entry === undefined) return usage;
-  const tier = usage.pricing?.service_tier;
-  if (tier !== undefined && tier !== 'standard' && entry.service_tiers?.[tier] === undefined) return usage;
-  return { ...usage, cost_usd: estimateCostUsd(entry, usage), cost_source: 'catalog' };
+  const cost = estimateCostUsd(entry, usage);
+  return cost === undefined
+    ? { ...usage, cost_incomplete: true }
+    : { ...usage, cost_usd: cost, cost_source: 'catalog' };
 }
 
 /**

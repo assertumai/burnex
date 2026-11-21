@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { emptyUsage, messagePrefix, sumUsage } from '../src/parts/pipeline/backend/types.js';
-import { UsageSchema } from '../src/parts/pipeline/run/journal/schema.js';
+import { UsageAccumulator } from '../src/parts/pipeline/run/budget/accumulator.js';
+import { breakdownReport } from '../src/parts/pipeline/run/journal/usageSpread.js';
+import { UsageReportSchema, UsageSchema } from '../src/parts/pipeline/run/journal/schema.js';
 import { estimateCostUsd, loadPriceCatalog, priceUsage } from '../src/parts/pipeline/run/budget/priceCatalog.js';
 
 const catalog = loadPriceCatalog();
@@ -58,6 +60,31 @@ describe('OpenAI pricing', () => {
   it('does not silently substitute a tariff missing from the catalog', () => {
     const terra = { ...usage, model: 'gpt-6.1-terra', pricing: { service_tier: 'ultrafast' as const } };
     assert.equal(priceUsage(terra, catalog).cost_usd, undefined);
+  });
+  it('keeps missing cache-write rates unpriced and preserves partial totals', () => {
+    const call = { ...usage, model: 'gpt-5.4-mini', pricing: { cache_ttl: '12h' as const } };
+    const unpriced = priceUsage(call, catalog);
+    assert.equal(unpriced.cost_usd, undefined);
+    assert.equal(unpriced.cache_write, call.cache_write);
+    const priced = priceUsage({ ...call, cache_write: 0 }, catalog);
+    assert.ok(priced.cost_usd);
+    const combined = sumUsage(priced, unpriced);
+    assert.equal(combined.cost_usd, priced.cost_usd);
+    assert.equal(combined.cost_incomplete, true);
+
+    const accumulator = new UsageAccumulator(() => 1);
+    accumulator.record('job', 'step', 1, combined);
+    assert.equal(accumulator.takeCostUnreportedEvent(true), true);
+    const report = UsageReportSchema.parse(accumulator.report('run'));
+    assert.equal(breakdownReport(report).costUnreportedAttempts, 1);
+    assert.equal(report.total.cost_usd, priced.cost_usd);
+  });
+  it('prefers a reported tier over the requested tier', () => {
+    const fast = { ...usage, pricing: { requested_service_tier: 'fast' as const } };
+    assert.equal(priceUsage(fast, catalog).cost_usd, 0.72);
+    assert.equal(priceUsage({
+      ...fast, pricing: { ...fast.pricing, service_tier: 'standard' },
+    }, catalog).cost_usd, 0.36);
   });
   it('preserves backend-reported cost and unknown models', () => {
     assert.equal(priceUsage({ ...usage, reported_cost_usd: 0.012 }, catalog).cost_usd, 0.012);

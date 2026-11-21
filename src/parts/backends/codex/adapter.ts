@@ -57,13 +57,10 @@ export function createCodexAdapter(config: BackendConfig): BackendAdapter {
       // передаётся переопределением `-c` — одинаково для новой нити и для
       // продолжения (design.md, решение 2). Рабочий каталог задаёт движок
       // процессом, `-C` не нужен.
-      const resume = invocation.resumeSession && invocation.sessionId !== undefined && config.sessions;
-      // Форк (`review-defend`, решение 4) — третья форма команды: нить ещё не
-      // начата, и новый идентификатор назовёт `thread.started`.
-      const fork = !resume && invocation.forkFrom !== undefined && config.sessions;
-      const command: string[] = resume
+      const mode = launchMode(config, invocation);
+      const command: string[] = mode === 'resume'
         ? [config.command, 'exec', 'resume', invocation.sessionId as string]
-        : fork
+        : mode === 'fork'
           ? [config.command, 'exec', 'fork', invocation.forkFrom as string]
           : [config.command, 'exec'];
       // `--skip-git-repo-check`: режим `copy` даёт дерево без `.git`, и без
@@ -73,10 +70,16 @@ export function createCodexAdapter(config: BackendConfig): BackendAdapter {
       // среде runner. Авторизация при этом сохраняется, а серверы,
       // явно объявленные шагом, ниже возвращаются переопределениями `-c`.
       command.push('--json', '--skip-git-repo-check', '--ignore-user-config');
-      // Keep the requested CLI routing and the catalog estimate in agreement.
+      // CLI может опустить запрошенный тариф, а JSON не сообщает фактический.
       command.push('-c', `service_tier=${tomlString(serviceTier === 'standard' ? 'default' : serviceTier === 'fast' ? 'priority' : 'flex')}`);
 
       const model = invocation.model ?? config.defaultModel;
+      // По результатам проверки CLI 0.171: priority для этой модели
+      // отбрасывается. GPT-6.2 не поддерживает Flex.
+      if ((serviceTier === 'fast' && model === 'gpt-5.4-mini') ||
+          (serviceTier === 'flex' && (model === 'gpt-6.2-astra' || model === 'gpt-6.2-sol'))) {
+        throw new BurnexError(`BURNEX_CODEX_SERVICE_TIER: модель ${model} не поддерживает тариф ${serviceTier} через Codex CLI`);
+      }
       if (model !== undefined) command.push('-m', model);
       if (invocation.effort !== undefined) {
         command.push('-c', `model_reasoning_effort=${tomlString(invocation.effort)}`);
@@ -114,7 +117,7 @@ export function createCodexAdapter(config: BackendConfig): BackendAdapter {
       return { command, stdin: invocation.prompt, env: config.env };
     },
 
-    parseLine(line: string): BackendEvent {
+    parseLine(line: string, invocation?: AgentInvocation): BackendEvent {
       const trimmed = line.trim();
       if (trimmed === '') return { kind: 'ignored' };
 
@@ -137,8 +140,10 @@ export function createCodexAdapter(config: BackendConfig): BackendAdapter {
           };
         case 'item.completed':
           return completedItem(record.item);
-        case 'turn.completed':
-          return { kind: 'usage', usage: readUsage(record.usage, serviceTier) };
+        case 'turn.completed': {
+          const mode = invocation === undefined ? 'fresh' : launchMode(config, invocation);
+          return { kind: 'usage', usage: readUsage(record.usage, serviceTier, mode === 'fresh') };
+        }
         case 'turn.failed':
           return failure((record.error as Record<string, unknown> | undefined)?.message);
         case 'error':
@@ -150,6 +155,12 @@ export function createCodexAdapter(config: BackendConfig): BackendAdapter {
       }
     },
   };
+}
+
+function launchMode(config: BackendConfig, invocation: AgentInvocation): 'fresh' | 'resume' | 'fork' {
+  if (!config.sessions) return 'fresh';
+  if (invocation.resumeSession && invocation.sessionId !== undefined) return 'resume';
+  return invocation.forkFrom === undefined ? 'fresh' : 'fork';
 }
 
 /** Строка в форме TOML для `-c key=value`: JSON-строка — законная basic string TOML. */
@@ -270,7 +281,11 @@ function parseStructured(text: string): unknown {
  * `reasoning_output_tokens` уже входят в `output_tokens`. Стоимости и окон
  * лимитов поток не несёт — поля остаются несообщёнными.
  */
-function readUsage(raw: unknown, serviceTier: 'standard' | 'fast' | 'flex'): Partial<Usage> {
+function readUsage(
+  raw: unknown,
+  requestedTier: 'standard' | 'fast' | 'flex',
+  fresh: boolean,
+): Partial<Usage> {
   if (typeof raw !== 'object' || raw === null) return {};
   const source = raw as Record<string, unknown>;
   const num = (key: string): number | undefined =>
@@ -282,7 +297,9 @@ function readUsage(raw: unknown, serviceTier: 'standard' | 'fast' | 'flex'): Par
   const output = num('output_tokens');
 
   return {
-    pricing: { input_scope: 'turn', service_tier: serviceTier },
+    // CLI 0.149 сообщал расход вызова, 0.171 на resume сообщает расход нити.
+    // JSON не различает эти случаи и не сообщает исходный счётчик форка.
+    pricing: { input_scope: fresh ? 'turn' : 'thread_or_turn', requested_service_tier: requestedTier },
     ...(input === undefined ? {} : { tokens_in: Math.max(0, input - (cached ?? 0) - (written ?? 0)) }),
     ...(cached === undefined ? {} : { cache_read: cached }),
     ...(written === undefined ? {} : { cache_write: written }),
