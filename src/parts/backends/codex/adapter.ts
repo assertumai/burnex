@@ -1,3 +1,7 @@
+import { codexFailure } from './refusal.js';
+import { isolatedAppServerHome } from './appServerIsolation.js';
+import { probeAppServer } from './appServerCapabilities.js';
+import { connectAppServer } from './appServerProtocol.js';
 import { BurnexError } from '../../../plugin/index.js';
 import { effectivePermissions } from '../../pipeline/surface.js';
 import type {
@@ -5,8 +9,6 @@ import type {
   BackendAdapter,
   BackendConfig,
   BackendEvent,
-  BackendRefusal,
-  BackendRefusalClass,
   LaunchSpec,
   McpServer,
   McpServers,
@@ -53,6 +55,8 @@ export function createCodexAdapter(config: BackendConfig): BackendAdapter {
     },
 
     launch(invocation: AgentInvocation): LaunchSpec {
+      const isolatedHome = isolatedAppServerHome(config.env);
+      const launchEnv = isolatedHome === undefined ? config.env : { ...config.env, CODEX_HOME: isolatedHome };
       // У формы `resume` нет `-s`, `-C` и `--add-dir`, поэтому всё, что можно,
       // передаётся переопределением `-c` — одинаково для новой нити и для
       // продолжения (design.md, решение 2). Рабочий каталог задаёт движок
@@ -113,8 +117,31 @@ export function createCodexAdapter(config: BackendConfig): BackendAdapter {
       }
 
       // `-` — промпт со stdin: контекст легко перерастает предел аргументов.
+      const requested = config.env?.BURNEX_CODEX_TRANSPORT;
+      if (requested === 'app-server' || requested === 'auto') {
+        const capability = probeAppServer(config.command, config.env);
+        if (capability.supported) {
+          // Reuse all config overrides, including required MCP and sandbox. Exec-only
+          // options are carried by RPC (model, outputSchema) or process cwd.
+          const rpcCommand = [config.command, 'app-server', '--stdio',
+            ...(capability.isolation === 'native-flag' ? ['--ignore-user-config'] : [])];
+          for (let i = 0; i < command.length; i++) {
+            if (command[i] === '-c') rpcCommand.push('-c', command[++i]!);
+          }
+          return { command: rpcCommand, stdin: '', env: launchEnv, transport: 'app-server-stdio',
+            diagnostic: `${capability.version}: ${capability.reason}`,
+            usageContext: { ...(model === undefined ? {} : { model }),
+              pricing: { input_scope: 'turn', requested_service_tier: serviceTier } },
+            connect: (channel) => connectAppServer({ ...invocation,
+              ...(model === undefined ? {} : { model }) }, channel) };
+        }
+        if (requested === 'app-server') throw new BurnexError(`Codex app-server unavailable: ${capability.version}: ${capability.reason}`);
+        command.push('-');
+        return { command, stdin: invocation.prompt, env: launchEnv, transport: 'exec',
+          diagnostic: `${capability.version}: fallback: ${capability.reason}` };
+      }
       command.push('-');
-      return { command, stdin: invocation.prompt, env: config.env };
+      return { command, stdin: invocation.prompt, env: launchEnv };
     },
 
     parseLine(line: string, invocation?: AgentInvocation): BackendEvent {
@@ -145,9 +172,9 @@ export function createCodexAdapter(config: BackendConfig): BackendAdapter {
           return { kind: 'usage', usage: readUsage(record.usage, serviceTier, mode === 'fresh') };
         }
         case 'turn.failed':
-          return failure((record.error as Record<string, unknown> | undefined)?.message);
+          return codexFailure((record.error as Record<string, unknown> | undefined)?.message);
         case 'error':
-          return failure(record.message);
+          return codexFailure(record.message);
         default:
           // `turn.started`, `item.started`, `item.updated` и незнакомые записи
           // будущих версий: пропуск, а не отказ — контракт `parseLine`.
@@ -305,90 +332,4 @@ function readUsage(
     ...(written === undefined ? {} : { cache_write: written }),
     ...(output === undefined ? {} : { tokens_out: output }),
   };
-}
-
-/**
- * Отказ турна. Сообщение CLI — строка, внутри которой JSON ответа API вида
- * `{"type":"error","status":429,"error":{"type":…,"message":…}}`; класс решает
- * код, а формулировка смотрится только когда кода нет (design.md, решение 5).
- * Код, не входящий в узнаваемые, — отказ без класса: бэкенд его назвал, и
- * угадывать поверх названного нельзя.
- */
-function failure(rawMessage: unknown): BackendEvent {
-  const message = typeof rawMessage === 'string' ? rawMessage : JSON.stringify(rawMessage ?? null);
-  const refusal = readRefusal(message);
-  return { kind: 'result', text: message, failed: true, ...(refusal === undefined ? {} : { refusal }) };
-}
-
-function readRefusal(message: string): BackendRefusal | undefined {
-  const parsed = parseApiError(message);
-  const statusCode = parsed?.status;
-  const refusalClass = classifyRefusal(statusCode, parsed?.text ?? message);
-  if (refusalClass === undefined) return undefined;
-
-  const resetAt = refusalClass === 'rate_limit' ? parsed?.resetAt : undefined;
-  return {
-    class: refusalClass,
-    message,
-    ...(statusCode === undefined ? {} : { statusCode }),
-    ...(resetAt === undefined ? {} : { resetAt }),
-  };
-}
-
-interface ApiError {
-  readonly status?: number;
-  readonly text?: string;
-  readonly resetAt?: number;
-}
-
-function parseApiError(message: string): ApiError | undefined {
-  let record: Record<string, unknown>;
-  try {
-    record = JSON.parse(message) as Record<string, unknown>;
-  } catch {
-    return undefined;
-  }
-  if (typeof record !== 'object' || record === null) return undefined;
-
-  const error = (typeof record.error === 'object' && record.error !== null ? record.error : {}) as Record<
-    string,
-    unknown
-  >;
-  const status = typeof record.status === 'number' ? record.status : undefined;
-  const text = typeof error.message === 'string' ? error.message : undefined;
-  return {
-    ...(status === undefined ? {} : { status }),
-    ...(text === undefined ? {} : { text }),
-    ...readResetAt(error) ?? {},
-  };
-}
-
-/**
- * Момент сброса — только из полей ответа, если они есть. Живой записи 429 у
- * ChatGPT-аккаунта нет (см. README фикстур), поэтому распознаются две
- * очевидные формы и ничего сверх: `resets_at` (секунды эпохи либо ISO 8601) и
- * `resets_in_seconds`.
- */
-function readResetAt(error: Record<string, unknown>): { resetAt: number } | undefined {
-  const at = error.resets_at;
-  if (typeof at === 'number') return { resetAt: at < 1e12 ? at * 1000 : at };
-  if (typeof at === 'string') {
-    const parsed = Date.parse(at);
-    if (!Number.isNaN(parsed)) return { resetAt: parsed };
-  }
-  const inSeconds = error.resets_in_seconds;
-  if (typeof inSeconds === 'number') return { resetAt: Date.now() + inSeconds * 1000 };
-  return undefined;
-}
-
-function classifyRefusal(statusCode: number | undefined, text: string): BackendRefusalClass | undefined {
-  if (statusCode !== undefined) {
-    if (statusCode === 429) return 'rate_limit';
-    if (statusCode === 401 || statusCode === 403) return 'unauthenticated';
-    return undefined;
-  }
-  // Закрытый перечень формулировок — расширять его по весу равно смене кодов возврата.
-  if (/rate limit|usage limit|quota/i.test(text)) return 'rate_limit';
-  if (/unauthorized|not logged in|authentication/i.test(text)) return 'unauthenticated';
-  return undefined;
 }

@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-import type { BackendAdapter, BackendRefusal } from '../../backend/types.js';
+import type { BackendAdapter, BackendRefusal, BackendEvent } from '../../backend/types.js';
 import type { BackendSlots } from '../../backend/slots.js';
 import {
   BACKEND_REFUSAL_PREDICATE,
@@ -22,7 +22,10 @@ import type { Masker } from '../journal/mask.js';
 import type { AttemptRecord, PredicateResult, StatusValue, Usage } from '../journal/schema.js';
 import { priceUsage, type PriceCatalog } from '../budget/priceCatalog.js';
 import { runAttempts, type AttemptPlan } from './attempts.js';
-import { runProcess, type ProcessResult } from './process.js';
+import { acquireAttemptLease } from '../journal/attemptLease.js';
+import { beginBackendInvocation, finishBackendInvocation } from './backendProcess.js';
+import { UsageNormalizer } from './usageNormalizer.js';
+import type { ProcessResult } from './process.js';
 
 /**
  * Исполнение агентского шага.
@@ -139,9 +142,11 @@ export interface AgentStepOptions {
    * Нарастающий итог попытки и её номер. Номер обязателен: без него расход
    * ложится под чужую попытку, а замена по ключу стирает предыдущую.
    */
+  readonly onCheckpoint?: () => void;
   readonly onUsage?: (usage: Usage, attempt: number) => void;
   /** Каталог цен для оценки попытки, если бэкенд цену не сообщил. */
   readonly priceCatalog?: PriceCatalog;
+  readonly cacheReadWeight?: number;
   readonly onUnparsed?: (line: string) => void;
   /** Один вызов на каждый отказ бэкенда в разрешении на вызов инструмента. */
   readonly onPermissionDenied?: (plan: AttemptPlan, tool: string, input: unknown) => void;
@@ -215,6 +220,12 @@ function unavailableMcpServers(
 }
 
 export async function executeAgentStep(options: AgentStepOptions): Promise<AgentStepResult> {
+  const release = acquireAttemptLease(options.stepDir);
+  try { return await executeAgentStepOwned(options); }
+  finally { release(); }
+}
+
+async function executeAgentStepOwned(options: AgentStepOptions): Promise<AgentStepResult> {
   const { step, adapter } = options;
   const evaluate = options.evaluate ?? evaluateDefault;
   // Схему держит движок, а не CLI (`backend-structured-output`, решение 2):
@@ -293,7 +304,25 @@ export async function executeAgentStep(options: AgentStepOptions): Promise<Agent
       const suffix = plan.attempt === 1 ? '' : `.${plan.attempt}`;
       writePrompt(options.stepDir, suffix, prompt, options.masker);
 
-      let usage = emptyUsage(adapter.name, resolvedModel, 0);
+      const baseUsage = mergeUsage(emptyUsage(adapter.name, resolvedModel, 0), launch.usageContext);
+      let usage = baseUsage;
+      const normalizer = new UsageNormalizer();
+      const { checkpoint, run } = beginBackendInvocation({
+        dir: options.stepDir, attempt: plan.attempt, backend: adapter.name, role: 'agent', launch,
+        ...(sessionId === undefined ? {} : { sessionId }),
+        ...(options.onCheckpoint === undefined ? {} : { onCheckpoint: options.onCheckpoint }),
+      });
+      let observedUsage = false;
+      const publishUsage = (): void => {
+        usage = priceUsage(usage, options.priceCatalog);
+        const tokensKnown = [usage.tokens_in, usage.tokens_out, usage.cache_read, usage.cache_write].some((value) => value !== null);
+        checkpoint.update({ usage, ...(tokensKnown ? { billable_tokens: Math.round((usage.tokens_in ?? 0) + (usage.tokens_out ?? 0) +
+          (usage.cache_write ?? 0) + (usage.cache_read ?? 0) * (options.cacheReadWeight ?? 1)) } : {}),
+          usage_state: normalizer.uncertain ? 'incomplete' : 'observed',
+          last_usage_at: new Date().toISOString(), ledger: normalizer.state() }, !observedUsage);
+        observedUsage = true;
+        options.onUsage?.(usage, plan.attempt);
+      };
       const seenUsageMessageIds = new Set<string>();
       let text: string | undefined;
       // Куски `text` текстового CLI; итоговый текст из них собирается после
@@ -306,17 +335,7 @@ export async function executeAgentStep(options: AgentStepOptions): Promise<Agent
       let refusal: BackendRefusal | undefined;
       let permissionDenials = 0;
       const observedInputs = new Set<string>();
-      let carry = '';
-
-      const consume = (chunk: string): void => {
-        carry += chunk;
-        const lines = carry.split('\n');
-        carry = lines.pop() ?? '';
-        for (const line of lines) handleLine(line);
-      };
-
-      const handleLine = (line: string): void => {
-        const event = adapter.parseLine(line, invocation);
+      const handleEvent = (event: BackendEvent): void => {
         switch (event.kind) {
           case 'init':
             backendInit = event.data;
@@ -335,6 +354,17 @@ export async function executeAgentStep(options: AgentStepOptions): Promise<Agent
             }
             recordUsageDelta(event.usage, event.messageId);
             break;
+          case 'usage_snapshot': {
+            const normalized = normalizer.accept(event);
+            checkpoint.update({ last_usage_at: new Date().toISOString(), ledger: normalizer.state(),
+              ...(normalizer.uncertain ? { usage_state: 'incomplete' } : {}),
+              ...(event.turnId === undefined ? {} : { turn_id: event.turnId }) });
+            if (normalized !== undefined) {
+              usage = mergeUsage(baseUsage, normalized);
+              publishUsage();
+            }
+            break;
+          }
           case 'usage':
             recordUsageDelta(event.usage, event.messageId);
             break;
@@ -347,7 +377,7 @@ export async function executeAgentStep(options: AgentStepOptions): Promise<Agent
               // попытку так же, как связывает сообщённую цену, — в этот же
               // момент (решение 5).
               usage = priceUsage(mergeUsage(usage, callCost(event.usage)), options.priceCatalog);
-              options.onUsage?.(usage, plan.attempt);
+              publishUsage();
             }
             if (event.failed === true) failedByBackend = true;
             if (event.refusal !== undefined) refusal = event.refusal;
@@ -396,7 +426,7 @@ export async function executeAgentStep(options: AgentStepOptions): Promise<Agent
         const peak = messagePrefix(delta);
         const messageUsage = mergeUsage(emptyUsage(adapter.name, resolvedModel, 0), delta);
         usage = sumUsage(usage, peak === undefined ? messageUsage : { ...messageUsage, peak_prefix_tokens: peak });
-        options.onUsage?.(usage, plan.attempt);
+        publishUsage();
       };
 
       // Место бэкенда занято вокруг самого процесса: таймаут и детектор
@@ -404,11 +434,9 @@ export async function executeAgentStep(options: AgentStepOptions): Promise<Agent
       // очередь, — иначе ожидание места засчиталось бы попытке как простой.
       const runBackendProcess = (): Promise<ProcessResult> => {
         startedAt = new Date().toISOString();
-        return runProcess({
-          command: launch.command,
+        return run({
           cwd: options.cwd,
           env: { ...options.env(plan), ...(launch.env ?? {}), ...(options.credentials ?? {}) },
-          stdin: launch.stdin,
           timeoutMs: step.timeoutMs,
           ...(options.stallTimeoutMs === undefined ? {} : { stallTimeoutMs: options.stallTimeoutMs }),
           ...(options.graceMs === undefined ? {} : { graceMs: options.graceMs }),
@@ -416,15 +444,13 @@ export async function executeAgentStep(options: AgentStepOptions): Promise<Agent
           ...(options.onStall === undefined ? {} : { onStall: options.onStall }),
           stdoutPath: join(options.stepDir, `stdout${suffix}.log`),
           stderrPath: join(options.stepDir, `stderr${suffix}.log`),
-          onStdout: consume,
           ...(options.masker === undefined ? {} : { masker: options.masker }),
-        });
+        }, (line) => adapter.parseLine(line, invocation), handleEvent);
       };
       const process_ = options.backendSlots === undefined
         ? await runBackendProcess()
         : await options.backendSlots.run(adapter.name, runBackendProcess);
 
-      if (carry.trim() !== '') handleLine(carry);
       if (text === undefined) {
         // Пустые куски по краям — отступы вывода CLI, а не часть ответа:
         // отсекаются с обеих сторон, внутренние (между абзацами) остаются.
@@ -437,6 +463,8 @@ export async function executeAgentStep(options: AgentStepOptions): Promise<Agent
       // потока её в событиях нет. Без этой записи учёт работы и шага остаётся
       // с нулевым временем, которое выглядит измерением, а не пробелом.
       options.onUsage?.(usage, plan.attempt);
+      finishBackendInvocation(checkpoint, process_, usage, normalizer.uncertain, failedByBackend);
+      options.onCheckpoint?.();
 
       const textCheck = textSchema === undefined ? undefined : structuredFromText(textSchema, text);
       if (textCheck !== undefined) structured = textCheck.structured;

@@ -28,6 +28,10 @@ export interface ProcessOptions {
   readonly stderrPath?: string;
   /** Текст, который уйдёт процессу на stdin. Без него stdin закрыт. */
   readonly stdin?: string;
+  readonly onSpawn?: (pid: number, send: (message: unknown) => void, close: () => void) => void;
+  /** Return true when graceful protocol cancellation was sent. */
+  readonly onInterrupt?: () => boolean;
+  readonly interactive?: boolean;
   readonly onStdout?: (chunk: string) => void;
   readonly onStderr?: (chunk: string) => void;
   readonly onStall?: (silentMs: number) => void;
@@ -59,6 +63,8 @@ const DEFAULT_CAPTURE_BYTES = 1_000_000;
 
 export async function runProcess(options: ProcessOptions): Promise<ProcessResult> {
   const started = Date.now();
+  if (options.signal?.aborted === true) return { outcome: 'canceled', exitCode: null, signal: null,
+    stdout: '', stderr: '', wallclockMs: 0, forceKilled: false };
   const grace = options.graceMs ?? DEFAULT_GRACE_MS;
   const capture = options.maxCapturedBytes ?? DEFAULT_CAPTURE_BYTES;
 
@@ -80,11 +86,11 @@ export async function runProcess(options: ProcessOptions): Promise<ProcessResult
     reject: false,
     buffer: false,
     shell: useShell,
-    stdin: options.stdin === undefined ? 'ignore' : 'pipe',
+    stdin: options.stdin === undefined && !options.interactive ? 'ignore' : 'pipe',
     stripFinalNewline: false,
   }) as Subprocess;
 
-  if (options.stdin !== undefined && subprocess.stdin !== null) {
+  if (!options.interactive && options.stdin !== undefined && subprocess.stdin !== null) {
     subprocess.stdin.end(options.stdin);
   }
 
@@ -95,10 +101,10 @@ export async function runProcess(options: ProcessOptions): Promise<ProcessResult
   let forceKilled = false;
   let killTimer: NodeJS.Timeout | undefined;
 
-  const terminate = (reason: ProcessOutcome): void => {
+  const terminate = (reason: ProcessOutcome, notifyBackend = true): void => {
     if (outcome !== 'exited') return;
     outcome = reason;
-    killGroup(subprocess, 'SIGTERM');
+    if (!notifyBackend || options.onInterrupt?.() !== true) killGroup(subprocess, 'SIGTERM');
     killTimer = setTimeout(() => {
       forceKilled = true;
       killGroup(subprocess, 'SIGKILL');
@@ -131,6 +137,8 @@ export async function runProcess(options: ProcessOptions): Promise<ProcessResult
     clearTimeout(killTimer);
   });
 
+  subprocess.stdin?.on('error', () => { /* Exit/timeout remains authoritative on EPIPE. */ });
+
   // Молчание — не отказ: шаг может думать. Сообщаем и продолжаем ждать
   // таймаут, чтобы «непонятно, работает ли оно» стало наблюдаемым.
   let stallTimer: NodeJS.Timeout | undefined;
@@ -153,7 +161,16 @@ export async function runProcess(options: ProcessOptions): Promise<ProcessResult
   armStall();
 
   let result: Awaited<Subprocess>;
+  let startupFailure: { error: unknown } | undefined;
   try {
+    try {
+      if (subprocess.pid !== undefined) options.onSpawn?.(subprocess.pid,
+        (message) => { subprocess.stdin?.write(`${JSON.stringify(message)}\n`); },
+        () => { subprocess.stdin?.end(); });
+    } catch (error) {
+      startupFailure = { error };
+      terminate('canceled', false);
+    }
     result = await subprocess;
   } finally {
     // Процесс, не сумевший стартовать, доходит сюда исключением: без снятия
@@ -162,6 +179,7 @@ export async function runProcess(options: ProcessOptions): Promise<ProcessResult
   }
 
   await Promise.all([stdout.done(), stderr.done()]);
+  if (startupFailure !== undefined) throw startupFailure.error;
 
   // Процесс, не сумевший стартовать, не имеет ни кода, ни сигнала. Отличать
   // это от обычного отказа нужно, чтобы причина остановки называла отсутствие

@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { join } from 'node:path';
 
-import type { BackendAdapter, BackendRefusal } from '../../backend/types.js';
+import type { BackendAdapter, BackendEvent, BackendRefusal } from '../../backend/types.js';
 import type { BackendSlots } from '../../backend/slots.js';
 import {
   BACKEND_REFUSAL_PREDICATE,
@@ -18,7 +18,8 @@ import type { PredicateResult, Usage } from '../journal/schema.js';
 import type { RunJournal } from '../journal/writer.js';
 import type { Predicate } from '../../document/model.js';
 import { priceUsage, type PriceCatalog } from '../budget/priceCatalog.js';
-import { runProcess } from './process.js';
+import { beginBackendInvocation, finishBackendInvocation } from './backendProcess.js';
+import { UsageNormalizer } from './usageNormalizer.js';
 
 /**
  * Второй, асинхронный проход попытки.
@@ -198,19 +199,17 @@ async function callJudge(options: CallJudgeOptions): Promise<CallJudgeResult> {
   const dir = options.journal.prepareJudgeCall(options.stepDir, options.callIndex);
   options.journal.writeStepFile(dir, 'prompt.txt', prompt);
 
-  let usage = emptyUsage(adapter.name, predicate.model, 0);
+  const { checkpoint, run } = beginBackendInvocation({
+    dir, attempt: options.attempt, backend: adapter.name, role: 'judge', launch,
+    ...('sessionId' in invocation ? { sessionId: invocation.sessionId } : {}),
+  });
+  let usage = mergeUsage(emptyUsage(adapter.name, predicate.model, 0), launch.usageContext);
   let structured: unknown;
   let text: string | undefined;
   const pieces: string[] = [];
   let refusal: BackendRefusal | undefined;
-  let carry = '';
-
-  const consume = (chunk: string): void => {
-    carry += chunk;
-    const lines = carry.split('\n');
-    carry = lines.pop() ?? '';
-    for (const line of lines) handle(line);
-  };
+  let backendFailure: string | undefined;
+  const normalizer = new UsageNormalizer();
 
   const recordMessageUsage = (delta: Partial<Usage> | undefined): void => {
     if (delta === undefined) return;
@@ -220,8 +219,7 @@ async function callJudge(options: CallJudgeOptions): Promise<CallJudgeResult> {
     usage = mergeUsage(usage, peak === undefined ? delta : { ...delta, peak_prefix_tokens: peak });
   };
 
-  const handle = (line: string): void => {
-    const event = adapter.parseLine(line, invocation);
+  const handleEvent = (event: BackendEvent): void => {
     // Сообщение с вызовом инструмента адаптер отдаёт как `tool_use`, а не как
     // `usage`, хотя расход в нём тот же (см. `src/parts/backends/claude/adapter.ts`).
     // Пропустить его значило бы занижать пик тем сильнее, чем больше судья
@@ -229,12 +227,23 @@ async function callJudge(options: CallJudgeOptions): Promise<CallJudgeResult> {
     // обращения.
     if (event.kind === 'usage' || event.kind === 'tool_use') {
       recordMessageUsage(event.usage);
+    } else if (event.kind === 'usage_snapshot') {
+      const normalized = normalizer.accept(event);
+      usage = mergeUsage(usage, normalized);
+      checkpoint.update({ last_usage_at: new Date().toISOString(), ledger: normalizer.state(),
+        ...(event.turnId === undefined ? {} : { turn_id: event.turnId }),
+        ...(normalizer.uncertain ? { usage_state: 'incomplete' } : {}),
+        ...(normalized === undefined ? {} : {
+          usage: priceUsage(usage, options.priceCatalog),
+          usage_state: normalizer.uncertain ? 'incomplete' : 'observed',
+        }) });
     } else if (event.kind === 'result') {
       if (event.structured !== undefined) structured = event.structured;
       if (event.text !== undefined) text = event.text;
       // Судья всегда начинает новую сессию: до вызова она не стоила ничего.
       usage = mergeUsage(usage, event.usage === undefined ? undefined : withCallCost(event.usage, 0));
       if (event.refusal !== undefined) refusal = event.refusal;
+      if (event.failed === true) backendFailure = event.text || 'бэкенд сообщил об ошибке';
     } else if (event.kind === 'text') {
       pieces.push(event.text);
     }
@@ -242,34 +251,32 @@ async function callJudge(options: CallJudgeOptions): Promise<CallJudgeResult> {
 
   // Место бэкенда занято вокруг самого процесса — на общих основаниях с
   // агентским шагом, см. `agentStep.ts`.
-  const runBackendProcess = (): ReturnType<typeof runProcess> =>
-    runProcess({
-      command: launch.command,
+  const runBackendProcess = (): ReturnType<typeof run> =>
+    run({
       cwd: options.cwd,
       // Тем же порядком, что у агентского шага: окружение шага, поверх — бэкенда.
       env: { ...(options.env ?? {}), ...(launch.env ?? {}), ...(options.credentials ?? {}) },
-      stdin: launch.stdin,
       timeoutMs: options.timeoutMs,
       ...(options.stallTimeoutMs === undefined ? {} : { stallTimeoutMs: options.stallTimeoutMs }),
       ...(options.signal === undefined ? {} : { signal: options.signal }),
       ...(options.onStall === undefined ? {} : { onStall: options.onStall }),
       stdoutPath: join(dir, 'stdout.log'),
       stderrPath: join(dir, 'stderr.log'),
-      onStdout: consume,
       masker: options.journal.masker,
-    });
+    }, (line) => adapter.parseLine(line, invocation), handleEvent);
   const process_ = options.backendSlots === undefined
     ? await runBackendProcess()
     : await options.backendSlots.run(adapter.name, runBackendProcess);
 
-  if (carry.trim() !== '') handle(carry);
   if (textMode) {
     // Текст `result` главнее кусков текстового CLI — как у агентского шага.
     structured = structuredFromText(judgeVerdictSchemaPath(), text ?? (pieces.length === 0 ? undefined : pieces.join('\n'))).structured;
   }
   usage = priceUsage({ ...usage, wallclock_ms: process_.wallclockMs }, options.priceCatalog);
+  finishBackendInvocation(checkpoint, process_, usage, normalizer.uncertain, backendFailure !== undefined);
 
-  const verdict = process_.outcome === 'exited' ? parseVerdict(structured) : undefined;
+  const verdict = process_.outcome === 'exited' && backendFailure === undefined
+    && (launch.connect === undefined || process_.exitCode === 0) ? parseVerdict(structured) : undefined;
 
   // Отказ бэкенда проверяется раньше разбора вердикта: и лимит подписки, и
   // отказ аутентификации оставляют структурированный вывод пустым, и без этой
@@ -297,7 +304,8 @@ async function callJudge(options: CallJudgeOptions): Promise<CallJudgeResult> {
             passed: false,
             hard: predicate.hard,
             expected: predicate.claim,
-            detail: describeFailure(process_.outcome, options.timeoutMs),
+            detail: (process_.outcome === 'exited' ? backendFailure : undefined)
+              ?? describeFailure(process_.outcome, options.timeoutMs),
           };
 
   options.journal.writeStepJson(dir, 'verdict.json', {

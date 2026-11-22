@@ -218,6 +218,16 @@ export interface AttemptModel {
 }
 
 export interface StepSnapshot {
+  readonly activeAttempt?: {
+    readonly attempt: number;
+    readonly session_id?: string;
+    readonly processState: 'running' | 'silent' | 'lost' | 'unknown' | 'exited';
+    readonly usage_state: 'unavailable' | 'observed' | 'closed' | 'incomplete';
+    readonly last_usage_at?: string;
+    readonly diagnostic?: string;
+    readonly billable_tokens?: number;
+    readonly usage?: { readonly cost_usd?: number; readonly cost_source?: CostSource };
+  };
   readonly id: string;
   readonly kind: 'agent' | 'run' | 'script' | 'plugin' | 'review' | 'discuss';
   readonly agent?: string;

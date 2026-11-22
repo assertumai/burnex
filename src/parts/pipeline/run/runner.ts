@@ -1,3 +1,6 @@
+import { assertRunSafeToResume } from './journal/attemptRecovery.js';
+import { beginRunOwnership, runOwnerPath } from './journal/runOwnership.js';
+import { acquireAttemptLease, attemptLeasePath } from './journal/attemptLease.js';
 import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { cpSync, existsSync, readFileSync, readdirSync, rmSync, rmdirSync } from 'node:fs';
@@ -91,7 +94,7 @@ import {
 } from './journal/data.js';
 import { jobDir, jobOutputsPath, jobScratchDir, shortRunId } from './journal/paths.js';
 import { MAX_OUTPUT_KEYS, needsVarName, parseJobOutputs, type OutputPolicy } from './jobOutputs.js';
-import { findStepDir } from './journal/reader.js';
+import { findStepDir, readStatus } from './journal/reader.js';
 import { appendUsageRecord, usageRecord } from './journal/usageStore.js';
 import { RunJournal } from './journal/writer.js';
 import { jobLockHash, serializeLock } from '../document/lock.js';
@@ -283,6 +286,28 @@ export function resolveExitCode(
 }
 
 export async function runPipeline(options: RunOptions): Promise<RunResult> {
+  const resume = options.resume;
+  const release = resume === undefined ? undefined : acquireAttemptLease(resume.source.paths.dir);
+  let endOwnership: ReturnType<typeof beginRunOwnership> | undefined;
+  let finished = false;
+  try {
+    if (resume !== undefined) {
+      const { source, plan } = resume;
+      assertRunSafeToResume(source.paths, plan.explicitFrom);
+      if (plan.sourceUpdatedAt !== undefined && readStatus(source.paths).updated_at !== plan.sourceUpdatedAt) {
+        throw new BurnexError('The source run changed while planning resume. Build a new resume plan.');
+      }
+    }
+    const result = await runPipelineOwned(options, (dir) => { endOwnership = beginRunOwnership(dir); });
+    finished = true;
+    return result;
+  } finally {
+    try { endOwnership?.(finished); }
+    finally { release?.(); }
+  }
+}
+
+async function runPipelineOwned(options: RunOptions, ownRun: (dir: string) => void): Promise<RunResult> {
   const { pipeline } = options.expanded;
   const { config } = options;
 
@@ -394,6 +419,7 @@ export async function runPipeline(options: RunOptions): Promise<RunResult> {
             options.onEvent?.(event, usageForEvents.current?.snapshot() ?? ZERO_USAGE_SNAPSHOT),
         }),
   });
+  ownRun(journal.paths.dir);
   journal.writeLock(lock);
 
   let manifest: RunManifest = {
@@ -3644,6 +3670,9 @@ async function runAgentStep(
   // разбор по журналу насчитает усечений больше, чем их было.
   let noteTruncationReported = false;
 
+  let lastUsageRefresh = 0;
+  let usageRefreshTimer: NodeJS.Timeout | undefined;
+  attemptResources.defer('снятие таймера live usage', () => { clearTimeout(usageRefreshTimer); });
   let result: Awaited<ReturnType<typeof executeAgentStep>>;
   try {
     result = await executeAgentStep({
@@ -3774,11 +3803,9 @@ async function runAgentStep(
           ];
         }
 
-        // Ненулевой код возврата означает, что бэкенд не отработал, и жалобы
-        // предикатов на отсутствующий вывод только уводят от причины. Настоящую
-        // причину бэкенд написал в stderr — её и показываем первой. Судья здесь
-        // не вызывается: попытка отклонена в любом случае.
-        if (outcome.process.exitCode !== 0) {
+        // Ошибка бэкенда завершает попытку до проверки предикатов и вызова судьи.
+        // Причина приходит через stderr или событие результата.
+        if (outcome.process.exitCode !== 0 || outcome.failedByBackend) {
           const detail = outcome.process.stderr.trim().split('\n').slice(-3).join('\n');
           return [
             {
@@ -3786,10 +3813,9 @@ async function runAgentStep(
               passed: false,
               hard: true,
               actual: outcome.process.exitCode,
-              detail:
-                detail === ''
-                  ? `бэкенд завершился кодом ${outcome.process.exitCode ?? 'нет'}`
-                  : detail,
+              detail: detail || (outcome.failedByBackend
+                ? outcome.text || 'бэкенд сообщил об ошибке'
+                : `бэкенд завершился кодом ${outcome.process.exitCode ?? 'нет'}`),
             },
           ];
         }
@@ -3864,11 +3890,24 @@ async function runAgentStep(
         return results;
       },
       ...(context.priceCatalog === undefined ? {} : { priceCatalog: context.priceCatalog }),
+      cacheReadWeight: config.backends[step.agent]?.cacheReadWeight ?? 1,
+      onCheckpoint: () => context.refreshStatus(),
       onUsage: (current, attempt) => {
         context.usage.record(job.id, step.id, attempt, current, participant);
         const found = context.usage.check(budgetScopes(), current);
         exceeded ??= found;
         abort.trigger(found);
+        if (Date.now() - lastUsageRefresh >= 1000) {
+          lastUsageRefresh = Date.now();
+          context.refreshStatus();
+        } else if (usageRefreshTimer === undefined) {
+          usageRefreshTimer = setTimeout(() => {
+            usageRefreshTimer = undefined;
+            lastUsageRefresh = Date.now();
+            context.refreshStatus();
+          }, 1000 - (Date.now() - lastUsageRefresh));
+          usageRefreshTimer.unref();
+        }
       },
       onUnparsed: (line) =>
         journal.event({ kind: 'backend.unparsed', job: job.id, step: step.id, line }),
@@ -4846,6 +4885,8 @@ function carryOverRunDir(resume: ResumeContext, journal: RunJournal): void {
       paths.jobs,
       paths.workspace,
       paths.anchors,
+      attemptLeasePath(paths.dir),
+      runOwnerPath(paths.dir),
       // Снимок движка принадлежит прогону, который его снял: этот прогон снял
       // собственный до первой работы (`run/engine.ts`), и чужой, скопированный
       // поверх, вернул бы исполнение к коду другого прогона — при том что

@@ -1,0 +1,176 @@
+{
+  "cliVersion": "0.169.0",
+  "model": "gpt-6.1-sol",
+  "transport": "app-server-stdio",
+  "isolation": "dedicated temporary CODEX_HOME; auth copy removed after test",
+  "observedOn": "2026-11-14",
+  "scenarios": [
+    {
+      "mode": "tools",
+      "status": "success",
+      "usageState": "closed",
+      "baseline": {
+        "tokens_in": 0,
+        "tokens_out": 0,
+        "cache_read": 0,
+        "cache_write": 0
+      },
+      "snapshots": [
+        {
+          "tokens_in": 2517,
+          "tokens_out": 50,
+          "cache_read": 12160,
+          "cache_write": 0
+        },
+        {
+          "tokens_in": 2714,
+          "tokens_out": 81,
+          "cache_read": 26752,
+          "cache_write": 0
+        },
+        {
+          "tokens_in": 3005,
+          "tokens_out": 96,
+          "cache_read": 41344,
+          "cache_write": 0
+        }
+      ],
+      "expectedAttempt": {
+        "tokens_in": 3005,
+        "tokens_out": 96,
+        "cache_read": 41344,
+        "cache_write": 0
+      },
+      "usageBeforeCompleted": true,
+      "forceKilled": false,
+      "rpcErrorCount": 0,
+      "observationsMs": [
+        4389,
+        6639,
+        9463
+      ]
+    },
+    {
+      "mode": "resume",
+      "status": "success",
+      "usageState": "closed",
+      "baseline": {
+        "tokens_in": 3005,
+        "cache_read": 41344,
+        "cache_write": 0,
+        "tokens_out": 96
+      },
+      "snapshots": [
+        {
+          "tokens_in": 3005,
+          "tokens_out": 96,
+          "cache_read": 41344,
+          "cache_write": 0
+        },
+        {
+          "tokens_in": 3195,
+          "tokens_out": 111,
+          "cache_read": 56064,
+          "cache_write": 0
+        }
+      ],
+      "expectedAttempt": {
+        "tokens_in": 190,
+        "tokens_out": 15,
+        "cache_read": 14720,
+        "cache_write": 0
+      },
+      "usageBeforeCompleted": true,
+      "forceKilled": false,
+      "rpcErrorCount": 0,
+      "observationsMs": [
+        3507
+      ]
+    },
+    {
+      "mode": "fork",
+      "status": "success",
+      "usageState": "closed",
+      "baseline": {
+        "tokens_in": 3195,
+        "cache_read": 56064,
+        "cache_write": 0,
+        "tokens_out": 111
+      },
+      "snapshots": [
+        {
+          "tokens_in": 3195,
+          "tokens_out": 111,
+          "cache_read": 56064,
+          "cache_write": 0
+        },
+        {
+          "tokens_in": 18132,
+          "tokens_out": 126,
+          "cache_read": 56064,
+          "cache_write": 0
+        }
+      ],
+      "expectedAttempt": {
+        "tokens_in": 14937,
+        "tokens_out": 15,
+        "cache_read": 0,
+        "cache_write": 0
+      },
+      "usageBeforeCompleted": true,
+      "forceKilled": false,
+      "rpcErrorCount": 0,
+      "observationsMs": [
+        3426
+      ]
+    },
+    {
+      "mode": "interrupt",
+      "status": "canceled",
+      "usageState": "incomplete",
+      "baseline": {
+        "tokens_in": 0,
+        "tokens_out": 0,
+        "cache_read": 0,
+        "cache_write": 0
+      },
+      "snapshots": [
+        {
+          "tokens_in": 14652,
+          "tokens_out": 50,
+          "cache_read": 0,
+          "cache_write": 0
+        }
+      ],
+      "expectedAttempt": {
+        "tokens_in": 14652,
+        "tokens_out": 50,
+        "cache_read": 0,
+        "cache_write": 0
+      },
+      "usageBeforeCompleted": true,
+      "forceKilled": false,
+      "rpcErrorCount": 0,
+      "observationsMs": [
+        4324
+      ]
+    }
+  ],
+  "configuredAdapter": {
+    "status": "success",
+    "checkpoint": {
+      "state": "completed",
+      "usage_state": "closed"
+    },
+    "usage": {
+      "backend": "codex",
+      "model": "gpt-6.1-sol",
+      "tokens_in": 2471,
+      "tokens_out": 15,
+      "cache_read": 12160,
+      "cache_write": 0,
+      "wallclock_ms": 4247
+    },
+    "rpcErrorCount": 0
+  }
+}
