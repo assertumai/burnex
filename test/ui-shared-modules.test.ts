@@ -295,6 +295,8 @@ describe('ui-shared-modules: версия таблицы сведена с пе�
     2: '13fa6661e9e4d422fa7bae261dff780a81fd4f0a5e0b29f5400f831217f40241',
     // Версия 3 (`rename-package-burnex`): имена те же, спецификаторы `@stepcast/*` → `@burnex/*`.
     3: '897a93940fa1d426b199390a19e1aea6b99941aff5a43281b0dada6829acb477',
+    // Версия 4 (меню витрины): добавлены слот NAV_ACTIONS и значки — Icon, IconValue, ICON_NAMES, IMAGE_ICON_PREFIX, TEXT_ICON_PREFIX, iconGlyphs, isIconName.
+    4: 'd9d674ea5413e82c06be53928eb3e539c42a3af198937aefea1599b82a7c3ee4',
   };
 
   it('перечень имён при действующей версии совпадает с зафиксированным отпечатком', () => {

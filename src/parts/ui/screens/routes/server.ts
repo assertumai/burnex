@@ -20,6 +20,7 @@ const handleGet: ApiHandler = (_req, res, env) => {
   const buildError = env.watcher.currentRoutesError();
   sendJson(res, 200, {
     routes: routesPayload(result),
+    navGroups: result.navGroups,
     // Отключённые строки идут рядом с действующими: без них маршрут,
     // выключенный из витрины, исчезал бы из перечня совсем, и включить его
     // обратно можно было бы только правкой файла руками (`ui-routes`,

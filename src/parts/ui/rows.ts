@@ -11,6 +11,7 @@ import { row as proposalsRow } from './screens/proposals/server.js';
 import { row as reviewStrategiesRow } from './screens/review-strategies/server.js';
 import { row as discussionStrategiesRow } from './screens/discussion-strategies/server.js';
 import { row as routesRow } from './screens/routes/server.js';
+import { row as navigationRow } from './screens/navigation/server.js';
 import { row as runRow } from './screens/run/server.js';
 import { row as runsRow } from './screens/runs/server.js';
 import { row as scrumRow } from './screens/scrum/server.js';
@@ -64,6 +65,7 @@ export const SCREEN_ROWS: readonly BuiltinRow[] = [
   scheduleRow,
   systemRow,
   routesRow,
+  navigationRow,
   proposalsRow,
 ];
 

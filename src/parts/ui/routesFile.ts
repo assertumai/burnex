@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Document, parse as parseYaml, parseDocument } from 'yaml';
@@ -13,6 +13,8 @@ import {
   normalizedTemplate,
   paramPlaceholderNames,
   templateParamNames,
+  type NavGroupEntry,
+  type RouteLayerName,
   type RouteDefinition,
   type RouteNav,
   type RouteTable,
@@ -31,14 +33,45 @@ import { cabinetDir, homeRoot } from '../../kernel/dirs.js';
 
 const ROUTE_NAME = /^[A-Za-z0-9_]+$/;
 
+/** Потолок длины значка-картинки: PNG 64×64 укладывается с запасом, а значок лежит строкой в файле и едет в каждом событии. */
+const MAX_ICON_LENGTH = 16_384;
+
+/**
+ * Значок пункта (docs/routes.md): имя набора витрины, `text:<символы>` либо
+ * растровая `data:`-картинка. Набора демон не знает — незнакомое имя витрина
+ * рисует запасным значком; а вот `data:` проверяется здесь: внешних адресов
+ * и SVG среди значков нет, чтобы файл слоя не мог подгрузить чужое.
+ */
+const NavIconSchema = z
+  .string()
+  .min(1)
+  .max(MAX_ICON_LENGTH)
+  .refine((value) => !/^(data|https?|file|javascript):/i.test(value) || /^data:image\/(png|webp|jpeg|gif);base64,[A-Za-z0-9+/=]+$/.test(value), {
+    message: 'icon must be a set name, text:<glyphs>, or a base64 data:image/png|webp|jpeg|gif',
+  });
+
 const RouteNavSchema = z
   .object({
     title: z.string().min(1).optional(),
     order: z.number().optional(),
-    group: z.string().min(1).optional(),
+    // `null` — явное «без группы»: слияние идёт по листьям, и пропуск поля
+    // означал бы «как в нижнем слое», а не «снять группу».
+    group: z.string().min(1).nullable().optional(),
     active_for: z.array(z.string().min(1)).optional(),
+    icon: NavIconSchema.optional(),
+    hidden: z.boolean().optional(),
   })
   .strict();
+
+const NavGroupSchema = z
+  .object({
+    id: z.string().min(1),
+    title: z.string().min(1).optional(),
+    order: z.number().optional(),
+  })
+  .strict();
+
+export type NavGroupDocument = z.infer<typeof NavGroupSchema>;
 
 const RouteTargetSchema = z.union([
   z.object({ screen: z.string().min(1) }).strict(),
@@ -63,6 +96,7 @@ export type RouteRowDocument = z.infer<typeof RouteRowSchema>;
 export const RouteDocumentSchema = z
   .object({
     routes: z.array(RouteRowSchema),
+    nav_groups: z.array(NavGroupSchema).optional(),
   })
   .strict();
 
@@ -83,7 +117,7 @@ export function projectRoutesPath(projectRoot: string): string {
   return join(cabinetDir(projectRoot), ROUTES_FILE_NAME);
 }
 
-function readRoutesDocument(path: string): readonly RouteRowDocument[] {
+function readRoutesDocument(path: string): RouteFileDocument {
   let text: string;
   try {
     text = readFileSync(path, 'utf8');
@@ -111,10 +145,10 @@ function readRoutesDocument(path: string): readonly RouteRowDocument[] {
       hint: 'The format is described in docs/routes.md; schema: schema/routes.schema.json',
     });
   }
-  return parsed.data.routes;
+  return parsed.data;
 }
 
-export type RouteLayerName = 'builtin' | 'home' | 'project';
+export type { NavGroupEntry, RouteLayerName };
 
 interface LayerFile {
   readonly layer: RouteLayerName;
@@ -122,15 +156,18 @@ interface LayerFile {
   readonly package?: string;
   readonly path: string;
   readonly rows: readonly RouteRowDocument[];
+  readonly groups: readonly NavGroupDocument[];
 }
 
 function readLayer(layer: RouteLayerName, path: string, required: boolean, packageName?: string): LayerFile | undefined {
   if (!required && !existsSync(path)) return undefined;
+  const document = readRoutesDocument(path);
   return {
     layer,
     ...(packageName === undefined ? {} : { package: packageName }),
     path,
-    rows: readRoutesDocument(path),
+    rows: document.routes,
+    groups: document.nav_groups ?? [],
   };
 }
 
@@ -154,8 +191,10 @@ interface MergedFields {
   values?: FieldSlot<Readonly<Record<string, readonly string[]>>>;
   navTitle?: FieldSlot<string>;
   navOrder?: FieldSlot<number>;
-  navGroup?: FieldSlot<string>;
+  navGroup?: FieldSlot<string | null>;
   navActiveFor?: FieldSlot<readonly string[]>;
+  navIcon?: FieldSlot<string>;
+  navHidden?: FieldSlot<boolean>;
   enabled?: FieldSlot<boolean>;
 }
 
@@ -194,6 +233,8 @@ function mergeRows(layers: readonly LayerFile[]): readonly MergedRow[] {
       if (raw.nav?.order !== undefined) entry.fields.navOrder = { value: raw.nav.order, source };
       if (raw.nav?.group !== undefined) entry.fields.navGroup = { value: raw.nav.group, source };
       if (raw.nav?.active_for !== undefined) entry.fields.navActiveFor = { value: raw.nav.active_for, source };
+      if (raw.nav?.icon !== undefined) entry.fields.navIcon = { value: raw.nav.icon, source };
+      if (raw.nav?.hidden !== undefined) entry.fields.navHidden = { value: raw.nav.hidden, source };
     }
   }
 
@@ -219,8 +260,28 @@ export interface RouteEntry {
     readonly navOrder?: RouteFieldSource;
     readonly navGroup?: RouteFieldSource;
     readonly navActiveFor?: RouteFieldSource;
+    readonly navIcon?: RouteFieldSource;
+    readonly navHidden?: RouteFieldSource;
     readonly enabled?: RouteFieldSource;
   };
+}
+
+/** Слить объявления групп слоёв по `id`, по листьям, в порядке первого появления. */
+function mergeGroups(layers: readonly LayerFile[]): readonly NavGroupEntry[] {
+  const byId = new Map<string, { title?: string; order?: number; layers: RouteLayerName[] }>();
+  for (const layer of layers) {
+    for (const raw of layer.groups) {
+      let entry = byId.get(raw.id);
+      if (entry === undefined) {
+        entry = { layers: [] };
+        byId.set(raw.id, entry);
+      }
+      if (raw.title !== undefined) entry.title = raw.title;
+      if (raw.order !== undefined) entry.order = raw.order;
+      if (!entry.layers.includes(layer.layer)) entry.layers.push(layer.layer);
+    }
+  }
+  return [...byId].map(([id, entry]) => ({ id, ...entry }));
 }
 
 /**
@@ -261,6 +322,7 @@ export interface RouteBuildResult {
   readonly entries: readonly RouteEntry[];
   readonly disabled: readonly DisabledRouteEntry[];
   readonly failures: readonly RoutePackageFailure[];
+  readonly navGroups: readonly NavGroupEntry[];
 }
 
 /** Строка действующей таблицы, обогащённая источником каждого поля — форма ответа `GET /api/routes` и события потока `routes`. */
@@ -290,15 +352,20 @@ function buildNav(fields: MergedFields): RouteNav | undefined {
     fields.navTitle === undefined &&
     fields.navOrder === undefined &&
     fields.navGroup === undefined &&
-    fields.navActiveFor === undefined
+    fields.navActiveFor === undefined &&
+    fields.navIcon === undefined &&
+    fields.navHidden === undefined
   ) {
     return undefined;
   }
   return {
     ...(fields.navTitle === undefined ? {} : { title: fields.navTitle.value }),
     ...(fields.navOrder === undefined ? {} : { order: fields.navOrder.value }),
-    ...(fields.navGroup === undefined ? {} : { group: fields.navGroup.value }),
+    // `group: null` верхнего слоя снимает группу нижнего: в действующей строке её просто нет.
+    ...(fields.navGroup === undefined || fields.navGroup.value === null ? {} : { group: fields.navGroup.value }),
     ...(fields.navActiveFor === undefined ? {} : { activeFor: fields.navActiveFor.value }),
+    ...(fields.navIcon === undefined ? {} : { icon: fields.navIcon.value }),
+    ...(fields.navHidden === undefined || !fields.navHidden.value ? {} : { hidden: true }),
   };
 }
 
@@ -472,6 +539,8 @@ export function buildRouteTable(options: RouteBuildOptions): RouteBuildResult {
         ...(row.fields.navOrder === undefined ? {} : { navOrder: row.fields.navOrder.source }),
         ...(row.fields.navGroup === undefined ? {} : { navGroup: row.fields.navGroup.source }),
         ...(row.fields.navActiveFor === undefined ? {} : { navActiveFor: row.fields.navActiveFor.source }),
+        ...(row.fields.navIcon === undefined ? {} : { navIcon: row.fields.navIcon.source }),
+        ...(row.fields.navHidden === undefined ? {} : { navHidden: row.fields.navHidden.source }),
         ...(row.fields.enabled === undefined ? {} : { enabled: row.fields.enabled.source }),
       },
     });
@@ -495,7 +564,7 @@ export function buildRouteTable(options: RouteBuildOptions): RouteBuildResult {
     byNormalized.set(key, entry);
   }
 
-  return { table: entries.map((entry) => entry.definition), entries, disabled, failures };
+  return { table: entries.map((entry) => entry.definition), entries, disabled, failures, navGroups: mergeGroups(layers) };
 }
 
 /** Имя файла слоя, в который пишет витрина, — для подсказок и для `POST /api/routes`. */
@@ -512,66 +581,233 @@ export function writableLayerPath(layer: WritableRouteLayer, options: RouteBuild
 }
 
 /**
- * Записать строку маршрута в файл слоя через `Document` библиотеки `yaml`:
- * комментарии, порядок прочих строк и форматирование пользователя переживают
- * правку (`ui-routes`, Решение 11). Файл, который не разбирается, не
- * переписывается — отказ называет место разбора.
+ * Открыть файл слоя как `Document` библиотеки `yaml` для записи: комментарии,
+ * порядок прочих строк и форматирование пользователя переживают правку
+ * (`ui-routes`, Решение 11). Файл, который не разбирается, не переписывается —
+ * отказ называет место разбора. `text` — прежнее содержимое файла
+ * (`undefined` — файла не было): им запись откатывается, если таблица после
+ * неё не собралась.
+ */
+function openLayerDocument(path: string): { doc: Document; text: string | undefined } {
+  if (!existsSync(path)) return { doc: new Document({ routes: [] }), text: undefined };
+
+  let text: string;
+  try {
+    text = readFileSync(path, 'utf8');
+  } catch (error) {
+    throw new BurnexError(`Routes file cannot be read: ${path}`, {
+      file: path,
+      hint: (error as NodeJS.ErrnoException).message,
+      cause: error,
+    });
+  }
+  const doc = parseDocument(text);
+  // `parseDocument` на синтаксической ошибке не бросает — она едет списком
+  // `doc.errors`, и без этой проверки сохранение переписывало бы файл,
+  // который чтение слоя (`parse`, выше) считает сломанным, по своему
+  // «как получится» разбору (`ui-routes`, «Файл, который не разбирается, не
+  // переписывается»).
+  const parseFailure = doc.errors[0];
+  if (parseFailure !== undefined) {
+    const pos = parseFailure.linePos?.[0];
+    throw new BurnexError(`Routes file ${path} is not valid YAML, write cancelled: ${parseFailure.message}`, {
+      file: path,
+      ...(pos === undefined ? {} : { at: `line ${pos.line}, column ${pos.col}` }),
+      hint: 'Fix the file by hand before saving from the dashboard',
+    });
+  }
+  const existing = RouteDocumentSchema.safeParse(doc.toJS());
+  if (!existing.success) {
+    const failure = describeSchemaFailure(existing.error);
+    throw new BurnexError(`Routes file ${path} does not match the format, write cancelled: ${failure.message}`, {
+      file: path,
+      ...(failure.at === undefined ? {} : { at: failure.at }),
+      hint: 'Fix the file by hand before saving from the dashboard',
+    });
+  }
+  return { doc, text };
+}
+
+/** Запись через временный файл и переименование: наблюдатель и чтение слоя не видят файла, записанного наполовину. */
+function saveLayerDocument(path: string, doc: Document): void {
+  mkdirSync(dirname(path), { recursive: true });
+  const temporary = `${path}.${process.pid}.tmp`;
+  writeFileSync(temporary, doc.toString(), 'utf8');
+  renameSync(temporary, path);
+}
+
+/** Листья `nav`, которых форма экрана «Маршруты» не знает: запись строки из неё не должна их стирать. */
+const NAV_LEAVES_KEPT_ON_ROW_WRITE = ['active_for', 'icon', 'hidden'] as const;
+
+/**
+ * Записать строку маршрута в файл слоя. Строка заменяется целиком, кроме
+ * листьев `nav`, которые пишет экран меню и поставка (`icon`, `hidden`,
+ * `active_for`): строка, пришедшая без них, оставляет уже записанные.
  */
 export function writeRouteRow(layer: WritableRouteLayer, row: RouteRowDocument, options: RouteBuildOptions): void {
   const path = writableLayerPath(layer, options);
-
-  let doc: Document;
-  if (existsSync(path)) {
-    let text: string;
-    try {
-      text = readFileSync(path, 'utf8');
-    } catch (error) {
-      throw new BurnexError(`Routes file cannot be read: ${path}`, {
-        file: path,
-        hint: (error as NodeJS.ErrnoException).message,
-        cause: error,
-      });
-    }
-    doc = parseDocument(text);
-    // `parseDocument` на синтаксической ошибке не бросает — она едет списком
-    // `doc.errors`, и без этой проверки сохранение переписывало бы файл,
-    // который чтение слоя (`parse`, выше) считает сломанным, по своему
-    // «как получится» разбору (`ui-routes`, «Файл, который не разбирается, не
-    // переписывается»).
-    const parseFailure = doc.errors[0];
-    if (parseFailure !== undefined) {
-      const pos = parseFailure.linePos?.[0];
-      throw new BurnexError(
-        `Routes file ${path} is not valid YAML, write cancelled: ${parseFailure.message}`,
-        {
-          file: path,
-          ...(pos === undefined ? {} : { at: `line ${pos.line}, column ${pos.col}` }),
-          hint: 'Fix the file by hand before saving a route from the dashboard',
-        },
-      );
-    }
-    const existing = RouteDocumentSchema.safeParse(doc.toJS());
-    if (!existing.success) {
-      const failure = describeSchemaFailure(existing.error);
-      throw new BurnexError(`Routes file ${path} does not match the format, write cancelled: ${failure.message}`, {
-        file: path,
-        ...(failure.at === undefined ? {} : { at: failure.at }),
-        hint: 'Fix the file by hand before saving a route from the dashboard',
-      });
-    }
-    if (doc.get('routes') === undefined) doc.set('routes', []);
-  } else {
-    doc = new Document({ routes: [] });
-  }
+  const { doc } = openLayerDocument(path);
 
   const rows = (doc.toJS() as RouteFileDocument).routes;
   const index = rows.findIndex((existingRow) => existingRow.id === row.id);
   if (index === -1) {
     doc.addIn(['routes', rows.length], row);
   } else {
-    doc.setIn(['routes', index], row);
+    const kept: Record<string, unknown> = {};
+    const existingNav = (rows[index] as RouteRowDocument).nav;
+    for (const leaf of NAV_LEAVES_KEPT_ON_ROW_WRITE) {
+      if (existingNav?.[leaf] !== undefined && row.nav?.[leaf] === undefined) kept[leaf] = existingNav[leaf];
+    }
+    const nav = { ...kept, ...row.nav };
+    doc.setIn(['routes', index], Object.keys(nav).length === 0 ? row : { ...row, nav });
   }
 
-  mkdirSync(dirname(path), { recursive: true });
-  writeFileSync(path, doc.toString(), 'utf8');
+  saveLayerDocument(path, doc);
+}
+
+/**
+ * Правка меню одним запросом экрана «Navigation»: только названные листья.
+ * У пункта `null` в `title`, `order`, `icon`, `hidden` снимает собственный
+ * лист слоя (значение снова берётся из нижних слоёв), а `group: null`
+ * пишется как есть — это явное «без группы». У группы `null` в `title` и
+ * `order` снимает лист; `removeGroups` убирает объявление группы из слоя.
+ */
+export const NavPatchSchema = z
+  .object({
+    routes: z
+      .array(
+        z
+          .object({
+            id: z.string().min(1),
+            title: z.string().min(1).nullable().optional(),
+            order: z.number().nullable().optional(),
+            group: z.string().min(1).nullable().optional(),
+            icon: NavIconSchema.nullable().optional(),
+            hidden: z.boolean().nullable().optional(),
+          })
+          .strict(),
+      )
+      .optional(),
+    groups: z
+      .array(
+        z
+          .object({
+            id: z.string().min(1),
+            title: z.string().min(1).nullable().optional(),
+            order: z.number().nullable().optional(),
+          })
+          .strict(),
+      )
+      .optional(),
+    removeGroups: z.array(z.string().min(1)).optional(),
+  })
+  .strict();
+
+export type NavPatch = z.infer<typeof NavPatchSchema>;
+
+/** Листья `nav`, которыми распоряжается экран меню; `active_for` — не его забота и сбросом не снимается. */
+const NAV_MENU_LEAVES = ['title', 'order', 'group', 'icon', 'hidden'] as const;
+
+/** Индекс строки списка `key` с названным `id`; строки нет — она добавляется одним `id`. */
+function ensureListRow(doc: Document, key: 'routes' | 'nav_groups', id: string): number {
+  // Узлы, а не голые значения: в строку, добавленную объектом JS, `setIn` листа уже не войдёт.
+  if (doc.get(key) === undefined) doc.set(key, doc.createNode([]));
+  const rows = ((doc.toJS() as Record<string, unknown>)[key] ?? []) as readonly { id: string }[];
+  const index = rows.findIndex((row) => row.id === id);
+  if (index !== -1) return index;
+  doc.addIn([key, rows.length], doc.createNode({ id }));
+  return rows.length;
+}
+
+/**
+ * Убрать из слоя то, что после правки ничего не объявляет: пустой `nav`,
+ * строку маршрута из одного `id` и пустую секцию групп. Строка из одного
+ * `id` законна, но бессмысленна, а копить такие в файле пользователя незачем.
+ */
+function pruneEmptyNav(doc: Document): void {
+  const js = doc.toJS() as { routes?: readonly Record<string, unknown>[]; nav_groups?: readonly unknown[] };
+  const routes = js.routes ?? [];
+  for (let index = routes.length - 1; index >= 0; index -= 1) {
+    const row = routes[index] as Record<string, unknown>;
+    const nav = row.nav as Record<string, unknown> | undefined;
+    const navEmpty = nav !== undefined && Object.keys(nav).length === 0;
+    if (navEmpty) doc.deleteIn(['routes', index, 'nav']);
+    const keys = Object.keys(row).filter((key) => !(key === 'nav' && navEmpty));
+    if (keys.length === 1 && keys[0] === 'id') doc.deleteIn(['routes', index]);
+  }
+  if (js.nav_groups !== undefined && js.nav_groups.length === 0) doc.delete('nav_groups');
+}
+
+/**
+ * Сохранить файл слоя и проверить, что таблица с ним собирается; отказ
+ * сборки возвращает файл к прежнему содержимому и уходит вызывающему —
+ * правка меню не должна оставить витрину на «последней успешной таблице».
+ */
+function saveLayerChecked(path: string, doc: Document, previous: string | undefined, options: RouteBuildOptions): void {
+  saveLayerDocument(path, doc);
+  try {
+    buildRouteTable(options);
+  } catch (error) {
+    if (previous === undefined) rmSync(path, { force: true });
+    else writeFileSync(path, previous, 'utf8');
+    throw error;
+  }
+}
+
+/** Применить правку меню к файлу слоя — только названные листья, остальное содержимое файла не тронуто. */
+export function writeNavPatch(layer: WritableRouteLayer, patch: NavPatch, options: RouteBuildOptions): void {
+  const path = writableLayerPath(layer, options);
+  const { doc, text } = openLayerDocument(path);
+
+  for (const { id, ...leaves } of patch.routes ?? []) {
+    const index = ensureListRow(doc, 'routes', id);
+    for (const leaf of NAV_MENU_LEAVES) {
+      const value = leaves[leaf];
+      if (value === undefined) continue;
+      if (value === null && leaf !== 'group') doc.deleteIn(['routes', index, 'nav', leaf]);
+      else doc.setIn(['routes', index, 'nav', leaf], value);
+    }
+  }
+
+  for (const { id, ...leaves } of patch.groups ?? []) {
+    const index = ensureListRow(doc, 'nav_groups', id);
+    for (const leaf of ['title', 'order'] as const) {
+      const value = leaves[leaf];
+      if (value === undefined) continue;
+      if (value === null) doc.deleteIn(['nav_groups', index, leaf]);
+      else doc.setIn(['nav_groups', index, leaf], value);
+    }
+  }
+
+  for (const id of patch.removeGroups ?? []) {
+    const groups = (doc.toJS() as RouteFileDocument).nav_groups ?? [];
+    const index = groups.findIndex((group) => group.id === id);
+    if (index !== -1) doc.deleteIn(['nav_groups', index]);
+  }
+
+  pruneEmptyNav(doc);
+  saveLayerChecked(path, doc, text, options);
+}
+
+/**
+ * Снять из слоя все настройки меню: листья `nav`, которыми распоряжается
+ * экран меню, и объявления групп. Пути, цели, `active_for` и собственные
+ * маршруты пользователя остаются; его маршрут без `nav` из меню пропадает,
+ * адрес по-прежнему открывается.
+ */
+export function resetNav(layer: WritableRouteLayer, options: RouteBuildOptions): void {
+  const path = writableLayerPath(layer, options);
+  if (!existsSync(path)) return;
+  const { doc, text } = openLayerDocument(path);
+
+  const rows = (doc.toJS() as RouteFileDocument).routes;
+  rows.forEach((row, index) => {
+    for (const leaf of NAV_MENU_LEAVES) {
+      if (row.nav?.[leaf] !== undefined) doc.deleteIn(['routes', index, 'nav', leaf]);
+    }
+  });
+  if (doc.get('nav_groups') !== undefined) doc.delete('nav_groups');
+
+  pruneEmptyNav(doc);
+  saveLayerChecked(path, doc, text, options);
 }

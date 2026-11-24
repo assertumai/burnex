@@ -27,6 +27,22 @@ export interface RouteNav {
   readonly group?: string;
   /** Маршруты, на которых пункт этого маршрута остаётся подсвеченным. */
   readonly activeFor?: readonly string[];
+  /** Значок пункта: имя набора витрины, `text:<символы>` либо `data:image/…` (docs/routes.md). */
+  readonly icon?: string;
+  /** Пункт убран из меню, адрес при этом открывается: в отличие от `enabled: false` маршрут остаётся в таблице. */
+  readonly hidden?: boolean;
+}
+
+/**
+ * Группа бокового меню — строка секции `nav_groups` файла маршрутов, слитая
+ * по `id` теми же слоями, что и маршруты. Группа, названная пунктом, но не
+ * объявленная, тоже рисуется: заголовок — её `id`, место — после объявленных.
+ */
+export interface NavGroup {
+  readonly id: string;
+  readonly title?: string;
+  /** Порядок группы в меню; меньшее значение — выше. */
+  readonly order?: number;
 }
 
 /**
@@ -322,4 +338,73 @@ export function sharedModuleHref(routeSegment: string): string {
  */
 export function isReservedPath(pathname: string): boolean {
   return isApiPath(pathname) || isWidgetPath(pathname) || isPluginPath(pathname) || isSharedPath(pathname);
+}
+
+/** Слой файла маршрутов, из которого пришло значение. */
+export type RouteLayerName = 'builtin' | 'home' | 'project';
+
+/** Группа меню действующей таблицы и слои, объявившие её: удалить из витрины можно только объявление своего слоя. */
+export interface NavGroupEntry extends NavGroup {
+  readonly layers: readonly RouteLayerName[];
+}
+
+/** Группа меню с её пунктами — итог раскладки таблицы маршрутов по группам. */
+export interface NavMenuGroup {
+  readonly id: string;
+  readonly title: string;
+  /** Группа объявлена секцией `nav_groups`, а не только названа пунктом. */
+  readonly declared: boolean;
+  readonly items: readonly RouteDefinition[];
+}
+
+export interface NavMenu {
+  readonly groups: readonly NavMenuGroup[];
+  /** Пункты без группы — идут после групп, без заголовка. */
+  readonly ungrouped: readonly RouteDefinition[];
+}
+
+/**
+ * Разложить маршруты с объявленным `nav` по группам — одна раскладка и для
+ * бокового меню каркаса, и для экрана его настройки. Объявленные группы идут
+ * по `order` (без него — после упорядоченных, в порядке объявления),
+ * названные только пунктом — после них в порядке первого появления; пункты
+ * группы — по `nav.order`. Скрытые пункты и пустые объявленные группы
+ * остаются в раскладке: меню их пропускает, экран настройки показывает.
+ */
+export function buildNavMenu(table: RouteTable, navGroups: readonly NavGroup[]): NavMenu {
+  const byOrder = <T>(items: readonly T[], order: (item: T) => number | undefined): T[] =>
+    items
+      .map((item, index) => ({ item, index }))
+      .sort((a, b) => (order(a.item) ?? Infinity) - (order(b.item) ?? Infinity) || a.index - b.index)
+      .map(({ item }) => item);
+
+  const buckets = new Map<string, { title: string; declared: boolean; items: RouteDefinition[] }>();
+  for (const group of byOrder(navGroups, (candidate) => candidate.order)) {
+    buckets.set(group.id, { title: group.title ?? navGroupTitle(group.id), declared: true, items: [] });
+  }
+
+  const ungrouped: RouteDefinition[] = [];
+  for (const route of byOrder(
+    table.filter((candidate) => candidate.nav !== undefined),
+    (candidate) => candidate.nav?.order,
+  )) {
+    const id = route.nav?.group;
+    if (id === undefined) {
+      ungrouped.push(route);
+      continue;
+    }
+    let bucket = buckets.get(id);
+    if (bucket === undefined) {
+      bucket = { title: navGroupTitle(id), declared: false, items: [] };
+      buckets.set(id, bucket);
+    }
+    bucket.items.push(route);
+  }
+
+  return { groups: [...buckets].map(([id, bucket]) => ({ id, ...bucket })), ungrouped };
+}
+
+/** Заголовок группы без объявленного `title` — её `id` с заглавной буквы. */
+export function navGroupTitle(id: string): string {
+  return id.charAt(0).toUpperCase() + id.slice(1);
 }

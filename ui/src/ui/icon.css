@@ -1,0 +1,17 @@
+.sc-icon { flex: none; display: block; }
+.sc-icon-image { flex: none; display: block; object-fit: contain; border-radius: 3px; }
+.sc-icon-text {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  white-space: nowrap;
+}
+/* Запасной значок — буква подписи в контуре: пункт без значка остаётся различимым в узкой колонке. */
+.sc-icon-text--fallback {
+  border: 1.5px solid currentColor;
+  border-radius: 5px;
+  font-weight: 600;
+  opacity: .8;
+}

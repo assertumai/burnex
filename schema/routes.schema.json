@@ -95,8 +95,15 @@
                 "type": "number"
               },
               "group": {
-                "type": "string",
-                "minLength": 1
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
               },
               "active_for": {
                 "type": "array",
@@ -104,12 +111,43 @@
                   "type": "string",
                   "minLength": 1
                 }
+              },
+              "icon": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 16384
+              },
+              "hidden": {
+                "type": "boolean"
               }
             },
             "additionalProperties": false
           },
           "enabled": {
             "type": "boolean"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "nav_groups": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1
+          },
+          "order": {
+            "type": "number"
           }
         },
         "required": [

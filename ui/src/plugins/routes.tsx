@@ -1,6 +1,6 @@
 import type { Context } from 'cordis';
 
-import type { RouteDefinition } from '../../../src/parts/ui/routes.ts';
+import type { NavGroupEntry, RouteDefinition } from '../../../src/parts/ui/routes.ts';
 
 /**
  * Плагин `routes` — читает действующую таблицу маршрутов у демона
@@ -15,6 +15,8 @@ import type { RouteDefinition } from '../../../src/parts/ui/routes.ts';
 
 interface RoutesResponse {
   readonly routes: readonly RouteDefinition[];
+  /** Нет у демона прежней сборки — меню тогда рисует группы по одним `nav.group`. */
+  readonly navGroups?: readonly NavGroupEntry[];
   readonly buildError?: string;
 }
 
@@ -27,7 +29,7 @@ async function fetchRoutes(): Promise<RoutesResponse> {
 
 export default function routes(ctx: Context): void {
   const apply = (response: RoutesResponse): void => {
-    ctx.routes.set(response.routes, response.buildError);
+    ctx.routes.set(response.routes, response.buildError, response.navGroups ?? []);
   };
 
   void fetchRoutes()

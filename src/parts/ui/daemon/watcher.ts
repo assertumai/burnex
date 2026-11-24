@@ -463,7 +463,7 @@ export function createWatcher(options: WatcherOptions): Watcher {
   // файла поставки маршрутов нет вовсе, и молчаливый подъём с пустой таблицей
   // был бы неотличим от «пользователь отключил всё сам» — ровно та подмена
   // причины, которой изменение не допускает.
-  let routes: RouteBuildResult = { table: [], entries: [], disabled: [], failures: [] };
+  let routes: RouteBuildResult = { table: [], entries: [], disabled: [], failures: [], navGroups: [] };
   let routesError: string | undefined;
   try {
     routes = buildRouteTable(routeOptions);

@@ -58,9 +58,32 @@ export interface NavItemProps {
   readonly href: string | undefined;
   readonly active: boolean;
   readonly navigate: (href: string) => void;
+  /** Значок пункта строкой `nav.icon` маршрута; своего значка у маршрута может не быть. */
+  readonly icon?: string;
+  /**
+   * Меню свёрнуто в узкую колонку: место есть только под значок. Вкладчик со
+   * своим видом пункта обязан уложиться в него и оставить ссылке доступное
+   * имя (`aria-label`); подпись показывает каркас подсказкой по атрибуту
+   * `data-nav-tip`.
+   */
+  readonly compact?: boolean;
 }
 
 export const NAV = slot<NavItemProps, 'keyed'>('nav', 'keyed');
+
+/**
+ * Действия подвала бокового меню — значки-кнопки рядом с кнопкой узкой
+ * колонки, списком вкладов. Так экран настройки меню даёт вход в себя,
+ * который переживает скрытие его собственного пункта, а каркас по-прежнему
+ * не знает ни одного экрана по имени.
+ */
+export interface NavActionProps {
+  readonly navigate: (href: string) => void;
+  /** Меню свёрнуто в узкую колонку — действия стоят столбцом. */
+  readonly compact: boolean;
+}
+
+export const NAV_ACTIONS = slot<NavActionProps, 'list'>('nav.actions', 'list');
 
 /** Данные витрины, общие экрану и хосту виджета — раздаются props, а не через контекст (design.md `cordis-kernel-browser`, Решение 10). */
 export interface LiveDataProps {

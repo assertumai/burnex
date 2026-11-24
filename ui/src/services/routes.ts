@@ -1,6 +1,6 @@
 import { Service, type Context } from 'cordis';
 
-import type { RouteTable } from '../../../src/parts/ui/routes.ts';
+import type { NavGroupEntry, RouteTable } from '../../../src/parts/ui/routes.ts';
 
 /**
  * Таблица маршрутов на месте живого сервиса ядра витрины (`ui-routes`,
@@ -15,10 +15,12 @@ export const ROUTES_SERVICE_NAME = 'routes';
 
 export interface RoutesSnapshot {
   readonly table: RouteTable;
+  /** Объявленные группы меню — секция `nav_groups` слоёв, слитая по `id`. */
+  readonly navGroups: readonly NavGroupEntry[];
   readonly buildError: string | undefined;
 }
 
-const EMPTY: RoutesSnapshot = { table: [], buildError: undefined };
+const EMPTY: RoutesSnapshot = { table: [], navGroups: [], buildError: undefined };
 
 export class RoutesService extends Service {
   private data: RoutesSnapshot = EMPTY;
@@ -41,8 +43,8 @@ export class RoutesService extends Service {
   }
 
   /** Заменить таблицу целиком — вызывает плагин `routes` после каждого ответа демона. */
-  set(table: RouteTable, buildError: string | undefined): void {
-    this.data = { table, buildError };
+  set(table: RouteTable, buildError: string | undefined, navGroups: readonly NavGroupEntry[] = []): void {
+    this.data = { table, navGroups, buildError };
     for (const listener of this.listeners) listener();
   }
 }

@@ -1,6 +1,6 @@
 import { Service, type Context } from 'cordis';
 
-import type { RouteDefinition } from '../../../src/parts/ui/routes.ts';
+import type { NavGroupEntry, RouteDefinition } from '../../../src/parts/ui/routes.ts';
 import type { ScreenDeclaration } from '../../../src/parts/ui/screens/declaration.ts';
 import type { BacklogOverview, Overview, PluginRowView, ProposalsStreamEvent, RunSnapshot, WidgetsOverview } from '../api';
 
@@ -27,6 +27,7 @@ export type LiveState = 'connecting' | 'live' | 'offline';
 /** Событие `routes` потока — та же форма, что и ответ `GET /api/routes` (`ui-daemon`). */
 export interface RoutesEvent {
   readonly routes: readonly RouteDefinition[];
+  readonly navGroups?: readonly NavGroupEntry[];
   readonly buildError?: string;
 }
 

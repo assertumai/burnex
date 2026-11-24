@@ -47,7 +47,7 @@ describe('ui-routes-file: сборка таблицы трёх слоёв', () =
     assert.equal(entry?.definition.path, '/release');
     assert.equal(entry?.sources.path.layer, 'project');
     assert.deepEqual(entry?.definition.target, { kind: 'screen', id: 'screen-pipelines' });
-    assert.equal(entry?.definition.nav?.order, 1);
+    assert.equal(entry?.definition.nav?.order, 20);
     assert.equal(entry?.sources.navOrder?.layer, 'builtin');
   });
 
@@ -71,21 +71,21 @@ describe('ui-routes-file: сборка таблицы трёх слоёв', () =
     const cleanup = result.entries.find((candidate) => candidate.id === 'screen-cleanup');
     assert.equal(cleanup?.definition.nav?.group, 'work');
     assert.equal(cleanup?.sources.navGroup?.layer, 'home');
-    assert.equal(cleanup?.definition.nav?.order, 6);
+    assert.equal(cleanup?.definition.nav?.order, 30);
     const agents = result.entries.find((candidate) => candidate.id === 'screen-agents');
-    assert.equal(agents?.definition.nav?.group, 'config');
+    assert.equal(agents?.definition.nav?.group, 'agents');
     assert.equal(agents?.sources.navGroup?.layer, 'builtin');
     const secrets = result.entries.find((candidate) => candidate.id === 'screen-secrets');
     assert.equal(secrets?.definition.path, '/secrets');
-    assert.equal(secrets?.definition.nav?.group, 'config');
-    assert.equal(secrets?.definition.nav?.order, 8);
+    assert.equal(secrets?.definition.nav?.group, 'workspace');
+    assert.equal(secrets?.definition.nav?.order, 30);
     const schedule = result.entries.find((candidate) => candidate.id === 'screen-schedule');
     assert.equal(schedule?.definition.path, '/schedule');
-    assert.equal(schedule?.definition.nav?.group, 'config');
-    assert.equal(schedule?.definition.nav?.order, 9);
+    assert.equal(schedule?.definition.nav?.group, 'work');
+    assert.equal(schedule?.definition.nav?.order, 30);
     const system = result.entries.find((candidate) => candidate.id === 'screen-system');
     assert.equal(system?.definition.path, '/system');
-    assert.equal(system?.definition.nav?.group, 'config');
+    assert.equal(system?.definition.nav?.group, 'system');
     assert.equal(system?.definition.nav?.order, 10);
   });
 
@@ -171,7 +171,7 @@ describe('ui-routes-file: сборка таблицы трёх слоёв', () =
     // screen-decisions, screen-proposals, screen-secrets, screen-schedule,
     // screen-system, screen-packages, screen-review-strategies и
     // screen-discussion-strategies) плюс этот новый.
-    assert.equal(result.entries.length, 22);
+    assert.equal(result.entries.length, 23);
     const entry = result.entries.find((candidate) => candidate.id === 'my-dashboard');
     assert.deepEqual(entry?.definition.target, { kind: 'widget', id: 'proj/team' });
     const runs = result.entries.find((candidate) => candidate.id === 'screen-runs');

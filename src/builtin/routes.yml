@@ -5,6 +5,10 @@
 # `id` (docs/routes.md). Название пункта меню не объявлено нарочно — оно
 # берётся из заголовка цели (`nav.title` отсутствует означает «как экран»),
 # и правка заголовка экрана не расходится с меню сама по себе.
+#
+# Группы меню — секция `nav_groups` внизу файла: шесть разделов поставки по
+# задаче пользователя, а не по устройству движка. `nav.order` — порядок пункта
+# внутри своей группы, шагом 10, чтобы слою пользователя было куда вставить.
 routes:
   # Стартовая страница — экран «Home» (`ui-home-screen`): корень объясняет,
   # что за приложение открыто и что демон видит сейчас; таблица прогонов
@@ -13,12 +17,12 @@ routes:
   - id: screen-home
     path: /
     target: { screen: screen-home }
-    nav: { order: 0, group: work }
+    nav: { order: 0, group: work, icon: house }
 
   - id: screen-runs
     path: /runs
     target: { screen: screen-runs }
-    nav: { order: 1, active_for: [screen-run], group: work }
+    nav: { order: 10, active_for: [screen-run], group: work, icon: play }
 
   - id: screen-run
     path: /runs/:projectKey/:runId
@@ -27,40 +31,40 @@ routes:
   - id: screen-pipelines
     path: /pipelines
     target: { screen: screen-pipelines }
-    nav: { order: 1, group: work }
+    nav: { order: 20, group: work, icon: workflow }
 
   - id: screen-widgets
     path: /widgets
     target: { screen: screen-widgets }
-    nav: { order: 2, group: extend }
+    nav: { order: 10, group: customize, icon: puzzle }
 
   # Пакеты слоёв проекта и home: состав, статус, отказы ресурсов
   # (`ui-packages-screen`).
   - id: screen-packages
     path: /packages
     target: { screen: screen-packages }
-    nav: { order: 3, group: config }
+    nav: { order: 20, group: workspace, icon: package }
 
   - id: screen-backlog
     path: /backlog
     target: { screen: screen-backlog }
-    nav: { order: 3, group: work }
+    nav: { order: 40, group: work, icon: list-todo }
 
   - id: screen-scrum
     path: /scrum
     target: { screen: screen-scrum }
-    nav: { order: 4, group: work }
+    nav: { order: 50, group: work, icon: square-kanban }
 
   - id: screen-usage
     path: /usage/:period?
     target: { screen: screen-usage }
     values: { period: [7d, 30d, 90d, all] }
-    nav: { order: 5, group: system }
+    nav: { order: 20, group: system, icon: chart-column }
 
   - id: screen-cleanup
     path: /cleanup
     target: { screen: screen-cleanup }
-    nav: { order: 6, group: system }
+    nav: { order: 30, group: system, icon: trash-2 }
 
   # Вкладка экрана — необязательный параметр пути с закрытым перечнем
   # (`ui-agents-settings-merge`, design.md Решение 1): адрес без вкладки
@@ -69,7 +73,7 @@ routes:
     path: /agents/:tab?
     target: { screen: screen-agents }
     values: { tab: [default, profiles, backends, tiers, policy] }
-    nav: { order: 7, group: config, active_for: [screen-settings] }
+    nav: { order: 10, group: agents, active_for: [screen-settings], icon: bot }
 
   # Прежний адрес настроек — строка-псевдоним с чужой целью, не редирект
   # (design.md Решение 2): `id` сохранён, чтобы перекрытия пользовательских
@@ -84,54 +88,72 @@ routes:
   - id: screen-review-strategies
     path: /review-strategies/:name?
     target: { screen: screen-review-strategies }
-    nav: { order: 7.5, group: config }
+    nav: { order: 20, group: agents, icon: scan-search }
 
   # Стратегии обсуждения шагов `discuss:` — тот же экран для документа
   # `kind: discussion-strategy` (`ui-discussion-strategies`).
   - id: screen-discussion-strategies
     path: /discussion-strategies/:name?
     target: { screen: screen-discussion-strategies }
-    nav: { order: 7.6, group: config }
+    nav: { order: 30, group: agents, icon: messages-square }
 
   # Статусы секретов проектов: проба провайдеров на каждом открытии, значения
   # не показываются (`ui-secrets-screen`).
   - id: screen-secrets
     path: /secrets
     target: { screen: screen-secrets }
-    nav: { order: 8, group: config }
+    nav: { order: 30, group: workspace, icon: key-round }
 
   # Реестр проектов витрины: остальные экраны показывают только добавленные
   # сюда проекты (`src/parts/ui/projects.ts`).
   - id: screen-projects
     path: /projects
     target: { screen: screen-projects }
-    nav: { order: 8.5, group: config }
+    nav: { order: 10, group: workspace, icon: folder-git-2 }
 
   # Расписания пайплайнов: только просмотр, правка — в документе пайплайна
   # (`ui-schedule-view`).
   - id: screen-schedule
     path: /schedule
     target: { screen: screen-schedule }
-    nav: { order: 9, group: config }
+    nav: { order: 30, group: work, icon: calendar-clock }
 
   # Здоровье установки: версия и способ установки, демон, автозапуск, бэкенды,
   # модели без цены (`ui-system-health`).
   - id: screen-system
     path: /system
     target: { screen: screen-system }
-    nav: { order: 10, group: config }
+    nav: { order: 10, group: system, icon: activity }
 
   - id: screen-routes
     path: /routes
     target: { screen: screen-routes }
-    nav: { order: 9, group: extend }
+    nav: { order: 20, group: customize, icon: route }
 
   - id: screen-decisions
     path: /decisions
     target: { screen: screen-decisions }
-    nav: { order: 10, group: extend }
+    nav: { order: 10, group: review, icon: gavel }
 
   - id: screen-proposals
     path: /proposals
     target: { screen: screen-proposals }
-    nav: { order: 11, group: extend }
+    nav: { order: 20, group: review, icon: git-pull-request-arrow }
+
+  # Настройка самого меню: группы, порядок, названия, значки, скрытие пунктов
+  # (`docs/routes.md`, «Меню из витрины»).
+  - id: screen-navigation
+    path: /navigation
+    target: { screen: screen-navigation }
+    nav: { order: 30, group: customize, icon: sliders-horizontal }
+
+# Разделы бокового меню. Группа, названная пунктом, но не объявленная здесь
+# (в том числе прежние `extend` и `config` из слоёв пользователя), рисуется
+# после объявленных под своим `id`.
+nav_groups:
+  - { id: work, title: Work, order: 10 }
+  - { id: review, title: Review, order: 20 }
+  - { id: agents, title: Agents, order: 30 }
+  - { id: workspace, title: Workspace, order: 40 }
+  - { id: customize, title: Customize, order: 50 }
+  - { id: system, title: System, order: 60 }

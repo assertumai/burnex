@@ -102,6 +102,7 @@ describe('ui-screens: состав экранов у демона', () => {
       'screen-decisions',
       'screen-discussion-strategies',
       'screen-home',
+      'screen-navigation',
       'screen-packages',
       'screen-pipelines',
       'screen-projects',
@@ -352,7 +353,7 @@ describe('ui-screens: строка каркаса снята патчем', () =
     // `TypeError` мимо всякого разбора отказа и уронило бы демон.
     const rows = ['ui-shell', 'screen-home', 'screen-runs', 'screen-run', 'screen-pipelines', 'screen-widgets',
       'screen-backlog', 'screen-scrum', 'screen-usage', 'screen-cleanup', 'screen-agents', 'screen-review-strategies', 'screen-discussion-strategies', 'screen-secrets', 'screen-projects', 'screen-schedule', 'screen-system',
-      'screen-routes', 'screen-decisions', 'screen-proposals', 'ui-dashboards', 'screen-packages', 'ui-run-launch'];
+      'screen-routes', 'screen-navigation', 'screen-decisions', 'screen-proposals', 'ui-dashboards', 'screen-packages', 'ui-run-launch'];
     writePatch(
       home,
       `version: 1\nkind: plugins-patch\nplugins:\n${rows

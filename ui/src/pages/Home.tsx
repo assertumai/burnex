@@ -6,8 +6,10 @@ import { declaration as discussionStrategiesDeclaration } from '../../../src/par
 import { declaration as backlogDeclaration } from '../../../src/parts/ui/screens/backlog/declaration.ts';
 import { declaration as cleanupDeclaration } from '../../../src/parts/ui/screens/cleanup/declaration.ts';
 import { declaration as decisionsDeclaration } from '../../../src/parts/ui/screens/decisions/declaration.ts';
+import { declaration as navigationDeclaration } from '../../../src/parts/ui/screens/navigation/declaration.ts';
 import { declaration as pipelinesDeclaration } from '../../../src/parts/ui/screens/pipelines/declaration.ts';
 import { declaration as packagesDeclaration } from '../../../src/parts/ui/screens/packages/declaration.ts';
+import { declaration as projectsDeclaration } from '../../../src/parts/ui/screens/projects/declaration.ts';
 import { declaration as proposalsDeclaration } from '../../../src/parts/ui/screens/proposals/declaration.ts';
 import { declaration as routesDeclaration } from '../../../src/parts/ui/screens/routes/declaration.ts';
 import { declaration as runsDeclaration } from '../../../src/parts/ui/screens/runs/declaration.ts';
@@ -108,6 +110,11 @@ export const SECTIONS: readonly SectionGroup[] = [
         description: 'How each project’s pipelines are wired: job graph, transitions, steps and agent selection.',
       },
       {
+        target: screenTarget(scheduleDeclaration.id),
+        title: scheduleDeclaration.title,
+        description: 'Which pipelines are declared on a schedule, the next moment and the last scheduled run; read-only.',
+      },
+      {
         target: screenTarget(backlogDeclaration.id),
         title: backlogDeclaration.title,
         description: 'Improvement queue of every project the daemon sees, in file order.',
@@ -117,6 +124,11 @@ export const SECTIONS: readonly SectionGroup[] = [
         title: scrumDeclaration.title,
         description: 'One project’s queue in columns; drag a card to change its status or start a pipeline.',
       },
+    ],
+  },
+  {
+    label: 'Review',
+    entries: [
       {
         target: screenTarget(decisionsDeclaration.id),
         title: decisionsDeclaration.title,
@@ -130,38 +142,8 @@ export const SECTIONS: readonly SectionGroup[] = [
     ],
   },
   {
-    label: 'Extend',
+    label: 'Agents',
     entries: [
-      {
-        target: screenTarget(widgetsDeclaration.id),
-        title: widgetsDeclaration.title,
-        description: 'Small React components rendered on this dashboard: the bundled catalog and what each project installed.',
-      },
-      {
-        target: screenTarget(packagesDeclaration.id),
-        title: packagesDeclaration.title,
-        description: 'Packages of the project and home layers: what each brings, whether it is in effect, and which resources failed.',
-      },
-      {
-        target: screenTarget(routesDeclaration.id),
-        title: routesDeclaration.title,
-        description: 'Every address the dashboard resolves, its target and menu place; edit them per layer.',
-      },
-    ],
-  },
-  {
-    label: 'System',
-    entries: [
-      {
-        target: screenTarget(usageDeclaration.id),
-        title: usageDeclaration.title,
-        description: 'Cost and tokens across all runs for a period, by model and by pipeline.',
-      },
-      {
-        target: screenTarget(cleanupDeclaration.id),
-        title: cleanupDeclaration.title,
-        description: 'Free disk space by deleting run files or trimming the usage history, with a preview first.',
-      },
       {
         target: screenTarget(agentsDeclaration.id),
         title: agentsDeclaration.title,
@@ -177,20 +159,67 @@ export const SECTIONS: readonly SectionGroup[] = [
         title: discussionStrategiesDeclaration.title,
         description: 'Who proposes, drafts and decides in a discuss: step, with which agent and how many defense rounds.',
       },
+    ],
+  },
+  {
+    label: 'Workspace',
+    entries: [
+      {
+        target: screenTarget(projectsDeclaration.id),
+        title: projectsDeclaration.title,
+        description:
+          'Projects you added to the dashboard; every other screen shows only these.',
+      },
+      {
+        target: screenTarget(packagesDeclaration.id),
+        title: packagesDeclaration.title,
+        description: 'Packages of the project and home layers: what each brings, whether it is in effect, and which resources failed.',
+      },
       {
         target: screenTarget(secretsDeclaration.id),
         title: secretsDeclaration.title,
         description: 'Which secrets the pipelines and backends expect and whether each one resolves here; values are never shown.',
       },
+    ],
+  },
+  {
+    label: 'Customize',
+    entries: [
       {
-        target: screenTarget(scheduleDeclaration.id),
-        title: scheduleDeclaration.title,
-        description: 'Which pipelines are declared on a schedule, the next moment and the last scheduled run; read-only.',
+        target: screenTarget(widgetsDeclaration.id),
+        title: widgetsDeclaration.title,
+        description: 'Small React components rendered on this dashboard: the bundled catalog and what each project installed.',
       },
+      {
+        target: screenTarget(routesDeclaration.id),
+        title: routesDeclaration.title,
+        description: 'Every address the dashboard resolves, its target and menu place; edit them per layer.',
+      },
+      {
+        target: screenTarget(navigationDeclaration.id),
+        title: navigationDeclaration.title,
+        description:
+          'The side menu itself: groups, order, titles and icons of its items; hide what you do not use.',
+      },
+    ],
+  },
+  {
+    label: 'System',
+    entries: [
       {
         target: screenTarget(systemDeclaration.id),
         title: systemDeclaration.title,
         description: 'Engine version and install method, the daemon, autostart, backends and models without a price.',
+      },
+      {
+        target: screenTarget(usageDeclaration.id),
+        title: usageDeclaration.title,
+        description: 'Cost and tokens across all runs for a period, by model and by pipeline.',
+      },
+      {
+        target: screenTarget(cleanupDeclaration.id),
+        title: cleanupDeclaration.title,
+        description: 'Free disk space by deleting run files or trimming the usage history, with a preview first.',
       },
     ],
   },

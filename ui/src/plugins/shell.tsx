@@ -1,16 +1,27 @@
-import { Component, useContext, useEffect, useSyncExternalStore, type JSX, type ReactNode } from 'react';
+import {
+  Component,
+  useContext,
+  useEffect,
+  useState,
+  useSyncExternalStore,
+  type FocusEvent,
+  type JSX,
+  type MouseEvent,
+  type ReactNode,
+} from 'react';
 import type { Context } from 'cordis';
 
-import { hrefForRoute } from '../../../src/parts/ui/routes.ts';
+import { buildNavMenu, hrefForRoute, type RouteDefinition } from '../../../src/parts/ui/routes.ts';
 import { KernelContext, ROOT } from '../kernel';
 import { HOME_ROUTES_FILE, RoutesListing } from '../pages/Routes';
 import { useRoute, useRoutes, useScreens } from '../router';
 import { Slot } from '../slots.tsx';
-import { Alert, Button } from '@burnex/ui';
+import { Alert, Button, Icon } from '@burnex/ui';
 import { WidgetHost } from '../widgetHost';
 import { GenericNavItem } from './navItem';
 import {
   NAV,
+  NAV_ACTIONS,
   ROUTES_LISTING_KEY,
   ROUTE_TARGET,
   SCREEN,
@@ -68,11 +79,45 @@ function useKernelContext(): Context {
   return ctx;
 }
 
-/** Порядок групп поставки; незнакомая группа встаёт после них. */
-export const NAV_GROUP_ORDER: readonly string[] = ['work', 'extend', 'config', 'system'];
+/**
+ * Состояние меню этой вкладки — узкая колонка и свёрнутые группы — живёт в
+ * `localStorage`, а не в `routes.yml`: это привычка человека за этим
+ * браузером, а не состав меню проекта. Хранилище недоступно (приватный
+ * режим, тест без него) — меню просто не помнит состояние.
+ */
+const RAIL_KEY = 'burnex.nav.rail';
+const COLLAPSED_KEY = 'burnex.nav.collapsed';
 
-function navGroupLabel(group: string): string {
-  return group.charAt(0).toUpperCase() + group.slice(1);
+function readStored(key: string): string | undefined {
+  try {
+    return globalThis.localStorage?.getItem(key) ?? undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function writeStored(key: string, value: string): void {
+  try {
+    globalThis.localStorage?.setItem(key, value);
+  } catch {
+    // Нет хранилища — нет памяти; меню работает и без неё.
+  }
+}
+
+function readCollapsedGroups(): ReadonlySet<string> {
+  try {
+    const parsed: unknown = JSON.parse(readStored(COLLAPSED_KEY) ?? '[]');
+    return new Set(Array.isArray(parsed) ? parsed.filter((id): id is string => typeof id === 'string') : []);
+  } catch {
+    return new Set();
+  }
+}
+
+/** Подсказка узкой колонки: подпись пункта рядом с ним, вне прокручиваемой области (та обрезала бы её). */
+interface NavTip {
+  readonly text: string;
+  readonly top: number;
+  readonly left: number;
 }
 
 const LIVE_LABEL = {
@@ -244,56 +289,94 @@ function Shell(): JSX.Element {
     proposals: live.proposals,
   };
 
-  const navRoutes = [...routesSnapshot.table]
-    .filter((candidate) => candidate.nav !== undefined)
-    .sort((a, b) => (a.nav?.order ?? Number.POSITIVE_INFINITY) - (b.nav?.order ?? Number.POSITIVE_INFINITY));
-
   const activeRouteId = route?.route.id;
+  const isActive = (navRoute: RouteDefinition): boolean =>
+    activeRouteId !== undefined &&
+    (activeRouteId === navRoute.id || navRoute.nav?.activeFor?.includes(activeRouteId) === true);
 
-  // Группы меню — по `nav.group` маршрута: известные группы поставки идут в
-  // объявленном порядке, незнакомая группа — после них, пункты без группы —
-  // последними без заголовка. Каркас не знает ни одного экрана, но порядок
-  // трёх групп поставки знает: иначе группы вставали бы по первому пункту.
-  const groups = new Map<string | undefined, typeof navRoutes>();
-  for (const known of NAV_GROUP_ORDER) groups.set(known, []);
-  for (const navRoute of navRoutes) {
-    const group = navRoute.nav?.group;
-    const bucket = groups.get(group);
-    if (bucket === undefined) groups.set(group, [navRoute]);
-    else bucket.push(navRoute);
-  }
-  const ungrouped = groups.get(undefined) ?? [];
-  groups.delete(undefined);
+  // Раскладка по группам — общая с экраном настройки меню (`buildNavMenu`);
+  // каркас не знает ни одной группы и ни одного экрана: и те и другие
+  // объявлены файлом маршрутов. Скрытые пункты и опустевшие группы меню
+  // пропускает.
+  const menu = buildNavMenu(routesSnapshot.table, routesSnapshot.navGroups);
+  const visible = (routes: readonly RouteDefinition[]): readonly RouteDefinition[] =>
+    routes.filter((candidate) => candidate.nav?.hidden !== true);
+  const groups = menu.groups
+    .map((group) => ({ ...group, items: visible(group.items) }))
+    .filter((group) => group.items.length > 0);
+  const ungrouped = visible(menu.ungrouped);
 
-  const renderNavItem = (navRoute: (typeof navRoutes)[number]): JSX.Element => {
+  const [rail, setRail] = useState(() => readStored(RAIL_KEY) === '1');
+  const [collapsed, setCollapsed] = useState(readCollapsedGroups);
+  const [tip, setTip] = useState<NavTip | undefined>(undefined);
+
+  const toggleRail = (): void => {
+    setTip(undefined);
+    setRail((current) => {
+      writeStored(RAIL_KEY, current ? '0' : '1');
+      return !current;
+    });
+  };
+  const setGroupCollapsed = (id: string, value: boolean): void => {
+    setCollapsed((current) => {
+      if (current.has(id) === value) return current;
+      const next = new Set(current);
+      if (value) next.add(id);
+      else next.delete(id);
+      writeStored(COLLAPSED_KEY, JSON.stringify([...next]));
+      return next;
+    });
+  };
+
+  // Переход на экран свёрнутой группы раскрывает её: текущий пункт должен
+  // быть виден. Свернуть её после этого пользователь вправе — заголовок
+  // такой группы остаётся отмеченным как содержащий текущую страницу.
+  const activeGroupId = groups.find((group) => group.items.some(isActive))?.id;
+  useEffect(() => {
+    if (activeGroupId !== undefined) setGroupCollapsed(activeGroupId, false);
+    // Зависимости — только текущий пункт: раскрытие не должно повторяться на каждую отрисовку.
+  }, [activeGroupId, activeRouteId]);
+
+  const showTip = (event: MouseEvent<HTMLElement> | FocusEvent<HTMLElement>): void => {
+    if (!rail) return;
+    const item = (event.target as HTMLElement).closest<HTMLElement>('[data-nav-tip]');
+    const text = item?.dataset.navTip;
+    if (item === null || item === undefined || text === undefined) return;
+    const box = item.getBoundingClientRect();
+    setTip({ text, top: box.top + box.height / 2, left: box.right + 8 });
+  };
+  const hideTip = (): void => setTip(undefined);
+
+  const renderNavItem = (navRoute: RouteDefinition): JSX.Element => {
     const title =
       navRoute.nav?.title ??
       (navRoute.target.kind === 'screen' ? screensTable.get(navRoute.target.id)?.title : undefined) ??
       navRoute.target.id;
-    const active =
-      activeRouteId !== undefined &&
-      (activeRouteId === navRoute.id || navRoute.nav?.activeFor?.includes(activeRouteId) === true);
     // Ссылка пункта — адрес своего маршрута, а не поиск по цели: цель
     // вправе иметь несколько маршрутов, и пункт обязан вести на тот, чей
     // `nav` его и породил (`ui-routes`, Решение 13).
     const href = hrefForRoute(navRoute);
-    return (
-      <Slot
-        key={navRoute.id}
-        of={NAV}
-        k={navRoute.id}
-        props={{ route: navRoute, title, href, active, navigate }}
-        default={<GenericNavItem route={navRoute} title={title} href={href} active={active} navigate={navigate} />}
-      />
-    );
+    const props = {
+      route: navRoute,
+      title,
+      href,
+      active: isActive(navRoute),
+      navigate,
+      ...(navRoute.nav?.icon === undefined ? {} : { icon: navRoute.nav.icon }),
+      compact: rail,
+    };
+    return <Slot key={navRoute.id} of={NAV} k={navRoute.id} props={props} default={<GenericNavItem {...props} />} />;
   };
+
+  const liveLabel = LIVE_LABEL[live.state];
 
   return (
     <div className="shell">
-      <nav className="sidebar">
+      <nav className={rail ? 'sidebar rail' : 'sidebar'} aria-label="Main">
         <a
           className="brand"
           href="/"
+          aria-label="burnex"
           onClick={(event) => {
             if (event.metaKey || event.ctrlKey) return;
             event.preventDefault();
@@ -301,18 +384,63 @@ function Shell(): JSX.Element {
           }}
         >
           <span className="brand-mark" aria-hidden="true" />
-          burnex
+          <span className="brand-name">burnex</span>
         </a>
 
-        {[...groups].filter(([, routes]) => routes.length > 0).map(([group, routes]) => (
-          <div className="nav-group" key={group}>
-            <div className="nav-group-label">{navGroupLabel(group as string)}</div>
-            {routes.map(renderNavItem)}
-          </div>
-        ))}
-        {ungrouped.length === 0 ? null : <div className="nav-group">{ungrouped.map(renderNavItem)}</div>}
+        {/* Прокручивается только середина: бренд и подвал остаются на месте при любой высоте окна. */}
+        <div className="nav-scroll" onMouseOver={showTip} onMouseLeave={hideTip} onFocus={showTip} onBlur={hideTip}>
+          {groups.map((group) => {
+            // В узкой колонке группы не сворачиваются: без подписей свёрнутую группу не найти.
+            const isCollapsed = !rail && collapsed.has(group.id);
+            const holdsCurrent = group.id === activeGroupId;
+            return (
+              <div className={isCollapsed ? 'nav-group collapsed' : 'nav-group'} key={group.id}>
+                <button
+                  type="button"
+                  className={holdsCurrent ? 'nav-group-label holds-current' : 'nav-group-label'}
+                  aria-expanded={!isCollapsed}
+                  aria-controls={`nav-group-${group.id}`}
+                  onClick={() => setGroupCollapsed(group.id, !isCollapsed)}
+                >
+                  <span className="nav-group-title">{group.title}</span>
+                  <Icon name="chevron-down" size={13} className="nav-group-chevron" />
+                </button>
+                <div className="nav-group-items" id={`nav-group-${group.id}`}>
+                  {group.items.map(renderNavItem)}
+                </div>
+              </div>
+            );
+          })}
+          {ungrouped.length === 0 ? null : (
+            <div className="nav-group">
+              <div className="nav-group-items">{ungrouped.map(renderNavItem)}</div>
+            </div>
+          )}
+        </div>
 
-        <div className={live.state === 'live' ? 'live on' : 'live off'}>{LIVE_LABEL[live.state]}</div>
+        <div className="sidebar-footer">
+          <div className={live.state === 'live' ? 'live on' : 'live off'} title={liveLabel}>
+            <span className="live-label">{liveLabel}</span>
+          </div>
+          <div className="sidebar-actions">
+            <Slot of={NAV_ACTIONS} props={{ navigate, compact: rail }} />
+            <button
+              type="button"
+              className="sidebar-action sidebar-toggle"
+              aria-label={rail ? 'Expand menu' : 'Collapse menu'}
+              title={rail ? 'Expand menu' : 'Collapse menu'}
+              aria-pressed={rail}
+              onClick={toggleRail}
+            >
+              <Icon name={rail ? 'panel-left-open' : 'panel-left-close'} size={16} />
+            </button>
+          </div>
+        </div>
+        {tip === undefined ? null : (
+          <div className="nav-tip" style={{ top: tip.top, left: tip.left }} aria-hidden="true">
+            {tip.text}
+          </div>
+        )}
       </nav>
 
       <main className="content">
@@ -360,7 +488,7 @@ function Shell(): JSX.Element {
 }
 
 export default function shell(ctx: Context): void {
-  ctx.slots.contribute(ROOT, { component: Shell, slots: [NAV, SCREEN, SCREEN_FRAME, ROUTE_TARGET] });
+  ctx.slots.contribute(ROOT, { component: Shell, slots: [NAV, NAV_ACTIONS, SCREEN, SCREEN_FRAME, ROUTE_TARGET] });
   ctx.slots.contribute<Record<string, never>, 'chain'>(SCREEN_FRAME, { component: ScreenErrorBoundary });
   ctx.slots.contribute(ROUTE_TARGET, { component: ScreenTargetView, key: 'screen' });
   ctx.slots.contribute(ROUTE_TARGET, { component: WidgetTargetView, key: 'widget' });

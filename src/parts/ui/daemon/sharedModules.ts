@@ -155,6 +155,7 @@ export const SHARED_MODULES: Readonly<Record<SharedModuleSpecifier, SharedModule
       'slot',
       'ROOT',
       'NAV',
+      'NAV_ACTIONS',
       'SCREEN',
       'SCREEN_FRAME',
       'ROUTE_TARGET',
@@ -210,6 +211,13 @@ export const SHARED_MODULES: Readonly<Record<SharedModuleSpecifier, SharedModule
       'PageHeader',
       'EmptyState',
       'Input',
+      'Icon',
+      'IconValue',
+      'ICON_NAMES',
+      'IMAGE_ICON_PREFIX',
+      'TEXT_ICON_PREFIX',
+      'iconGlyphs',
+      'isIconName',
     ],
   },
 };
@@ -221,7 +229,7 @@ export const SHARED_MODULES: Readonly<Record<SharedModuleSpecifier, SharedModule
  * этим числом: правка имён без поднятой версии красит проверку раньше, чем
  * расхождение уедет виджету пользователя карточкой «неразрешённый импорт».
  */
-export const SHARED_MODULE_TABLE_VERSION = 3;
+export const SHARED_MODULE_TABLE_VERSION = 4;
 
 export type SharedModuleChangeKind = 'removed' | 'renamed' | 'replaced';
 

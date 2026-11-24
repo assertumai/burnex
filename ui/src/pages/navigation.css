@@ -1,0 +1,109 @@
+/* Экран «Navigation»: карточка на группу, строка на пункт. */
+.nav-edit { max-width: 56rem; }
+.nav-edit-groups { display: flex; flex-direction: column; gap: .9rem; margin-top: 1rem; }
+.nav-edit-group-card {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--card);
+}
+.nav-edit-group-head {
+  display: flex;
+  align-items: center;
+  gap: .6rem;
+  padding: .5rem .6rem;
+  border-bottom: 1px solid var(--border);
+}
+.nav-edit-group-title { max-width: 16rem; font-weight: 600; }
+.nav-edit-group-static { font-weight: 600; padding: .3rem .2rem; }
+.nav-edit-group-actions { margin-left: auto; display: flex; gap: .1rem; }
+.nav-edit-up { transform: rotate(180deg); }
+
+.nav-edit-items { list-style: none; margin: 0; padding: .35rem; min-height: 2.6rem; border-radius: var(--radius); }
+.nav-edit-items.is-over { background: color-mix(in srgb, var(--primary) 8%, transparent); }
+.nav-edit-empty { padding: .5rem .6rem; }
+.nav-edit-item {
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+  padding: .25rem .3rem;
+  border-radius: var(--radius);
+  background: var(--card);
+}
+.nav-edit-item:hover { background: var(--secondary); }
+.nav-edit-item.is-hidden .nav-edit-icon,
+.nav-edit-item.is-hidden .nav-edit-title { opacity: .5; }
+.nav-edit-overlay {
+  border: 1px solid var(--border);
+  padding: .45rem .6rem;
+  box-shadow: 0 6px 20px rgb(0 0 0 / .25);
+  cursor: grabbing;
+}
+.nav-edit-handle,
+.nav-edit-action,
+.nav-edit-icon {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.9rem;
+  height: 1.9rem;
+  border: 0;
+  border-radius: var(--radius);
+  background: none;
+  color: var(--muted-foreground);
+  cursor: pointer;
+}
+.nav-edit-handle { cursor: grab; touch-action: none; }
+.nav-edit-icon { color: var(--foreground); border: 1px solid var(--border); }
+.nav-edit-action:hover:not(:disabled),
+.nav-edit-icon:hover,
+.nav-edit-handle:hover { background: var(--secondary); color: var(--foreground); }
+.nav-edit-action:disabled { opacity: .35; cursor: default; }
+.nav-edit-title { flex: 1 1 10rem; min-width: 6rem; max-width: 18rem; }
+.nav-edit-path { flex: 1 1 6rem; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nav-edit-group,
+.nav-edit-layer {
+  flex: none;
+  font: inherit;
+  font-size: .82rem;
+  color: var(--foreground);
+  background: var(--background);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: .3rem .4rem;
+  max-width: 14rem;
+}
+.nav-edit-footer { display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-top: 1rem; }
+.nav-edit-footer .sc-icon { display: inline-block; vertical-align: -2px; }
+.nav-edit-reset { display: flex; align-items: center; gap: .5rem; }
+
+.nav-icon-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(2.3rem, 1fr));
+  gap: .25rem;
+  max-height: 15rem;
+  overflow-y: auto;
+  margin: .8rem 0;
+}
+.nav-icon-option {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 2.3rem;
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  background: none;
+  color: var(--foreground);
+  cursor: pointer;
+}
+.nav-icon-option:hover { background: var(--secondary); }
+.nav-icon-option.selected { border-color: var(--primary); background: var(--accent); color: var(--accent-foreground); }
+.nav-icon-custom { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: .8rem; }
+.nav-icon-field { display: flex; flex-direction: column; gap: .35rem; min-width: 0; }
+.nav-icon-row { display: flex; gap: .4rem; }
+.nav-icon-field input[type='file'] { font-size: .8rem; width: 100%; min-width: 0; }
+
+@media (max-width: 44rem) {
+  .nav-edit-path { display: none; }
+  .nav-icon-custom { grid-template-columns: 1fr; }
+}

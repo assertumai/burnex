@@ -90,8 +90,13 @@ ctx.slots.contribute(ROOT, {
 Слот приходится описывать не строкой наугад, а значением: имя `@burnex/slots`
 (таблица общих модулей, `docs/plugins.md`) отдаёт `slot()`, виды, типы вклада
 (`Contribution`, `ChainLinkProps`) и дескрипторы встроенных слотов витрины —
-`ROOT`, `NAV`, `SCREEN`, `SCREEN_FRAME`, `ROUTE_TARGET` (`ui/src/sharedSlots.ts`;
+`ROOT`, `NAV`, `NAV_ACTIONS`, `SCREEN`, `SCREEN_FRAME`, `ROUTE_TARGET` (`ui/src/sharedSlots.ts`;
 `ROUTE_TARGET` и навигация из действующей таблицы маршрутов — `docs/routes.md`).
+Вклад в `NAV` (свой вид пункта меню) получает, кроме прежних props, `icon` —
+строку `nav.icon` маршрута — и `compact`: меню свёрнуто в узкую колонку,
+место есть только под значок, а подпись каркас показывает подсказкой по
+атрибуту `data-nav-tip` элемента пункта. `NAV_ACTIONS` — список
+значков-кнопок в подвале меню (так экран «Navigation» даёт вход в себя).
 Дескриптор,
 полученный плагином этим именем, — то же значение, которым пользуется сама
 витрина, а не его копия: `ctx.slots.contribute(SCREEN, { component, key:
@@ -107,7 +112,8 @@ ctx.slots.contribute(ROOT, {
 
 `@burnex/ui` отдаёт компоненты витрины исходниками — Button, Card, Table,
 Dialog, Tabs, Select, Input, Badge, Label, Separator, Alert, Switch, Combobox,
-PageHeader, EmptyState (`ui/src/ui/`) — тем же именем, каким пользуются
+PageHeader, EmptyState, а также значки `Icon` (имя набора) и `IconValue`
+(строка формата `nav.icon`) (`ui/src/ui/`) — тем же именем, каким пользуются
 встроенные экраны, и одним экземпляром со страницей: свой React, свой Radix,
 своя тема. API и имена компонентов — шадсновские (shadcn/ui), а вёрстка —
 обычный CSS на CSS-переменных, не Tailwind: демон собирает браузерную половину

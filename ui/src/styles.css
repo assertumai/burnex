@@ -110,30 +110,32 @@ a { color: inherit; text-decoration: none; }
 
 .shell { display: flex; min-height: 100vh; }
 
-/* Боковое меню: колонка постоянной ширины, содержимое занимает остальное. */
+/* Боковое меню: колонка на высоту окна из трёх частей — бренд, прокручиваемый
+   перечень, подвал. Прокручивается только перечень (`.nav-scroll`): колонка
+   без этого обрезала нижние пункты и признак связи на невысоком окне. */
 .sidebar {
-  width: 13.75rem;
+  width: 14.5rem;
   flex: none;
   border-right: 1px solid var(--border);
-  padding: 1.25rem .875rem;
   position: sticky;
   top: 0;
   height: 100vh;
+  height: 100dvh;
   display: flex;
   flex-direction: column;
-  gap: .3rem;
   background: var(--sidebar);
+  transition: width .15s ease;
 }
 
 .brand {
+  flex: none;
   display: flex;
   align-items: center;
   gap: .6rem;
   font-size: 1.125rem;
   font-weight: 700;
   letter-spacing: -.02em;
-  padding: 0 .5rem;
-  margin-bottom: 1rem;
+  padding: 1.1rem 1.25rem .8rem;
 }
 /* Знак — маскот-уголёк Burnex (`assets/burnex-mark.svg`), в CSS, чтобы сборка тестов витрины не училась грузить картинки. */
 .brand-mark {
@@ -145,21 +147,55 @@ a { color: inherit; text-decoration: none; }
   background: url(./assets/burnex-mark.svg) center / 82% no-repeat, color-mix(in srgb, var(--primary) 22%, transparent);
 }
 
-/* Группы меню — по `nav.group` маршрута (`ui-overhaul`): подпись группы
-   набрана капителью, пункты под ней. */
-.nav-group { display: flex; flex-direction: column; gap: .1rem; margin-bottom: .7rem; }
-.nav-group-label {
-  font-size: .66rem;
-  font-weight: 600;
-  letter-spacing: .1em;
-  text-transform: uppercase;
-  color: var(--muted-foreground);
-  padding: 0 .5rem;
-  margin-bottom: .25rem;
+/* `min-height: 0` обязателен: flex-элемент иначе не сжимается ниже своего
+   содержимого и прокрутка не включается. */
+.nav-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: .25rem .75rem .75rem;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
 }
 
+/* Группы меню — секция `nav_groups` файла маршрутов: заголовок-кнопка
+   сворачивает пункты под ним. */
+.nav-group { margin-bottom: .5rem; }
+.nav-group-label {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: .4rem;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: .68rem;
+  font-weight: 600;
+  letter-spacing: .09em;
+  text-transform: uppercase;
+  color: var(--muted-foreground);
+  padding: .4rem .5rem .3rem;
+  border-radius: var(--radius);
+  cursor: pointer;
+  text-align: left;
+}
+.nav-group-label:hover { color: var(--foreground); }
+.nav-group-chevron { opacity: 0; transition: transform .15s, opacity .1s; }
+.nav-group-label:hover .nav-group-chevron,
+.nav-group-label:focus-visible .nav-group-chevron,
+.nav-group.collapsed .nav-group-chevron { opacity: 1; }
+.nav-group.collapsed .nav-group-chevron { transform: rotate(-90deg); }
+/* Свёрнутая группа с текущей страницей внутри отмечена цветом акцента: иначе текущий пункт пропадал бы бесследно. */
+.nav-group.collapsed .nav-group-label.holds-current { color: var(--accent-foreground); }
+.nav-group-items { display: flex; flex-direction: column; gap: .1rem; }
+.nav-group.collapsed .nav-group-items { display: none; }
+
 .nav-item {
-  display: block;
+  display: flex;
+  align-items: center;
+  gap: .6rem;
   padding: .4rem .5rem;
   border-radius: var(--radius);
   color: var(--muted-foreground);
@@ -167,25 +203,93 @@ a { color: inherit; text-decoration: none; }
   cursor: pointer;
   transition: background .1s, color .1s;
 }
+.nav-item-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .nav-item:hover { background: var(--secondary); color: var(--foreground); }
 /* Текущий пункт — тёплой подложкой и цветом акцента: в «Ember» активность
    всегда оранжевая, от пункта меню до индикатора связи. */
 .nav-item.active { background: var(--accent); color: var(--accent-foreground); font-weight: 600; }
+.nav-item:focus-visible,
+.nav-group-label:focus-visible,
+.sidebar-action:focus-visible,
+.brand:focus-visible { outline: 2px solid var(--ring, var(--primary)); outline-offset: -2px; }
 
-/* Признак связи — в подвале колонки: он про всю витрину, а не про экран. */
+/* Подвал колонки: признак связи — он про всю витрину, а не про экран — и
+   действия над самим меню. */
+.sidebar-footer {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: .4rem;
+  padding: .55rem .75rem .65rem 1.25rem;
+  border-top: 1px solid var(--border);
+}
 .live {
-  margin-top: auto;
+  min-width: 0;
   font-size: .78rem;
   color: var(--muted-foreground);
-  padding: .7rem .5rem 0;
-  border-top: 1px solid var(--border);
   display: flex;
   align-items: center;
   gap: .45rem;
 }
+.live-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .live::before { content: ''; width: 8px; height: 8px; border-radius: 99px; flex: none; }
 .live.on::before { background: var(--primary); box-shadow: 0 0 10px var(--primary); }
 .live.off::before { border: 1px solid var(--muted-foreground); }
+.sidebar-actions { display: flex; gap: .1rem; flex: none; }
+.sidebar-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.9rem;
+  height: 1.9rem;
+  border: 0;
+  border-radius: var(--radius);
+  background: none;
+  color: var(--muted-foreground);
+  cursor: pointer;
+}
+.sidebar-action:hover { background: var(--secondary); color: var(--foreground); }
+
+/* Узкая колонка: от пункта остаётся значок, от заголовка группы — черта.
+   Подписи не убраны из разметки, а спрятаны: имя ссылке даёт `aria-label`. */
+.sidebar.rail { width: 3.75rem; }
+.sidebar.rail .brand { padding-left: .9rem; padding-right: 0; }
+.sidebar.rail .brand-name,
+.sidebar.rail .nav-item-label,
+.sidebar.rail .live-label { display: none; }
+.sidebar.rail .nav-scroll { padding-left: .6rem; padding-right: .6rem; }
+.sidebar.rail .nav-item { justify-content: center; padding: .5rem 0; }
+.sidebar.rail .nav-group-label {
+  display: block;
+  height: 1px;
+  min-height: 1px;
+  padding: 0;
+  font-size: 0;
+  margin: .45rem .35rem;
+  width: auto;
+  background: var(--border);
+  overflow: hidden;
+  pointer-events: none;
+}
+.sidebar.rail .nav-group:first-child .nav-group-label { display: none; }
+.sidebar.rail .nav-group-label > * { display: none; }
+.sidebar.rail .sidebar-footer { flex-direction: column; padding: .55rem 0 .65rem; gap: .5rem; }
+.sidebar.rail .sidebar-actions { flex-direction: column; }
+
+/* Подсказка узкой колонки — `position: fixed`: внутри прокручиваемого перечня её обрезало бы. */
+.nav-tip {
+  position: fixed;
+  z-index: 50;
+  transform: translateY(-50%);
+  padding: .25rem .55rem;
+  border-radius: var(--radius);
+  background: var(--foreground);
+  color: var(--background);
+  font-size: .8rem;
+  white-space: nowrap;
+  pointer-events: none;
+}
 
 /* `min-width: 0` обязателен: без него широкая таблица распирает flex-колонку
    и уносит вбок всю страницу вместо того, чтобы прокручиваться в себе. */
@@ -532,21 +636,45 @@ button.tokens {
   /* Колонка меню на ширине телефона съела бы больше трети экрана: она
      ложится полосой сверху, оставляя содержимому всю ширину. */
   .shell { flex-direction: column; }
-  .sidebar {
+  /* Полоса сверху: бренд, перечень одной прокручиваемой вбок строкой,
+     признак связи. Сворачивание групп и узкая колонка здесь не действуют —
+     места по ширине и так нет, а прятать пункты за заголовками в одной
+     строке незачем. */
+  .sidebar,
+  .sidebar.rail {
     width: auto;
     height: auto;
+    position: static;
     flex-direction: row;
-    flex-wrap: wrap;
     align-items: center;
-    gap: .2rem;
-    padding: .7rem 1rem;
     border-right: none;
     border-bottom: 1px solid var(--border);
   }
-  .brand { margin-bottom: 0; margin-right: .4rem; }
-  .nav-group { flex-direction: row; flex-wrap: wrap; gap: .2rem; margin-bottom: 0; }
-  .nav-group-label { display: none; }
-  .live { margin-top: 0; margin-left: auto; }
+  .brand,
+  .sidebar.rail .brand { padding: .6rem .5rem .6rem 1rem; }
+  .brand-name { display: none; }
+  .nav-scroll,
+  .sidebar.rail .nav-scroll {
+    display: flex;
+    align-items: center;
+    gap: .2rem;
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding: .5rem .25rem;
+  }
+  .nav-group { display: contents; }
+  .nav-group-label,
+  .sidebar.rail .nav-group-label { display: none; }
+  .nav-group-items,
+  .nav-group.collapsed .nav-group-items { display: contents; }
+  .nav-item { flex: none; }
+  .sidebar.rail .nav-item { padding: .4rem .5rem; }
+  .sidebar.rail .nav-item-label { display: inline; }
+  .sidebar-footer,
+  .sidebar.rail .sidebar-footer { flex-direction: row; border-top: none; padding: 0 .75rem 0 .25rem; }
+  .live-label,
+  .sidebar-toggle,
+  .nav-tip { display: none; }
 
   .content { padding: 1.2rem 1rem; }
   .run-row,
@@ -703,7 +831,7 @@ pre {
  */
 .missing-link { display: inline-block; }
 .missing-link-reason { display: block; font-size: .78rem; color: var(--muted-foreground); }
-.nav-item-disabled { display: block; padding: .4rem .6rem; color: var(--muted-foreground); }
+.nav-item-disabled { cursor: default; opacity: .6; }
 .routes-notice h1 { margin-bottom: .3rem; }
 .routes-listing-error { color: var(--status-failed); }
 .routes-table { width: 100%; border-collapse: collapse; }

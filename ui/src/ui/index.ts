@@ -32,4 +32,16 @@ export { Alert, AlertTitle, AlertDescription, type AlertProps, type AlertVariant
 export { Switch, type SwitchProps } from './switch';
 export { Combobox, type ComboboxOption, type ComboboxProps } from './combobox';
 export { PageHeader, type PageHeaderProps } from './pageHeader';
+export {
+  Icon,
+  IconValue,
+  ICON_NAMES,
+  IMAGE_ICON_PREFIX,
+  TEXT_ICON_PREFIX,
+  iconGlyphs,
+  isIconName,
+  type IconName,
+  type IconProps,
+  type IconValueProps,
+} from './icon';
 export { EmptyState, type EmptyStateProps } from './emptyState';

@@ -125,12 +125,19 @@ function handleEvents(req: IncomingMessage, res: ServerResponse, env: RequestEnv
     // Таблица маршрутов — синхронно из наблюдателя (`ui-routes`, Решение 10):
     // ему не нужно ядро демона, поэтому, в отличие от `screens`/`plugins`,
     // отправка не отстаёт от прочих событий такта на микрозадачу.
-    const routesPayloadValue = routesPayload(env.watcher.currentRoutes());
+    const currentRoutes = env.watcher.currentRoutes();
     const routesBuildError = env.watcher.currentRoutesError();
-    const routesKey = JSON.stringify({ routes: routesPayloadValue, buildError: routesBuildError });
+    // Группы меню едут тем же событием: правка одного заголовка группы не
+    // меняет ни одной строки маршрута, но меню обязано её увидеть.
+    const routesEvent = {
+      routes: routesPayload(currentRoutes),
+      navGroups: currentRoutes.navGroups,
+      ...(routesBuildError === undefined ? {} : { buildError: routesBuildError }),
+    };
+    const routesKey = JSON.stringify(routesEvent);
     if (routesKey !== sentRoutesKey) {
       sentRoutesKey = routesKey;
-      send('routes', { routes: routesPayloadValue, ...(routesBuildError === undefined ? {} : { buildError: routesBuildError }) });
+      send('routes', routesEvent);
     }
     // Состав дашбордов — синхронно из наблюдателя, тем же приёмом, что и
     // `routes`: отказ одного дашборда едет причиной внутри `failures`, не

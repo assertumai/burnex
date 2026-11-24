@@ -156,7 +156,7 @@ describe('ui-routes: навигация и подсветка из действ�
 
       const markup = renderToStaticMarkup(<KernelFrame kernel={kernel} diagnostics={diagnostics} />);
       // Ровно один пункт навигации — у screen-run своего нет.
-      assert.equal((markup.match(/class="nav-item/g) ?? []).length, 1);
+      assert.equal((markup.match(/class="nav-item[ "]/g) ?? []).length, 1);
     } finally {
       restoreWindow();
       restoreFetch();
@@ -217,7 +217,7 @@ describe('ui-routes: навигация и подсветка из действ�
       const diagnostics = await kernel.settle();
 
       const markup = renderToStaticMarkup(<KernelFrame kernel={kernel} diagnostics={diagnostics} />);
-      assert.match(markup, /href="\/release"[^>]*>Релиз</);
+      assert.match(markup, /href="\/release"(?:(?!<\/a>).)*>Релиз</);
     } finally {
       restoreWindow();
       restoreFetch();
@@ -327,7 +327,7 @@ describe('ui-routes: навигация и подсветка из действ�
       });
 
       const markup = renderToStaticMarkup(<KernelFrame kernel={kernel} diagnostics={diagnostics} />);
-      assert.match(markup, /href="\/release"[^>]*>Релиз</);
+      assert.match(markup, /href="\/release"(?:(?!<\/a>).)*>Релиз</);
     } finally {
       restoreWindow();
       restoreFetch();
