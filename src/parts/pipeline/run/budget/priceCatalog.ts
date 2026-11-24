@@ -20,6 +20,14 @@ import type { Usage } from '../journal/schema.js';
 /** Цена за миллион токенов; все четыре обязательны — «нет цены» не равно нулю. */
 const priceField = z.number().nonnegative();
 
+const RatesSchema = z.object({
+  input: priceField, output: priceField, cache_read: priceField, cache_write: priceField,
+  cache_write_12h: priceField.optional(),
+}).strict();
+const ContextRatesSchema = RatesSchema.extend({
+  long_context: RatesSchema.extend({ threshold: z.number().int().positive() }).optional(),
+});
+
 const PriceEntrySchema = z
   .object({
     backend: z.string().min(1),
@@ -29,6 +37,9 @@ const PriceEntrySchema = z
     output: priceField,
     cache_read: priceField,
     cache_write: priceField,
+    cache_write_12h: priceField.optional(),
+    long_context: RatesSchema.extend({ threshold: z.number().int().positive() }).optional(),
+    service_tiers: z.partialRecord(z.enum(['fast', 'flex', 'batch', 'ultrafast']), ContextRatesSchema).optional(),
   })
   .strict();
 
@@ -116,13 +127,26 @@ export function loadPriceCatalog(path: string = priceCatalogPath()): PriceCatalo
  */
 export function estimateCostUsd(
   entry: PriceEntry,
-  usage: Pick<Usage, 'tokens_in' | 'tokens_out' | 'cache_read' | 'cache_write'>,
-): number {
+  usage: Pick<Usage, 'tokens_in' | 'tokens_out' | 'cache_read' | 'cache_write'> & Pick<Partial<Usage>, 'pricing'>,
+): number | undefined {
+  if (usage.pricing?.input_scope === 'thread_or_turn') return undefined;
+  const tier = usage.pricing?.service_tier ?? usage.pricing?.requested_service_tier;
+  const rates = tier === undefined || tier === 'standard' ? entry : entry.service_tiers?.[tier];
+  if (rates === undefined) return undefined;
+  // CLI reports a whole agent turn, not individual API requests. Without a
+  // request context size, applying long-context rates to the turn is a conservative estimate.
+  const context = usage.pricing?.context_tokens ??
+    ((usage.tokens_in ?? 0) + (usage.cache_read ?? 0) + (usage.cache_write ?? 0));
+  const selected = rates.long_context !== undefined && context > rates.long_context.threshold
+    ? rates.long_context : rates;
+  const write = usage.pricing?.cache_ttl === '12h'
+    ? selected.cache_write_12h : selected.cache_write;
+  if (write === undefined && (usage.cache_write ?? 0) > 0) return undefined;
   const micro =
-    (usage.tokens_in ?? 0) * entry.input +
-    (usage.tokens_out ?? 0) * entry.output +
-    (usage.cache_read ?? 0) * entry.cache_read +
-    (usage.cache_write ?? 0) * entry.cache_write;
+    (usage.tokens_in ?? 0) * selected.input +
+    (usage.tokens_out ?? 0) * selected.output +
+    (usage.cache_read ?? 0) * selected.cache_read +
+    (usage.cache_write ?? 0) * (write ?? 0);
   // Шум двоичной дроби (0.1 × 3 даёт 0.30000000000000004) не должен
   // прибавлять лишний микродоллар к точной сумме.
   return Math.ceil(Math.round(micro * 1e6) / 1e6) / 1_000_000;
@@ -139,11 +163,15 @@ export function priceUsage(usage: Usage, catalog: PriceCatalog | undefined): Usa
   if (usage.reported_cost_usd !== undefined) {
     return { ...usage, cost_usd: usage.reported_cost_usd, cost_source: 'reported' };
   }
+  if (usage.pricing?.input_scope === 'thread_or_turn') return { ...usage, cost_incomplete: true };
   if (catalog === undefined || usage.model === undefined) return usage;
   if (usage.tokens_in === null || usage.tokens_out === null) return usage;
   const entry = catalog.find(usage.backend, usage.model);
   if (entry === undefined) return usage;
-  return { ...usage, cost_usd: estimateCostUsd(entry, usage), cost_source: 'catalog' };
+  const cost = estimateCostUsd(entry, usage);
+  return cost === undefined
+    ? { ...usage, cost_incomplete: true }
+    : { ...usage, cost_usd: cost, cost_source: 'catalog' };
 }
 
 /**

@@ -259,9 +259,10 @@ export interface BackendAdapter {
   /**
    * Разобрать одну строку потока. Неизвестная запись возвращает `ignored`,
    * неразбираемая — `unparsed`: бэкенды обновляются сами и добавляют поля,
-   * и падать от нового поля недопустимо.
+   * и падать от нового поля недопустимо. При исполнении движок передаёт
+   * тот же вызов, что получил launch.
    */
-  parseLine(line: string): BackendEvent;
+  parseLine(line: string, invocation?: AgentInvocation): BackendEvent;
 }
 
 /** Один уровень effort, который CLI объявил для конкретной модели. */
@@ -376,6 +377,7 @@ export function sumUsage(base: Usage, addition: Usage): Usage {
   const peak = maxOptional(base.peak_prefix_tokens, addition.peak_prefix_tokens);
   return {
     backend: base.backend,
+    ...((addition.pricing ?? base.pricing) === undefined ? {} : { pricing: addition.pricing ?? base.pricing }),
     ...(base.model === undefined ? {} : { model: base.model }),
     tokens_in: sumNullable(base.tokens_in, addition.tokens_in),
     tokens_out: sumNullable(base.tokens_out, addition.tokens_out),
@@ -384,6 +386,7 @@ export function sumUsage(base: Usage, addition: Usage): Usage {
     wallclock_ms: base.wallclock_ms + addition.wallclock_ms,
     ...(reported === undefined ? {} : { reported_cost_usd: reported }),
     ...(cost === undefined || source === undefined ? {} : { cost_usd: cost, cost_source: source }),
+    ...(base.cost_incomplete === true || addition.cost_incomplete === true ? { cost_incomplete: true } : {}),
     // Пик — максимум одного обращения, а не сумма: два независимых вызова
     // (шаг и вызванный им судья) не складывают своих префиксов.
     ...(peak === undefined ? {} : { peak_prefix_tokens: peak }),
@@ -430,7 +433,8 @@ function maxOptional(a: number | undefined, b: number | undefined): number | und
  * означало бы выдать отсутствие данных за факт маленького обращения.
  */
 export function messagePrefix(delta: Partial<Usage> | undefined): number | undefined {
-  if (delta === undefined) return undefined;
+  const scope = delta?.pricing?.input_scope;
+  if (delta === undefined || (scope !== undefined && scope !== 'request')) return undefined;
   const { tokens_in, cache_read, cache_write } = delta;
   if (tokens_in == null && cache_read == null && cache_write == null) return undefined;
   return (tokens_in ?? 0) + (cache_read ?? 0) + (cache_write ?? 0);
