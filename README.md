@@ -73,6 +73,12 @@ curl -fsSL https://raw.githubusercontent.com/assertumai/burnex/main/scripts/inst
 | Cursor | `burnex skill install --agent cursor` | `.cursor/skills/burnex/` |
 | Claude Code | `burnex skill install --agent claude` | `.claude/skills/burnex/` |
 
+В каталог ложатся `SKILL.md` — модель пайплайна, правила надёжности, порядок
+проверки и разбора прогона — и справочники `references/`: формат документа,
+готовые рецепты, ревью и решения человека, команды CLI, диагностика прогонов,
+конфигурация. Повторная установка ничего не перезаписывает: файл с локальными
+правками останавливает её до первой записи.
+
 ## Статус
 
 Ранний. Пайплайн из нескольких работ с агентскими шагами исполняется целиком,
