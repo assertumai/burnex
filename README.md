@@ -62,6 +62,17 @@ curl -fsSL https://raw.githubusercontent.com/assertumai/burnex/main/scripts/inst
 тегов. Дальше — [первый прогон](https://assertumai.github.io/burnex/ru/start/first-run/).
 Обновление, откат и разработка через `npm link` — [docs/install.md](docs/install.md).
 
+### Skill для агента
+
+Чтобы агент мог писать, проверять и запускать пайплайны Burnex, выполните
+в корне проекта **одну** команду для своего агента.
+
+| Агент | Команда | Каталог установки |
+| --- | --- | --- |
+| Codex | `burnex skill install --agent codex` | `.agents/skills/burnex/` |
+| Cursor | `burnex skill install --agent cursor` | `.cursor/skills/burnex/` |
+| Claude Code | `burnex skill install --agent claude` | `.claude/skills/burnex/` |
+
 ## Статус
 
 Ранний. Пайплайн из нескольких работ с агентскими шагами исполняется целиком,

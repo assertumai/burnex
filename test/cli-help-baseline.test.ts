@@ -99,6 +99,8 @@ const HELP_TEXT = `ошибка: Не указана команда
   burnex update — обновить движок тем способом, каким он поставлен (managed, checkout, npm)
       --ref — ссылка вместо последнего тега; для npm — версия или dist-tag
       --no-restart — не перезапускать демон витрины после обновления
+  burnex skill <action> — install: установить skill Burnex в текущий проект
+      --agent — для какого агента установить: codex, cursor или claude (обязательно)
   burnex usage <run> — показать расход прогона по работам, шагам и попыткам
   burnex backlog <action> <slug> — вести очередь улучшений backlog.md: list|pick|finish|settle|add|show, см. docs/backlog.md
       --file — путь к файлу очереди, по умолчанию backlog.md в рабочем каталоге

@@ -19,6 +19,7 @@ import { row as init } from '../pipeline/commands/init.js';
 import { row as context } from '../pipeline/commands/context.js';
 import { row as up } from '../ui/commands/up.js';
 import { row as down } from '../ui/commands/down.js';
+import { row as skill } from '../install/commands/skill.js';
 import { row as update } from '../install/commands/update.js';
 import { row as usage } from '../pipeline/commands/usage.js';
 import { row as backlog } from '../pipeline/commands/backlog.js';
@@ -79,6 +80,7 @@ export const COMMAND_ROWS: readonly CommandRow[] = [
   up,
   down,
   update,
+  skill,
   usage,
   backlog,
   knowledge,
