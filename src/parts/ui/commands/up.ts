@@ -11,11 +11,13 @@ import {
   describeDaemon,
   isAddressInUse,
   portBusyError,
+  readRecord,
   runningDaemon,
   startDetached,
   stopDaemon,
   writeRecord,
 } from '../daemon/daemon.js';
+import { installExitLog, noteOrphanDaemon } from '../daemon/exitLog.js';
 import { installAgent, requireMacos, systemHost, type LaunchdHost } from '../daemon/launchd.js';
 import { createUiServer } from '../daemon/server.js';
 import { commandRow } from '../../../kernel/cli/commandRow.js';
@@ -77,6 +79,8 @@ export async function runUpCommand(
 
     write(`витрина: http://127.0.0.1:${server.port}`);
     write(`наблюдение за ${config.runs.root}`);
+    // С этого момента причина завершения попадает в лог (`ui.log` у демона).
+    installExitLog({ write });
     // Процесс держится сервером и живёт до сигнала прерывания.
     return ExitCode.ok;
   }
@@ -100,7 +104,10 @@ export async function runUpCommand(
   // Повторный запуск — не ошибка: человек хочет открыть дашборд, а не узнать,
   // что он уже открыт. Печатаются те же сведения, что дала бы команда о
   // состоянии демона, — поэтому отдельной такой команды и нет.
+  // Запись читается до `runningDaemon`: та стирает осиротевший файл молча.
+  const previous = readRecord(paths);
   const running = runningDaemon(paths);
+  if (previous !== undefined && running === undefined) noteOrphanDaemon(paths, previous);
   if (running !== undefined) {
     for (const line of describeDaemon(running)) write(line);
     return ExitCode.ok;
