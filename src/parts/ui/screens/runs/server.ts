@@ -5,8 +5,6 @@ import { isRunAlive } from '../../../pipeline/run/journal/reader.js';
 import { runPaths } from '../../../pipeline/run/journal/paths.js';
 import { catchUpUsageRecords, catchUpUsageStore, readUsageStore } from '../../../pipeline/run/journal/usageStore.js';
 import {
-  removeRunWithStats,
-  removeRuns,
   selectByAddresses,
   selectCandidates,
   type AddressedCandidate,
@@ -21,6 +19,7 @@ import { parseRunAddress } from '../../runAddress.js';
 import { isSafeSegment } from '../../routes.js';
 import { screenRow, type ApiHandler } from '../registry.js';
 import { declaration } from './declaration.js';
+import { removeRunOffLoop, removeRunsOffLoop } from './removal.js';
 
 /** Потолок числа адресов в групповом удалении: список сверх него — ошибка, не частичная работа. */
 const MAX_RUN_ADDRESSES = 500;
@@ -155,7 +154,7 @@ const handleSelectRuns: ApiHandler = (req, res, env) => {
  * Идущий прогон не удаляется: снести каталог под работающим движком значит
  * оставить его писать в никуда и потерять уже сделанное.
  */
-const handleDelete: ApiHandler = (req, res, env) => {
+const handleDelete: ApiHandler = async (req, res, env) => {
   const url = new URL(req.url ?? '/', 'http://internal');
   const parsed = parseRunAddress(url.searchParams.get('run'));
   if (parsed === undefined) {
@@ -180,7 +179,11 @@ const handleDelete: ApiHandler = (req, res, env) => {
     return;
   }
 
-  const result = removeRunWithStats(env.runsRoot, parsed.key, parsed.runId, stats);
+  const result = await removeRunOffLoop(env.runsRoot, parsed.key, parsed.runId, stats);
+  if (result.alive) {
+    sendJson(res, 409, { error: 'The run is in progress: stop it before deleting' });
+    return;
+  }
   // Обзор пересобирается сразу: иначе удалённый прогон повисит на экране до
   // следующего опроса, и пользователь решит, что удаление не сработало.
   env.watcher.poll();
@@ -244,7 +247,7 @@ const handleDeleteRuns: ApiHandler = async (req, res, env) => {
     addresses.push(address);
   }
 
-  const summary = removeRuns(env.runsRoot, addresses, stats);
+  const summary = await removeRunsOffLoop(env.runsRoot, addresses, stats);
   // Одна пересборка на всю группу, а не на каждый прогон: наблюдатель не
   // должен просыпаться сотни раз за один запрос.
   env.watcher.poll();
