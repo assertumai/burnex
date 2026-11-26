@@ -70,6 +70,10 @@ export interface StepPlan {
 
 export interface ResumePlan {
   readonly sourceRunId: string;
+  /** Source journal revision used for the plan. */
+  readonly sourceUpdatedAt?: string;
+  /** Validated target supplied by the caller. Automatic decisions are independent of this target. */
+  readonly explicitFrom?: ResumeFrom;
   readonly steps: readonly StepPlan[];
   /** Выходы работ прошлого прогона: подставляются вместо переиспользованных. */
   readonly outputs: ReadonlyMap<string, unknown>;
@@ -567,6 +571,8 @@ export function buildResumePlan(requested: BuildPlanOptions): ResumePlan {
 
   return {
     sourceRunId: source.manifest.run_id,
+    sourceUpdatedAt: source.status.updated_at,
+    ...(from === undefined ? {} : { explicitFrom: from }),
     steps: coarsened,
     outputs,
     observedInputs,

@@ -125,7 +125,24 @@ export interface AgentInvocation {
   readonly scratchDir?: string;
 }
 
+/** Per-launch bidirectional connection; adapters never share mutable stream state. */
+export interface BackendChannel {
+  send(message: unknown): void;
+  emit(event: BackendEvent): void;
+  close(): void;
+}
+export interface BackendConnection {
+  receive(line: string): void;
+  interrupt(): void;
+  /** Called after the process output has been consumed. */
+  onExit?(): void;
+}
 export interface LaunchSpec {
+  /** Invocation metadata retained when cumulative counters are replaced. */
+  readonly usageContext?: Pick<Partial<Usage>, 'model' | 'pricing'>;
+  readonly connect?: (channel: BackendChannel) => BackendConnection;
+  readonly transport?: string;
+  readonly diagnostic?: string;
   readonly command: readonly string[];
   /** Промпт уходит через stdin: контекст легко перерастает предел аргументов. */
   readonly stdin: string;
@@ -188,6 +205,8 @@ export type BackendEvent =
       /** Stable within duplicate stream records of one Claude model turn. */
       readonly messageId?: string;
     }
+  | { readonly kind: 'usage_snapshot'; readonly scope: 'thread'; readonly sessionId: string;
+      readonly turnId?: string; readonly usage: Partial<Usage>; readonly baseline?: boolean }
   | { readonly kind: 'usage'; readonly usage: Partial<Usage>; readonly messageId?: string }
   | {
       readonly kind: 'result';

@@ -10,6 +10,7 @@ import { expandPipeline } from '../src/parts/pipeline/document/expand.js';
 import { runPipeline, type RunResult } from '../src/parts/pipeline/run/runner.js';
 import { planResume, readSourceRun } from '../src/parts/pipeline/run/resumePlan.js';
 import { readEvents, readManifest } from '../src/parts/pipeline/run/journal/reader.js';
+import { attemptLeasePath } from '../src/parts/pipeline/run/journal/attemptLease.js';
 import type { Event } from '../src/parts/pipeline/run/journal/schema.js';
 import { makeProject, testBaseEnv, type Project } from './helpers.js';
 import { tempDir } from './tmp.js';
@@ -594,6 +595,8 @@ jobs:
     const second = await start({ resume: { plan, source } });
 
     assert.equal(second.status, 'success');
+    assert.equal(existsSync(attemptLeasePath(first.journal.paths.dir)), false);
+    assert.equal(existsSync(attemptLeasePath(second.journal.paths.dir)), false);
     assert.equal(
       readFileSync(join(second.journal.paths.engine, 'dist', 'src', 'bin.js'), 'utf8'),
       'REBUILT',
